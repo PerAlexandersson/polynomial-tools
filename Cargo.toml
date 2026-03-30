@@ -1,0 +1,14 @@
+[workspace]
+members = [
+    "polynomial-tools",
+    "polynomial-tools/web",
+    "combinatoric-core",
+    "combpoly",
+    "kostka",
+    "experiments",
+    "sym-poly/core",
+    "sym-poly/sym",
+    "sym-poly/qsym",
+    "sym-poly/multipoly",
+]
+resolver = "2"

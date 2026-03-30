@@ -1,0 +1,12 @@
+[package]
+name = "sym-poly-qsym"
+version = "0.1.0"
+edition = "2021"
+description = "Quasisymmetric functions: monomial, fundamental, power sum, Young quasisymmetric Schur bases"
+
+[dependencies]
+sym-poly-core = { path = "../core" }
+sym-poly-sym = { path = "../sym" }
+num-bigint = "0.4"
+num-rational = "0.4"
+num-traits = "0.2"

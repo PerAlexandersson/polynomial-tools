@@ -1,0 +1,26 @@
+[package]
+name = "combpoly"
+version = "0.1.0"
+edition = "2021"
+authors = ["Per Alexandersson <per.w.alexandersson@gmail.com>"]
+description = "CLI tool for exploring combinatorial polynomials from permutations, words, and parking functions"
+license = "MIT"
+keywords = ["combinatorics", "polynomials", "permutations", "real-rootedness", "pattern-avoidance"]
+categories = ["command-line-utilities", "mathematics", "science"]
+readme = "README.md"
+
+# The main CLI binary
+[[bin]]
+name = "combpoly"
+path = "src/main.rs"
+
+# Binaries in src/bin/ are auto-discovered by Cargo
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+num = "0.4.1"
+num-bigint = "0.4"
+num-rational = "0.4"
+num-traits = "0.2.15"
+rayon = "1.10"
+polynomial-tools = { path = "../polynomial-tools" }

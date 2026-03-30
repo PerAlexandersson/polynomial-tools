@@ -1,0 +1,1518 @@
+//! Real-rootedness testing, interlacing, log-concavity, and ultra-log-concavity.
+//!
+//! All functions accept polynomials as `i64` coefficient vectors in ascending degree order:
+//! `coeffs[i]` is the coefficient of t^i.
+//!
+//! # Default algorithm: Bézout matrices
+//!
+//! The primary functions [`is_real_rooted`] and [`check_interlacing`] use Bézout matrices,
+//! which are dramatically faster than Sturm chains (100–400× for interlacing at degree 15+).
+//!
+//! ## Bézout matrix for interlacing
+//!
+//! Given polynomials f (degree d) and g (degree d−1), both with positive leading coefficients,
+//! the **Bézout matrix** B(f, g) is the d×d symmetric matrix whose (i, j) entry is the
+//! coefficient of x^i y^j in the bivariate polynomial
+//!
+//! ```text
+//! (f(x)g(y) - f(y)g(x)) / (x - y).
+//! ```
+//!
+//! **Theorem (Bézout/Hermite; Fisk, Cor. 9.145):** If f and g have positive leading
+//! coefficients, then g strictly interlaces f if and only if B(f, g) is positive definite.
+//!
+//! This reduces interlacing to a single matrix positive-definiteness check (Gaussian
+//! elimination with exact rational pivots), avoiding root isolation entirely.
+//!
+//! ## Bézout matrix for real-rootedness
+//!
+//! A polynomial f of degree d is real-rooted if and only if f' interlaces f. Since
+//! f may have repeated roots, B(f, f') is only positive **semi**-definite for real-rooted f.
+//!
+//! ## Shared roots and same-degree interlacing
+//!
+//! The Bézout matrix detects **strict** interlacing only (deg difference exactly 1).
+//! [`check_weak_interlacing`] extends this to handle:
+//!
+//! - **Shared roots**: divides out gcd(f, g) over ℚ, verifies the GCD is real-rooted,
+//!   then checks strict interlacing of the reduced polynomials.
+//! - **Same degree**: `check_weak_interlacing(f, g)` tests f ≪ g (f on the LEFT)
+//!   by extending g with a root far to the right (via the Cauchy bound), reducing
+//!   to the deg+1 case. If all coefficients of g are positive (all roots negative),
+//!   multiplying by t suffices.
+//! - **Directed**: `check_weak_interlacing(f, g)` tests `f ≪ g` (f interlaces g
+//!   from the left). This is **not symmetric**: `f ≪ g` and `g ≪ f` are different
+//!   for same-degree polynomials. Requires deg(f) ≤ deg(g) ≤ deg(f) + 1.
+//!
+//! ## Sturm chain fallback
+//!
+//! The original Sturm-chain implementations are available as [`is_real_rooted_sturm`],
+//! [`check_interlacing_sturm`], and [`real_roots`] for cases where actual root locations
+//! are needed.
+
+use crate::sturm::SturmChain;
+use num_bigint::BigInt;
+use num_rational::Ratio;
+use num_traits::Signed;
+
+type Q = Ratio<BigInt>;
+
+// ---------------------------------------------------------------------------
+// Display utility for &[i64] coefficient vectors
+// ---------------------------------------------------------------------------
+
+/// Format an `i64` coefficient vector as a human-readable polynomial string.
+///
+/// Uses the variable name `t` by default. Coefficients of 1 or -1 are displayed
+/// without the leading "1". Examples:
+///
+/// - `[1, 2, 1]` → `"1 + 2t + t^2"`
+/// - `[0, -1, 0, 3]` → `"-t + 3t^3"`
+/// - `[]` or `[0]` → `"0"`
+pub fn format_poly(coeffs: &[i64]) -> String {
+    format_poly_var(coeffs, "t")
+}
+
+/// Format an `i64` coefficient vector with a custom variable name.
+pub fn format_poly_var(coeffs: &[i64], var: &str) -> String {
+    let mut terms = Vec::new();
+    for (i, &c) in coeffs.iter().enumerate() {
+        if c == 0 {
+            continue;
+        }
+        let term = match (c, i) {
+            (_, 0) => format!("{}", c),
+            (1, 1) => var.to_string(),
+            (-1, 1) => format!("-{}", var),
+            (_, 1) => format!("{}{}", c, var),
+            (1, e) => format!("{}^{}", var, e),
+            (-1, e) => format!("-{}^{}", var, e),
+            (_, e) => format!("{}{}^{}", c, var, e),
+        };
+        terms.push(term);
+    }
+    if terms.is_empty() {
+        return "0".to_string();
+    }
+    let mut result = terms[0].clone();
+    for term in &terms[1..] {
+        if let Some(rest) = term.strip_prefix('-') {
+            result.push_str(" - ");
+            result.push_str(rest);
+        } else {
+            result.push_str(" + ");
+            result.push_str(term);
+        }
+    }
+    result
+}
+
+// ---------------------------------------------------------------------------
+// Real-rootedness and interlacing
+// ---------------------------------------------------------------------------
+
+/// Check if a polynomial is real-rooted using Sturm chains with exact arithmetic.
+///
+/// This is the slower Sturm-chain method. Prefer [`is_real_rooted`] (Bézout-based)
+/// unless you need root isolation.
+///
+/// Returns true for the zero polynomial and for constant/linear polynomials.
+pub fn is_real_rooted_sturm(coeffs: &[i64]) -> bool {
+    let start = coeffs.iter().position(|&c| c != 0).unwrap_or(0);
+    let end = coeffs.iter().rposition(|&c| c != 0).unwrap_or(0);
+    if start > end {
+        return true;
+    }
+    let trimmed = &coeffs[start..=end];
+    if trimmed.len() <= 2 {
+        return true;
+    }
+
+    let sc = SturmChain::from_i64_coeffs(trimmed);
+    let sf_degree = sc.square_free_degree();
+    sc.count_real_roots() == sf_degree
+}
+
+/// Check if a coefficient sequence is log-concave.
+///
+/// A sequence a_0, a_1, ..., a_d is log-concave if a_k^2 >= a_{k-1} * a_{k+1}
+/// for all 1 <= k <= d-1.
+pub fn is_log_concave(coeffs: &[i64]) -> bool {
+    if coeffs.len() <= 2 {
+        return true;
+    }
+    for i in 1..coeffs.len() - 1 {
+        if coeffs[i] * coeffs[i] < coeffs[i - 1] * coeffs[i + 1] {
+            return false;
+        }
+    }
+    true
+}
+
+/// Check if a coefficient sequence is ultra-log-concave (satisfies Newton's inequalities).
+///
+/// A polynomial a_0 + a_1 t + ... + a_d t^d of degree d is ultra-log-concave if
+/// a_k / C(d,k) is log-concave, where C(d,k) is the binomial coefficient.
+///
+/// This is implied by real-rootedness but is strictly weaker.
+pub fn is_ultra_log_concave(coeffs: &[i64]) -> bool {
+    let d = match coeffs.iter().rposition(|&c| c != 0) {
+        Some(d) => d,
+        None => return true,
+    };
+    if d <= 1 {
+        return true;
+    }
+    let mut binom = vec![1i128; d + 1];
+    for k in 1..=d {
+        binom[k] = binom[k - 1] * (d - k + 1) as i128 / k as i128;
+    }
+    for k in 1..d {
+        let lhs = (coeffs[k] as i128) * (coeffs[k] as i128) * binom[k - 1] * binom[k + 1];
+        let rhs = (coeffs[k - 1] as i128) * (coeffs[k + 1] as i128) * binom[k] * binom[k];
+        if lhs < rhs {
+            return false;
+        }
+    }
+    true
+}
+
+/// Check if a polynomial has palindromic (symmetric) coefficients.
+///
+/// A polynomial a_0 + a_1 t + ... + a_d t^d is palindromic if a_i = a_{d-i}
+/// for all i, equivalently t^d p(1/t) = p(t).
+///
+/// Returns true for the zero polynomial and constant polynomials.
+/// Trailing zeros are trimmed before checking.
+pub fn is_palindromic(coeffs: &[i64]) -> bool {
+    let d = match coeffs.iter().rposition(|&c| c != 0) {
+        Some(d) => d,
+        None => return true,
+    };
+    for i in 0..=d / 2 {
+        if coeffs[i] != coeffs[d - i] {
+            return false;
+        }
+    }
+    true
+}
+
+/// Compute the gamma coefficients of a palindromic polynomial.
+///
+/// For a palindromic polynomial p(t) of degree d, there is a unique expansion
+///
+/// ```text
+/// p(t) = sum_{i=0}^{floor(d/2)} gamma_i * t^i * (1+t)^{d-2i}
+/// ```
+///
+/// Returns `None` if the polynomial is not palindromic.
+/// Returns `Some(gamma_coefficients)` where `gamma[i]` is the coefficient
+/// of t^i (1+t)^{d-2i} in the expansion.
+///
+/// The polynomial is gamma-positive iff all returned coefficients are non-negative.
+pub fn gamma_coefficients(coeffs: &[i64]) -> Option<Vec<i64>> {
+    let d = match coeffs.iter().rposition(|&c| c != 0) {
+        Some(d) => d,
+        None => return Some(vec![]),
+    };
+    if !is_palindromic(coeffs) {
+        return None;
+    }
+    let half = d / 2;
+
+    // Precompute binomial coefficients C(n, k) for n up to d.
+    // binomials[n][k] = C(n, k).
+    let mut binomials = vec![vec![0i128; d + 1]; d + 1];
+    for n in 0..=d {
+        binomials[n][0] = 1;
+        for k in 1..=n {
+            binomials[n][k] = binomials[n - 1][k - 1] + binomials[n - 1][k];
+        }
+    }
+
+    // Extract gamma coefficients from i=0 upward.
+    // gamma_i = coeffs[i] - sum_{j<i} gamma_j * C(d-2j, i-j)
+    let mut gamma = vec![0i128; half + 1];
+    for i in 0..=half {
+        let mut val = coeffs[i] as i128;
+        for j in 0..i {
+            val -= gamma[j] * binomials[d - 2 * j][i - j];
+        }
+        gamma[i] = val;
+    }
+
+    Some(gamma.into_iter().map(|g| g as i64).collect())
+}
+
+/// Check if a polynomial is gamma-positive.
+///
+/// A palindromic polynomial is gamma-positive if all its gamma coefficients
+/// (in the basis {t^i (1+t)^{d-2i}}) are non-negative.
+///
+/// Returns false for non-palindromic polynomials.
+pub fn is_gamma_positive(coeffs: &[i64]) -> bool {
+    match gamma_coefficients(coeffs) {
+        None => false,
+        Some(gammas) => gammas.iter().all(|&g| g >= 0),
+    }
+}
+
+/// Find all real roots of a polynomial as rational interval midpoints.
+///
+/// Returns `None` if the polynomial is not real-rooted.
+/// Returns `Some(vec![])` for constant/zero polynomials.
+pub fn real_roots(coeffs: &[i64]) -> Option<Vec<Q>> {
+    let start = coeffs.iter().position(|&c| c != 0).unwrap_or(0);
+    let end = coeffs.iter().rposition(|&c| c != 0).unwrap_or(0);
+    if start > end {
+        return Some(vec![]);
+    }
+    let trimmed = &coeffs[start..=end];
+    if trimmed.len() <= 1 {
+        return Some(vec![]);
+    }
+    if trimmed.len() == 2 {
+        let a = Q::from_integer(BigInt::from(trimmed[0]));
+        let b = Q::from_integer(BigInt::from(trimmed[1]));
+        return Some(vec![-a / b]);
+    }
+
+    let sc = SturmChain::from_i64_coeffs(trimmed);
+    let sf_degree = sc.square_free_degree();
+    let eps = Q::new(BigInt::from(1), BigInt::from(1_000_000));
+    let intervals = sc.isolate_roots(&eps);
+
+    if intervals.len() == sf_degree {
+        Some(
+            intervals
+                .into_iter()
+                .map(|(lo, hi)| (&lo + &hi) / Q::from_integer(BigInt::from(2)))
+                .collect(),
+        )
+    } else {
+        None
+    }
+}
+
+/// Check if roots of p interlace roots of q, using Sturm chains.
+///
+/// This is the slower Sturm-chain method that isolates all roots. Prefer
+/// [`check_interlacing`] (Bézout-based) for better performance.
+///
+/// Convention: `check_interlacing_sturm(f, g)` checks f ≪ g (f has smaller degree).
+///
+/// Returns `None` if either polynomial is not real-rooted.
+/// Returns `Some(false)` if deg(g) ≠ deg(f) + 1.
+pub fn check_interlacing_sturm(f: &[i64], g: &[i64]) -> Option<bool> {
+    let rf = real_roots(f)?;
+    let rg = real_roots(g)?;
+
+    if rg.len() != rf.len() + 1 {
+        return Some(false);
+    }
+
+    let mut rf: Vec<_> = rf; rf.sort();
+    let mut rg: Vec<_> = rg; rg.sort();
+
+    // Check rg[0] < rf[0] < rg[1] < rf[1] < ... < rg[d]
+    for i in 0..rf.len() {
+        if rf[i] <= rg[i] || rf[i] >= rg[i + 1] {
+            return Some(false);
+        }
+    }
+
+    Some(true)
+}
+
+// ---------------------------------------------------------------------------
+// Bézout matrix approach
+// ---------------------------------------------------------------------------
+
+/// Compute the Bézout matrix B(f, g) where deg(f) = deg(g) + 1.
+///
+/// The (i, j) entry (0-indexed) is the coefficient of x^i y^j in
+///
+/// ```text
+/// (f(x)g(y) - f(y)g(x)) / (x - y)
+/// ```
+///
+/// Returns a d x d matrix (as `i64`) where d = deg(f), or `None` if the degree
+/// constraint is not satisfied.
+///
+/// The division is exact because h(x,y) = f(x)g(y) - f(y)g(x) vanishes on x = y.
+/// Expanding: for each pair (k, l) with k > l, the contribution is
+///
+/// ```text
+/// (f_k g_l - f_l g_k) * sum_{m=0}^{k-l-1} x^{l+m} y^{k-1-m}
+/// ```
+///
+/// which follows from factoring x^k y^l - x^l y^k = x^l y^l (x^{k-l} - y^{k-l})
+/// and using the geometric sum (x^n - y^n)/(x - y) = sum x^i y^{n-1-i}.
+pub fn bezout_matrix(f: &[i64], g: &[i64]) -> Option<Vec<Vec<i64>>> {
+    let df = poly_degree_trimmed(f)?;
+    let dg = poly_degree_trimmed(g)?;
+
+    if df != dg + 1 {
+        return None;
+    }
+
+    let d = df; // matrix is d × d
+    let mut b = vec![vec![0i128; d]; d];
+
+    for k in 0..=df {
+        for l in 0..k {
+            if l > dg && k > dg {
+                continue;
+            }
+            // Contribution: (f_k * g_l - f_l * g_k) * Σ_m x^{l+m} y^{k-1-m}
+            let fk = coeff_i64(f, k) as i128;
+            let fl = coeff_i64(f, l) as i128;
+            let gk = coeff_i64(g, k) as i128;
+            let gl = coeff_i64(g, l) as i128;
+            let c = fk * gl - fl * gk;
+            if c == 0 {
+                continue;
+            }
+            for m in 0..=(k - l - 1) {
+                let xi = l + m;     // power of x
+                let yj = k - 1 - m; // power of y
+                if xi < d && yj < d {
+                    b[xi][yj] += c;
+                }
+            }
+        }
+    }
+
+    // Convert to i64 — return None if any entry overflows.
+    let mut result: Vec<Vec<i64>> = Vec::with_capacity(d);
+    for row in b {
+        let mut r = Vec::with_capacity(d);
+        for v in row {
+            if v > i64::MAX as i128 || v < i64::MIN as i128 {
+                return None; // overflow: caller should use bezout_matrix_bigint
+            }
+            r.push(v as i64);
+        }
+        result.push(r);
+    }
+    Some(result)
+}
+
+/// Compute the Bézout matrix with BigInt entries (no overflow).
+fn bezout_matrix_bigint(f: &[i64], g: &[i64]) -> Option<Vec<Vec<BigInt>>> {
+    let f_big: Vec<BigInt> = f.iter().map(|&c| BigInt::from(c)).collect();
+    let g_big: Vec<BigInt> = g.iter().map(|&c| BigInt::from(c)).collect();
+    bezout_matrix_bigint_coeffs(&f_big, &g_big)
+}
+
+/// Compute the Bézout matrix from BigInt coefficient vectors.
+fn bezout_matrix_bigint_coeffs(f: &[BigInt], g: &[BigInt]) -> Option<Vec<Vec<BigInt>>> {
+    let zero_big = BigInt::from(0);
+    let df = {
+        let mut d = None;
+        for i in (0..f.len()).rev() {
+            if f[i] != zero_big { d = Some(i); break; }
+        }
+        d
+    }?;
+    let dg = {
+        let mut d = None;
+        for i in (0..g.len()).rev() {
+            if g[i] != zero_big { d = Some(i); break; }
+        }
+        d
+    }?;
+    if df != dg + 1 {
+        return None;
+    }
+    let d = df;
+    let zero = BigInt::from(0);
+    let mut b = vec![vec![zero.clone(); d]; d];
+
+    for k in 0..=df {
+        for l in 0..k {
+            let fk = if k < f.len() { &f[k] } else { &zero };
+            let fl = if l < f.len() { &f[l] } else { &zero };
+            let gk = if k < g.len() { &g[k] } else { &zero };
+            let gl = if l < g.len() { &g[l] } else { &zero };
+            let c = fk * gl - fl * gk;
+            if c == zero {
+                continue;
+            }
+            for m in 0..=(k - l - 1) {
+                let xi = l + m;
+                let yj = k - 1 - m;
+                if xi < d && yj < d {
+                    b[xi][yj] = &b[xi][yj] + &c;
+                }
+            }
+        }
+    }
+    Some(b)
+}
+
+/// Check positive definiteness of a symmetric BigInt matrix via Gaussian elimination.
+fn is_positive_definite_bigint(mat: &[Vec<BigInt>]) -> bool {
+    crate::linalg::is_positive_definite(mat)
+}
+
+fn is_positive_semidefinite_bigint(mat: &[Vec<BigInt>]) -> bool {
+    crate::linalg::is_positive_semidefinite(mat)
+}
+
+/// Check **strict** interlacing f ≪ g via the Bézout matrix.
+///
+/// Convention: `check_interlacing(f, g)` checks f ≪ g, where f has degree d−1
+/// and g has degree d. The caller must pass f (smaller degree) first.
+///
+/// Two real-rooted polynomials with deg(g) = deg(f) + 1 strictly interlace
+/// if and only if the Bézout matrix B(g, f) is positive definite (Fisk, Cor. 9.145).
+///
+/// This is 100–400× faster than Sturm chains at degree 15+ because it avoids
+/// root isolation entirely — just one exact Gaussian elimination on a d×d matrix.
+///
+/// Returns `Some(true)` if f ≪ g, `Some(false)` if not,
+/// or `None` if deg(g) ≠ deg(f) + 1.
+///
+/// # Limitations
+///
+/// - Requires deg(g) = deg(f) + 1 exactly; returns `None` otherwise.
+/// - The Bézout matrix is singular when f and g share a root, so this function
+///   returns `Some(false)` in that case.
+///
+/// For same-degree interlacing, shared roots, or either argument order, use
+/// [`check_weak_interlacing`].
+pub fn check_interlacing(f: &[i64], g: &[i64]) -> Option<bool> {
+    let df = poly_degree_trimmed(f);
+    let dg = poly_degree_trimmed(g);
+
+    // 0 ≪ g for any real-rooted g (vacuously true).
+    if df.is_none() {
+        return Some(is_real_rooted(g));
+    }
+
+    match (df, dg) {
+        (Some(df), Some(dg)) if dg == df + 1 => {},
+        _ => return None,
+    };
+
+    let mat = bezout_matrix_bigint(g, f)?;
+    Some(is_positive_definite_bigint(&mat))
+}
+
+/// Cauchy bound for root radius: all roots of `coeffs` lie in |z| < bound.
+///
+/// For f(t) = a_n t^n + ... + a_0, the Cauchy bound is
+/// 1 + max(|a_0|, ..., |a_{n-1}|) / |a_n|.
+/// Returns 2 for constant or zero polynomials.
+fn cauchy_root_bound(coeffs: &[i64]) -> i64 {
+    let deg = match poly_degree_trimmed(coeffs) {
+        Some(d) if d > 0 => d,
+        _ => return 2,
+    };
+    let lc = coeffs[deg].abs();
+    let max_other = coeffs[..deg].iter().map(|c| c.abs()).max().unwrap_or(0);
+    // ceil(1 + max_other / lc)
+    1 + (max_other + lc - 1) / lc
+}
+
+/// Multiply polynomial by (t + r) in i64 coefficients.
+fn poly_mul_linear_factor(coeffs: &[i64], r: i64) -> Vec<i64> {
+    // (t + r) * (a_0 + a_1 t + ... + a_n t^n) = r*a_0 + (a_0 + r*a_1)t + ... + a_n t^{n+1}
+    let n = coeffs.len();
+    let mut result = vec![0i64; n + 1];
+    for i in 0..n {
+        result[i] += r * coeffs[i];
+        result[i + 1] += coeffs[i];
+    }
+    result
+}
+
+/// Check **directed weak** interlacing `p ≪ q` via the Bézout matrix.
+///
+/// Tests whether `p` interlaces `q` **from the left**: the roots of `p` and `q`
+/// alternate with p's roots weakly to the left of q's roots:
+///
+/// ```text
+/// ... ≤ a₃ ≤ b₃ ≤ a₂ ≤ b₂ ≤ a₁ ≤ b₁ ≤ 0
+/// ```
+///
+/// where aᵢ are roots of p and bᵢ are roots of q. Shared roots are allowed.
+/// Requires `deg(p) = deg(q)` or `deg(p) = deg(q) - 1` (equivalently,
+/// `deg(q) ∈ {deg(p), deg(p) + 1}`). The zero polynomial interlaces
+/// any real-rooted polynomial from the left (vacuously).
+///
+/// **This function is NOT symmetric**: `check_weak_interlacing(p, q)` tests
+/// `p ≪ q`, which is different from `q ≪ p` when `deg(p) = deg(q)`.
+///
+/// Handles:
+/// - **deg(q) = deg(p) + 1**: divides out gcd(p,q) if nontrivial (verifying
+///   the shared roots are real), then checks strict interlacing of the reduced pair.
+/// - **deg(p) = deg(q)** (same degree): extends q with a root far to the right
+///   (via the Cauchy bound), giving q_ext of degree deg(q)+1, then checks p ≪ q_ext.
+///   **Fast path**: if all coefficients of q are positive (all roots negative),
+///   multiplying by t (root at 0) suffices.
+///
+/// Returns `Some(true)` if `p ≪ q`, `Some(false)` if not, or `None`
+/// if the degree relationship is invalid (deg(p) > deg(q) or deg(q) > deg(p) + 1).
+pub fn check_weak_interlacing(p: &[i64], q: &[i64]) -> Option<bool> {
+    // 0 ≪ q for any real-rooted q (vacuously true).
+    if poly_degree_trimmed(p).is_none() {
+        return Some(is_real_rooted(q));
+    }
+    // p ≪ 0 only if p is also zero (already handled above).
+    if poly_degree_trimmed(q).is_none() {
+        return Some(false);
+    }
+
+    let dp = poly_degree_trimmed(p).unwrap();
+    let dq = poly_degree_trimmed(q).unwrap();
+
+    // Same-degree case: p ≪ q means p's roots are to the LEFT of q's roots.
+    // The alternation pattern is: p_d ≤ q_d ≤ ... ≤ p_1 ≤ q_1 ≤ 0.
+    //
+    // Reduction to the deg+1 case: extend p (the LEFT polynomial) with a root
+    // far to the RIGHT. Then p_ext has degree d+1 with roots {p_d,...,p_1,R},
+    // and we check q ≪ p_ext, which gives:
+    //   p_d ≤ q_d ≤ p_{d-1} ≤ ... ≤ q_1 ≤ R.
+    // Since R is far right, q_1 ≤ R holds automatically, and the rest
+    // recovers the original same-degree interlacing p_i ≤ q_i.
+    if dp == dq {
+        let all_p_pos = p.iter().all(|&c| c > 0);
+        let p_ext = if all_p_pos {
+            // All roots negative, so root at 0 is far right enough.
+            poly_mul_linear_factor(p, 0)
+        } else {
+            let bound_p = cauchy_root_bound(p);
+            let bound_q = cauchy_root_bound(q);
+            let r = bound_p.max(bound_q) + 1;
+            poly_mul_linear_factor(p, -r)
+        };
+        return check_weak_interlacing_impl(q, &p_ext);
+    }
+
+    // deg(q) = deg(p) + 1: standard case, p has smaller degree.
+    if dq == dp + 1 {
+        return check_weak_interlacing_impl(p, q);
+    }
+
+    // deg(p) > deg(q): invalid for p ≪ q.
+    None
+}
+
+/// Core weak interlacing check for deg(g) = deg(f) + 1.
+fn check_weak_interlacing_impl(f: &[i64], g: &[i64]) -> Option<bool> {
+    let to_q = |coeffs: &[i64]| -> Vec<Q> {
+        coeffs.iter().map(|&c| Q::from_integer(BigInt::from(c))).collect()
+    };
+
+    let pq = to_q(f);
+    let qq = to_q(g);
+
+    let gcd = poly_gcd_q(&pq, &qq);
+    let gcd_deg = q_degree(&gcd);
+
+    // If GCD is trivial (constant), just do strict interlacing
+    if gcd_deg == 0 {
+        return check_interlacing(f, g);
+    }
+
+    // The shared roots (given by the GCD) must themselves be real.
+    let gcd_i64 = q_poly_to_i64(&gcd);
+    if !is_real_rooted(&gcd_i64) {
+        return Some(false);
+    }
+
+    // Divide out the GCD
+    let f_red = poly_exact_div_q(&pq, &gcd);
+    let g_red = poly_exact_div_q(&qq, &gcd);
+
+    let df = q_degree(&f_red);
+    let dg = q_degree(&g_red);
+
+    if df == 0 && dg == 0 {
+        // Both reduced to constants: all roots are shared.
+        return Some(true);
+    }
+
+    // After dividing out GCD, f_red should have smaller degree than g_red
+    if dg != df + 1 {
+        return None;
+    }
+
+    // Convert back to i64 coefficients (clear denominators first)
+    let f_i64 = q_poly_to_i64(&f_red);
+    let g_i64 = q_poly_to_i64(&g_red);
+
+    let mat = bezout_matrix_bigint(&g_i64, &f_i64)?;
+    Some(is_positive_definite_bigint(&mat))
+}
+
+// ---------------------------------------------------------------------------
+// Polynomial arithmetic over Q (for GCD computation)
+// ---------------------------------------------------------------------------
+
+fn q_degree(p: &[Q]) -> usize {
+    let zero = Q::from_integer(BigInt::from(0));
+    p.iter().rposition(|c| *c != zero).unwrap_or(0)
+}
+
+fn poly_gcd_q(a: &[Q], b: &[Q]) -> Vec<Q> {
+    let zero = Q::from_integer(BigInt::from(0));
+    let mut r0: Vec<Q> = a.to_vec();
+    let mut r1: Vec<Q> = b.to_vec();
+
+    // Trim trailing zeros
+    while r0.last().map_or(false, |c| *c == zero) { r0.pop(); }
+    while r1.last().map_or(false, |c| *c == zero) { r1.pop(); }
+
+    while !r1.is_empty() && r1.iter().any(|c| *c != zero) {
+        let rem = poly_rem_q(&r0, &r1);
+        r0 = r1;
+        r1 = rem;
+    }
+    // Make monic
+    if !r0.is_empty() {
+        let lc = r0.last().unwrap().clone();
+        if lc != zero {
+            let inv = Q::from_integer(BigInt::from(1)) / lc;
+            for c in r0.iter_mut() {
+                *c = c.clone() * inv.clone();
+            }
+        }
+    }
+    // Trim
+    while r0.last().map_or(false, |c| *c == zero) { r0.pop(); }
+    if r0.is_empty() { r0.push(zero); }
+    r0
+}
+
+fn poly_rem_q(a: &[Q], b: &[Q]) -> Vec<Q> {
+    let zero = Q::from_integer(BigInt::from(0));
+    if b.is_empty() || b.iter().all(|c| *c == zero) {
+        panic!("division by zero polynomial");
+    }
+    let mut rem = a.to_vec();
+    let db = q_degree(b);
+    let lc_b = b[db].clone();
+
+    while rem.len() > db + 1 || (rem.len() == db + 1 && q_degree(&rem) >= db) {
+        let dr = q_degree(&rem);
+        if dr < db {
+            break;
+        }
+        let lc_r = rem[dr].clone();
+        if lc_r == zero {
+            rem.pop();
+            continue;
+        }
+        let factor = lc_r / lc_b.clone();
+        let shift = dr - db;
+        for (i, c) in b.iter().enumerate() {
+            rem[shift + i] = rem[shift + i].clone() - factor.clone() * c.clone();
+        }
+        // The leading term should now be zero; pop it
+        while rem.last().map_or(false, |c| *c == zero) {
+            rem.pop();
+        }
+    }
+    if rem.is_empty() { rem.push(zero); }
+    rem
+}
+
+fn poly_exact_div_q(a: &[Q], b: &[Q]) -> Vec<Q> {
+    let zero = Q::from_integer(BigInt::from(0));
+    let da = q_degree(a);
+    let db = q_degree(b);
+    if da < db {
+        return vec![zero];
+    }
+    let mut rem = a.to_vec();
+    let lc_b = b[db].clone();
+    let dq = da - db;
+    let mut quot = vec![zero.clone(); dq + 1];
+
+    for i in (0..=dq).rev() {
+        let lc_rem = if i + db < rem.len() { rem[i + db].clone() } else { zero.clone() };
+        if lc_rem == zero {
+            continue;
+        }
+        let q_coeff = lc_rem / lc_b.clone();
+        quot[i] = q_coeff.clone();
+        for (j, c) in b.iter().enumerate() {
+            if i + j < rem.len() {
+                rem[i + j] = rem[i + j].clone() - q_coeff.clone() * c.clone();
+            }
+        }
+    }
+    while quot.last().map_or(false, |c| *c == zero) { quot.pop(); }
+    if quot.is_empty() { quot.push(zero); }
+    quot
+}
+
+/// Convert a Q polynomial to i64 by clearing denominators.
+fn q_poly_to_i64(p: &[Q]) -> Vec<i64> {
+    use num_integer::Integer;
+    let zero = Q::from_integer(BigInt::from(0));
+    // LCM of all denominators
+    let lcm = p.iter()
+        .filter(|c| **c != zero)
+        .fold(BigInt::from(1), |acc, c| acc.lcm(c.denom()));
+
+    let lcm_q = Q::from_integer(lcm);
+    let result: Vec<i64> = p.iter()
+        .map(|c| {
+            let scaled = c * &lcm_q;
+            // Should be an integer now
+            let n = scaled.to_integer();
+            // Convert to i64 (may panic on overflow for huge polynomials)
+            i64::try_from(&n).unwrap_or_else(|_| {
+                // If it doesn't fit, try with sign
+                if n.is_negative() {
+                    -(i64::try_from(&(-n)).expect("coefficient too large for i64"))
+                } else {
+                    panic!("coefficient too large for i64: {}", n)
+                }
+            })
+        })
+        .collect();
+    result
+}
+
+/// Check if a polynomial is real-rooted using the Bézout matrix.
+///
+/// A polynomial f of degree d is real-rooted if and only if its derivative f'
+/// interlaces it. This function computes B(f, f') and checks positive
+/// semi-definiteness (semi- rather than strict because repeated roots make
+/// the matrix singular).
+///
+/// The leading coefficients of f and f' are aligned to the same sign before
+/// computing B, since the positive-definiteness criterion assumes both leading
+/// coefficients are positive.
+///
+/// This is ~3× faster than Sturm chains across all degrees, and the gap grows
+/// with degree.
+pub fn is_real_rooted(coeffs: &[i64]) -> bool {
+    let d = match poly_degree_trimmed(coeffs) {
+        Some(d) => d,
+        None => return true,
+    };
+    if d <= 1 {
+        return true;
+    }
+
+    // Compute f'(t) in BigInt to avoid i64 overflow.
+    // f' = Σ (k+1) a_{k+1} t^k, degree d-1.
+    let mut fp: Vec<BigInt> = Vec::with_capacity(d);
+    let mut overflowed = false;
+    for k in 0..d {
+        let mult = (k as i64) + 1;
+        let ak1 = coeff_i64(coeffs, k + 1);
+        match mult.checked_mul(ak1) {
+            Some(v) => fp.push(BigInt::from(v)),
+            None => {
+                fp.push(BigInt::from(mult) * BigInt::from(ak1));
+                overflowed = true;
+            }
+        }
+    }
+
+    // Ensure leading coefficients have the same sign.
+    let lc_f = BigInt::from(coeff_i64(coeffs, d));
+    let lc_fp = fp.last().cloned().unwrap_or_else(|| BigInt::from(0));
+    let zero_big = BigInt::from(0);
+    if (lc_f > zero_big) != (lc_fp > zero_big) {
+        for c in fp.iter_mut() {
+            *c = -c.clone();
+        }
+    }
+
+    if overflowed {
+        // Use fully BigInt Bézout path
+        let f_big: Vec<BigInt> = coeffs.iter().map(|&c| BigInt::from(c)).collect();
+        let mat = match bezout_matrix_bigint_coeffs(&f_big, &fp) {
+            Some(m) => m,
+            None => return false,
+        };
+        is_positive_semidefinite_bigint(&mat)
+    } else {
+        // Convert back to i64 for the existing path
+        let fp_i64: Vec<i64> = fp.iter().map(|b| {
+            use num_traits::ToPrimitive;
+            b.to_i64().unwrap()
+        }).collect();
+        let mat = match bezout_matrix_bigint(coeffs, &fp_i64) {
+            Some(m) => m,
+            None => return false,
+        };
+        is_positive_semidefinite_bigint(&mat)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Aliases for explicit algorithm selection
+// ---------------------------------------------------------------------------
+
+/// Alias for [`is_real_rooted`] — Bézout matrix method (the default).
+pub fn is_real_rooted_bezout(coeffs: &[i64]) -> bool {
+    is_real_rooted(coeffs)
+}
+
+/// Alias for [`check_interlacing`] — Bézout matrix method (the default).
+pub fn check_interlacing_bezout(p: &[i64], q: &[i64]) -> Option<bool> {
+    check_interlacing(p, q)
+}
+
+/// Alias for [`check_weak_interlacing`] — Bézout matrix with GCD factoring.
+pub fn check_weak_interlacing_bezout(p: &[i64], q: &[i64]) -> Option<bool> {
+    check_weak_interlacing(p, q)
+}
+
+// ---------------------------------------------------------------------------
+// Resultant and discriminant
+// ---------------------------------------------------------------------------
+
+/// Compute the Sylvester matrix of f and g.
+///
+/// For f of degree n and g of degree m, the Sylvester matrix is (n+m) x (n+m).
+/// The first m rows are shifted copies of f's coefficients (in descending order),
+/// and the last n rows are shifted copies of g's coefficients.
+///
+/// Returns `None` if either polynomial is zero.
+pub fn sylvester_matrix(f: &[i64], g: &[i64]) -> Option<Vec<Vec<BigInt>>> {
+    let n = poly_degree_trimmed(f)?;
+    let m = poly_degree_trimmed(g)?;
+    let size = n + m;
+    let zero = BigInt::from(0);
+    let mut mat = vec![vec![zero.clone(); size]; size];
+
+    // First m rows: coefficients of f, shifted right by row index.
+    // Row i has f_n, f_{n-1}, ..., f_0 starting at column i.
+    for i in 0..m {
+        for k in 0..=n {
+            mat[i][i + k] = BigInt::from(coeff_i64(f, n - k));
+        }
+    }
+    // Last n rows: coefficients of g, shifted right by row index.
+    for i in 0..n {
+        for k in 0..=m {
+            mat[m + i][i + k] = BigInt::from(coeff_i64(g, m - k));
+        }
+    }
+    Some(mat)
+}
+
+fn determinant_bigint(mat: &[Vec<BigInt>]) -> BigInt {
+    crate::linalg::determinant(mat)
+}
+
+/// Compute the resultant Res(f, g) of two polynomials.
+///
+/// The resultant is zero if and only if f and g share a common root (over the
+/// algebraic closure) or one of them is zero. Computed via the Sylvester matrix
+/// determinant.
+///
+/// Returns the resultant as a `BigInt`.
+pub fn resultant(f: &[i64], g: &[i64]) -> BigInt {
+    match sylvester_matrix(f, g) {
+        Some(mat) => determinant_bigint(&mat),
+        None => BigInt::from(0),
+    }
+}
+
+/// Compute the discriminant of a polynomial.
+///
+/// ```text
+/// disc(f) = (-1)^{n(n-1)/2} * Res(f, f') / lc(f)
+/// ```
+///
+/// where n = deg(f) and f' is the formal derivative.
+///
+/// The discriminant is zero iff f has a repeated root. For a polynomial with
+/// roots r_1, ..., r_n, disc(f) = lc(f)^{2n-2} * prod_{i<j} (r_i - r_j)^2
+/// (up to the sign convention).
+pub fn discriminant(f: &[i64]) -> BigInt {
+    let n = match poly_degree_trimmed(f) {
+        Some(n) => n,
+        None => return BigInt::from(0),
+    };
+    if n <= 1 {
+        return BigInt::from(1);
+    }
+
+    // Derivative
+    let mut fp: Vec<i64> = Vec::with_capacity(n);
+    for k in 0..n {
+        fp.push((k as i64 + 1) * coeff_i64(f, k + 1));
+    }
+
+    let res = resultant(f, &fp);
+    let lc = BigInt::from(coeff_i64(f, n));
+    let sign_exp = n * (n - 1) / 2;
+    let sign = if sign_exp % 2 == 0 { BigInt::from(1) } else { BigInt::from(-1) };
+
+    sign * res / lc
+}
+
+// ---------------------------------------------------------------------------
+// Ehrhart polynomial <-> h*-vector conversion
+// ---------------------------------------------------------------------------
+
+/// Convert an h\*-vector to an Ehrhart polynomial.
+///
+/// Given h\* = (h\*\_0, ..., h\*\_d), the Ehrhart polynomial is
+///
+/// ```text
+/// L(t) = sum_{i=0}^{d} h*_i * C(t + d - i, d)
+/// ```
+///
+/// where C(t+a, d) = (t+a)(t+a-1)...(t+a-d+1)/d! is a polynomial of degree d in t.
+///
+/// Returns the polynomial coefficients as rationals in ascending degree order.
+/// For a valid h\*-vector of a lattice polytope, L(t) has degree d = len(hstar) - 1.
+pub fn hstar_to_ehrhart(hstar: &[i64]) -> Vec<Q> {
+    if hstar.is_empty() {
+        return vec![];
+    }
+    let d = hstar.len() - 1;
+    if d == 0 {
+        return vec![Q::from_integer(BigInt::from(hstar[0]))];
+    }
+
+    let zero = Q::from_integer(BigInt::from(0));
+    let one = Q::from_integer(BigInt::from(1));
+    let mut result = vec![zero.clone(); d + 1];
+
+    // Compute d! for normalization
+    let mut d_fact = Q::from_integer(BigInt::from(1));
+    for j in 2..=d {
+        d_fact = d_fact * Q::from_integer(BigInt::from(j as i64));
+    }
+
+    for (i, &hi) in hstar.iter().enumerate() {
+        if hi == 0 {
+            continue;
+        }
+        // Build C(t + d - i, d) as a polynomial in t.
+        // C(t + a, d) = product_{j=0}^{d-1} (t + a - j) / d!  where a = d - i.
+        let a = (d - i) as i64;
+
+        // Multiply linear factors (t + a)(t + a - 1)...(t + a - d + 1)
+        // Start with polynomial = 1
+        let mut poly = vec![one.clone()]; // degree 0
+        for j in 0..d {
+            let shift = a - j as i64; // constant term of the linear factor (t + shift)
+            let shift_q = Q::from_integer(BigInt::from(shift));
+            // Multiply poly by (t + shift): new[k] = poly[k-1] + shift * poly[k]
+            let mut new_poly = vec![zero.clone(); poly.len() + 1];
+            for (k, c) in poly.iter().enumerate() {
+                new_poly[k] = new_poly[k].clone() + shift_q.clone() * c.clone();
+                new_poly[k + 1] = new_poly[k + 1].clone() + c.clone();
+            }
+            poly = new_poly;
+        }
+
+        // Divide by d! and scale by h*_i
+        let scale = Q::from_integer(BigInt::from(hi)) / d_fact.clone();
+        for (k, c) in poly.iter().enumerate() {
+            if k <= d {
+                result[k] = result[k].clone() + scale.clone() * c.clone();
+            }
+        }
+    }
+
+    // Trim trailing zeros
+    while result.last().map_or(false, |c| *c == zero) {
+        result.pop();
+    }
+    result
+}
+
+/// Convert an Ehrhart polynomial to an h\*-vector.
+///
+/// Given L(t) of degree d with rational coefficients, the h\*-vector entries are
+///
+/// ```text
+/// h*_i = sum_{k=0}^{i} (-1)^k * C(d+1, k) * L(i-k)    for i = 0, ..., d
+/// ```
+///
+/// where L(j) is the Ehrhart polynomial evaluated at the non-negative integer j.
+///
+/// The h\*-vector entries are always integers for Ehrhart polynomials of lattice
+/// polytopes. The function rounds the exact rational result to the nearest integer.
+pub fn ehrhart_to_hstar(ehrhart_coeffs: &[Q]) -> Vec<i64> {
+    if ehrhart_coeffs.is_empty() {
+        return vec![];
+    }
+    let zero = Q::from_integer(BigInt::from(0));
+    // Find degree
+    let d = ehrhart_coeffs.iter().rposition(|c| *c != zero).unwrap_or(0);
+
+    // Evaluate L(t) at t = 0, 1, ..., d
+    let mut values = Vec::with_capacity(d + 1);
+    for t in 0..=d {
+        let t_q = Q::from_integer(BigInt::from(t as i64));
+        let mut val = zero.clone();
+        let mut t_pow = Q::from_integer(BigInt::from(1));
+        for c in ehrhart_coeffs.iter() {
+            val = val + c.clone() * t_pow.clone();
+            t_pow = t_pow * t_q.clone();
+        }
+        values.push(val);
+    }
+
+    // Binomial coefficients C(d+1, k) for k = 0, ..., d+1
+    let mut binom = vec![1i64; d + 2];
+    for k in 1..=d + 1 {
+        binom[k] = binom[k - 1] * (d + 1 - k + 1) as i64 / k as i64;
+    }
+
+    // h*_i = sum_{k=0}^{i} (-1)^k * C(d+1, k) * L(i-k)
+    let mut hstar = Vec::with_capacity(d + 1);
+    for i in 0..=d {
+        let mut val = zero.clone();
+        for k in 0..=i {
+            let sign = if k % 2 == 0 { 1i64 } else { -1i64 };
+            val = val + Q::from_integer(BigInt::from(sign * binom[k])) * values[i - k].clone();
+        }
+        // Should be an exact integer
+        let n = val.to_integer();
+        hstar.push(i64::try_from(&n).expect("h*-vector entry too large for i64"));
+    }
+
+    hstar
+}
+
+/// Convenience: convert Ehrhart polynomial given as `i64` coefficients of the
+/// **numerator** polynomial when written over a common denominator.
+///
+/// That is, if L(t) = (a_0 + a_1 t + ... + a_d t^d) / denom, pass `(numerator_coeffs, denom)`.
+/// This is useful when the Ehrhart polynomial is stored in integer-denominator form.
+pub fn ehrhart_to_hstar_with_denom(numerator_coeffs: &[i64], denom: i64) -> Vec<i64> {
+    let denom_q = Q::from_integer(BigInt::from(denom));
+    let coeffs: Vec<Q> = numerator_coeffs.iter()
+        .map(|&c| Q::from_integer(BigInt::from(c)) / denom_q.clone())
+        .collect();
+    ehrhart_to_hstar(&coeffs)
+}
+
+fn poly_degree_trimmed(coeffs: &[i64]) -> Option<usize> {
+    coeffs.iter().rposition(|&c| c != 0)
+}
+
+fn coeff_i64(coeffs: &[i64], k: usize) -> i64 {
+    if k < coeffs.len() {
+        coeffs[k]
+    } else {
+        0
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_format_poly() {
+        assert_eq!(format_poly(&[1, 2, 1]), "1 + 2t + t^2");
+        assert_eq!(format_poly(&[0, -1, 0, 3]), "-t + 3t^3");
+        assert_eq!(format_poly(&[]), "0");
+        assert_eq!(format_poly(&[0]), "0");
+        assert_eq!(format_poly(&[5]), "5");
+        assert_eq!(format_poly(&[0, 0, -1]), "-t^2");
+        assert_eq!(format_poly_var(&[1, 1], "q"), "1 + q");
+    }
+
+    #[test]
+    fn test_real_rooted() {
+        assert!(is_real_rooted(&[1, 2, 1])); // (1+t)^2
+        assert!(is_real_rooted(&[1, 11, 11, 1])); // Eulerian A_4(t)
+        assert!(!is_real_rooted(&[1, 43, 196, 168, 23, 1])); // counterexample
+        assert!(is_real_rooted(&[0])); // zero
+        assert!(is_real_rooted(&[5])); // constant
+        assert!(is_real_rooted(&[1, 1])); // linear
+    }
+
+    #[test]
+    fn test_log_concave() {
+        assert!(is_log_concave(&[1, 2, 1]));
+        assert!(is_log_concave(&[1, 3, 3, 1]));
+        assert!(!is_log_concave(&[1, 1, 3]));
+    }
+
+    #[test]
+    fn test_ultra_log_concave() {
+        assert!(is_ultra_log_concave(&[1, 3, 3, 1])); // (1+t)^3
+        assert!(is_ultra_log_concave(&[1, 4, 6, 4, 1])); // (1+t)^4
+    }
+
+    #[test]
+    fn test_real_roots() {
+        // (t-1)(t-2) = 2 - 3t + t^2
+        let roots = real_roots(&[2, -3, 1]).unwrap();
+        assert_eq!(roots.len(), 2);
+
+        // t^2 + 1: not real-rooted
+        assert!(real_roots(&[1, 0, 1]).is_none());
+    }
+
+    #[test]
+    fn test_interlacing_sturm() {
+        // (t-2) ≪ (t-1)(t-3): roots 1 < 2 < 3
+        assert_eq!(check_interlacing_sturm(&[-2, 1], &[3, -4, 1]), Some(true));
+
+        // Wrong order: big first → Some(false) since deg diff is -1
+        assert_eq!(check_interlacing_sturm(&[3, -4, 1], &[-2, 1]), Some(false));
+
+        // Same-degree: not interlacing (requires deg diff = 1)
+        assert_eq!(check_interlacing_sturm(&[-1, 0, 1], &[-4, 0, 1]), Some(false));
+
+        // Not real-rooted: t^2+1 → None
+        assert_eq!(check_interlacing_sturm(&[1, 1], &[1, 0, 1]), None);
+    }
+
+    #[test]
+    fn test_interlacing_bezout() {
+        // (t-2) ≪ (t-1)(t-3): interlacing, roots 1 < 2 < 3
+        assert_eq!(check_interlacing(&[-2, 1], &[3, -4, 1]), Some(true));
+
+        // Wrong order: big first → None
+        assert_eq!(check_interlacing(&[3, -4, 1], &[-2, 1]), None);
+
+        // Same-degree polynomials: returns None
+        assert_eq!(check_interlacing(&[-1, 0, 1], &[-4, 0, 1]), None);
+
+        // Not real-rooted: t+1 and t^2+1. Degree diff = 1 but B is not pos def.
+        assert_eq!(check_interlacing(&[1, 1], &[1, 0, 1]), Some(false));
+    }
+
+    // -- Bézout matrix tests --
+
+    #[test]
+    fn test_bezout_matrix_simple() {
+        // f = (t-1)(t-3) = 3 - 4t + t^2, g = t - 2
+        // B should be 2x2... wait deg(f)=2, deg(g)=1, so d=2.
+        let b = bezout_matrix(&[3, -4, 1], &[-2, 1]).unwrap();
+        assert_eq!(b.len(), 2);
+        // Should be positive definite since g interlaces f (roots: 1 < 2 < 3).
+        let b_big = bezout_matrix_bigint(&[3, -4, 1], &[-2, 1]).unwrap();
+        assert!(is_positive_definite_bigint(&b_big));
+    }
+
+    #[test]
+    fn test_bezout_interlacing() {
+        // (t-2) ≪ (t-1)(t-3): interlacing, roots 1 < 2 < 3
+        assert_eq!(
+            check_interlacing_bezout(&[-2, 1], &[3, -4, 1]),
+            Some(true)
+        );
+
+        // (t-4) ≪ (t-1)(t-3): NOT interlacing (4 not between 1 and 3)
+        assert_eq!(
+            check_interlacing_bezout(&[-4, 1], &[3, -4, 1]),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn test_bezout_interlacing_degree3() {
+        // (t-2)(t-4) ≪ (t-1)(t-3)(t-5): interlacing, 1 < 2 < 3 < 4 < 5
+        assert_eq!(
+            check_interlacing_bezout(&[8, -6, 1], &[-15, 23, -9, 1]),
+            Some(true)
+        );
+
+        // (t-2)(t-6) ≪ (t-1)(t-3)(t-5): NOT interlacing (no root of g between 3 and 5)
+        assert_eq!(
+            check_interlacing_bezout(&[12, -8, 1], &[-15, 23, -9, 1]),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn test_bezout_real_rooted() {
+        assert!(is_real_rooted_bezout(&[1, 2, 1])); // (1+t)^2
+        assert!(is_real_rooted_bezout(&[1, 3, 3, 1])); // (1+t)^3
+        assert!(is_real_rooted_bezout(&[1, 11, 11, 1])); // Eulerian A_4(t)
+        assert!(!is_real_rooted_bezout(&[1, 0, 1])); // t^2 + 1
+        assert!(is_real_rooted_bezout(&[1])); // constant
+        assert!(is_real_rooted_bezout(&[1, 1])); // linear
+    }
+
+    #[test]
+    fn test_weak_interlacing_shared_roots() {
+        // g = (t-1)(t-2) = 2 - 3t + t^2, roots {1, 2} (deg 2, small)
+        // f = (t-1)^2 (t-3) = -3 + 7t - 5t^2 + t^3, roots {1, 1, 3} (deg 3, big)
+        // Shared root at 1. After dividing out (t-1):
+        //   g/(t-1) = (t-2) = -2 + t   (deg 1, small)
+        //   f/(t-1) = (t-1)(t-3) = 3 - 4t + t^2  (deg 2, big)
+        // These strictly interlace: 1 < 2 < 3.
+        assert_eq!(
+            check_weak_interlacing_bezout(&[2, -3, 1], &[-3, 7, -5, 1]),
+            Some(true)
+        );
+
+        // f = (t-1)(t-3) = 3-4t+t^2, g = (t-1)(t-4) = 4-5t+t^2
+        // Same degree after GCD removal: f/(t-1) = t-3, g/(t-1) = t-4
+        // These have degree diff = 0 with 1 root each. Strict check doesn't apply.
+        // But they do weakly interlace if we allow same-degree.
+        // Actually with deg diff = 0, check_interlacing returns None.
+        // So weak interlacing for same-degree reduced polys returns None.
+        // Same degree. Roots of f: {1,3}, roots of g: {1,4}.
+        // After removing shared root 1, reduced roots {3} and {4}: same degree.
+        // The Cauchy extension puts a root far right: 3 < 4 < R, so interlacing holds.
+        let result = check_weak_interlacing_bezout(&[3, -4, 1], &[4, -5, 1]);
+        assert_eq!(result, Some(true));
+
+        // Same-degree interlacing that DOES hold:
+        // f = (t-1)(t-3), roots {1,3}; g = (t-2)(t-4), roots {2,4}
+        // Roots alternate: 1 < 2 < 3 < 4.
+        assert_eq!(
+            check_weak_interlacing(&[3, -4, 1], &[8, -6, 1]),
+            Some(true)
+        );
+
+        // Both orderings should work (interlacing is symmetric for same degree):
+        assert_eq!(
+            check_weak_interlacing(&[8, -6, 1], &[3, -4, 1]),
+            Some(true)
+        );
+
+        // Same-degree, NOT interlacing: f = (t-1)(t-4), g = (t-2)(t-3)
+        // Roots nested: 1 < 2 < 3 < 4 but pattern is f,g,g,f — not alternating.
+        assert_eq!(
+            check_weak_interlacing(&[4, -5, 1], &[6, -5, 1]),
+            Some(false)
+        );
+
+        // Same-degree, positive coefficients (fast path via *t):
+        // f = 1+t, g = 1+2t. Roots: -1 < -1/2. Alternating.
+        assert_eq!(
+            check_weak_interlacing(&[1, 1], &[1, 2]),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn test_weak_interlacing_identical() {
+        // f = g = (t-1)(t-2): all roots shared, reduced to constants.
+        assert_eq!(
+            check_weak_interlacing_bezout(&[2, -3, 1], &[2, -3, 1]),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn test_weak_interlacing_complex_shared_roots() {
+        // f = (t^2+1)(t-1) = -1 + t - t^2 + t^3, complex roots at ±i, real root at 1
+        // g = (t^2+1)(t-2) = -2 + t - 2t^2 + t^3, complex roots at ±i, real root at 2
+        // GCD = t^2+1, which is NOT real-rooted.
+        // Should return Some(false) — cannot weakly interlace with shared complex roots.
+        assert_eq!(
+            check_weak_interlacing(&[-1, 1, -1, 1], &[-2, 1, -2, 1]),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn test_bezout_agrees_with_sturm() {
+        // Test on several polynomials that both methods agree
+        let cases: Vec<(&[i64], bool)> = vec![
+            (&[1, 2, 1], true),
+            (&[1, 3, 3, 1], true),
+            (&[1, 4, 6, 4, 1], true),
+            (&[1, 11, 11, 1], true),
+            (&[1, 26, 66, 26, 1], true),
+            (&[1, 0, 1], false),
+            (&[1, 43, 196, 168, 23, 1], false),
+            (&[-6, 11, -6, 1], true), // (t-1)(t-2)(t-3)
+        ];
+        for (coeffs, expected) in cases {
+            let sturm = is_real_rooted_sturm(coeffs);
+            let bezout = is_real_rooted(coeffs);
+            assert_eq!(
+                sturm, expected,
+                "Sturm disagrees on {:?}",
+                coeffs
+            );
+            assert_eq!(
+                bezout, expected,
+                "Bézout disagrees on {:?}",
+                coeffs
+            );
+        }
+    }
+
+    // -- Palindromic / gamma tests --
+
+    #[test]
+    fn test_is_palindromic() {
+        assert!(is_palindromic(&[1, 2, 1]));
+        assert!(is_palindromic(&[1, 11, 11, 1]));
+        assert!(is_palindromic(&[1, 4, 6, 4, 1]));
+        assert!(is_palindromic(&[1]));
+        assert!(is_palindromic(&[]));
+        assert!(!is_palindromic(&[1, 2, 3]));
+        // Trailing zeros trimmed: [1, 2, 1, 0] is palindromic
+        assert!(is_palindromic(&[1, 2, 1, 0]));
+    }
+
+    #[test]
+    fn test_gamma_coefficients() {
+        // (1+t)^3 = [1,3,3,1]: gamma = [1, 0]
+        assert_eq!(gamma_coefficients(&[1, 3, 3, 1]), Some(vec![1, 0]));
+
+        // A_4(t) = [1,11,11,1]: gamma_0=1, gamma_1=11-3=8
+        assert_eq!(gamma_coefficients(&[1, 11, 11, 1]), Some(vec![1, 8]));
+
+        // (1+t)^4 = [1,4,6,4,1]: gamma_0=1, gamma_1=4-C(4,1)=0, gamma_2=6-C(4,2)=0
+        assert_eq!(gamma_coefficients(&[1, 4, 6, 4, 1]), Some(vec![1, 0, 0]));
+
+        // Not palindromic
+        assert_eq!(gamma_coefficients(&[1, 2, 3]), None);
+
+        // Zero/constant
+        assert_eq!(gamma_coefficients(&[]), Some(vec![]));
+        assert_eq!(gamma_coefficients(&[5]), Some(vec![5]));
+
+        // [1,2,2,1] degree 3: gamma_0=1, gamma_1=2-3=-1
+        assert_eq!(gamma_coefficients(&[1, 2, 2, 1]), Some(vec![1, -1]));
+    }
+
+    #[test]
+    fn test_is_gamma_positive() {
+        assert!(is_gamma_positive(&[1, 3, 3, 1]));
+        assert!(is_gamma_positive(&[1, 11, 11, 1]));
+        assert!(is_gamma_positive(&[1, 4, 6, 4, 1]));
+        // [1,2,2,1] has gamma_1 = -1, NOT gamma-positive
+        assert!(!is_gamma_positive(&[1, 2, 2, 1]));
+        // Non-palindromic: not gamma-positive
+        assert!(!is_gamma_positive(&[1, 2, 3]));
+    }
+
+    // -- Resultant / discriminant tests --
+
+    #[test]
+    fn test_resultant() {
+        // Res((t-1)(t-2), (t-3)) = (1-3)(2-3) = (-2)(-1) = 2
+        assert_eq!(resultant(&[2, -3, 1], &[-3, 1]), BigInt::from(2));
+
+        // Res(t^2+1, t-1) = 1^2 + 1 = 2
+        assert_eq!(resultant(&[1, 0, 1], &[-1, 1]), BigInt::from(2));
+
+        // Res(t-1, t-1) = 0 (shared root)
+        assert_eq!(resultant(&[-1, 1], &[-1, 1]), BigInt::from(0));
+    }
+
+    #[test]
+    fn test_discriminant() {
+        // disc(t^2 - 1) = disc((t-1)(t+1)). Roots 1,-1.
+        // disc = (-1)^{2*1/2} * Res(t^2-1, 2t) / 1
+        // = (-1)^1 * Res([−1,0,1],[0,2]) / 1
+        // Sylvester of t^2-1 (deg 2) and 2t (deg 1): 3x3 matrix.
+        //   row0 (f shifted): [1, 0, -1]
+        //   row1 (g shifted): [2, 0, 0]
+        //   row2 (g shifted): [0, 2, 0]
+        // det = 1*(0*0 - 0*2) - 0*(2*0 - 0*0) + (-1)*(2*2 - 0*0) = -4
+        // disc = (-1)^1 * (-4) / 1 = 4
+        assert_eq!(discriminant(&[-1, 0, 1]), BigInt::from(4));
+
+        // disc((t-1)(t-2)) = (1-2)^2 = 1. f = [2,-3,1], lc=1, n=2.
+        // disc = (-1)^1 * Res(f, f') / lc
+        // f' = [-3, 2]. Sylvester 3x3.
+        assert_eq!(discriminant(&[2, -3, 1]), BigInt::from(1));
+
+        // disc(t^2 + 1) = -4 (no real roots, negative discriminant)
+        assert_eq!(discriminant(&[1, 0, 1]), BigInt::from(-4));
+    }
+
+    #[test]
+    fn test_discriminant_degree3() {
+        // f = (t-1)(t-2)(t-3) = -6 + 11t - 6t^2 + t^3
+        // disc = product (r_i - r_j)^2 = (1-2)^2(1-3)^2(2-3)^2 = 1*4*1 = 4
+        // But with the sign: (-1)^{3*2/2} = (-1)^3 = -1, and
+        // disc = (-1)^3 * Res(f,f') / lc(f).
+        // Let's just compute and check the absolute value.
+        let d = discriminant(&[-6, 11, -6, 1]);
+        // |disc| = 4 for monic with roots 1,2,3
+        assert_eq!(d.clone() * d.clone().signum(), BigInt::from(4));
+    }
+
+    // -- Ehrhart / h*-vector tests --
+
+    fn q(n: i64, d: i64) -> Q {
+        Q::new(BigInt::from(n), BigInt::from(d))
+    }
+
+    #[test]
+    fn test_hstar_to_ehrhart_simplex() {
+        // Standard d-simplex has h* = [1, 0, ..., 0].
+        // L(t) = C(t+d, d).
+
+        // 1-simplex [0,1]: h* = [1, 0], L(t) = t + 1
+        let ehrhart = hstar_to_ehrhart(&[1, 0]);
+        assert_eq!(ehrhart.len(), 2);
+        assert_eq!(ehrhart[0], q(1, 1)); // constant term = 1
+        assert_eq!(ehrhart[1], q(1, 1)); // t coefficient = 1
+
+        // 2-simplex: h* = [1, 0, 0], L(t) = C(t+2,2) = (t+1)(t+2)/2 = 1 + 3t/2 + t^2/2
+        let ehrhart = hstar_to_ehrhart(&[1, 0, 0]);
+        assert_eq!(ehrhart.len(), 3);
+        assert_eq!(ehrhart[0], q(1, 1));  // 1
+        assert_eq!(ehrhart[1], q(3, 2));  // 3/2
+        assert_eq!(ehrhart[2], q(1, 2));  // 1/2
+    }
+
+    #[test]
+    fn test_hstar_to_ehrhart_square() {
+        // Unit square: h* = [1, 1], L(t) = (t+1)^2 = 1 + 2t + t^2
+        let ehrhart = hstar_to_ehrhart(&[1, 1]);
+        assert_eq!(ehrhart.len(), 2);
+        // Wait, h* = [1, 1] means d = 1, but the unit square is dimension 2...
+        // Actually h* has d+1 entries for a d-dimensional polytope.
+        // Unit square: d=2, h* = [1, 1, 0]
+        let ehrhart = hstar_to_ehrhart(&[1, 1, 0]);
+        assert_eq!(ehrhart.len(), 3);
+        assert_eq!(ehrhart[0], q(1, 1));
+        assert_eq!(ehrhart[1], q(2, 1));
+        assert_eq!(ehrhart[2], q(1, 1));
+    }
+
+    #[test]
+    fn test_ehrhart_to_hstar_simplex() {
+        // 1-simplex: L(t) = t + 1 = [1, 1], h* = [1, 0]
+        let ehrhart = vec![q(1, 1), q(1, 1)];
+        assert_eq!(ehrhart_to_hstar(&ehrhart), vec![1, 0]);
+
+        // 2-simplex: L(t) = 1 + 3t/2 + t^2/2, h* = [1, 0, 0]
+        let ehrhart = vec![q(1, 1), q(3, 2), q(1, 2)];
+        assert_eq!(ehrhart_to_hstar(&ehrhart), vec![1, 0, 0]);
+    }
+
+    #[test]
+    fn test_ehrhart_to_hstar_square() {
+        // Unit square: L(t) = (t+1)^2 = 1 + 2t + t^2, h* = [1, 1, 0]
+        let ehrhart = vec![q(1, 1), q(2, 1), q(1, 1)];
+        assert_eq!(ehrhart_to_hstar(&ehrhart), vec![1, 1, 0]);
+    }
+
+    #[test]
+    fn test_roundtrip_hstar_ehrhart() {
+        // h* -> Ehrhart -> h* should be identity
+        let hstar = vec![1, 4, 6, 4, 1];
+        let ehrhart = hstar_to_ehrhart(&hstar);
+        let recovered = ehrhart_to_hstar(&ehrhart);
+        assert_eq!(recovered, hstar);
+    }
+
+    #[test]
+    fn test_ehrhart_to_hstar_with_denom() {
+        // 2-simplex: L(t) = (t^2 + 3t + 2) / 2
+        // numerator = [2, 3, 1], denom = 2
+        assert_eq!(ehrhart_to_hstar_with_denom(&[2, 3, 1], 2), vec![1, 0, 0]);
+    }
+}

@@ -1,0 +1,8 @@
+[package]
+name = "sym-poly-multipoly"
+version = "0.1.0"
+edition = "2021"
+description = "Multivariate polynomials with divided difference operators and key polynomials"
+
+[dependencies]
+sym-poly-core = { path = "../core" }

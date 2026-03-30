@@ -1,0 +1,12 @@
+[package]
+name = "polynomial-tools"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Univariate polynomial toolkit: real-rootedness (Bézout), interlacing, gamma-positivity, resultant, Ehrhart/h*-vectors, recurrence search, standard sequences"
+
+[dependencies]
+num-bigint = "0.4"
+num-rational = "0.4"
+num-traits = "0.2"
+num-integer = "0.1"

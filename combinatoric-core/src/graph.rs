@@ -1,0 +1,1898 @@
+//! Simple undirected graphs on vertex set {0, 1, ..., n-1}.
+//!
+//! Provides a [`Graph`] type with adjacency-list representation, standard graph
+//! generators (complete, bipartite, path, cycle, Ferrers board, unit interval),
+//! and combinatorial algorithms (matchings, independence sets, acyclic orientations).
+//!
+//! # Examples
+//!
+//! ```
+//! use combinatoric_core::graph::Graph;
+//!
+//! let k4 = Graph::complete(4);
+//! assert_eq!(k4.num_vertices(), 4);
+//! assert_eq!(k4.num_edges(), 6);
+//! assert_eq!(k4.matching_polynomial(), vec![1, 6, 3]);
+//! ```
+
+use std::collections::BTreeSet;
+
+use num_bigint::BigInt;
+
+use crate::partition::Partition;
+
+// ---------------------------------------------------------------------------
+// Polynomial helpers (Vec<i64> arithmetic for chromatic polynomial)
+// ---------------------------------------------------------------------------
+
+/// Subtract two polynomials given as coefficient vectors (ascending degree).
+fn vec_poly_sub(a: &[i64], b: &[i64]) -> Vec<i64> {
+    let len = a.len().max(b.len());
+    let mut r = vec![0i64; len];
+    for (i, &c) in a.iter().enumerate() {
+        r[i] += c;
+    }
+    for (i, &c) in b.iter().enumerate() {
+        r[i] -= c;
+    }
+    while r.last() == Some(&0) {
+        r.pop();
+    }
+    r
+}
+
+/// Add two polynomials.
+fn vec_poly_add(a: &[i64], b: &[i64]) -> Vec<i64> {
+    let len = a.len().max(b.len());
+    let mut r = vec![0i64; len];
+    for (i, &c) in a.iter().enumerate() {
+        r[i] += c;
+    }
+    for (i, &c) in b.iter().enumerate() {
+        r[i] += c;
+    }
+    while r.last() == Some(&0) {
+        r.pop();
+    }
+    r
+}
+
+/// Multiply two polynomials.
+fn vec_poly_mul(a: &[i64], b: &[i64]) -> Vec<i64> {
+    if a.is_empty() || b.is_empty() {
+        return vec![];
+    }
+    let mut r = vec![0i64; a.len() + b.len() - 1];
+    for (i, &ca) in a.iter().enumerate() {
+        for (j, &cb) in b.iter().enumerate() {
+            r[i + j] += ca * cb;
+        }
+    }
+    while r.last() == Some(&0) {
+        r.pop();
+    }
+    r
+}
+
+/// Multiply a polynomial by t (shift coefficients up by 1).
+fn poly_mul_by_t(p: &[i64]) -> Vec<i64> {
+    if p.is_empty() {
+        return vec![];
+    }
+    let mut r = vec![0i64; p.len() + 1];
+    for (i, &c) in p.iter().enumerate() {
+        r[i + 1] = c;
+    }
+    r
+}
+
+/// Scale a polynomial by a constant.
+fn vec_poly_scale(p: &[i64], s: i64) -> Vec<i64> {
+    if s == 0 {
+        return vec![];
+    }
+    let mut r: Vec<i64> = p.iter().map(|&c| c * s).collect();
+    while r.last() == Some(&0) {
+        r.pop();
+    }
+    r
+}
+
+/// Product of a list of polynomials.
+fn poly_product(polys: &[Vec<i64>]) -> Vec<i64> {
+    let mut result = vec![1i64];
+    for p in polys {
+        result = vec_poly_mul(&result, p);
+    }
+    result
+}
+
+/// Exact polynomial division (assumes b divides a exactly).
+fn poly_exact_div(a: &[i64], b: &[i64]) -> Vec<i64> {
+    if b.is_empty() {
+        panic!("division by zero polynomial");
+    }
+    if a.is_empty() {
+        return vec![];
+    }
+    let da = a.len() - 1;
+    let db = b.len() - 1;
+    if da < db {
+        return vec![];
+    }
+    let mut rem = a.to_vec();
+    let mut quot = vec![0i64; da - db + 1];
+    let lead_b = *b.last().unwrap();
+    for i in (0..=da - db).rev() {
+        let q = rem[i + db] / lead_b;
+        quot[i] = q;
+        for (j, &bj) in b.iter().enumerate() {
+            rem[i + j] -= q * bj;
+        }
+    }
+    while quot.last() == Some(&0) {
+        quot.pop();
+    }
+    quot
+}
+
+/// Factorial.
+fn factorial(n: usize) -> u64 {
+    (1..=n as u64).product()
+}
+
+// ---------------------------------------------------------------------------
+// BigInt polynomial helpers (for tree sink polynomial)
+// ---------------------------------------------------------------------------
+
+fn big(n: i64) -> BigInt { BigInt::from(n) }
+fn big_zero() -> BigInt { BigInt::from(0) }
+
+fn bpoly_add(a: &[BigInt], b: &[BigInt]) -> Vec<BigInt> {
+    let len = a.len().max(b.len());
+    let mut r = vec![big_zero(); len];
+    for (i, c) in a.iter().enumerate() { r[i] += c; }
+    for (i, c) in b.iter().enumerate() { r[i] += c; }
+    while r.last() == Some(&big_zero()) { r.pop(); }
+    r
+}
+
+fn bpoly_mul(a: &[BigInt], b: &[BigInt]) -> Vec<BigInt> {
+    if a.is_empty() || b.is_empty() { return vec![]; }
+    let mut r = vec![big_zero(); a.len() + b.len() - 1];
+    for (i, ca) in a.iter().enumerate() {
+        for (j, cb) in b.iter().enumerate() {
+            r[i + j] += ca * cb;
+        }
+    }
+    while r.last() == Some(&big_zero()) { r.pop(); }
+    r
+}
+
+fn bpoly_mul_t(p: &[BigInt]) -> Vec<BigInt> {
+    if p.is_empty() { return vec![]; }
+    let mut r = vec![big_zero(); p.len() + 1];
+    for (i, c) in p.iter().enumerate() { r[i + 1] = c.clone(); }
+    r
+}
+
+fn bpoly_scale(p: &[BigInt], s: &BigInt) -> Vec<BigInt> {
+    if *s == big_zero() { return vec![]; }
+    let mut r: Vec<BigInt> = p.iter().map(|c| c * s).collect();
+    while r.last() == Some(&big_zero()) { r.pop(); }
+    r
+}
+
+fn bpoly_product(polys: &[Vec<BigInt>]) -> Vec<BigInt> {
+    let mut result = vec![big(1)];
+    for p in polys { result = bpoly_mul(&result, p); }
+    result
+}
+
+fn bpoly_exact_div(a: &[BigInt], b: &[BigInt]) -> Vec<BigInt> {
+    if b.is_empty() { panic!("division by zero polynomial"); }
+    if a.is_empty() { return vec![]; }
+    let da = a.len() - 1;
+    let db = b.len() - 1;
+    if da < db { return vec![]; }
+    let mut rem = a.to_vec();
+    let mut quot = vec![big_zero(); da - db + 1];
+    let lead_b = b.last().unwrap();
+    for i in (0..=da - db).rev() {
+        let q = &rem[i + db] / lead_b;
+        quot[i] = q.clone();
+        for (j, bj) in b.iter().enumerate() {
+            rem[i + j] -= &q * bj;
+        }
+    }
+    while quot.last() == Some(&big_zero()) { quot.pop(); }
+    quot
+}
+
+fn factorial_big(n: usize) -> BigInt {
+    let mut r = big(1);
+    for i in 2..=n { r *= big(i as i64); }
+    r
+}
+
+/// Multiply a polynomial by (t + c).
+fn poly_mul_linear(p: &[i64], c: i64) -> Vec<i64> {
+    let mut result = vec![0i64; p.len() + 1];
+    for (i, &coeff) in p.iter().enumerate() {
+        result[i] += c * coeff;     // c · coeff · t^i
+        result[i + 1] += coeff;     // coeff · t^{i+1}
+    }
+    while result.last() == Some(&0) {
+        result.pop();
+    }
+    result
+}
+
+// ---------------------------------------------------------------------------
+// Graph type
+// ---------------------------------------------------------------------------
+
+/// A simple undirected graph on vertices `0..n`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Graph {
+    n: usize,
+    edges: Vec<(usize, usize)>,
+    adj: Vec<BTreeSet<usize>>,
+}
+
+impl Graph {
+    // -- Constructors -------------------------------------------------------
+
+    /// Create a graph on `n` vertices with the given edges.
+    ///
+    /// Edges are unordered pairs `(u, v)` with `u < v`. Duplicates and
+    /// self-loops are silently ignored.
+    pub fn new(n: usize, edges: &[(usize, usize)]) -> Self {
+        let mut adj = vec![BTreeSet::new(); n];
+        let mut deduped = Vec::new();
+        let mut seen = BTreeSet::new();
+
+        for &(u, v) in edges {
+            if u == v || u >= n || v >= n {
+                continue;
+            }
+            let (a, b) = if u < v { (u, v) } else { (v, u) };
+            if seen.insert((a, b)) {
+                adj[a].insert(b);
+                adj[b].insert(a);
+                deduped.push((a, b));
+            }
+        }
+
+        Graph { n, edges: deduped, adj }
+    }
+
+    /// Parse a graph from a graph6 string.
+    ///
+    /// Graph6 is a compact ASCII format for simple undirected graphs, used by
+    /// nauty/Traces and standard graph databases. Each character encodes 6 bits
+    /// of the upper triangle of the adjacency matrix.
+    ///
+    /// See <https://users.cecs.anu.edu.au/~bdm/data/formats.txt>.
+    pub fn from_graph6(s: &str) -> Result<Self, String> {
+        let bytes: Vec<u8> = s.trim().bytes().collect();
+        if bytes.is_empty() {
+            return Err("empty graph6 string".into());
+        }
+
+        // Decode n (number of vertices)
+        let (n, offset) = if bytes[0] == 126 {
+            // n >= 63: multi-byte encoding
+            if bytes.len() < 4 {
+                return Err("truncated graph6 header".into());
+            }
+            if bytes[1] == 126 {
+                // n >= 258048: 8-byte encoding (not supported for practical sizes)
+                return Err("graph6 with n >= 258048 not supported".into());
+            }
+            let n = ((bytes[1] as usize - 63) << 12)
+                | ((bytes[2] as usize - 63) << 6)
+                | (bytes[3] as usize - 63);
+            (n, 4)
+        } else {
+            ((bytes[0] as usize - 63), 1)
+        };
+
+        // Decode adjacency bits from remaining bytes
+        let mut bits = Vec::new();
+        for &b in &bytes[offset..] {
+            if b < 63 || b > 126 {
+                return Err(format!("invalid graph6 byte: {}", b));
+            }
+            let val = b - 63;
+            for k in (0..6).rev() {
+                bits.push((val >> k) & 1);
+            }
+        }
+
+        // Upper triangle: bit index maps to (i, j) with j > i
+        let mut edges = Vec::new();
+        let mut bit_idx = 0;
+        for j in 1..n {
+            for i in 0..j {
+                if bit_idx < bits.len() && bits[bit_idx] == 1 {
+                    edges.push((i, j));
+                }
+                bit_idx += 1;
+            }
+        }
+
+        Ok(Graph::new(n, &edges))
+    }
+
+    /// Parse all graphs from a graph6-format file (one graph per line).
+    ///
+    /// Skips blank lines and lines starting with `>` (header lines).
+    pub fn all_from_graph6_file(path: &std::path::Path) -> Result<Vec<Self>, String> {
+        let content = std::fs::read_to_string(path)
+            .map_err(|e| format!("failed to read {}: {}", path.display(), e))?;
+        let mut graphs = Vec::new();
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('>') {
+                continue;
+            }
+            graphs.push(Self::from_graph6(line)?);
+        }
+        Ok(graphs)
+    }
+
+    /// Empty graph on `n` vertices (no edges).
+    pub fn empty(n: usize) -> Self {
+        Graph {
+            n,
+            edges: Vec::new(),
+            adj: vec![BTreeSet::new(); n],
+        }
+    }
+
+    // -- Accessors ----------------------------------------------------------
+
+    /// Number of vertices.
+    pub fn num_vertices(&self) -> usize {
+        self.n
+    }
+
+    /// Number of edges.
+    pub fn num_edges(&self) -> usize {
+        self.edges.len()
+    }
+
+    /// Edge list as sorted pairs `(u, v)` with `u < v`.
+    pub fn edges(&self) -> &[(usize, usize)] {
+        &self.edges
+    }
+
+    /// Neighbors of vertex `v`.
+    pub fn neighbors(&self, v: usize) -> &BTreeSet<usize> {
+        &self.adj[v]
+    }
+
+    /// Degree of vertex `v`.
+    pub fn degree(&self, v: usize) -> usize {
+        self.adj[v].len()
+    }
+
+    /// Whether vertices `u` and `v` are adjacent.
+    pub fn has_edge(&self, u: usize, v: usize) -> bool {
+        self.adj[u].contains(&v)
+    }
+
+    // -- Standard generators ------------------------------------------------
+
+    /// Complete graph K_n.
+    pub fn complete(n: usize) -> Self {
+        let mut edges = Vec::new();
+        for i in 0..n {
+            for j in (i + 1)..n {
+                edges.push((i, j));
+            }
+        }
+        Graph::new(n, &edges)
+    }
+
+    /// Path graph P_n on n vertices: 0—1—2—...—(n-1).
+    pub fn path(n: usize) -> Self {
+        let edges: Vec<_> = (0..n.saturating_sub(1)).map(|i| (i, i + 1)).collect();
+        Graph::new(n, &edges)
+    }
+
+    /// Cycle graph C_n on n vertices: 0—1—...—(n-1)—0.
+    pub fn cycle(n: usize) -> Self {
+        if n < 3 {
+            return Graph::path(n);
+        }
+        let mut edges: Vec<_> = (0..n - 1).map(|i| (i, i + 1)).collect();
+        edges.push((0, n - 1));
+        Graph::new(n, &edges)
+    }
+
+    /// Complete bipartite graph K_{a,b}.
+    ///
+    /// Vertices 0..a are one part, a..(a+b) the other.
+    pub fn complete_bipartite(a: usize, b: usize) -> Self {
+        let n = a + b;
+        let mut edges = Vec::new();
+        for i in 0..a {
+            for j in a..n {
+                edges.push((i, j));
+            }
+        }
+        Graph::new(n, &edges)
+    }
+
+    /// Complete multipartite graph K_{sizes[0], sizes[1], ...}.
+    ///
+    /// Vertices are numbered contiguously within each part.
+    pub fn complete_multipartite(sizes: &[usize]) -> Self {
+        let n: usize = sizes.iter().sum();
+        let mut edges = Vec::new();
+        let mut offsets = Vec::with_capacity(sizes.len() + 1);
+        offsets.push(0);
+        for &s in sizes {
+            offsets.push(offsets.last().unwrap() + s);
+        }
+        for (p, &sp) in sizes.iter().enumerate() {
+            for (q, &sq) in sizes.iter().enumerate() {
+                if q <= p {
+                    continue;
+                }
+                for i in offsets[p]..offsets[p] + sp {
+                    for j in offsets[q]..offsets[q] + sq {
+                        edges.push((i, j));
+                    }
+                }
+            }
+        }
+        Graph::new(n, &edges)
+    }
+
+    /// Ferrers board graph (bipartite) from a partition λ.
+    ///
+    /// Vertices: rows `0..ℓ(λ)` and columns `ℓ(λ)..ℓ(λ)+λ_1`.
+    /// Edge (row i, col j) exists iff j < λ_i (the box (i,j) is in the diagram).
+    pub fn ferrers_board(lambda: &Partition) -> Self {
+        let rows = lambda.num_parts();
+        if rows == 0 {
+            return Graph::empty(0);
+        }
+        let cols = lambda.part(0) as usize;
+        let n = rows + cols;
+        let mut edges = Vec::new();
+        for i in 0..rows {
+            for j in 0..(lambda.part(i) as usize) {
+                edges.push((i, rows + j));
+            }
+        }
+        Graph::new(n, &edges)
+    }
+
+    /// Skew Ferrers board graph from partitions λ/μ.
+    ///
+    /// Same as [`ferrers_board`](Self::ferrers_board) but only includes boxes
+    /// in the skew shape λ/μ.
+    pub fn ferrers_board_skew(lambda: &Partition, mu: &Partition) -> Self {
+        let rows = lambda.num_parts();
+        if rows == 0 {
+            return Graph::empty(0);
+        }
+        let cols = lambda.part(0) as usize;
+        let n = rows + cols;
+        let mut edges = Vec::new();
+        for i in 0..rows {
+            let start = if i < mu.num_parts() { mu.part(i) as usize } else { 0 };
+            for j in start..(lambda.part(i) as usize) {
+                edges.push((i, rows + j));
+            }
+        }
+        Graph::new(n, &edges)
+    }
+
+    /// Unit interval graph from an area sequence.
+    ///
+    /// Given `area = [a_1, ..., a_n]`, vertex i is connected to vertex j
+    /// (with i < j) iff j - i ≤ a_j. This is the incomparability graph of a
+    /// unit interval order.
+    pub fn unit_interval(area: &[u8]) -> Self {
+        let n = area.len();
+        let mut edges = Vec::new();
+        for j in 0..n {
+            let a = area[j] as usize;
+            for gap in 1..=a {
+                if gap <= j {
+                    edges.push((j - gap, j));
+                }
+            }
+        }
+        Graph::new(n, &edges)
+    }
+
+    /// Petersen graph (10 vertices, 15 edges, 3-regular).
+    pub fn petersen() -> Self {
+        let mut edges = Vec::new();
+        // Outer cycle: 0-1-2-3-4-0
+        for i in 0..5 {
+            edges.push((i, (i + 1) % 5));
+        }
+        // Inner pentagram: 5-7-9-6-8-5
+        edges.push((5, 7));
+        edges.push((7, 9));
+        edges.push((9, 6));
+        edges.push((6, 8));
+        edges.push((8, 5));
+        // Spokes: i -- i+5
+        for i in 0..5 {
+            edges.push((i, i + 5));
+        }
+        Graph::new(10, &edges)
+    }
+
+    // -- Graph operations ---------------------------------------------------
+
+    /// Complement graph: edge (u,v) iff (u,v) is NOT in self.
+    pub fn complement(&self) -> Self {
+        let mut edges = Vec::new();
+        for i in 0..self.n {
+            for j in (i + 1)..self.n {
+                if !self.has_edge(i, j) {
+                    edges.push((i, j));
+                }
+            }
+        }
+        Graph::new(self.n, &edges)
+    }
+
+    /// Induced subgraph on vertex set `verts` (relabeled to 0..verts.len()).
+    pub fn induced_subgraph(&self, verts: &[usize]) -> Self {
+        let vset: BTreeSet<usize> = verts.iter().copied().collect();
+        let mut idx = vec![0usize; self.n];
+        for (new, &old) in verts.iter().enumerate() {
+            idx[old] = new;
+        }
+        let edges: Vec<_> = self
+            .edges
+            .iter()
+            .filter(|&&(u, v)| vset.contains(&u) && vset.contains(&v))
+            .map(|&(u, v)| (idx[u], idx[v]))
+            .collect();
+        Graph::new(verts.len(), &edges)
+    }
+
+    /// Delete a vertex (reindex remaining vertices).
+    pub fn delete_vertex(&self, v: usize) -> Self {
+        let verts: Vec<usize> = (0..self.n).filter(|&u| u != v).collect();
+        self.induced_subgraph(&verts)
+    }
+
+    /// Delete an edge.
+    pub fn delete_edge(&self, u: usize, v: usize) -> Self {
+        let (a, b) = if u < v { (u, v) } else { (v, u) };
+        let edges: Vec<_> = self.edges.iter().copied().filter(|&e| e != (a, b)).collect();
+        Graph::new(self.n, &edges)
+    }
+
+    /// Contract an edge: merge v into u, remove self-loops.
+    pub fn contract_edge(&self, u: usize, v: usize) -> Self {
+        // Redirect all edges involving v to u, then delete v
+        let (keep, remove) = if u < v { (u, v) } else { (v, u) };
+        let mut new_edges = Vec::new();
+        for &(a, b) in &self.edges {
+            let a2 = if a == remove { keep } else { a };
+            let b2 = if b == remove { keep } else { b };
+            if a2 != b2 {
+                new_edges.push((a2, b2));
+            }
+        }
+        // Reindex: shift vertices above `remove` down by 1
+        let new_edges: Vec<_> = new_edges
+            .iter()
+            .map(|&(a, b)| {
+                let a2 = if a > remove { a - 1 } else { a };
+                let b2 = if b > remove { b - 1 } else { b };
+                (a2, b2)
+            })
+            .collect();
+        Graph::new(self.n - 1, &new_edges)
+    }
+
+    /// Line graph L(G): vertices are edges of G, two vertices in L(G) are
+    /// adjacent iff the corresponding edges in G share an endpoint.
+    ///
+    /// Vertex i of L(G) corresponds to `self.edges()[i]`.
+    pub fn line_graph(&self) -> Self {
+        let m = self.edges.len();
+        let mut lg_edges = Vec::new();
+        for i in 0..m {
+            let (a, b) = self.edges[i];
+            for j in (i + 1)..m {
+                let (c, d) = self.edges[j];
+                if a == c || a == d || b == c || b == d {
+                    lg_edges.push((i, j));
+                }
+            }
+        }
+        Graph::new(m, &lg_edges)
+    }
+
+    // -- Predicates ---------------------------------------------------------
+
+    /// Is the graph connected?
+    pub fn is_connected(&self) -> bool {
+        if self.n <= 1 {
+            return true;
+        }
+        let mut visited = vec![false; self.n];
+        let mut stack = vec![0usize];
+        visited[0] = true;
+        let mut count = 1;
+        while let Some(v) = stack.pop() {
+            for &u in &self.adj[v] {
+                if !visited[u] {
+                    visited[u] = true;
+                    count += 1;
+                    stack.push(u);
+                }
+            }
+        }
+        count == self.n
+    }
+
+    /// Is the graph bipartite? Returns Some((A, B)) if yes, None if no.
+    pub fn bipartition(&self) -> Option<(Vec<usize>, Vec<usize>)> {
+        let mut color = vec![None; self.n];
+        let mut a = Vec::new();
+        let mut b = Vec::new();
+
+        for start in 0..self.n {
+            if color[start].is_some() {
+                continue;
+            }
+            color[start] = Some(false);
+            a.push(start);
+            let mut stack = vec![start];
+            while let Some(v) = stack.pop() {
+                let c = color[v].unwrap();
+                for &u in &self.adj[v] {
+                    match color[u] {
+                        Some(cu) if cu == c => return None,
+                        Some(_) => {}
+                        None => {
+                            color[u] = Some(!c);
+                            if !c { b.push(u); } else { a.push(u); }
+                            stack.push(u);
+                        }
+                    }
+                }
+            }
+        }
+        Some((a, b))
+    }
+
+    /// Is the graph bipartite?
+    pub fn is_bipartite(&self) -> bool {
+        self.bipartition().is_some()
+    }
+
+    /// Is the graph claw-free (K_{1,3}-free)?
+    ///
+    /// A graph is claw-free iff no vertex has three mutually non-adjacent
+    /// neighbors.
+    pub fn is_claw_free(&self) -> bool {
+        for v in 0..self.n {
+            let nbrs: Vec<usize> = self.adj[v].iter().copied().collect();
+            if nbrs.len() < 3 {
+                continue;
+            }
+            // Check all triples of neighbors
+            for i in 0..nbrs.len() {
+                for j in (i + 1)..nbrs.len() {
+                    for k in (j + 1)..nbrs.len() {
+                        // If none of the three pairs are adjacent, we have a claw
+                        if !self.has_edge(nbrs[i], nbrs[j])
+                            && !self.has_edge(nbrs[i], nbrs[k])
+                            && !self.has_edge(nbrs[j], nbrs[k])
+                        {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+        true
+    }
+
+    // -- Matchings ----------------------------------------------------------
+
+    /// All matchings of the graph, as lists of edge indices.
+    ///
+    /// A matching is a set of edges with no shared endpoints.
+    /// Returns matchings grouped by nothing — just a flat list.
+    pub fn all_matchings(&self) -> Vec<Vec<(usize, usize)>> {
+        let mut result = Vec::new();
+        let mut current = Vec::new();
+        let mut used = vec![false; self.n];
+        self.matchings_rec(0, &mut current, &mut used, &mut result);
+        result
+    }
+
+    fn matchings_rec(
+        &self,
+        edge_idx: usize,
+        current: &mut Vec<(usize, usize)>,
+        used: &mut [bool],
+        result: &mut Vec<Vec<(usize, usize)>>,
+    ) {
+        result.push(current.clone());
+        for i in edge_idx..self.edges.len() {
+            let (u, v) = self.edges[i];
+            if !used[u] && !used[v] {
+                used[u] = true;
+                used[v] = true;
+                current.push((u, v));
+                self.matchings_rec(i + 1, current, used, result);
+                current.pop();
+                used[u] = false;
+                used[v] = false;
+            }
+        }
+    }
+
+    /// Matching polynomial: coefficients[k] = number of matchings with k edges.
+    pub fn matching_polynomial(&self) -> Vec<i64> {
+        let matchings = self.all_matchings();
+        let max_k = matchings.iter().map(|m| m.len()).max().unwrap_or(0);
+        let mut coeffs = vec![0i64; max_k + 1];
+        for m in &matchings {
+            coeffs[m.len()] += 1;
+        }
+        coeffs
+    }
+
+    /// All perfect matchings (matchings that cover every vertex).
+    pub fn perfect_matchings(&self) -> Vec<Vec<(usize, usize)>> {
+        if self.n % 2 != 0 {
+            return vec![]; // odd number of vertices → no perfect matching
+        }
+        let target = self.n / 2;
+        self.all_matchings()
+            .into_iter()
+            .filter(|m| m.len() == target)
+            .collect()
+    }
+
+    /// All non-crossing matchings.
+    ///
+    /// A matching is non-crossing if no two edges (a,b) and (c,d) satisfy
+    /// a < c < b < d (when endpoints are ordered on a line 0,1,...,n-1).
+    pub fn non_crossing_matchings(&self) -> Vec<Vec<(usize, usize)>> {
+        self.all_matchings()
+            .into_iter()
+            .filter(|m| {
+                for i in 0..m.len() {
+                    for j in (i + 1)..m.len() {
+                        let (a, b) = m[i]; // a < b guaranteed by edge ordering
+                        let (c, d) = m[j];
+                        if (a < c && c < b && b < d) || (c < a && a < d && d < b) {
+                            return false;
+                        }
+                    }
+                }
+                true
+            })
+            .collect()
+    }
+
+    /// All non-nesting matchings.
+    ///
+    /// A matching is non-nesting if no two edges (a,b) and (c,d) satisfy
+    /// a < c < d < b (one edge nested inside the other).
+    pub fn non_nesting_matchings(&self) -> Vec<Vec<(usize, usize)>> {
+        self.all_matchings()
+            .into_iter()
+            .filter(|m| {
+                for i in 0..m.len() {
+                    for j in (i + 1)..m.len() {
+                        let (a, b) = m[i];
+                        let (c, d) = m[j];
+                        if (a < c && d < b) || (c < a && b < d) {
+                            return false;
+                        }
+                    }
+                }
+                true
+            })
+            .collect()
+    }
+
+    // -- Triangles and cliques ----------------------------------------------
+
+    /// All triangles (3-cliques) in the graph.
+    ///
+    /// Returns triples (a, b, c) with a < b < c.
+    pub fn triangles(&self) -> Vec<(usize, usize, usize)> {
+        let mut result = Vec::new();
+        for &(a, b) in &self.edges {
+            for &c in self.adj[b].range((b + 1)..) {
+                if self.has_edge(a, c) {
+                    result.push((a, b, c));
+                }
+            }
+        }
+        result
+    }
+
+    /// All orientations of the graph (all 2^|E| ways to direct edges).
+    ///
+    /// Returns each orientation as a list of directed edges (u, v) meaning u → v.
+    pub fn all_orientations(&self) -> Vec<Vec<(usize, usize)>> {
+        let m = self.edges.len();
+        let mut result = Vec::with_capacity(1 << m);
+        for mask in 0..(1u64 << m) {
+            let mut orient = Vec::with_capacity(m);
+            for (i, &(u, v)) in self.edges.iter().enumerate() {
+                if (mask >> i) & 1 == 0 {
+                    orient.push((u, v));
+                } else {
+                    orient.push((v, u));
+                }
+            }
+            result.push(orient);
+        }
+        result
+    }
+
+    /// Stirling graph S(n): bipartite graph on {0,...,n-1} ∪ {n,...,2n-1}
+    /// where left vertex i is adjacent to right vertex n+j iff i < j.
+    ///
+    /// The number of k-matchings equals the Stirling number S(n, n-k).
+    pub fn stirling(n: usize) -> Self {
+        let total = 2 * n;
+        let mut edges = Vec::new();
+        for i in 0..n {
+            for j in (i + 1)..n {
+                edges.push((i, n + j));
+            }
+        }
+        Graph::new(total, &edges)
+    }
+
+    // -- Independent sets ---------------------------------------------------
+
+    /// All independent sets (including the empty set).
+    pub fn all_independent_sets(&self) -> Vec<Vec<usize>> {
+        let mut result = Vec::new();
+        let mut current = Vec::new();
+        self.indep_rec(0, &mut current, &mut result);
+        result
+    }
+
+    fn indep_rec(
+        &self,
+        start: usize,
+        current: &mut Vec<usize>,
+        result: &mut Vec<Vec<usize>>,
+    ) {
+        result.push(current.clone());
+        for v in start..self.n {
+            if current.iter().all(|&u| !self.has_edge(u, v)) {
+                current.push(v);
+                self.indep_rec(v + 1, current, result);
+                current.pop();
+            }
+        }
+    }
+
+    /// Independence polynomial: coefficients[k] = number of independent sets of size k.
+    pub fn independence_polynomial(&self) -> Vec<i64> {
+        let sets = self.all_independent_sets();
+        let max_k = sets.iter().map(|s| s.len()).max().unwrap_or(0);
+        let mut coeffs = vec![0i64; max_k + 1];
+        for s in &sets {
+            coeffs[s.len()] += 1;
+        }
+        coeffs
+    }
+
+    // -- Proper colorings ---------------------------------------------------
+
+    /// All proper colorings with `k` colors (labeled 0..k).
+    ///
+    /// A proper coloring assigns a color to each vertex such that no two
+    /// adjacent vertices share the same color.
+    pub fn proper_colorings(&self, k: usize) -> Vec<Vec<usize>> {
+        let mut result = Vec::new();
+        let mut coloring = vec![0usize; self.n];
+        self.color_rec(0, k, &mut coloring, &mut result);
+        result
+    }
+
+    fn color_rec(
+        &self,
+        v: usize,
+        k: usize,
+        coloring: &mut Vec<usize>,
+        result: &mut Vec<Vec<usize>>,
+    ) {
+        if v == self.n {
+            result.push(coloring.clone());
+            return;
+        }
+        for c in 0..k {
+            if self.adj[v].iter().all(|&u| u >= v || coloring[u] != c) {
+                coloring[v] = c;
+                self.color_rec(v + 1, k, coloring, result);
+            }
+        }
+    }
+
+    /// Chromatic polynomial evaluated at t = k: number of proper k-colorings.
+    pub fn chromatic_polynomial_eval(&self, k: usize) -> usize {
+        self.proper_colorings(k).len()
+    }
+
+    /// Count proper colorings by color type (sorted color multiplicities).
+    ///
+    /// Returns a map from partition (the color type) to count.
+    /// The sum over all partitions of n gives the chromatic polynomial at k = n.
+    pub fn proper_colorings_by_type(&self, k: usize) -> Vec<(Vec<u32>, usize)> {
+        let colorings = self.proper_colorings(k);
+        let mut type_counts: std::collections::BTreeMap<Vec<u32>, usize> =
+            std::collections::BTreeMap::new();
+
+        for coloring in &colorings {
+            let mut freq = vec![0u32; k];
+            for &c in coloring {
+                freq[c] += 1;
+            }
+            freq.sort_unstable_by(|a, b| b.cmp(a));
+            while freq.last() == Some(&0) {
+                freq.pop();
+            }
+            *type_counts.entry(freq).or_insert(0) += 1;
+        }
+
+        type_counts.into_iter().collect()
+    }
+
+    // -- Acyclic orientations -----------------------------------------------
+
+    /// All acyclic orientations of the graph.
+    ///
+    /// An acyclic orientation assigns a direction to each edge such that the
+    /// resulting directed graph has no directed cycles. Each proper coloring
+    /// with n colors induces an acyclic orientation (orient u→v if color(u) < color(v)).
+    ///
+    /// Returns orientations as lists of directed edges `(u, v)` meaning u → v.
+    pub fn acyclic_orientations(&self) -> Vec<Vec<(usize, usize)>> {
+        // Use the coloring method: for each permutation of vertices,
+        // orient edges by the permutation order.
+        // This generates each acyclic orientation exactly once per
+        // linear extension of its transitive closure, so we deduplicate.
+        let mut seen = BTreeSet::new();
+        let mut result = Vec::new();
+
+        // Generate all permutations
+        let perms = all_perms(self.n);
+        for perm in &perms {
+            let mut orientation = Vec::new();
+            for &(u, v) in &self.edges {
+                if perm[u] < perm[v] {
+                    orientation.push((u, v));
+                } else {
+                    orientation.push((v, u));
+                }
+            }
+            orientation.sort();
+            if seen.insert(orientation.clone()) {
+                result.push(orientation);
+            }
+        }
+        result
+    }
+
+    /// Number of acyclic orientations.
+    pub fn num_acyclic_orientations(&self) -> usize {
+        self.acyclic_orientations().len()
+    }
+
+    /// Sink polynomial of acyclic orientations: coefficients[k] = number of
+    /// acyclic orientations with exactly k sinks.
+    ///
+    /// A sink is a vertex with no outgoing edges in the orientation.
+    /// This equals the chromatic polynomial evaluated at -t (up to sign).
+    pub fn acyclic_sink_polynomial(&self) -> Vec<i64> {
+        let orientations = self.acyclic_orientations();
+        let mut max_sinks = 0;
+        let mut sink_counts: Vec<usize> = Vec::new();
+
+        for orient in &orientations {
+            let mut has_outgoing = vec![false; self.n];
+            for &(u, _v) in orient {
+                has_outgoing[u] = true;
+            }
+            let sinks = has_outgoing.iter().filter(|&&x| !x).count();
+            if sinks > max_sinks {
+                max_sinks = sinks;
+                sink_counts.resize(max_sinks + 1, 0);
+            }
+            if sinks < sink_counts.len() {
+                sink_counts[sinks] += 1;
+            }
+        }
+
+        sink_counts.resize(max_sinks + 1, 0);
+        sink_counts.iter().map(|&c| c as i64).collect()
+    }
+
+    // -- Chromatic polynomial (deletion-contraction) -----------------------
+
+    /// Chromatic polynomial via deletion-contraction.
+    ///
+    /// Returns coefficients in ascending degree order:
+    /// `result[k]` is the coefficient of t^k in χ_G(t).
+    ///
+    /// Uses memoization keyed on canonical edge sets.
+    pub fn chromatic_polynomial(&self) -> Vec<i64> {
+        let mut cache: std::collections::HashMap<(usize, Vec<(usize, usize)>), Vec<i64>> =
+            std::collections::HashMap::new();
+        self.chromatic_poly_dc(&mut cache)
+    }
+
+    fn chromatic_poly_dc(
+        &self,
+        cache: &mut std::collections::HashMap<(usize, Vec<(usize, usize)>), Vec<i64>>,
+    ) -> Vec<i64> {
+        let key = (self.n, self.edges.clone());
+        if let Some(cached) = cache.get(&key) {
+            return cached.clone();
+        }
+
+        let result = if self.edges.is_empty() {
+            // No edges: χ(t) = t^n
+            let mut c = vec![0i64; self.n + 1];
+            c[self.n] = 1;
+            c
+        } else {
+            // χ_G(t) = χ_{G-e}(t) - χ_{G/e}(t)
+            let (u, v) = self.edges[0];
+            let g_del = self.delete_edge(u, v);
+            let g_con = self.contract_edge(u, v);
+            let p_del = g_del.chromatic_poly_dc(cache);
+            let p_con = g_con.chromatic_poly_dc(cache);
+            vec_poly_sub(&p_del, &p_con)
+        };
+
+        cache.insert(key, result.clone());
+        result
+    }
+
+    /// Sink polynomial by enumerating 2^m edge orientations and checking acyclicity.
+    ///
+    /// For each of the 2^|E| orientations, check if the resulting digraph is
+    /// acyclic (via topological sort), and count sinks.
+    /// This is O(2^m · (n + m)) which is much faster than the n!-based method
+    /// when m is moderate relative to n.
+    pub fn sink_polynomial_fast(&self) -> Vec<i64> {
+        let m = self.edges.len();
+        let n = self.n;
+        if n == 0 {
+            return vec![1];
+        }
+        let mut coeffs = vec![0i64; n + 1];
+
+        for mask in 0u64..(1u64 << m) {
+            // Build adjacency list for this orientation
+            // For each edge (u,v), bit i=0 means u→v, bit i=1 means v→u
+            let mut out_deg = vec![0usize; n];
+            let mut adj_out: Vec<Vec<usize>> = vec![Vec::new(); n];
+            for (i, &(u, v)) in self.edges.iter().enumerate() {
+                if mask & (1u64 << i) == 0 {
+                    adj_out[u].push(v);
+                    out_deg[u] += 1;
+                } else {
+                    adj_out[v].push(u);
+                    out_deg[v] += 1;
+                }
+            }
+
+            // Check acyclicity via Kahn's algorithm (topological sort)
+            let mut in_deg = vec![0usize; n];
+            for u in 0..n {
+                for &v in &adj_out[u] {
+                    in_deg[v] += 1;
+                }
+            }
+            let mut queue: Vec<usize> = (0..n).filter(|&v| in_deg[v] == 0).collect();
+            let mut visited = 0usize;
+            while let Some(u) = queue.pop() {
+                visited += 1;
+                for &v in &adj_out[u] {
+                    in_deg[v] -= 1;
+                    if in_deg[v] == 0 {
+                        queue.push(v);
+                    }
+                }
+            }
+
+            if visited == n {
+                // Acyclic: count sinks (vertices with out-degree 0)
+                let sinks = out_deg.iter().filter(|&&d| d == 0).count();
+                coeffs[sinks] += 1;
+            }
+        }
+
+        // Strip trailing zeros
+        while coeffs.last() == Some(&0) {
+            coeffs.pop();
+        }
+        coeffs
+    }
+
+    /// Sink polynomial over ALL orientations (not just acyclic ones).
+    ///
+    /// For each of the 2^|E| orientations, count sinks (vertices with out-degree 0).
+    /// Note: orientations with cycles may have zero sinks, contributing to coeff[0].
+    pub fn sink_polynomial_all_orientations(&self) -> Vec<i64> {
+        let m = self.edges.len();
+        let n = self.n;
+        if n == 0 {
+            return vec![1];
+        }
+        let mut coeffs = vec![0i64; n + 1];
+
+        for mask in 0u64..(1u64 << m) {
+            let mut out_deg = vec![0usize; n];
+            for (i, &(u, v)) in self.edges.iter().enumerate() {
+                if mask & (1u64 << i) == 0 {
+                    out_deg[u] += 1;
+                } else {
+                    out_deg[v] += 1;
+                }
+            }
+            let sinks = out_deg.iter().filter(|&&d| d == 0).count();
+            coeffs[sinks] += 1;
+        }
+
+        // Strip trailing zeros
+        while coeffs.last() == Some(&0) {
+            coeffs.pop();
+        }
+        coeffs
+    }
+
+    // -- Tree-specific sink polynomial ----------------------------------------
+
+    /// Sink polynomial of L(T) for a tree T, via bottom-up recursion.
+    ///
+    /// For a tree, an acyclic orientation of L(T) corresponds to choosing
+    /// a total order on the edges incident to each vertex. An edge e={u,v}
+    /// is a sink iff e is minimum at u and minimum at v.
+    ///
+    /// We root T and process bottom-up. At each vertex v with parent edge e_p
+    /// and child edges e_1,...,e_k, we choose a permutation of all d_v edges
+    /// incident to v. We track a two-variable polynomial in (t, s) where
+    /// t marks sinks in the subtree, and s marks whether e_p is minimum at v.
+    ///
+    /// This runs in O(n · D^2) where D is the max degree, via polynomial
+    /// convolution at each vertex.
+    ///
+    /// Panics if the graph is not a tree.
+    pub fn sink_polynomial_tree(&self) -> Vec<i64> {
+        use num_traits::ToPrimitive;
+        self.sink_polynomial_tree_bigint()
+            .iter()
+            .map(|c| c.to_i64().expect("coefficient overflow in sink_polynomial_tree"))
+            .collect()
+    }
+
+    /// Return the per-vertex (A_v, B_v) polynomials from the tree recursion.
+    ///
+    /// Returns (order, parent, a_polys, b_polys) where:
+    /// - order[i] is the vertex in BFS order (root = order[0])
+    /// - parent[v] is the parent of v (usize::MAX for root)
+    /// - a_polys[v] = A_v(t), b_polys[v] = B_v(t)
+    pub fn tree_ab_polynomials(&self) -> (Vec<usize>, Vec<usize>, Vec<Vec<BigInt>>, Vec<Vec<BigInt>>) {
+        assert!(
+            self.edges.len() + 1 == self.n && self.n > 0,
+            "tree_ab_polynomials requires a tree"
+        );
+
+        let mut adj: Vec<Vec<usize>> = vec![Vec::new(); self.n];
+        for &(u, v) in &self.edges {
+            adj[u].push(v);
+            adj[v].push(u);
+        }
+        let root = 0;
+        let mut parent = vec![usize::MAX; self.n];
+        let mut order = Vec::with_capacity(self.n);
+        let mut visited = vec![false; self.n];
+        let mut queue = std::collections::VecDeque::new();
+        queue.push_back(root);
+        visited[root] = true;
+        while let Some(v) = queue.pop_front() {
+            order.push(v);
+            for &u in &adj[v] {
+                if !visited[u] {
+                    visited[u] = true;
+                    parent[u] = v;
+                    queue.push_back(u);
+                }
+            }
+        }
+
+        let one_b: Vec<BigInt> = vec![big(1)];
+        let zero_b: Vec<BigInt> = vec![];
+        let mut a_poly: Vec<Vec<BigInt>> = vec![vec![]; self.n];
+        let mut b_poly: Vec<Vec<BigInt>> = vec![vec![]; self.n];
+
+        for &v in order.iter().rev() {
+            let children: Vec<usize> = adj[v]
+                .iter()
+                .copied()
+                .filter(|&u| parent[u] == v)
+                .collect();
+            let k = children.len();
+
+            if v == root {
+                // Root: A and B don't apply, but store the sink poly in B for convenience
+                if k == 0 {
+                    a_poly[v] = one_b.clone();
+                    b_poly[v] = zero_b.clone();
+                    continue;
+                }
+                let mut tps: Vec<Vec<BigInt>> = Vec::new();
+                for &c in &children {
+                    tps.push(bpoly_add(&a_poly[c], &b_poly[c]));
+                }
+                let p = bpoly_product(&tps);
+                let fact = factorial_big(k - 1);
+                let mut result = zero_b.clone();
+                for (j, &c) in children.iter().enumerate() {
+                    let p_j = bpoly_exact_div(&p, &tps[j]);
+                    let t_a_j = bpoly_mul_t(&a_poly[c]);
+                    let sink_or_not = bpoly_add(&t_a_j, &b_poly[c]);
+                    let term = bpoly_mul(&sink_or_not, &p_j);
+                    result = bpoly_add(&result, &term);
+                }
+                a_poly[v] = zero_b.clone();
+                b_poly[v] = bpoly_scale(&result, &fact); // store S_{L(T)} in b_poly[root]
+            } else if k == 0 {
+                a_poly[v] = one_b.clone();
+                b_poly[v] = zero_b.clone();
+            } else {
+                let d = k + 1;
+                let mut tps: Vec<Vec<BigInt>> = Vec::new();
+                for &c in &children {
+                    tps.push(bpoly_add(&a_poly[c], &b_poly[c]));
+                }
+                let p = bpoly_product(&tps);
+                let fact = factorial_big(d - 1);
+                a_poly[v] = bpoly_scale(&p, &fact);
+                let mut bv = zero_b.clone();
+                for (j, &c) in children.iter().enumerate() {
+                    let p_j = bpoly_exact_div(&p, &tps[j]);
+                    let t_a_j = bpoly_mul_t(&a_poly[c]);
+                    let sink_or_not = bpoly_add(&t_a_j, &b_poly[c]);
+                    let term = bpoly_mul(&sink_or_not, &p_j);
+                    bv = bpoly_add(&bv, &term);
+                }
+                b_poly[v] = bpoly_scale(&bv, &fact);
+            }
+        }
+
+        (order, parent, a_poly, b_poly)
+    }
+
+    /// Sink polynomial of L(T) for a tree T, using BigInt arithmetic.
+    ///
+    /// Root T and process bottom-up. At each vertex v with parent edge e_p
+    /// and children c_1,...,c_k, track two polynomials:
+    ///   A_v(t) = contribution when e_p IS minimum at v,
+    ///   B_v(t) = contribution when e_p is NOT minimum at v.
+    /// See \cref{prop:treeRecursion} in the paper for details.
+    pub fn sink_polynomial_tree_bigint(&self) -> Vec<BigInt> {
+        assert!(
+            self.edges.len() + 1 == self.n && self.n > 0,
+            "sink_polynomial_tree requires a tree (|E| = |V| - 1)"
+        );
+
+        if self.n == 1 {
+            return vec![big(1)];
+        }
+
+        // Build adjacency and root at vertex 0
+        let mut adj: Vec<Vec<usize>> = vec![Vec::new(); self.n];
+        for &(u, v) in &self.edges {
+            adj[u].push(v);
+            adj[v].push(u);
+        }
+        let root = 0;
+        let mut parent = vec![usize::MAX; self.n];
+        let mut order = Vec::with_capacity(self.n);
+        let mut visited = vec![false; self.n];
+        let mut queue = std::collections::VecDeque::new();
+        queue.push_back(root);
+        visited[root] = true;
+        while let Some(v) = queue.pop_front() {
+            order.push(v);
+            for &u in &adj[v] {
+                if !visited[u] {
+                    visited[u] = true;
+                    parent[u] = v;
+                    queue.push_back(u);
+                }
+            }
+        }
+
+        let one_b: Vec<BigInt> = vec![big(1)];
+        let zero_b: Vec<BigInt> = vec![];
+
+        let mut a_poly: Vec<Vec<BigInt>> = vec![vec![]; self.n];
+        let mut b_poly: Vec<Vec<BigInt>> = vec![vec![]; self.n];
+
+        for &v in order.iter().rev() {
+            let children: Vec<usize> = adj[v]
+                .iter()
+                .copied()
+                .filter(|&u| parent[u] == v)
+                .collect();
+            let k = children.len();
+
+            if v == root {
+                if k == 0 { continue; }
+                let mut tps: Vec<Vec<BigInt>> = Vec::new();
+                for &c in &children {
+                    tps.push(bpoly_add(&a_poly[c], &b_poly[c]));
+                }
+                let p = bpoly_product(&tps);
+                let fact = factorial_big(k - 1);
+                let mut result = zero_b.clone();
+                for (j, &c) in children.iter().enumerate() {
+                    let p_j = bpoly_exact_div(&p, &tps[j]);
+                    let t_a_j = bpoly_mul_t(&a_poly[c]);
+                    let sink_or_not = bpoly_add(&t_a_j, &b_poly[c]);
+                    let term = bpoly_mul(&sink_or_not, &p_j);
+                    result = bpoly_add(&result, &term);
+                }
+                return bpoly_scale(&result, &fact);
+            }
+
+            if k == 0 {
+                a_poly[v] = one_b.clone();
+                b_poly[v] = zero_b.clone();
+            } else {
+                let d = k + 1;
+                let mut tps: Vec<Vec<BigInt>> = Vec::new();
+                for &c in &children {
+                    tps.push(bpoly_add(&a_poly[c], &b_poly[c]));
+                }
+                let p = bpoly_product(&tps);
+                let fact = factorial_big(d - 1);
+
+                a_poly[v] = bpoly_scale(&p, &fact);
+
+                let mut bv = zero_b.clone();
+                for (j, &c) in children.iter().enumerate() {
+                    let p_j = bpoly_exact_div(&p, &tps[j]);
+                    let t_a_j = bpoly_mul_t(&a_poly[c]);
+                    let sink_or_not = bpoly_add(&t_a_j, &b_poly[c]);
+                    let term = bpoly_mul(&sink_or_not, &p_j);
+                    bv = bpoly_add(&bv, &term);
+                }
+                b_poly[v] = bpoly_scale(&bv, &fact);
+            }
+        }
+
+        one_b
+    }
+
+    // -- Display ------------------------------------------------------------
+
+    /// Format as edge list string.
+    pub fn display_edges(&self) -> String {
+        let edges: Vec<String> = self
+            .edges
+            .iter()
+            .map(|(u, v)| format!("{}-{}", u, v))
+            .collect();
+        format!("Graph({} vertices, edges: [{}])", self.n, edges.join(", "))
+    }
+}
+
+impl std::fmt::Display for Graph {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Graph(n={}, |E|={})",
+            self.n,
+            self.edges.len()
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+fn all_perms(n: usize) -> Vec<Vec<usize>> {
+    if n == 0 {
+        return vec![vec![]];
+    }
+    let mut result = Vec::new();
+    let mut perm: Vec<usize> = (0..n).collect();
+    loop {
+        result.push(perm.clone());
+        if !next_perm(&mut perm) {
+            break;
+        }
+    }
+    result
+}
+
+fn next_perm(perm: &mut [usize]) -> bool {
+    let n = perm.len();
+    if n <= 1 {
+        return false;
+    }
+    let mut i = n - 2;
+    while perm[i] >= perm[i + 1] {
+        if i == 0 {
+            return false;
+        }
+        i -= 1;
+    }
+    let mut j = n - 1;
+    while perm[j] <= perm[i] {
+        j -= 1;
+    }
+    perm.swap(i, j);
+    perm[i + 1..].reverse();
+    true
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -- Generator tests --
+
+    #[test]
+    fn test_complete() {
+        let k4 = Graph::complete(4);
+        assert_eq!(k4.num_vertices(), 4);
+        assert_eq!(k4.num_edges(), 6);
+
+        let k5 = Graph::complete(5);
+        assert_eq!(k5.num_edges(), 10);
+    }
+
+    #[test]
+    fn test_path() {
+        let p5 = Graph::path(5);
+        assert_eq!(p5.num_vertices(), 5);
+        assert_eq!(p5.num_edges(), 4);
+        assert!(p5.has_edge(0, 1));
+        assert!(!p5.has_edge(0, 2));
+    }
+
+    #[test]
+    fn test_cycle() {
+        let c5 = Graph::cycle(5);
+        assert_eq!(c5.num_edges(), 5);
+        assert!(c5.has_edge(0, 4));
+    }
+
+    #[test]
+    fn test_bipartite() {
+        let k23 = Graph::complete_bipartite(2, 3);
+        assert_eq!(k23.num_vertices(), 5);
+        assert_eq!(k23.num_edges(), 6);
+        assert!(k23.is_bipartite());
+    }
+
+    #[test]
+    fn test_multipartite() {
+        let k222 = Graph::complete_multipartite(&[2, 2, 2]);
+        assert_eq!(k222.num_vertices(), 6);
+        assert_eq!(k222.num_edges(), 12); // 3 * C(2,1)^2 = wait, 3*4 = 12
+        assert!(!k222.has_edge(0, 1)); // same part
+        assert!(k222.has_edge(0, 2)); // different parts
+    }
+
+    #[test]
+    fn test_ferrers_board() {
+        let lam = Partition::new(vec![3, 2]);
+        let g = Graph::ferrers_board(&lam);
+        assert_eq!(g.num_vertices(), 5); // 2 rows + 3 cols
+        assert_eq!(g.num_edges(), 5); // boxes: (0,0),(0,1),(0,2),(1,0),(1,1)
+    }
+
+    #[test]
+    fn test_unit_interval() {
+        // area [0,1,2] gives edges: 1-2 (gap 1 ≤ a[2]=2), 0-2 (gap 2 ≤ a[2]=2), 0-1 (gap 1 ≤ a[1]=1)
+        let g = Graph::unit_interval(&[0, 1, 2]);
+        assert_eq!(g.num_vertices(), 3);
+        assert_eq!(g.num_edges(), 3); // complete graph K3
+    }
+
+    // -- Predicate tests --
+
+    #[test]
+    fn test_connected() {
+        assert!(Graph::complete(4).is_connected());
+        assert!(Graph::path(5).is_connected());
+        assert!(Graph::cycle(5).is_connected());
+
+        // Disconnected: two components
+        let g = Graph::new(4, &[(0, 1), (2, 3)]);
+        assert!(!g.is_connected());
+    }
+
+    #[test]
+    fn test_bipartite_predicate() {
+        assert!(Graph::path(5).is_bipartite());
+        assert!(!Graph::complete(3).is_bipartite()); // K3 has odd cycle
+        assert!(Graph::cycle(4).is_bipartite()); // even cycle
+        assert!(!Graph::cycle(5).is_bipartite()); // odd cycle
+    }
+
+    #[test]
+    fn test_claw_free() {
+        // K4 is claw-free (every triple of neighbors has edges)
+        assert!(Graph::complete(4).is_claw_free());
+        // Path is claw-free (max degree 2)
+        assert!(Graph::path(5).is_claw_free());
+        // Star K_{1,3} is NOT claw-free
+        let star = Graph::new(4, &[(0, 1), (0, 2), (0, 3)]);
+        assert!(!star.is_claw_free());
+    }
+
+    // -- Matching tests (verified against Mathematica) --
+
+    #[test]
+    fn test_matching_polynomial_k3() {
+        // Mathematica: {1, 3}
+        assert_eq!(Graph::complete(3).matching_polynomial(), vec![1, 3]);
+    }
+
+    #[test]
+    fn test_matching_polynomial_k4() {
+        // Mathematica: {1, 6, 3}
+        assert_eq!(Graph::complete(4).matching_polynomial(), vec![1, 6, 3]);
+    }
+
+    #[test]
+    fn test_matching_polynomial_k5() {
+        // Mathematica: {1, 10, 15}
+        assert_eq!(Graph::complete(5).matching_polynomial(), vec![1, 10, 15]);
+    }
+
+    #[test]
+    fn test_matching_polynomial_c5() {
+        // Mathematica: {1, 5, 5}
+        assert_eq!(Graph::cycle(5).matching_polynomial(), vec![1, 5, 5]);
+    }
+
+    #[test]
+    fn test_matching_polynomial_p5() {
+        // Mathematica: {1, 4, 3}
+        assert_eq!(Graph::path(5).matching_polynomial(), vec![1, 4, 3]);
+    }
+
+    // -- Independence polynomial tests --
+
+    #[test]
+    fn test_independence_polynomial_p4() {
+        // Mathematica: {1, 4, 3}
+        assert_eq!(Graph::path(4).independence_polynomial(), vec![1, 4, 3]);
+    }
+
+    #[test]
+    fn test_independence_polynomial_k4() {
+        // K4: only empty set and singletons are independent
+        assert_eq!(Graph::complete(4).independence_polynomial(), vec![1, 4]);
+    }
+
+    // -- Proper coloring tests --
+
+    #[test]
+    fn test_chromatic_polynomial_k3() {
+        // chi_{K3}(t) = t(t-1)(t-2)
+        // chi(1) = 0, chi(2) = 0, chi(3) = 6
+        assert_eq!(Graph::complete(3).chromatic_polynomial_eval(1), 0);
+        assert_eq!(Graph::complete(3).chromatic_polynomial_eval(2), 0);
+        assert_eq!(Graph::complete(3).chromatic_polynomial_eval(3), 6);
+    }
+
+    #[test]
+    fn test_chromatic_polynomial_c4() {
+        // Mathematica: t^4 - 4t^3 + 6t^2 - 3t
+        // chi(2) = 16 - 32 + 24 - 6 = 2
+        // chi(3) = 81 - 108 + 54 - 9 = 18
+        assert_eq!(Graph::cycle(4).chromatic_polynomial_eval(2), 2);
+        assert_eq!(Graph::cycle(4).chromatic_polynomial_eval(3), 18);
+    }
+
+    // -- Acyclic orientation tests (verified against Mathematica) --
+
+    #[test]
+    fn test_acyclic_orientations_p3() {
+        // Mathematica: 4
+        assert_eq!(Graph::path(3).num_acyclic_orientations(), 4);
+    }
+
+    #[test]
+    fn test_acyclic_orientations_c4() {
+        // Mathematica: 14
+        assert_eq!(Graph::cycle(4).num_acyclic_orientations(), 14);
+    }
+
+    #[test]
+    fn test_acyclic_orientations_k4() {
+        // Mathematica: 24 (= 4!)
+        assert_eq!(Graph::complete(4).num_acyclic_orientations(), 24);
+    }
+
+    // -- Graph operation tests --
+
+    #[test]
+    fn test_complement() {
+        let p3 = Graph::path(3); // 0-1, 1-2
+        let comp = p3.complement(); // 0-2
+        assert_eq!(comp.num_edges(), 1);
+        assert!(comp.has_edge(0, 2));
+    }
+
+    #[test]
+    fn test_delete_vertex() {
+        let k4 = Graph::complete(4);
+        let g = k4.delete_vertex(0);
+        assert_eq!(g.num_vertices(), 3);
+        assert_eq!(g.num_edges(), 3); // K3
+    }
+
+    #[test]
+    fn test_contract_edge() {
+        let p3 = Graph::path(3); // 0-1-2
+        let g = p3.contract_edge(0, 1); // merge 1 into 0, result: 0-1 (was 0-2)
+        assert_eq!(g.num_vertices(), 2);
+        assert_eq!(g.num_edges(), 1);
+    }
+
+    #[test]
+    fn test_petersen() {
+        let g = Graph::petersen();
+        assert_eq!(g.num_vertices(), 10);
+        assert_eq!(g.num_edges(), 15);
+        // Petersen graph is 3-regular
+        for v in 0..10 {
+            assert_eq!(g.degree(v), 3);
+        }
+        // Petersen is NOT claw-free (it contains K_{1,3})
+        assert!(!g.is_claw_free());
+    }
+
+    // -- Edge cases --
+
+    #[test]
+    fn test_empty_graph() {
+        let g = Graph::empty(3);
+        assert_eq!(g.num_edges(), 0);
+        assert_eq!(g.matching_polynomial(), vec![1]);
+        assert_eq!(g.independence_polynomial(), vec![1, 3, 3, 1]); // all subsets
+    }
+
+    #[test]
+    fn test_single_vertex() {
+        let g = Graph::empty(1);
+        assert!(g.is_connected());
+        assert!(g.is_bipartite());
+        assert!(g.is_claw_free());
+    }
+
+    // -- graph6 parser tests --
+
+    #[test]
+    fn test_graph6_k1() {
+        // K1 = single vertex, graph6 = "@"
+        let g = Graph::from_graph6("@").unwrap();
+        assert_eq!(g.num_vertices(), 1);
+        assert_eq!(g.num_edges(), 0);
+    }
+
+    #[test]
+    fn test_graph6_k2() {
+        // K2, graph6 = "A_"
+        let g = Graph::from_graph6("A_").unwrap();
+        assert_eq!(g.num_vertices(), 2);
+        assert_eq!(g.num_edges(), 1);
+    }
+
+    #[test]
+    fn test_graph6_k3() {
+        // K3, graph6 = "Bw"
+        let g = Graph::from_graph6("Bw").unwrap();
+        assert_eq!(g.num_vertices(), 3);
+        assert_eq!(g.num_edges(), 3);
+    }
+
+    #[test]
+    fn test_graph6_c5() {
+        // C5, graph6 = "Dhc"
+        let g = Graph::from_graph6("Dhc").unwrap();
+        assert_eq!(g.num_vertices(), 5);
+        assert_eq!(g.num_edges(), 5);
+        assert!(g.has_edge(0, 4)); // cycle edge
+    }
+
+    #[test]
+    fn test_graph6_petersen() {
+        // Petersen graph, graph6 = "IsP@DKAO?"  (well-known encoding)
+        // Let's verify by round-tripping: parse graph5c.g6 and check counts
+        let path = std::path::Path::new(
+            "/home/paxinum/Dropbox/mathematica-packages/graph5c.g6"
+        );
+        if path.exists() {
+            let graphs = Graph::all_from_graph6_file(path).unwrap();
+            // Number of connected graphs on 5 vertices = 21
+            assert_eq!(graphs.len(), 21);
+            // All should have 5 vertices
+            assert!(graphs.iter().all(|g| g.num_vertices() == 5));
+            // All should be connected
+            assert!(graphs.iter().all(|g| g.is_connected()));
+        }
+    }
+
+    #[test]
+    fn test_graph6_file_counts() {
+        // Known counts of connected graphs on n vertices (OEIS A001349)
+        let expected = [(3, 2), (4, 6), (5, 21), (6, 112), (7, 853)];
+        for (n, count) in expected {
+            let path = std::path::PathBuf::from(format!(
+                "/home/paxinum/Dropbox/mathematica-packages/graph{}c.g6", n
+            ));
+            if path.exists() {
+                let graphs = Graph::all_from_graph6_file(&path).unwrap();
+                assert_eq!(
+                    graphs.len(), count,
+                    "wrong count for connected graphs on {} vertices", n
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_graph6_trees() {
+        // Known counts of trees on n vertices (OEIS A000055)
+        let expected = [(5, 3), (6, 6), (7, 11), (8, 23), (9, 47), (10, 106)];
+        for (n, count) in expected {
+            let path = std::path::PathBuf::from(format!(
+                "/home/paxinum/Dropbox/mathematica-packages/trees{}.g6", n
+            ));
+            if path.exists() {
+                let trees = Graph::all_from_graph6_file(&path).unwrap();
+                assert_eq!(
+                    trees.len(), count,
+                    "wrong count for trees on {} vertices", n
+                );
+                // All trees are connected and bipartite
+                assert!(trees.iter().all(|g| g.is_connected()));
+                assert!(trees.iter().all(|g| g.is_bipartite()));
+                // All trees have n-1 edges
+                assert!(trees.iter().all(|g| g.num_edges() == n - 1));
+            }
+        }
+    }
+
+    // -- Perfect matchings --
+
+    #[test]
+    fn test_perfect_matchings_k4() {
+        // K4 has 3 perfect matchings
+        assert_eq!(Graph::complete(4).perfect_matchings().len(), 3);
+    }
+
+    #[test]
+    fn test_perfect_matchings_odd() {
+        assert_eq!(Graph::complete(3).perfect_matchings().len(), 0);
+    }
+
+    // -- Non-crossing matchings --
+
+    #[test]
+    fn test_non_crossing_k4() {
+        // K4: total matchings = 1 + 6 + 3 = 10. Non-crossing: all singles are
+        // non-crossing (7), pairs: (0-1,2-3) ok, (0-2,1-3) crosses, (0-3,1-2) ok.
+        // So non-crossing matchings with 2 edges: 2. Total: 1 + 6 + 2 = 9.
+        // Wait: empty + 6 single-edge + non-crossing pairs.
+        // Pairs from K4: {01,23}, {02,13}, {03,12}
+        // {02,13}: 0<1<2 and edge (1,3): 1<3, edge (0,2): 0<2. Cross? 0<1<2<3: no cross.
+        // Actually: (0,2) and (1,3): 0 < 1 < 2 < 3 → a=0,b=2,c=1,d=3 → 0<1<2<3 → a<c<b<d → crossing!
+        let nc = Graph::complete(4).non_crossing_matchings();
+        let nc2: Vec<_> = nc.iter().filter(|m| m.len() == 2).collect();
+        assert_eq!(nc2.len(), 2); // {0-1,2-3} and {0-3,1-2}
+    }
+
+    // -- Non-nesting matchings --
+
+    #[test]
+    fn test_non_nesting_k4() {
+        // K4 pairs: {01,23} no nesting, {02,13} no nesting (neither contains other),
+        // {03,12}: 0<1<2<3, edge (0,3) contains (1,2) → nesting!
+        let nn = Graph::complete(4).non_nesting_matchings();
+        let nn2: Vec<_> = nn.iter().filter(|m| m.len() == 2).collect();
+        assert_eq!(nn2.len(), 2); // {0-1,2-3} and {0-2,1-3}
+    }
+
+    // -- Triangles --
+
+    #[test]
+    fn test_triangles_k4() {
+        // K4 has C(4,3) = 4 triangles
+        assert_eq!(Graph::complete(4).triangles().len(), 4);
+    }
+
+    #[test]
+    fn test_triangles_c5() {
+        // C5 has no triangles
+        assert_eq!(Graph::cycle(5).triangles().len(), 0);
+    }
+
+    #[test]
+    fn test_triangles_k5() {
+        assert_eq!(Graph::complete(5).triangles().len(), 10);
+    }
+
+    // -- All orientations --
+
+    #[test]
+    fn test_all_orientations_p3() {
+        // P3 has 2 edges → 4 orientations
+        assert_eq!(Graph::path(3).all_orientations().len(), 4);
+    }
+
+    #[test]
+    fn test_all_orientations_k3() {
+        // K3 has 3 edges → 8 orientations
+        assert_eq!(Graph::complete(3).all_orientations().len(), 8);
+    }
+
+    // -- Stirling graph --
+
+    #[test]
+    fn test_stirling_graph() {
+        // S(3): matching polynomial should relate to Stirling numbers
+        let g = Graph::stirling(3);
+        assert_eq!(g.num_vertices(), 6);
+        // Matchings by size: S(3,3)=1, S(3,2)=3, S(3,1)=1
+        // matching poly = [1, 3, 1]
+        assert_eq!(g.matching_polynomial(), vec![1, 3, 1]);
+    }
+
+    // -- Line graph --
+
+    #[test]
+    fn test_line_graph_k3() {
+        // L(K3) = K3 (3 edges, each pair shares a vertex)
+        let lg = Graph::complete(3).line_graph();
+        assert_eq!(lg.num_vertices(), 3);
+        assert_eq!(lg.num_edges(), 3);
+    }
+
+    #[test]
+    fn test_line_graph_matching_independence() {
+        // I(L(G), x) = mu(G, x) for any graph G
+        let g = Graph::path(5);
+        let lg = g.line_graph();
+        assert_eq!(g.matching_polynomial(), lg.independence_polynomial());
+    }
+}

@@ -1,0 +1,3 @@
+[submodule "kostka"]
+	path = kostka
+	url = git@github.com:PerAlexandersson/kostka.git
