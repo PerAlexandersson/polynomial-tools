@@ -2,11 +2,12 @@
 //!
 //! - `partial_i(f)` = (f - s_i(f)) / (x_i - x_{i+1})  (simple divided difference)
 //! - `pi_i(f)` = partial_i(x_i * f)  (isobaric/Demazure operator)
+//! - `theta_i(f)` = pi_i(f) - f      (Demazure atom operator)
 //!
 //! Both always produce polynomials when applied to polynomials.
 
-use sym_poly_core::Ring;
 use crate::multipoly::MultiPoly;
+use sym_poly_core::Ring;
 
 /// Simple divided difference ∂_i: (f - s_i(f)) / (x_i - x_{i+1}).
 ///
@@ -43,6 +44,53 @@ pub fn partial_i<C: Ring>(f: &MultiPoly<C>, i: usize) -> MultiPoly<C> {
 pub fn pi_i<C: Ring>(f: &MultiPoly<C>, i: usize) -> MultiPoly<C> {
     let xi_f = f.mul_var(i);
     partial_i(&xi_f, i)
+}
+
+/// Demazure atom operator θ_i = π_i - id.
+pub fn theta_i<C: Ring>(f: &MultiPoly<C>, i: usize) -> MultiPoly<C> {
+    pi_i(f, i) - f.clone()
+}
+
+/// t-deformed Demazure operator:
+/// (1 - t) π_i(f) + t s_i(f).
+///
+/// This is the operator-level ingredient used in the recursive construction
+/// of several nonsymmetric Macdonald-type families.
+pub fn tpi_i<C: Ring>(f: &MultiPoly<C>, i: usize, t: &C) -> MultiPoly<C> {
+    let one_minus_t = C::one() - t.clone();
+    pi_i(f, i).scale(&one_minus_t) + f.swap_vars(i).scale(t)
+}
+
+/// t-deformed atom operator:
+/// (1 - t) θ_i(f) + t s_i(f).
+pub fn ttheta_i<C: Ring>(f: &MultiPoly<C>, i: usize, t: &C) -> MultiPoly<C> {
+    let one_minus_t = C::one() - t.clone();
+    theta_i(f, i).scale(&one_minus_t) + f.swap_vars(i).scale(t)
+}
+
+/// Apply simple divided differences in the given order.
+pub fn partial_word<C: Ring>(f: &MultiPoly<C>, word: &[usize]) -> MultiPoly<C> {
+    word.iter().fold(f.clone(), |acc, &i| partial_i(&acc, i))
+}
+
+/// Apply Demazure operators in the given order.
+pub fn pi_word<C: Ring>(f: &MultiPoly<C>, word: &[usize]) -> MultiPoly<C> {
+    word.iter().fold(f.clone(), |acc, &i| pi_i(&acc, i))
+}
+
+/// Apply atom operators in the given order.
+pub fn theta_word<C: Ring>(f: &MultiPoly<C>, word: &[usize]) -> MultiPoly<C> {
+    word.iter().fold(f.clone(), |acc, &i| theta_i(&acc, i))
+}
+
+/// Apply t-deformed Demazure operators in the given order.
+pub fn tpi_word<C: Ring>(f: &MultiPoly<C>, word: &[usize], t: &C) -> MultiPoly<C> {
+    word.iter().fold(f.clone(), |acc, &i| tpi_i(&acc, i, t))
+}
+
+/// Apply t-deformed atom operators in the given order.
+pub fn ttheta_word<C: Ring>(f: &MultiPoly<C>, word: &[usize], t: &C) -> MultiPoly<C> {
+    word.iter().fold(f.clone(), |acc, &i| ttheta_i(&acc, i, t))
 }
 
 /// Divide a polynomial by (x_i - x_{i+1}).
@@ -128,6 +176,30 @@ mod tests {
     }
 
     #[test]
+    fn test_theta_on_x1_squared() {
+        // θ_0(x_1^2) = π_0(x_1^2) - x_1^2 = x_1 x_2 + x_2^2
+        let f: MultiPoly<i64> = MultiPoly::x_power(2, vec![2, 0]);
+        let result = theta_i(&f, 0);
+        assert_eq!(result.coefficient(&[2, 0]), 0);
+        assert_eq!(result.coefficient(&[1, 1]), 1);
+        assert_eq!(result.coefficient(&[0, 2]), 1);
+    }
+
+    #[test]
+    fn test_tpi_specializations() {
+        let f: MultiPoly<i64> = MultiPoly::x_power(2, vec![2, 0]);
+        assert_eq!(tpi_i(&f, 0, &0), pi_i(&f, 0));
+        assert_eq!(tpi_i(&f, 0, &1), f.swap_vars(0));
+    }
+
+    #[test]
+    fn test_ttheta_specializations() {
+        let f: MultiPoly<i64> = MultiPoly::x_power(2, vec![2, 0]);
+        assert_eq!(ttheta_i(&f, 0, &0), theta_i(&f, 0));
+        assert_eq!(ttheta_i(&f, 0, &1), f.swap_vars(0));
+    }
+
+    #[test]
     fn test_braid_relation_partial() {
         // ∂_0 ∂_1 ∂_0 = ∂_1 ∂_0 ∂_1 on x_1^3 * x_2^2 * x_3
         let f: MultiPoly<i64> = MultiPoly::x_power(3, vec![3, 2, 1]);
@@ -152,5 +224,16 @@ mod tests {
         let lhs = partial_i(&partial_i(&f, 0), 2);
         let rhs = partial_i(&partial_i(&f, 2), 0);
         assert_eq!(lhs, rhs, "commutation for ∂ failed");
+    }
+
+    #[test]
+    fn test_word_application() {
+        let f: MultiPoly<i64> = MultiPoly::x_power(3, vec![3, 1, 0]);
+        let word = vec![0, 1, 0];
+        assert_eq!(pi_word(&f, &word), pi_i(&pi_i(&pi_i(&f, 0), 1), 0));
+        assert_eq!(
+            theta_word(&f, &word),
+            theta_i(&theta_i(&theta_i(&f, 0), 1), 0)
+        );
     }
 }

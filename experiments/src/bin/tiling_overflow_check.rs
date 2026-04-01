@@ -3,14 +3,20 @@
 //!
 //! Usage: cargo run --release --bin tiling_overflow_check
 
-use polynomial_tools::{is_real_rooted, is_real_rooted_sturm, format_poly};
+use polynomial_tools::{format_poly, is_real_rooted, is_real_rooted_sturm};
 
 /// Compute P_n(t) = sum_{j=0}^{floor(n/3)} C(n-2j, j) * d^j * t^j
 /// via the recursion P_n = P_{n-1} + d*t * P_{n-3}.
 fn tiling_poly_rect3(n: usize, d: i64) -> Vec<i64> {
-    if n == 0 { return vec![1]; }
-    if n == 1 { return vec![1]; }
-    if n == 2 { return vec![1]; }
+    if n == 0 {
+        return vec![1];
+    }
+    if n == 1 {
+        return vec![1];
+    }
+    if n == 2 {
+        return vec![1];
+    }
 
     let mut pp = vec![1i64]; // P_{n-3}
     let mut pq = vec![1i64]; // P_{n-2}
@@ -43,14 +49,7 @@ fn main() {
     // mu=(k,k,k), d=k: P_n(t) = sum_j C(n-2j,j) * k^j * t^j
     // Fails at n=69 for d=3, n=62 for d=4, n=58 for d=5
 
-    let test_cases = vec![
-        (3, 69),
-        (3, 68),
-        (4, 62),
-        (4, 61),
-        (5, 58),
-        (5, 57),
-    ];
+    let test_cases = vec![(3, 69), (3, 68), (4, 62), (4, 61), (5, 58), (5, 57)];
 
     for &(d, n) in &test_cases {
         let p = tiling_poly_rect3(n, d);
@@ -62,14 +61,19 @@ fn main() {
             let coeff = p[k + 1];
             let mult = (k as i64) + 1;
             if coeff.checked_mul(mult).is_none() {
-                println!("d={}, n={}: OVERFLOW at derivative term k={}: {} * {} overflows i64",
-                         d, n, k, mult, coeff);
+                println!(
+                    "d={}, n={}: OVERFLOW at derivative term k={}: {} * {} overflows i64",
+                    d, n, k, mult, coeff
+                );
                 overflow = true;
                 break;
             }
         }
         if !overflow {
-            println!("d={}, n={}: No i64 overflow in derivative (deg={})", d, n, deg);
+            println!(
+                "d={}, n={}: No i64 overflow in derivative (deg={})",
+                d, n, deg
+            );
         }
 
         // Check real-rootedness with both methods
@@ -99,7 +103,13 @@ fn main() {
         let p = tiling_poly_rect3(n, d);
         let rr_b = is_real_rooted(&p);
         let rr_s = is_real_rooted_sturm(&p);
-        println!("d_eff={}, n={}: Bezout={}, Sturm={}, match={}",
-                 d, n, rr_b, rr_s, rr_b == rr_s);
+        println!(
+            "d_eff={}, n={}: Bezout={}, Sturm={}, match={}",
+            d,
+            n,
+            rr_b,
+            rr_s,
+            rr_b == rr_s
+        );
     }
 }

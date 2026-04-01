@@ -6,9 +6,9 @@
 //! where R_1, R_2, ..., R_k are the maximal ascending runs.
 
 use combpoly::parking::all_parking_functions;
-use polynomial_tools::{format_poly, is_real_rooted};
 use combpoly::statistics;
 use combpoly::statistics::Stat;
+use polynomial_tools::{format_poly, is_real_rooted};
 
 /// Extract maximal ascending runs from a word.
 fn ascending_runs(w: &[u8]) -> Vec<&[u8]> {
@@ -138,13 +138,29 @@ fn main() {
         let pfs = all_parking_functions(n);
         let total = pfs.len();
 
-        let strict: Vec<Vec<u8>> = pfs.iter().filter(|w| is_run_sorted_strict(w)).cloned().collect();
-        let weak: Vec<Vec<u8>> = pfs.iter().filter(|w| is_run_sorted_weak(w)).cloned().collect();
-        let lex: Vec<Vec<u8>> = pfs.iter().filter(|w| is_run_sorted_lex(w)).cloned().collect();
+        let strict: Vec<Vec<u8>> = pfs
+            .iter()
+            .filter(|w| is_run_sorted_strict(w))
+            .cloned()
+            .collect();
+        let weak: Vec<Vec<u8>> = pfs
+            .iter()
+            .filter(|w| is_run_sorted_weak(w))
+            .cloned()
+            .collect();
+        let lex: Vec<Vec<u8>> = pfs
+            .iter()
+            .filter(|w| is_run_sorted_lex(w))
+            .cloned()
+            .collect();
 
         println!(
             "| {} | {} | {} | {} | {} |",
-            n, total, strict.len(), weak.len(), lex.len()
+            n,
+            total,
+            strict.len(),
+            weak.len(),
+            lex.len()
         );
 
         all_strict.push(strict);
@@ -166,28 +182,44 @@ fn main() {
         let pfs = all_parking_functions(n);
         let total = pfs.len();
 
-        let strict: Vec<Vec<u8>> = pfs.iter().filter(|w| {
-            let runs = strict_ascending_runs(w);
-            runs.len() <= 1 || (1..runs.len()).all(|i| {
-                runs[i].iter().min().unwrap() > runs[i-1].iter().min().unwrap()
+        let strict: Vec<Vec<u8>> = pfs
+            .iter()
+            .filter(|w| {
+                let runs = strict_ascending_runs(w);
+                runs.len() <= 1
+                    || (1..runs.len())
+                        .all(|i| runs[i].iter().min().unwrap() > runs[i - 1].iter().min().unwrap())
             })
-        }).cloned().collect();
+            .cloned()
+            .collect();
 
-        let weak: Vec<Vec<u8>> = pfs.iter().filter(|w| {
-            let runs = strict_ascending_runs(w);
-            runs.len() <= 1 || (1..runs.len()).all(|i| {
-                runs[i].iter().min().unwrap() >= runs[i-1].iter().min().unwrap()
+        let weak: Vec<Vec<u8>> = pfs
+            .iter()
+            .filter(|w| {
+                let runs = strict_ascending_runs(w);
+                runs.len() <= 1
+                    || (1..runs.len())
+                        .all(|i| runs[i].iter().min().unwrap() >= runs[i - 1].iter().min().unwrap())
             })
-        }).cloned().collect();
+            .cloned()
+            .collect();
 
-        let lex: Vec<Vec<u8>> = pfs.iter().filter(|w| {
-            let runs = strict_ascending_runs(w);
-            runs.len() <= 1 || (1..runs.len()).all(|i| runs[i] > runs[i-1])
-        }).cloned().collect();
+        let lex: Vec<Vec<u8>> = pfs
+            .iter()
+            .filter(|w| {
+                let runs = strict_ascending_runs(w);
+                runs.len() <= 1 || (1..runs.len()).all(|i| runs[i] > runs[i - 1])
+            })
+            .cloned()
+            .collect();
 
         println!(
             "| {} | {} | {} | {} | {} |",
-            n, total, strict.len(), weak.len(), lex.len()
+            n,
+            total,
+            strict.len(),
+            weak.len(),
+            lex.len()
         );
 
         all_strict2.push(strict);

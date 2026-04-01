@@ -1,1 +1,10 @@
 /target/
+.codex
+documents/*.aux
+documents/*.bbl
+documents/*.blg
+documents/*.fdb_latexmk
+documents/*.fls
+documents/*.log
+documents/*.out
+documents/*.synctex.gz

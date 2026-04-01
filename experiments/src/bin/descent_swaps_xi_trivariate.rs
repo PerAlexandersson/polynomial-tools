@@ -19,7 +19,6 @@
 ///
 /// If Ξ is trivariate stable, combining with the staircase operator gives
 /// a route to proving bivariate stability of Ψ_{n,S}(y,t).
-
 use combpoly::permutation::all_permutations;
 use combpoly::statistics::{compute, descent_set_bitmask, Stat};
 use std::collections::BTreeMap;
@@ -45,10 +44,14 @@ fn cabs(a: (f64, f64)) -> f64 {
 // ── Simple PRNG ───────────────────────────────────────────────────────────────
 struct Rng(u64);
 impl Rng {
-    fn new(seed: u64) -> Self { Rng(seed.wrapping_add(1)) }
+    fn new(seed: u64) -> Self {
+        Rng(seed.wrapping_add(1))
+    }
     fn next_u64(&mut self) -> u64 {
-        self.0 = self.0.wrapping_mul(6364136223846793005)
-                       .wrapping_add(1442695040888963407);
+        self.0 = self
+            .0
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         self.0
     }
     fn next_f64(&mut self) -> f64 {
@@ -66,7 +69,9 @@ fn descent_set_str(mask: u64, n: u8) -> String {
     let mut first = true;
     for i in 1..n {
         if (mask >> (i - 1)) & 1 == 1 {
-            if !first { s.push(','); }
+            if !first {
+                s.push(',');
+            }
             s.push_str(&i.to_string());
             first = false;
         }
@@ -81,27 +86,41 @@ fn valid_positions(s_mask: u64, n: u8) -> Vec<u8> {
     for p in 1..n {
         let p_in = (s_mask >> (p - 1)) & 1 == 1;
         let pm1_in = p >= 2 && (s_mask >> (p - 2)) & 1 == 1;
-        if p_in && !pm1_in { pos.push(p); }
+        if p_in && !pm1_in {
+            pos.push(p);
+        }
     }
-    if n >= 2 && (s_mask >> (n - 2)) & 1 == 0 { pos.push(n); }
+    if n >= 2 && (s_mask >> (n - 2)) & 1 == 0 {
+        pos.push(n);
+    }
     pos
 }
 
 /// S'_p  (base source descent set, as bitmask in [n-2]).
 fn source_asc(s_mask: u64, p: u8, n: u8) -> u64 {
-    if n <= 2 { return 0; }
-    if p == n { return s_mask; }
+    if n <= 2 {
+        return 0;
+    }
+    if p == n {
+        return s_mask;
+    }
     let mut sp = 0u64;
     if p == 1 {
         for j in 2..n {
-            if (s_mask >> (j - 1)) & 1 == 1 { sp |= 1 << (j - 2); }
+            if (s_mask >> (j - 1)) & 1 == 1 {
+                sp |= 1 << (j - 2);
+            }
         }
     } else {
         for pos in 1..=(p.saturating_sub(2)) {
-            if (s_mask >> (pos - 1)) & 1 == 1 { sp |= 1 << (pos - 1); }
+            if (s_mask >> (pos - 1)) & 1 == 1 {
+                sp |= 1 << (pos - 1);
+            }
         }
         for j in (p + 1)..n {
-            if (s_mask >> (j - 1)) & 1 == 1 { sp |= 1 << (j - 2); }
+            if (s_mask >> (j - 1)) & 1 == 1 {
+                sp |= 1 << (j - 2);
+            }
         }
     }
     sp
@@ -109,14 +128,18 @@ fn source_asc(s_mask: u64, p: u8, n: u8) -> u64 {
 
 /// S''_p  (augmented source = S'_p ∪ {p-1}), None for p=1 or p=n.
 fn source_desc(s_mask: u64, p: u8, n: u8) -> Option<u64> {
-    if p <= 1 || p >= n { return None; }
+    if p <= 1 || p >= n {
+        return None;
+    }
     Some(source_asc(s_mask, p, n) | (1 << (p - 2)))
 }
 
 /// ε₁(π, p) = 1 iff π(p-1)+1 = π(p)  (π is 0-indexed slice of length n-1).
 fn epsilon1(pi: &[u8], p: u8) -> bool {
     let n = pi.len() as u8 + 1;
-    if p <= 1 || p >= n { return false; }
+    if p <= 1 || p >= n {
+        return false;
+    }
     pi[(p - 2) as usize] + 1 == pi[(p - 1) as usize]
 }
 
@@ -152,7 +175,9 @@ fn build_xi_coeffs(
         for (desc_mask, class) in source_by_descent.iter() {
             let is_asc = *desc_mask == sp_asc;
             let is_desc = sp_desc.map_or(false, |sd| *desc_mask == sd);
-            if !is_asc && !is_desc { continue; }
+            if !is_asc && !is_desc {
+                continue;
+            }
 
             for pi in class {
                 // Position of n-1 in π (1-indexed position in [n-1])
@@ -179,19 +204,16 @@ fn build_xi_coeffs(
 // ── Evaluate Ξ(z, y, t) at complex point ─────────────────────────────────────
 //
 // tensor[i][q_idx][k] = [y^{i+1} z^{q_idx+1} t^k] Ξ
-fn eval_xi(
-    tensor: &[Vec<Vec<i64>>],
-    z: (f64, f64),
-    y: (f64, f64),
-    t: (f64, f64),
-) -> (f64, f64) {
+fn eval_xi(tensor: &[Vec<Vec<i64>>], z: (f64, f64), y: (f64, f64), t: (f64, f64)) -> (f64, f64) {
     let mut result = (0.0_f64, 0.0_f64);
     for (i, source_rows) in tensor.iter().enumerate() {
         let yi = cpow(y, (i + 1) as u32); // y^{rank = i+1}
         for (q_idx, tk_coeffs) in source_rows.iter().enumerate() {
-            if tk_coeffs.is_empty() { continue; }
+            if tk_coeffs.is_empty() {
+                continue;
+            }
             let zq = cpow(z, (q_idx + 1) as u32); // z^{q = q_idx+1}
-            // Evaluate Σ_k c_k t^k
+                                                  // Evaluate Σ_k c_k t^k
             let mut tpoly = (0.0_f64, 0.0_f64);
             for (k, &c) in tk_coeffs.iter().enumerate() {
                 if c != 0 {
@@ -220,7 +242,10 @@ fn main() {
 
     println!("=== Trivariate stability of Ξ(z, y, t) ===");
     println!("Ξ = Σ_i y^i Φ̃_{{p_i}}(z,t),  y-exponents = consecutive ranks");
-    println!("Checking n = 3..{}, {} random test points each\n", max_n, num_tests);
+    println!(
+        "Checking n = 3..{}, {} random test points each\n",
+        max_n, num_tests
+    );
 
     let mut grand_total = 0u64;
     let mut grand_pass = 0u64;
@@ -257,7 +282,9 @@ fn main() {
 
         for (&s_mask, _class) in &target_by_descent {
             // Only S with 1 ∉ S
-            if s_mask & 1 != 0 { continue; }
+            if s_mask & 1 != 0 {
+                continue;
+            }
 
             let positions = valid_positions(s_mask, n);
             let m = positions.len();
@@ -284,12 +311,12 @@ fn main() {
                 let (z, y, t) = if test_idx < 6 {
                     // A few structured tests
                     let cases: &[(f64, f64, f64, f64, f64, f64)] = &[
-                        (0.0, 1.0,  0.0, 1.0,  0.0, 1.0),  // i, i, i
-                        (1.0, 1.0,  1.0, 1.0,  1.0, 1.0),  // 1+i, 1+i, 1+i
-                        (-1.0, 0.5, 0.0, 0.5, -1.0, 0.5),  // mixed real parts
-                        (0.5, 2.0,  0.5, 0.5,  0.5, 2.0),
+                        (0.0, 1.0, 0.0, 1.0, 0.0, 1.0),   // i, i, i
+                        (1.0, 1.0, 1.0, 1.0, 1.0, 1.0),   // 1+i, 1+i, 1+i
+                        (-1.0, 0.5, 0.0, 0.5, -1.0, 0.5), // mixed real parts
+                        (0.5, 2.0, 0.5, 0.5, 0.5, 2.0),
                         (-0.3, 0.1, 0.7, 0.3, -0.5, 0.4),
-                        (2.0, 0.1, -1.0, 0.2,  0.3, 0.7),
+                        (2.0, 0.1, -1.0, 0.2, 0.3, 0.7),
                     ];
                     let c = cases[test_idx];
                     ((c.0, c.1), (c.2, c.3), (c.4, c.5))
@@ -305,14 +332,13 @@ fn main() {
 
                 let val = eval_xi(&tensor, z, y, t);
                 let abs_val = cabs(val);
-                if abs_val < min_abs { min_abs = abs_val; }
+                if abs_val < min_abs {
+                    min_abs = abs_val;
+                }
 
                 if abs_val < 1e-9 {
                     pass = false;
-                    println!(
-                        "  FAIL S={} p={:?}",
-                        s_str, positions
-                    );
+                    println!("  FAIL S={} p={:?}", s_str, positions);
                     println!(
                         "    Ξ({:.3}+{:.3}i, {:.3}+{:.3}i, {:.3}+{:.3}i) ≈ 0  (|Ξ|={:.2e})",
                         z.0, z.1, y.0, y.1, t.0, t.1, abs_val
@@ -324,16 +350,13 @@ fn main() {
 
             if pass {
                 n_pass += 1;
-                println!(
-                    "  PASS  S={}  m={}  min|Ξ|={:.3e}",
-                    s_str, m, min_abs
-                );
+                println!("  PASS  S={}  m={}  min|Ξ|={:.3e}", s_str, m, min_abs);
             }
         }
 
-        grand_total    += n_total;
-        grand_pass     += n_pass;
-        grand_trivial  += n_trivial;
+        grand_total += n_total;
+        grand_pass += n_pass;
+        grand_trivial += n_trivial;
 
         println!(
             "n={}: {}/{} passed  ({} trivial with m<2)\n",
@@ -342,8 +365,10 @@ fn main() {
     }
 
     println!("==========================================");
-    println!("TOTAL: {}/{} cases passed  ({} trivial skipped)",
-             grand_pass, grand_total, grand_trivial);
+    println!(
+        "TOTAL: {}/{} cases passed  ({} trivial skipped)",
+        grand_pass, grand_total, grand_trivial
+    );
 
     if grand_pass == grand_total && grand_total > 0 {
         println!();

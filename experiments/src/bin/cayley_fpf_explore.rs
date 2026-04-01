@@ -5,10 +5,10 @@
 //! Check real-rootedness, interlacing, and look for recurrences.
 
 use combpoly::cayley::for_each_fpf_cayley;
-use polynomial_tools::{check_interlacing, format_poly, is_real_rooted};
-use polynomial_tools::recurrence::{find_recurrence_adaptive, AdaptiveSearchOptions};
 use combpoly::statistics;
 use combpoly::statistics::Stat;
+use polynomial_tools::recurrence::{find_recurrence_adaptive, AdaptiveSearchOptions};
+use polynomial_tools::{check_interlacing, format_poly, is_real_rooted};
 
 fn accumulate_poly(coeffs: &mut Vec<i64>, val: usize) {
     if val >= coeffs.len() {
@@ -257,7 +257,9 @@ fn main() {
             }
         });
 
-        if m < 2 { continue; }
+        if m < 2 {
+            continue;
+        }
 
         println!("n = {}:", n);
         for k in 1..=max_last {

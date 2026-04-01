@@ -18,8 +18,8 @@ pub mod composition {
 
 // Re-export symmetric function types from sym-poly-sym
 pub mod symmetric_function {
-    pub use sym_poly_sym::symmetric_function::*;
     pub use sym_poly_sym::basis::*;
+    pub use sym_poly_sym::symmetric_function::*;
 }
 pub mod kostka {
     pub use sym_poly_sym::kostka::*;
@@ -29,15 +29,15 @@ pub mod transition {
 }
 
 // Local modules (not moved to sym-poly)
-pub mod graph;
-pub mod poset;
 pub mod chromatic;
+pub mod graph;
 pub mod key_polynomial;
+pub mod poset;
 
 // Top-level re-exports for convenience
-pub use sym_poly_core::Ring;
-pub use sym_poly_core::Partition;
+pub use graph::Graph;
 pub use sym_poly_core::Composition;
+pub use sym_poly_core::Partition;
+pub use sym_poly_core::Ring;
 pub use sym_poly_sym::Basis;
 pub use sym_poly_sym::SymmetricFunction;
-pub use graph::Graph;

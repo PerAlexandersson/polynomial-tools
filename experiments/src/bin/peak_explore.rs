@@ -98,7 +98,12 @@ fn ferrers_to_perm(lambda: &[usize]) -> Vec<u8> {
                 break;
             }
         }
-        assert!(best > 0, "No available column for row {} (lambda={:?})", i + 1, lambda);
+        assert!(
+            best > 0,
+            "No available column for row {} (lambda={:?})",
+            i + 1,
+            lambda
+        );
         perm[i] = best as u8;
         used[best] = true;
     }
@@ -197,15 +202,17 @@ fn format_poly(coeffs: &[i64]) -> String {
 /// Returns sorted roots (as f64 approximations).
 fn find_real_roots(coeffs: &[i64]) -> Option<Vec<f64>> {
     let roots = polynomial_tools::real_roots(coeffs)?;
-    let mut float_roots: Vec<f64> = roots.iter().map(|r| {
-        let n = r.numer().to_str_radix(10).parse::<f64>().unwrap();
-        let d = r.denom().to_str_radix(10).parse::<f64>().unwrap();
-        n / d
-    }).collect();
+    let mut float_roots: Vec<f64> = roots
+        .iter()
+        .map(|r| {
+            let n = r.numer().to_str_radix(10).parse::<f64>().unwrap();
+            let d = r.denom().to_str_radix(10).parse::<f64>().unwrap();
+            n / d
+        })
+        .collect();
     float_roots.sort_by(|a, b| a.partial_cmp(b).unwrap());
     Some(float_roots)
 }
-
 
 fn is_real_rooted(coeffs: &[i64]) -> bool {
     polynomial_tools::is_real_rooted(coeffs)
@@ -264,9 +271,7 @@ fn check_interlacing(f: &[i64], g: &[i64]) -> InterlaceResult {
 
     // For f << g, we need dg = df or dg = df + 1.
     if dg != df && dg != df + 1 {
-        return InterlaceResult::No(format!(
-            "degree mismatch: deg(f)={}, deg(g)={}", df, dg
-        ));
+        return InterlaceResult::No(format!("degree mismatch: deg(f)={}, deg(g)={}", df, dg));
     }
 
     // If f is constant (df == 0), then dg must be 0 or 1, already checked above.
@@ -281,7 +286,13 @@ fn check_interlacing(f: &[i64], g: &[i64]) -> InterlaceResult {
             if g_roots[i] > f_roots[i] + eps || f_roots[i] > g_roots[i + 1] + eps {
                 return InterlaceResult::No(format!(
                     "interleaving fails at i={}: g[{}]={:.6} f[{}]={:.6} g[{}]={:.6}",
-                    i, i, g_roots[i], i, f_roots[i], i + 1, g_roots[i + 1]
+                    i,
+                    i,
+                    g_roots[i],
+                    i,
+                    f_roots[i],
+                    i + 1,
+                    g_roots[i + 1]
                 ));
             }
         }
@@ -383,7 +394,11 @@ fn compute_du(lambda: &[usize]) -> (PolyMap, PolyMap) {
         }
 
         let is_descent = k > pi[1];
-        let map = if is_descent { &mut d_polys } else { &mut u_polys };
+        let map = if is_descent {
+            &mut d_polys
+        } else {
+            &mut u_polys
+        };
         let entry = map.entry(k).or_insert_with(Vec::new);
         while entry.len() <= peaks {
             entry.push(0);
@@ -405,12 +420,21 @@ fn verify_recursion(lambda: &[usize], lambda_plus: &[usize]) {
     // Check that lambda+ has the right shape
     assert_eq!(lambda_plus.len(), n + 1, "lambda+ must have one more row");
     for i in 0..n {
-        assert_eq!(lambda_plus[i + 1], lambda[i] + 1,
+        assert_eq!(
+            lambda_plus[i + 1],
+            lambda[i] + 1,
             "lambda+[{}] = {} should be lambda[{}]+1 = {}",
-            i + 1, lambda_plus[i + 1], i, lambda[i] + 1);
+            i + 1,
+            lambda_plus[i + 1],
+            i,
+            lambda[i] + 1
+        );
     }
 
-    println!("\nRecursion: lambda={:?} -> lambda+={:?}", lambda, lambda_plus);
+    println!(
+        "\nRecursion: lambda={:?} -> lambda+={:?}",
+        lambda, lambda_plus
+    );
 
     let (d_lam, u_lam) = compute_du(lambda);
     let (d_plus, u_plus) = compute_du(lambda_plus);
@@ -436,8 +460,12 @@ fn verify_recursion(lambda: &[usize], lambda_plus: &[usize]) {
 
         let d_match = d_predicted == d_actual;
         if !d_match {
-            println!("  D_{}^+ MISMATCH: predicted={} actual={}",
-                k, format_poly(&d_predicted), format_poly(&d_actual));
+            println!(
+                "  D_{}^+ MISMATCH: predicted={} actual={}",
+                k,
+                format_poly(&d_predicted),
+                format_poly(&d_actual)
+            );
             all_ok = false;
         }
 
@@ -454,8 +482,12 @@ fn verify_recursion(lambda: &[usize], lambda_plus: &[usize]) {
 
         let u_match = u_predicted == u_actual;
         if !u_match {
-            println!("  U_{}^+ MISMATCH: predicted={} actual={}",
-                k, format_poly(&u_predicted), format_poly(&u_actual));
+            println!(
+                "  U_{}^+ MISMATCH: predicted={} actual={}",
+                k,
+                format_poly(&u_predicted),
+                format_poly(&u_actual)
+            );
             all_ok = false;
         }
     }
@@ -514,7 +546,7 @@ fn main() {
 
 fn process_board(lambda: &[usize]) {
     let _n = lambda.len();
-    println!("{}",  "=".repeat(72));
+    println!("{}", "=".repeat(72));
     println!("Ferrers board lambda = {:?}", lambda);
 
     // Convert to 312-avoiding permutation
@@ -659,14 +691,14 @@ fn process_board(lambda: &[usize]) {
     for i in 0..d_seq.len() {
         for j in i + 1..d_seq.len() {
             let result = check_interlacing(&d_seq[i].1, &d_seq[j].1);
-            println!(
-                "  D_{} interlaces D_{}: {}",
-                d_seq[i].0, d_seq[j].0, result
-            );
+            println!("  D_{} interlaces D_{}: {}", d_seq[i].0, d_seq[j].0, result);
         }
     }
     let d_interlacing = check_sequence_interlacing(&d_seq);
-    println!("  => {{{{D_k}}}} is interlacing: {}", if d_interlacing { "YES" } else { "NO" });
+    println!(
+        "  => {{{{D_k}}}} is interlacing: {}",
+        if d_interlacing { "YES" } else { "NO" }
+    );
 
     // Check {U_k} is an interlacing sequence
     println!("\n--- {{U_k}} interlacing sequence ---");
@@ -678,14 +710,14 @@ fn process_board(lambda: &[usize]) {
     for i in 0..u_seq.len() {
         for j in i + 1..u_seq.len() {
             let result = check_interlacing(&u_seq[i].1, &u_seq[j].1);
-            println!(
-                "  U_{} interlaces U_{}: {}",
-                u_seq[i].0, u_seq[j].0, result
-            );
+            println!("  U_{} interlaces U_{}: {}", u_seq[i].0, u_seq[j].0, result);
         }
     }
     let u_interlacing = check_sequence_interlacing(&u_seq);
-    println!("  => {{{{U_k}}}} is interlacing: {}", if u_interlacing { "YES" } else { "NO" });
+    println!(
+        "  => {{{{U_k}}}} is interlacing: {}",
+        if u_interlacing { "YES" } else { "NO" }
+    );
 
     // Check {A_k} interlacing sequence
     println!("\n--- {{A_k}} interlacing sequence ---");
@@ -697,14 +729,14 @@ fn process_board(lambda: &[usize]) {
     for i in 0..a_seq.len() {
         for j in i + 1..a_seq.len() {
             let result = check_interlacing(&a_seq[i].1, &a_seq[j].1);
-            println!(
-                "  A_{} interlaces A_{}: {}",
-                a_seq[i].0, a_seq[j].0, result
-            );
+            println!("  A_{} interlaces A_{}: {}", a_seq[i].0, a_seq[j].0, result);
         }
     }
     let a_interlacing = check_sequence_interlacing(&a_seq);
-    println!("  => {{{{A_k}}}} is interlacing: {}", if a_interlacing { "YES" } else { "NO" });
+    println!(
+        "  => {{{{A_k}}}} is interlacing: {}",
+        if a_interlacing { "YES" } else { "NO" }
+    );
 
     // Check {W_k} interlacing sequence
     println!("\n--- {{W_k}} interlacing sequence ---");
@@ -716,14 +748,14 @@ fn process_board(lambda: &[usize]) {
     for i in 0..w_seq.len() {
         for j in i + 1..w_seq.len() {
             let result = check_interlacing(&w_seq[i].1, &w_seq[j].1);
-            println!(
-                "  W_{} interlaces W_{}: {}",
-                w_seq[i].0, w_seq[j].0, result
-            );
+            println!("  W_{} interlaces W_{}: {}", w_seq[i].0, w_seq[j].0, result);
         }
     }
     let w_interlacing = check_sequence_interlacing(&w_seq);
-    println!("  => {{{{W_k}}}} is interlacing: {}", if w_interlacing { "YES" } else { "NO" });
+    println!(
+        "  => {{{{W_k}}}} is interlacing: {}",
+        if w_interlacing { "YES" } else { "NO" }
+    );
 
     // Check ladder pair: A_k << W_k and W_k << A_{k+1}
     // AND the reverse: A_{k+1} << W_k and W_k << A_k
@@ -790,7 +822,10 @@ fn process_board(lambda: &[usize]) {
     });
     println!("\n--- Total peak polynomial P^lambda(t) = sum_k A_k ---");
     println!("  P(t) = {}", format_poly(&total));
-    println!("  Real-rooted: {}", if is_real_rooted(&total) { "YES" } else { "NO" });
+    println!(
+        "  Real-rooted: {}",
+        if is_real_rooted(&total) { "YES" } else { "NO" }
+    );
 
     // Print roots of each polynomial for inspection
     println!("\n--- Roots (approximate) ---");
@@ -799,14 +834,28 @@ fn process_board(lambda: &[usize]) {
         let u = u_polys.get(&k).map_or(vec![0], |v| v.clone());
         if !poly_is_zero(&d) {
             if let Some(roots) = find_real_roots(&d) {
-                println!("  D_{} roots: {:?}", k, roots.iter().map(|r| format!("{:.4}", r)).collect::<Vec<_>>());
+                println!(
+                    "  D_{} roots: {:?}",
+                    k,
+                    roots
+                        .iter()
+                        .map(|r| format!("{:.4}", r))
+                        .collect::<Vec<_>>()
+                );
             } else {
                 println!("  D_{} roots: NOT ALL REAL", k);
             }
         }
         if !poly_is_zero(&u) {
             if let Some(roots) = find_real_roots(&u) {
-                println!("  U_{} roots: {:?}", k, roots.iter().map(|r| format!("{:.4}", r)).collect::<Vec<_>>());
+                println!(
+                    "  U_{} roots: {:?}",
+                    k,
+                    roots
+                        .iter()
+                        .map(|r| format!("{:.4}", r))
+                        .collect::<Vec<_>>()
+                );
             } else {
                 println!("  U_{} roots: NOT ALL REAL", k);
             }

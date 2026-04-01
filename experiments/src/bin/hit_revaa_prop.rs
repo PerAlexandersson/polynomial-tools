@@ -12,39 +12,57 @@
 //!
 //! Usage: cargo run --release --bin hit_revaa_prop -- 5
 
-use polynomial_tools::real_rootedness::{check_weak_interlacing, is_real_rooted, format_poly};
+use polynomial_tools::real_rootedness::{check_weak_interlacing, format_poly, is_real_rooted};
 use std::collections::BTreeSet;
 
 // ── Polynomial helpers ──
 
 fn pt(p: &[i64]) -> Vec<i64> {
     let mut v = p.to_vec();
-    while v.len() > 1 && *v.last().unwrap() == 0 { v.pop(); }
+    while v.len() > 1 && *v.last().unwrap() == 0 {
+        v.pop();
+    }
     v
 }
-fn pz(p: &[i64]) -> bool { p.iter().all(|&c| c == 0) }
+fn pz(p: &[i64]) -> bool {
+    p.iter().all(|&c| c == 0)
+}
 fn pa(a: &[i64], b: &[i64]) -> Vec<i64> {
     let l = a.len().max(b.len());
     let mut r = vec![0i64; l];
-    for (i, &v) in a.iter().enumerate() { r[i] += v; }
-    for (i, &v) in b.iter().enumerate() { r[i] += v; }
+    for (i, &v) in a.iter().enumerate() {
+        r[i] += v;
+    }
+    for (i, &v) in b.iter().enumerate() {
+        r[i] += v;
+    }
     pt(&r)
 }
 fn ps(a: &[i64], b: &[i64]) -> Vec<i64> {
     let l = a.len().max(b.len());
     let mut r = vec![0i64; l];
-    for (i, &v) in a.iter().enumerate() { r[i] += v; }
-    for (i, &v) in b.iter().enumerate() { r[i] -= v; }
+    for (i, &v) in a.iter().enumerate() {
+        r[i] += v;
+    }
+    for (i, &v) in b.iter().enumerate() {
+        r[i] -= v;
+    }
     pt(&r)
 }
 fn pmt(p: &[i64]) -> Vec<i64> {
     let mut r = vec![0i64; p.len() + 1];
-    for (i, &v) in p.iter().enumerate() { r[i + 1] = v; }
+    for (i, &v) in p.iter().enumerate() {
+        r[i + 1] = v;
+    }
     pt(&r)
 }
 fn pdeg(p: &[i64]) -> Option<usize> {
     let v = pt(p);
-    if pz(&v) { None } else { Some(v.len() - 1) }
+    if pz(&v) {
+        None
+    } else {
+        Some(v.len() - 1)
+    }
 }
 fn pscale(p: &[i64], c: i64) -> Vec<i64> {
     pt(&p.iter().map(|&x| x * c).collect::<Vec<_>>())
@@ -53,8 +71,12 @@ fn pscale(p: &[i64], c: i64) -> Vec<i64> {
 fn interlaces(f: &[i64], g: &[i64]) -> bool {
     let f = pt(f);
     let g = pt(g);
-    if pz(&f) { return true; }
-    if pz(&g) { return false; }
+    if pz(&f) {
+        return true;
+    }
+    if pz(&g) {
+        return false;
+    }
     match check_weak_interlacing(&f, &g) {
         Some(true) => true,
         Some(false) => false,
@@ -68,7 +90,7 @@ fn interlaces(f: &[i64], g: &[i64]) -> bool {
                         Some(b) => b,
                         None => false,
                     }
-                },
+                }
                 _ => false,
             }
         }
@@ -98,7 +120,9 @@ fn bruhat_lower_ideal(perm: &[u8]) -> Vec<Vec<u8>> {
                 if cur[i] > cur[j] {
                     let mut c = cur.clone();
                     c.swap(i, j);
-                    if !vis.contains(&c) { q.insert(c); }
+                    if !vis.contains(&c) {
+                        q.insert(c);
+                    }
                 }
             }
         }
@@ -113,7 +137,11 @@ fn board_to_perm(b: &[u8]) -> Vec<u8> {
     let mut u = vec![false; n + 1];
     for i in 0..n {
         for c in (1..=(b[i] as usize).min(n)).rev() {
-            if !u[c] { p[i] = c as u8; u[c] = true; break; }
+            if !u[c] {
+                p[i] = c as u8;
+                u[c] = true;
+                break;
+            }
         }
     }
     p
@@ -124,7 +152,9 @@ fn is_312_avoiding(perm: &[u8]) -> bool {
     for i in 0..n {
         for j in i + 1..n {
             for k in j + 1..n {
-                if perm[k] < perm[i] && perm[i] < perm[j] { return false; }
+                if perm[k] < perm[i] && perm[i] < perm[j] {
+                    return false;
+                }
             }
         }
     }
@@ -139,7 +169,10 @@ fn gen_boards(n: usize) -> Vec<Vec<u8>> {
 }
 
 fn gb(n: usize, mx: usize, d: usize, c: &mut Vec<u8>, r: &mut Vec<Vec<u8>>) {
-    if d == n { r.push(c.clone()); return; }
+    if d == n {
+        r.push(c.clone());
+        return;
+    }
     for v in (d + 1).max(if d > 0 { c[d - 1] as usize } else { 1 })..=mx {
         c.push(v as u8);
         gb(n, mx, d + 1, c, r);
@@ -152,9 +185,15 @@ fn sub_partitions(lambda: &[u8]) -> Vec<Vec<u8>> {
     let mut result = Vec::new();
     let mut mu = vec![0u8; lambda.len()];
     fn gen(lambda: &[u8], mu: &mut Vec<u8>, pos: usize, max_val: u8, result: &mut Vec<Vec<u8>>) {
-        if pos == lambda.len() { result.push(mu.clone()); return; }
+        if pos == lambda.len() {
+            result.push(mu.clone());
+            return;
+        }
         let upper = lambda[pos].min(max_val);
-        for v in 0..=upper { mu[pos] = v; gen(lambda, mu, pos + 1, v, result); }
+        for v in 0..=upper {
+            mu[pos] = v;
+            gen(lambda, mu, pos + 1, v, result);
+        }
     }
     gen(lambda, &mut mu, 0, lambda[0], &mut result);
     result
@@ -162,10 +201,12 @@ fn sub_partitions(lambda: &[u8]) -> Vec<Vec<u8>> {
 
 /// Count hits: #{i : sigma_i > mu_i}
 fn count_hits(sigma: &[u8], mu: &[u8]) -> usize {
-    (0..sigma.len()).filter(|&i| {
-        let mu_i = if i < mu.len() { mu[i] as usize } else { 0 };
-        (sigma[i] as usize) > mu_i
-    }).count()
+    (0..sigma.len())
+        .filter(|&i| {
+            let mu_i = if i < mu.len() { mu[i] as usize } else { 0 };
+            (sigma[i] as usize) > mu_i
+        })
+        .count()
 }
 
 /// Build λ^+ = (n+1, λ_1+1, ..., λ_n+1) from λ.
@@ -197,25 +238,28 @@ struct FailInfo {
 }
 
 fn main() {
-    let max_n: usize = std::env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(5);
+    let max_n: usize = std::env::args()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(5);
     println!("================================================================");
     println!("  Reversed AA propagation for hit polynomials");
     println!("  312-avoiding Ferrers boards, n <= {}", max_n);
     println!("================================================================\n");
 
     // Counters: [total, fails]
-    let mut c_revaa_base = [0u64; 2];     // revAA at base level (λ, μ)
-    let mut c_revaa_plus = [0u64; 2];     // revAA at λ^+ level
-    let mut c_revaa_plus_wg = [0u64; 2];  // revAA at λ^+ within-group
-    let mut c_revaa_plus_xg = [0u64; 2];  // revAA at λ^+ cross-group
+    let mut c_revaa_base = [0u64; 2]; // revAA at base level (λ, μ)
+    let mut c_revaa_plus = [0u64; 2]; // revAA at λ^+ level
+    let mut c_revaa_plus_wg = [0u64; 2]; // revAA at λ^+ within-group
+    let mut c_revaa_plus_xg = [0u64; 2]; // revAA at λ^+ cross-group
 
     // Recursion verification
-    let mut c_recursion = [0u64; 2];      // recursion formula matches
+    let mut c_recursion = [0u64; 2]; // recursion formula matches
 
     // Consecutive difference structure
-    let mut c_diff_tm1 = [0u64; 2];       // A_{k'}^+ - A_{k'+1}^+ is (t-1)*h
-    let mut c_shift_lemma = [0u64; 2];    // h << A_{k'+1}^+ (shift lemma hypothesis)
-    let mut c_shift_result = [0u64; 2];   // A_{k'+1}^+ << A_{k'+1}^+ + (t-1)*h = A_{k'}^+
+    let mut c_diff_tm1 = [0u64; 2]; // A_{k'}^+ - A_{k'+1}^+ is (t-1)*h
+    let mut c_shift_lemma = [0u64; 2]; // h << A_{k'+1}^+ (shift lemma hypothesis)
+    let mut c_shift_result = [0u64; 2]; // A_{k'+1}^+ << A_{k'+1}^+ + (t-1)*h = A_{k'}^+
 
     // Failure details
     let mut revaa_plus_fails: Vec<FailInfo> = Vec::new();
@@ -225,14 +269,17 @@ fn main() {
     let mut total_plus_pairs = 0u64;
 
     // Track some example consecutive differences
-    let mut example_diffs: Vec<(Vec<u8>, Vec<u8>, usize, usize, Vec<i64>, Vec<i64>, Vec<i64>)> = Vec::new();
+    let mut example_diffs: Vec<(Vec<u8>, Vec<u8>, usize, usize, Vec<i64>, Vec<i64>, Vec<i64>)> =
+        Vec::new();
 
     for n in 2..=max_n {
         let boards = gen_boards(n);
         let mut n_boards = 0u64;
         for board in &boards {
             let perm = board_to_perm(board);
-            if !is_312_avoiding(&perm) { continue; }
+            if !is_312_avoiding(&perm) {
+                continue;
+            }
             n_boards += 1;
 
             let m = board[0] as usize;
@@ -247,19 +294,27 @@ fn main() {
                 let mut a_k: Vec<Vec<i64>> = vec![vec![0i64]; m + 1];
                 for sigma in &ideal {
                     let k = sigma[0] as usize;
-                    if k == 0 || k > m { continue; }
+                    if k == 0 || k > m {
+                        continue;
+                    }
                     let hits = count_hits(sigma, mu);
-                    while a_k[k].len() <= hits { a_k[k].push(0); }
+                    while a_k[k].len() <= hits {
+                        a_k[k].push(0);
+                    }
                     a_k[k][hits] += 1;
                 }
-                for k in 1..=m { a_k[k] = pt(&a_k[k]); }
+                for k in 1..=m {
+                    a_k[k] = pt(&a_k[k]);
+                }
 
                 let active: Vec<usize> = (1..=m).filter(|&k| !pz(&a_k[k])).collect();
 
                 // revAA at base level
                 for &k in &active {
                     for &kp in &active {
-                        if kp >= k { continue; }
+                        if kp >= k {
+                            continue;
+                        }
                         c_revaa_base[0] += 1;
                         if !interlaces(&a_k[k], &a_k[kp]) {
                             c_revaa_base[1] += 1;
@@ -271,7 +326,9 @@ fn main() {
             // ── λ^+ LEVEL ──
             let lp = lambda_plus(board);
             let perm_plus = board_to_perm(&lp);
-            if !is_312_avoiding(&perm_plus) { continue; }
+            if !is_312_avoiding(&perm_plus) {
+                continue;
+            }
             let mp = lp[0] as usize; // = m + 1 for standard boards, but let's be safe
 
             let ideal_plus = bruhat_lower_ideal(&perm_plus);
@@ -289,9 +346,13 @@ fn main() {
                 let np = lp.len(); // n + 1
                 for sigma in &ideal_plus {
                     let k = sigma[0] as usize;
-                    if k == 0 || k > mp { continue; }
+                    if k == 0 || k > mp {
+                        continue;
+                    }
                     let hits = count_hits(sigma, mu_plus);
-                    while a_kp[k].len() <= hits { a_kp[k].push(0); }
+                    while a_kp[k].len() <= hits {
+                        a_kp[k].push(0);
+                    }
                     a_kp[k][hits] += 1;
 
                     let poly = if np >= 2 && sigma[0] > sigma[1] {
@@ -299,7 +360,9 @@ fn main() {
                     } else {
                         &mut u_kp[k]
                     };
-                    while poly.len() <= hits { poly.push(0); }
+                    while poly.len() <= hits {
+                        poly.push(0);
+                    }
                     poly[hits] += 1;
                 }
                 for k in 1..=mp {
@@ -313,15 +376,20 @@ fn main() {
                 // ── Test reversed AA at λ^+ ──
                 for &k in &active_plus {
                     for &kp in &active_plus {
-                        if kp >= k { continue; }
+                        if kp >= k {
+                            continue;
+                        }
                         c_revaa_plus[0] += 1;
                         if !interlaces(&a_kp[k], &a_kp[kp]) {
                             c_revaa_plus[1] += 1;
                             if revaa_plus_fails.len() < 10 {
                                 revaa_plus_fails.push(FailInfo {
-                                    board: lp.clone(), mu: mu_plus.clone(),
-                                    kp1: k, kp2: kp,
-                                    f: a_kp[k].clone(), g: a_kp[kp].clone(),
+                                    board: lp.clone(),
+                                    mu: mu_plus.clone(),
+                                    kp1: k,
+                                    kp2: kp,
+                                    f: a_kp[k].clone(),
+                                    g: a_kp[kp].clone(),
                                 });
                             }
                         }
@@ -362,13 +430,17 @@ fn main() {
 
                 // ── Consecutive differences ──
                 for i in 0..active_plus.len() {
-                    if i + 1 >= active_plus.len() { continue; }
-                    let k1 = active_plus[i];     // larger k'
+                    if i + 1 >= active_plus.len() {
+                        continue;
+                    }
+                    let k1 = active_plus[i]; // larger k'
                     let k2 = active_plus[i + 1]; // smaller k'
-                    // Wait: active_plus is sorted ascending, so active_plus[i] < active_plus[i+1]
-                    // reversed AA means larger interlaces smaller.
-                    // consecutive: k' and k'+1
-                    if k2 != k1 + 1 { continue; }
+                                                 // Wait: active_plus is sorted ascending, so active_plus[i] < active_plus[i+1]
+                                                 // reversed AA means larger interlaces smaller.
+                                                 // consecutive: k' and k'+1
+                    if k2 != k1 + 1 {
+                        continue;
+                    }
 
                     // diff = A_{k1}^+ - A_{k2}^+  (k1 < k2, so this is "smaller minus larger")
                     // For reversed AA we want A_{k2} << A_{k1} (k2 > k1),
@@ -414,9 +486,12 @@ fn main() {
                                 c_shift_lemma[1] += 1;
                                 if shift_fails.len() < 10 {
                                     shift_fails.push(FailInfo {
-                                        board: lp.clone(), mu: mu_plus.clone(),
-                                        kp1: k1, kp2: k2,
-                                        f: h.clone(), g: a_kp[k1].clone(),
+                                        board: lp.clone(),
+                                        mu: mu_plus.clone(),
+                                        kp1: k1,
+                                        kp2: k2,
+                                        f: h.clone(),
+                                        g: a_kp[k1].clone(),
                                     });
                                 }
                             }
@@ -431,9 +506,12 @@ fn main() {
                             // Save example
                             if example_diffs.len() < 15 && !pz(&h) && pdeg(&h).unwrap_or(0) >= 1 {
                                 example_diffs.push((
-                                    lp.clone(), mu_plus.clone(),
-                                    k1, k2,
-                                    a_kp[k1].clone(), a_kp[k2].clone(),
+                                    lp.clone(),
+                                    mu_plus.clone(),
+                                    k1,
+                                    k2,
+                                    a_kp[k1].clone(),
+                                    a_kp[k2].clone(),
                                     h.clone(),
                                 ));
                             }
@@ -455,9 +533,13 @@ fn main() {
                 for sigma in &ideal_plus {
                     let k = sigma[0] as usize;
                     let l = *sigma.last().unwrap() as usize;
-                    if k == 0 || k > mp || l == 0 || l > mp { continue; }
+                    if k == 0 || k > mp || l == 0 || l > mp {
+                        continue;
+                    }
                     let hits = count_hits(sigma, mu_plus);
-                    while a_kp_lp[k][l].len() <= hits { a_kp_lp[k][l].push(0); }
+                    while a_kp_lp[k][l].len() <= hits {
+                        a_kp_lp[k][l].push(0);
+                    }
                     a_kp_lp[k][l][hits] += 1;
                 }
                 for k in 1..=mp {
@@ -471,17 +553,26 @@ fn main() {
                     let mut upper: Vec<usize> = Vec::new(); // k' > lp_val
                     let mut lower: Vec<usize> = Vec::new(); // k' < lp_val
                     for k in 1..=mp {
-                        if k == lp_val { continue; }
-                        if pz(&a_kp_lp[k][lp_val]) { continue; }
-                        if k > lp_val { upper.push(k); }
-                        else { lower.push(k); }
+                        if k == lp_val {
+                            continue;
+                        }
+                        if pz(&a_kp_lp[k][lp_val]) {
+                            continue;
+                        }
+                        if k > lp_val {
+                            upper.push(k);
+                        } else {
+                            lower.push(k);
+                        }
                     }
 
                     // Within-group: both upper or both lower
                     for group in [&upper, &lower] {
                         for &k in group {
                             for &kp in group {
-                                if kp >= k { continue; }
+                                if kp >= k {
+                                    continue;
+                                }
                                 c_revaa_plus_wg[0] += 1;
                                 if !interlaces(&a_kp_lp[k][lp_val], &a_kp_lp[kp][lp_val]) {
                                     c_revaa_plus_wg[1] += 1;
@@ -504,8 +595,10 @@ fn main() {
                 }
             }
         }
-        println!("n={}: {} valid boards, {} (lambda,mu) pairs, {} (lambda+,mu+) pairs so far",
-                 n, n_boards, total_pairs, total_plus_pairs);
+        println!(
+            "n={}: {} valid boards, {} (lambda,mu) pairs, {} (lambda+,mu+) pairs so far",
+            n, n_boards, total_pairs, total_plus_pairs
+        );
     }
 
     println!("\n================================================================");
@@ -529,20 +622,30 @@ fn main() {
 
     // Print failure details
     if !revaa_plus_fails.is_empty() {
-        println!("\n  --- revAA failures at lambda+ (first {}) ---", revaa_plus_fails.len());
+        println!(
+            "\n  --- revAA failures at lambda+ (first {}) ---",
+            revaa_plus_fails.len()
+        );
         for f in &revaa_plus_fails {
-            println!("    lambda+={:?} mu+={:?}: A_{} << A_{} FAILS",
-                     f.board, f.mu, f.kp1, f.kp2);
+            println!(
+                "    lambda+={:?} mu+={:?}: A_{} << A_{} FAILS",
+                f.board, f.mu, f.kp1, f.kp2
+            );
             println!("      A_{} = {}", f.kp1, format_poly(&f.f));
             println!("      A_{} = {}", f.kp2, format_poly(&f.g));
         }
     }
 
     if !shift_fails.is_empty() {
-        println!("\n  --- Shift-lemma failures (h << A_k) (first {}) ---", shift_fails.len());
+        println!(
+            "\n  --- Shift-lemma failures (h << A_k) (first {}) ---",
+            shift_fails.len()
+        );
         for f in &shift_fails {
-            println!("    lambda+={:?} mu+={:?}: h << A_{} FAILS (k'={}, k'+1={})",
-                     f.board, f.mu, f.kp1, f.kp1, f.kp2);
+            println!(
+                "    lambda+={:?} mu+={:?}: h << A_{} FAILS (k'={}, k'+1={})",
+                f.board, f.mu, f.kp1, f.kp1, f.kp2
+            );
             println!("      h = {}", format_poly(&f.f));
             println!("      A_{} = {}", f.kp1, format_poly(&f.g));
         }
@@ -551,13 +654,21 @@ fn main() {
     // Print example consecutive differences
     if !example_diffs.is_empty() {
         println!("\n================================================================");
-        println!("  EXAMPLE CONSECUTIVE DIFFERENCES (first {}):", example_diffs.len());
+        println!(
+            "  EXAMPLE CONSECUTIVE DIFFERENCES (first {}):",
+            example_diffs.len()
+        );
         println!("================================================================");
         for (lp, mu, k1, k2, ak1, ak2, h) in &example_diffs {
             println!("  lambda+={:?} mu+={:?}, k'={}, k'+1={}", lp, mu, k1, k2);
             println!("    A_{} = {}", k1, format_poly(ak1));
             println!("    A_{} = {}", k2, format_poly(ak2));
-            println!("    h = {}  (A_{{{}}} - A_{{{}}} = (t-1)*h)", format_poly(h), k2, k1);
+            println!(
+                "    h = {}  (A_{{{}}} - A_{{{}}} = (t-1)*h)",
+                format_poly(h),
+                k2,
+                k1
+            );
             println!("    h << A_{}? {}", k1, interlaces(h, ak1));
             println!();
         }

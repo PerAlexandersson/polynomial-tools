@@ -4,27 +4,39 @@
 //!
 //! Uses i128 arithmetic for polynomials and BigInt Bezout matrices for interlacing.
 
-use polynomial_tools::{is_real_rooted, check_weak_interlacing, format_poly};
-use polynomial_tools::linalg;
 use num_bigint::BigInt;
+use polynomial_tools::linalg;
+use polynomial_tools::{check_weak_interlacing, format_poly, is_real_rooted};
 
 type Poly = Vec<i128>;
 
-fn poly_zero() -> Poly { vec![0] }
-fn poly_one() -> Poly { vec![1] }
+fn poly_zero() -> Poly {
+    vec![0]
+}
+fn poly_one() -> Poly {
+    vec![1]
+}
 
 fn poly_add(a: &Poly, b: &Poly) -> Poly {
     let n = a.len().max(b.len());
     let mut r = vec![0i128; n];
-    for (i, &c) in a.iter().enumerate() { r[i] += c; }
-    for (i, &c) in b.iter().enumerate() { r[i] += c; }
-    while r.len() > 1 && *r.last().unwrap() == 0 { r.pop(); }
+    for (i, &c) in a.iter().enumerate() {
+        r[i] += c;
+    }
+    for (i, &c) in b.iter().enumerate() {
+        r[i] += c;
+    }
+    while r.len() > 1 && *r.last().unwrap() == 0 {
+        r.pop();
+    }
     r
 }
 
 fn poly_shift(a: &Poly, k: usize) -> Poly {
     let mut r = vec![0i128; a.len() + k];
-    for (i, &c) in a.iter().enumerate() { r[i + k] = c; }
+    for (i, &c) in a.iter().enumerate() {
+        r[i + k] = c;
+    }
     r
 }
 
@@ -42,7 +54,9 @@ fn poly_to_bigint(p: &Poly) -> Vec<BigInt> {
 
 fn deg(p: &Poly) -> usize {
     for i in (0..p.len()).rev() {
-        if p[i] != 0 { return i; }
+        if p[i] != 0 {
+            return i;
+        }
     }
     0
 }
@@ -52,7 +66,9 @@ fn bezout_matrix_big(f: &[BigInt], g: &[BigInt]) -> Option<Vec<Vec<BigInt>>> {
     let zero = BigInt::from(0);
     let df = f.iter().rposition(|c| *c != zero)?;
     let dg = g.iter().rposition(|c| *c != zero)?;
-    if df != dg + 1 { return None; }
+    if df != dg + 1 {
+        return None;
+    }
     let d = df;
     let mut b = vec![vec![zero.clone(); d]; d];
     for k in 0..=df {
@@ -62,7 +78,9 @@ fn bezout_matrix_big(f: &[BigInt], g: &[BigInt]) -> Option<Vec<Vec<BigInt>>> {
             let gk = if k < g.len() { &g[k] } else { &zero };
             let gl = if l < g.len() { &g[l] } else { &zero };
             let c = fk * gl - fl * gk;
-            if c == zero { continue; }
+            if c == zero {
+                continue;
+            }
             for m in 0..=(k - l - 1) {
                 let xi = l + m;
                 let yj = k - 1 - m;
@@ -115,7 +133,8 @@ fn check_weak_interlacing_big(p: &Poly, q: &Poly) -> Option<bool> {
 }
 
 fn main() {
-    let max_n: usize = std::env::args().nth(1)
+    let max_n: usize = std::env::args()
+        .nth(1)
         .and_then(|s| s.parse().ok())
         .unwrap_or(80);
 
@@ -131,9 +150,13 @@ fn main() {
 
         // Real-rootedness (try i64 first, fall back to BigInt Bezout)
         let rr = if let Some(v) = poly_to_i64(&p) {
-            if d < 2 { "triv".to_string() }
-            else if is_real_rooted(&v) { "RR".to_string() }
-            else { "NOT-RR".to_string() }
+            if d < 2 {
+                "triv".to_string()
+            } else if is_real_rooted(&v) {
+                "RR".to_string()
+            } else {
+                "NOT-RR".to_string()
+            }
         } else {
             // i64 overflow: use BigInt Bezout for real-rootedness
             // A polynomial is real-rooted iff it interlaces with its derivative.
@@ -150,8 +173,12 @@ fn main() {
                     Some(false) => "NOT-IL",
                     None => "N/A",
                 }
-            } else { "triv" }
-        } else { "—" };
+            } else {
+                "triv"
+            }
+        } else {
+            "—"
+        };
 
         if d <= 6 {
             if let Some(ref v) = poly_to_i64(&p) {
@@ -161,7 +188,10 @@ fn main() {
             }
         } else {
             let total: i128 = p.iter().sum();
-            println!("P_{:>3}: deg={:>3}, P(1)={:<22}  {}  {}", n, d, total, rr, il);
+            println!(
+                "P_{:>3}: deg={:>3}, P(1)={:<22}  {}  {}",
+                n, d, total, rr, il
+            );
         }
 
         prev = Some(p);
@@ -170,8 +200,15 @@ fn main() {
             let nn = n + 1;
             let mut result = poly_zero();
             let terms: &[(usize, usize, i128)] = &[
-                (1, 0, 1), (4, 1, 4), (5, 2, 3), (6, 2, 3),
-                (7, 2, 6), (8, 3, 2), (9, 3, 2), (10, 3, 4), (13, 4, 1),
+                (1, 0, 1),
+                (4, 1, 4),
+                (5, 2, 3),
+                (6, 2, 3),
+                (7, 2, 6),
+                (8, 3, 2),
+                (9, 3, 2),
+                (10, 3, 4),
+                (13, 4, 1),
             ];
             for &(lag, tpow, coeff) in terms {
                 if nn >= lag {

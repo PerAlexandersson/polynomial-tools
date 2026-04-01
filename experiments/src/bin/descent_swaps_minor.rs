@@ -161,7 +161,11 @@ fn main() {
             let s_str = descent_set_to_string(mask, n);
 
             // Check TP_2 and decompose each minor
-            let max_deg = lp_polys.iter().map(|(_, poly)| poly.len()).max().unwrap_or(0);
+            let max_deg = lp_polys
+                .iter()
+                .map(|(_, poly)| poly.len())
+                .max()
+                .unwrap_or(0);
             let mut family_tn2 = true;
             let mut family_minors: Vec<(u8, u8, usize, usize, i64)> = Vec::new();
 
@@ -200,10 +204,7 @@ fn main() {
             if family_tn2 {
                 n_tn2 += 1;
             } else {
-                println!(
-                    "  TN_2 FAIL: n={} S={} positions={:?}",
-                    n, s_str, vp
-                );
+                println!("  TN_2 FAIL: n={} S={} positions={:?}", n, s_str, vp);
                 for (p, poly) in &lp_polys {
                     println!("    L^({}) = {}", p, format_poly(poly));
                 }
@@ -262,7 +263,12 @@ fn main() {
                 injection_analysis_count += 1;
                 println!("\n  --- Detailed analysis: n={} S={} ---", n, s_str);
                 for (p, poly) in &lp_polys {
-                    println!("    L^({}) = {} (total={})", p, format_poly(poly), poly.iter().sum::<i64>());
+                    println!(
+                        "    L^({}) = {} (total={})",
+                        p,
+                        format_poly(poly),
+                        poly.iter().sum::<i64>()
+                    );
                 }
 
                 // For each pair of positions, show the ratio sequence
@@ -367,7 +373,8 @@ fn main() {
                             }
 
                             // Check if LR ratios are non-increasing
-                            let lr_monotone = lr_ratios.windows(2).all(|w| w[0].1 >= w[1].1 - 1e-12);
+                            let lr_monotone =
+                                lr_ratios.windows(2).all(|w| w[0].1 >= w[1].1 - 1e-12);
                             print!("  [{}]", if lr_monotone { "MONOTONE" } else { "NOT mono" });
                             println!();
                         }
@@ -385,10 +392,8 @@ fn main() {
                                 let pos_nm1 = if n >= 2 { pos_of(pi, n - 1) } else { 0 };
                                 let pos_1 = pos_of(pi, 1);
                                 // Reduced permutation: remove n, standardize
-                                let reduced: Vec<u8> = pi.iter()
-                                    .filter(|&&v| v != n)
-                                    .copied()
-                                    .collect();
+                                let reduced: Vec<u8> =
+                                    pi.iter().filter(|&&v| v != n).copied().collect();
                                 a_data.push((sw, pos_nm1, pos_1, reduced));
                             }
 
@@ -396,34 +401,39 @@ fn main() {
                             for &(pi, sw) in perms_b.iter() {
                                 let pos_nm1 = if n >= 2 { pos_of(pi, n - 1) } else { 0 };
                                 let pos_1 = pos_of(pi, 1);
-                                let reduced: Vec<u8> = pi.iter()
-                                    .filter(|&&v| v != n)
-                                    .copied()
-                                    .collect();
+                                let reduced: Vec<u8> =
+                                    pi.iter().filter(|&&v| v != n).copied().collect();
                                 b_data.push((sw, pos_nm1, pos_1, reduced));
                             }
 
                             // Show distribution of pos(n-1) conditioned on swaps count
                             if n <= 6 {
                                 println!("      pos(n-1) distribution by swaps:");
-                                let max_sw = a_data.iter().chain(b_data.iter()).map(|d| d.0).max().unwrap_or(0);
+                                let max_sw = a_data
+                                    .iter()
+                                    .chain(b_data.iter())
+                                    .map(|d| d.0)
+                                    .max()
+                                    .unwrap_or(0);
                                 for sw in 0..=max_sw {
-                                    let a_posns: Vec<u8> = a_data.iter()
-                                        .filter(|d| d.0 == sw)
-                                        .map(|d| d.1)
-                                        .collect();
-                                    let b_posns: Vec<u8> = b_data.iter()
-                                        .filter(|d| d.0 == sw)
-                                        .map(|d| d.1)
-                                        .collect();
+                                    let a_posns: Vec<u8> =
+                                        a_data.iter().filter(|d| d.0 == sw).map(|d| d.1).collect();
+                                    let b_posns: Vec<u8> =
+                                        b_data.iter().filter(|d| d.0 == sw).map(|d| d.1).collect();
                                     if !a_posns.is_empty() || !b_posns.is_empty() {
                                         // Count by pos(n-1)
                                         let mut a_counts: BTreeMap<u8, usize> = BTreeMap::new();
                                         let mut b_counts: BTreeMap<u8, usize> = BTreeMap::new();
-                                        for &q in &a_posns { *a_counts.entry(q).or_default() += 1; }
-                                        for &q in &b_posns { *b_counts.entry(q).or_default() += 1; }
-                                        println!("        sw={}: A(p={}) {:?}  B(p={}) {:?}",
-                                            sw, p_a, a_counts, p_b, b_counts);
+                                        for &q in &a_posns {
+                                            *a_counts.entry(q).or_default() += 1;
+                                        }
+                                        for &q in &b_posns {
+                                            *b_counts.entry(q).or_default() += 1;
+                                        }
+                                        println!(
+                                            "        sw={}: A(p={}) {:?}  B(p={}) {:?}",
+                                            sw, p_a, a_counts, p_b, b_counts
+                                        );
                                     }
                                 }
 
@@ -438,7 +448,10 @@ fn main() {
                                         }
                                     }
                                 }
-                                println!("      Shared source pairs (same reduced perm): {}", shared_sources);
+                                println!(
+                                    "      Shared source pairs (same reduced perm): {}",
+                                    shared_sources
+                                );
                             }
                         }
                     }
@@ -472,15 +485,18 @@ fn main() {
 
     println!("\n=== SUMMARY (n=5..{}) ===", max_n);
     println!("Total families:           {}", total_families);
-    println!("TN_2 families:            {}/{}", tn2_families, total_families);
+    println!(
+        "TN_2 families:            {}/{}",
+        tn2_families, total_families
+    );
     println!("Total 2x2 minors:         {}", total_minors);
-    println!("Non-negative minors:      {}/{}", nonneg_minors, total_minors);
+    println!(
+        "Non-negative minors:      {}/{}",
+        nonneg_minors, total_minors
+    );
     println!("  Positive:               {}", positive_minors);
     println!("  Zero:                   {}", zero_minors);
-    println!(
-        "  Negative:               {}",
-        total_minors - nonneg_minors
-    );
+    println!("  Negative:               {}", total_minors - nonneg_minors);
     println!(
         "Ratio monotonicity:       {}/{}",
         ratio_mono_pairs_ok, ratio_mono_pairs_total
@@ -518,7 +534,10 @@ fn main() {
     }
 
     if tn2_families == total_families {
-        println!("\nTN_2 VERIFIED for all {} families across n=5..{}.", total_families, max_n);
+        println!(
+            "\nTN_2 VERIFIED for all {} families across n=5..{}.",
+            total_families, max_n
+        );
     } else {
         println!(
             "\nTN_2 FAILS for {} out of {} families.",
@@ -530,7 +549,9 @@ fn main() {
     // ===== EXTRA: Check if the normalized coefficient vectors
     //       show a clean pattern (e.g., componentwise dominance) =====
     println!("\n=== NORMALIZED COEFFICIENT ANALYSIS ===");
-    println!("Checking whether L^{{(p_a)}}/|L^{{(p_a)}}| >= L^{{(p_b)}}/|L^{{(p_b)}}| componentwise");
+    println!(
+        "Checking whether L^{{(p_a)}}/|L^{{(p_a)}}| >= L^{{(p_b)}}/|L^{{(p_b)}}| componentwise"
+    );
     println!("for the lower-degree coefficients (stochastic dominance in CDF sense).\n");
 
     let mut cdf_dom_total = 0u64;

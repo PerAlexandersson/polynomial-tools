@@ -6,16 +6,16 @@
 /// Compute H_T(t) = Σ_{π ∈ T} t^{swaps_T(π)} for the six Catalan families
 /// Av(τ) with τ of length 3.
 use combpoly::permutation::avoiding_permutations;
-use polynomial_tools::real_rootedness::{
-    check_interlacing_sturm, format_poly, is_real_rooted,
-};
+use polynomial_tools::real_rootedness::{check_interlacing_sturm, format_poly, is_real_rooted};
 use std::collections::HashSet;
 
 /// Compute swaps_T(sigma): number of values i such that swapping
 /// i and i+1 in sigma produces another permutation in T.
 fn swaps_in_set(sigma: &[u8], set: &HashSet<Vec<u8>>) -> usize {
     let n = sigma.len();
-    if n <= 1 { return 0; }
+    if n <= 1 {
+        return 0;
+    }
     let mut count = 0;
     for i in 1..n as u8 {
         // Try swapping values i and i+1
@@ -32,13 +32,21 @@ fn swaps_in_set(sigma: &[u8], set: &HashSet<Vec<u8>>) -> usize {
 }
 
 fn build_poly(perms: &[Vec<u8>], set: &HashSet<Vec<u8>>) -> Vec<i64> {
-    if perms.is_empty() { return vec![0]; }
-    let max_s = perms.iter().map(|s| swaps_in_set(s, set)).max().unwrap_or(0);
+    if perms.is_empty() {
+        return vec![0];
+    }
+    let max_s = perms
+        .iter()
+        .map(|s| swaps_in_set(s, set))
+        .max()
+        .unwrap_or(0);
     let mut coeffs = vec![0i64; max_s + 1];
     for s in perms {
         coeffs[swaps_in_set(s, set)] += 1;
     }
-    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 { coeffs.pop(); }
+    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 {
+        coeffs.pop();
+    }
     coeffs
 }
 
@@ -73,13 +81,18 @@ fn main() {
             let perms = avoiding_permutations(n, &[pattern.clone()]);
             let set: HashSet<Vec<u8>> = perms.iter().cloned().collect();
             let poly = build_poly(&perms, &set);
-            let rr = if poly.len() <= 2 { true } else { is_real_rooted(&poly) };
+            let rr = if poly.len() <= 2 {
+                true
+            } else {
+                is_real_rooted(&poly)
+            };
             let pal = is_palindromic(&poly);
             let total: i64 = poly.iter().sum();
 
             println!(
                 "  n={:>2}: |Av|={:<6} {:<55} {} {}",
-                n, total,
+                n,
+                total,
                 format_poly(&poly),
                 if rr { "✓rr" } else { "✗rr" },
                 if pal { "pal" } else { "   " },

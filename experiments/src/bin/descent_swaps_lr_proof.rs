@@ -277,23 +277,15 @@ fn main() {
                 // --- Analysis 2: Shared source permutations ---
                 // A permutation pi is a source for both p_a and p_b if it appears
                 // in the source set for both.
-                let perm_set_a: BTreeSet<Vec<u8>> =
-                    src_a.iter().map(|s| s.perm.clone()).collect();
-                let perm_set_b: BTreeSet<Vec<u8>> =
-                    src_b.iter().map(|s| s.perm.clone()).collect();
+                let perm_set_a: BTreeSet<Vec<u8>> = src_a.iter().map(|s| s.perm.clone()).collect();
+                let perm_set_b: BTreeSet<Vec<u8>> = src_b.iter().map(|s| s.perm.clone()).collect();
 
-                let shared: BTreeSet<Vec<u8>> = perm_set_a
-                    .intersection(&perm_set_b)
-                    .cloned()
-                    .collect();
-                let excl_a: BTreeSet<Vec<u8>> = perm_set_a
-                    .difference(&perm_set_b)
-                    .cloned()
-                    .collect();
-                let excl_b: BTreeSet<Vec<u8>> = perm_set_b
-                    .difference(&perm_set_a)
-                    .cloned()
-                    .collect();
+                let shared: BTreeSet<Vec<u8>> =
+                    perm_set_a.intersection(&perm_set_b).cloned().collect();
+                let excl_a: BTreeSet<Vec<u8>> =
+                    perm_set_a.difference(&perm_set_b).cloned().collect();
+                let excl_b: BTreeSet<Vec<u8>> =
+                    perm_set_b.difference(&perm_set_a).cloned().collect();
 
                 // --- Analysis 3: eps2 threshold difference ---
                 // eps2(p,q) = 1[q <= p-2]
@@ -394,13 +386,11 @@ fn main() {
                             let base_sw = compute(pi, Stat::Swaps);
 
                             let e1_a = epsilon1(pi, p_a);
-                            let eps2_a =
-                                if q <= p_a.saturating_sub(2) { 1 } else { 0 };
+                            let eps2_a = if q <= p_a.saturating_sub(2) { 1 } else { 0 };
                             let sw_a = base_sw + if e1_a { 1 } else { 0 } + eps2_a;
 
                             let e1_b = epsilon1(pi, p_b);
-                            let eps2_b =
-                                if q <= p_b.saturating_sub(2) { 1 } else { 0 };
+                            let eps2_b = if q <= p_b.saturating_sub(2) { 1 } else { 0 };
                             let sw_b = base_sw + if e1_b { 1 } else { 0 } + eps2_b;
 
                             let in_tz = q >= tz_lo && q <= tz_hi;
@@ -413,10 +403,7 @@ fn main() {
                     }
 
                     // Show the A and B polynomials
-                    println!(
-                        "  A(t) = {:?}  B(t) = {:?}",
-                        a_poly, b_poly
-                    );
+                    println!("  A(t) = {:?}  B(t) = {:?}", a_poly, b_poly);
 
                     // Decompose: shared vs exclusive contributions
                     let mut shared_a_vals = Vec::new();
@@ -446,10 +433,7 @@ fn main() {
                     if !shared_a_vals.is_empty() {
                         let sa_poly = build_poly(&shared_a_vals);
                         let sb_poly = build_poly(&shared_b_vals);
-                        println!(
-                            "  Shared: A_sh(t) = {:?}  B_sh(t) = {:?}",
-                            sa_poly, sb_poly
-                        );
+                        println!("  Shared: A_sh(t) = {:?}  B_sh(t) = {:?}", sa_poly, sb_poly);
 
                         // Check LR just on shared part
                         let max_k2 = sa_poly.len().max(sb_poly.len());
@@ -477,10 +461,7 @@ fn main() {
                         } else {
                             build_poly(&excl_b_vals)
                         };
-                        println!(
-                            "  Excl:   A_ex(t) = {:?}  B_ex(t) = {:?}",
-                            ea_poly, eb_poly
-                        );
+                        println!("  Excl:   A_ex(t) = {:?}  B_ex(t) = {:?}", ea_poly, eb_poly);
                     }
 
                     println!();
@@ -621,10 +602,7 @@ fn main() {
                 }
 
                 let s_str = descent_set_to_string(mask, n);
-                println!(
-                    "n={} S={} pair ({},{}): zones L/M/R",
-                    n, s_str, p_a, p_b
-                );
+                println!("n={} S={} pair ({},{}): zones L/M/R", n, s_str, p_a, p_b);
                 let zone_names = ["L (q<=pa-2)", "M (pa-1<=q<=pb-2)", "R (q>=pb-1)"];
                 for z in 0..3 {
                     let ap = if a_by_zone[z].is_empty() {
@@ -655,14 +633,10 @@ fn main() {
 
                 // Check: for shared permutations in zone M,
                 // does eps1 change between p_a and p_b?
-                let perm_set_a: BTreeSet<Vec<u8>> =
-                    src_a.iter().map(|s| s.perm.clone()).collect();
-                let perm_set_b: BTreeSet<Vec<u8>> =
-                    src_b.iter().map(|s| s.perm.clone()).collect();
-                let shared: BTreeSet<Vec<u8>> = perm_set_a
-                    .intersection(&perm_set_b)
-                    .cloned()
-                    .collect();
+                let perm_set_a: BTreeSet<Vec<u8>> = src_a.iter().map(|s| s.perm.clone()).collect();
+                let perm_set_b: BTreeSet<Vec<u8>> = src_b.iter().map(|s| s.perm.clone()).collect();
+                let shared: BTreeSet<Vec<u8>> =
+                    perm_set_a.intersection(&perm_set_b).cloned().collect();
 
                 let mut shared_in_m = 0u32;
                 let mut shared_in_m_eps1_same = 0u32;
@@ -896,8 +870,14 @@ fn main() {
 
         println!(
             "n={}: {} pairs | same_asc={} same_desc={} same_both={} | A<=B={} B<=A={} disjoint={}",
-            n, n_total, n_same_asc, n_same_desc, n_same_both,
-            n_a_subset_b, n_b_subset_a, n_disjoint
+            n,
+            n_total,
+            n_same_asc,
+            n_same_desc,
+            n_same_both,
+            n_a_subset_b,
+            n_b_subset_a,
+            n_disjoint
         );
     }
 

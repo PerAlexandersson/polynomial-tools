@@ -17,6 +17,11 @@
 ///   Zone M: p_a - 1 <= q <= p_b - 2  => e_a = 0, e_b = 1
 ///   Zone R: q >= p_b - 1       => e_a = 0, e_b = 0
 ///
+use combpoly::fixed_descent::{
+    permutations_grouped_by_descent_set_bitmask,
+    q_refined_modified_source_distribution_from_grouped_source_permutations,
+    valid_insertion_positions_for_target_descent_set as valid_positions,
+};
 use combpoly::permutation::all_permutations;
 use combpoly::statistics::{compute, descent_set_bitmask, Stat};
 use std::collections::BTreeMap;
@@ -34,63 +39,6 @@ fn build_poly(vals: &[usize]) -> Vec<i64> {
         coeffs.pop();
     }
     coeffs
-}
-
-fn valid_positions(s_mask: u64, n: u8) -> Vec<u8> {
-    let mut positions = Vec::new();
-    for p in 1..n {
-        if (s_mask >> (p - 1)) & 1 == 1 && (p < 2 || (s_mask >> (p - 2)) & 1 == 0) {
-            positions.push(p);
-        }
-    }
-    if n >= 2 && (s_mask >> (n - 2)) & 1 == 0 {
-        positions.push(n);
-    }
-    positions
-}
-
-fn source_asc(s_mask: u64, p: u8, n: u8) -> u64 {
-    if n <= 2 {
-        return 0;
-    }
-    if p == n {
-        return s_mask;
-    }
-    let mut sp = 0u64;
-    if p == 1 {
-        for j in 2..n {
-            if (s_mask >> (j - 1)) & 1 == 1 {
-                sp |= 1 << (j - 2);
-            }
-        }
-    } else {
-        for pos in 1..=(p.saturating_sub(2)) {
-            if (s_mask >> (pos - 1)) & 1 == 1 {
-                sp |= 1 << (pos - 1);
-            }
-        }
-        for j in (p + 1)..n {
-            if (s_mask >> (j - 1)) & 1 == 1 {
-                sp |= 1 << (j - 2);
-            }
-        }
-    }
-    sp
-}
-
-fn source_desc(s_mask: u64, p: u8, n: u8) -> Option<u64> {
-    if p <= 1 || p >= n {
-        return None;
-    }
-    Some(source_asc(s_mask, p, n) | (1 << (p - 2)))
-}
-
-fn epsilon1(pi: &[u8], p: u8) -> bool {
-    let n = pi.len() as u8 + 1;
-    if p <= 1 || p >= n {
-        return false;
-    }
-    pi[(p - 2) as usize] + 1 == pi[(p - 1) as usize]
 }
 
 /// eps2(p, q) = 1 if q <= p-2, else 0
@@ -155,45 +103,6 @@ fn zone_label(z: Zone) -> &'static str {
     }
 }
 
-/// Build N_p(s, q) = distribution of (swaps_tilde, pos(n-1)) for source permutations of position p.
-/// Returns BTreeMap<(swaps_tilde, q), count>
-fn build_source_dist(
-    s_mask: u64,
-    p: u8,
-    n: u8,
-    by_descent_prev: &BTreeMap<u64, Vec<usize>>,
-    perm_prev_list: &[&Vec<u8>],
-) -> BTreeMap<(usize, u8), usize> {
-    let sp_asc = source_asc(s_mask, p, n);
-    let sp_desc = source_desc(s_mask, p, n);
-
-    let mut dist: BTreeMap<(usize, u8), usize> = BTreeMap::new();
-
-    // Ascent source
-    if let Some(indices) = by_descent_prev.get(&sp_asc) {
-        for &idx in indices {
-            let pi = perm_prev_list[idx];
-            let q = pi.iter().position(|&v| v == n - 1).unwrap() as u8 + 1;
-            let sw = compute(pi, Stat::Swaps) + if epsilon1(pi, p) { 1 } else { 0 };
-            *dist.entry((sw, q)).or_default() += 1;
-        }
-    }
-
-    // Descent source
-    if let Some(sp) = sp_desc {
-        if let Some(indices) = by_descent_prev.get(&sp) {
-            for &idx in indices {
-                let pi = perm_prev_list[idx];
-                let q = pi.iter().position(|&v| v == n - 1).unwrap() as u8 + 1;
-                let sw = compute(pi, Stat::Swaps); // eps1=0 always for descent source
-                *dist.entry((sw, q)).or_default() += 1;
-            }
-        }
-    }
-
-    dist
-}
-
 /// Build the polynomial N_p(*, q) for a fixed q: coefficients in swaps_tilde.
 fn build_n_poly(dist: &BTreeMap<(usize, u8), usize>, q: u8) -> Vec<i64> {
     let relevant: Vec<usize> = dist
@@ -253,18 +162,7 @@ fn main() {
     let mut mr_negative_examples: Vec<String> = Vec::new();
 
     for n in 5..=max_n {
-        let perms_prev = all_permutations(n - 1);
-
-        let mut by_descent_prev: BTreeMap<u64, Vec<usize>> = BTreeMap::new();
-        let mut perm_prev_list: Vec<&Vec<u8>> = Vec::new();
-        for pi in &perms_prev {
-            let idx = perm_prev_list.len();
-            perm_prev_list.push(pi);
-            by_descent_prev
-                .entry(descent_set_bitmask(pi))
-                .or_default()
-                .push(idx);
-        }
+        let grouped_source_permutations = permutations_grouped_by_descent_set_bitmask(n - 1);
 
         // Also build full permutations of n for verification
         let perms_n = all_permutations(n);
@@ -291,7 +189,13 @@ fn main() {
             // Build source distributions for each valid position
             let mut source_dists: BTreeMap<u8, BTreeMap<(usize, u8), usize>> = BTreeMap::new();
             for &p in &vp {
-                let dist = build_source_dist(s_mask, p, n, &by_descent_prev, &perm_prev_list);
+                let dist = q_refined_modified_source_distribution_from_grouped_source_permutations(
+                    s_mask,
+                    p,
+                    n,
+                    &grouped_source_permutations,
+                )
+                .counts_by_modified_source_swaps_and_previous_maximum_position;
                 source_dists.insert(p, dist);
             }
 
@@ -366,31 +270,15 @@ fn main() {
                     .collect();
 
                 // Determine max degree
-                let max_deg = lp_polys
-                    .values()
-                    .map(|p| p.len())
-                    .max()
-                    .unwrap_or(1);
+                let max_deg = lp_polys.values().map(|p| p.len()).max().unwrap_or(1);
 
                 // For each (k_1 < k_2) pair, decompose the minor
                 for k1 in 0..max_deg {
                     for k2 in (k1 + 1)..max_deg {
-                        let a_k1 = lp_polys
-                            .get(&p_a)
-                            .map(|p| coeff(p, k1))
-                            .unwrap_or(0);
-                        let a_k2 = lp_polys
-                            .get(&p_a)
-                            .map(|p| coeff(p, k2))
-                            .unwrap_or(0);
-                        let b_k1 = lp_polys
-                            .get(&p_b)
-                            .map(|p| coeff(p, k1))
-                            .unwrap_or(0);
-                        let b_k2 = lp_polys
-                            .get(&p_b)
-                            .map(|p| coeff(p, k2))
-                            .unwrap_or(0);
+                        let a_k1 = lp_polys.get(&p_a).map(|p| coeff(p, k1)).unwrap_or(0);
+                        let a_k2 = lp_polys.get(&p_a).map(|p| coeff(p, k2)).unwrap_or(0);
+                        let b_k1 = lp_polys.get(&p_b).map(|p| coeff(p, k1)).unwrap_or(0);
+                        let b_k2 = lp_polys.get(&p_b).map(|p| coeff(p, k2)).unwrap_or(0);
 
                         let minor = a_k1 * b_k2 - a_k2 * b_k1;
 
@@ -490,7 +378,11 @@ fn main() {
                                     "n={} S={} p_a={} p_b={} k1={} k2={} contrib={}",
                                     n,
                                     descent_set_to_string(s_mask, n),
-                                    p_a, p_b, k1, k2, c,
+                                    p_a,
+                                    p_b,
+                                    k1,
+                                    k2,
+                                    c,
                                 );
                                 if zp == (Zone::R, Zone::M) && rm_negative_examples.len() < 5 {
                                     rm_negative_examples.push(example.clone());
@@ -548,7 +440,10 @@ fn main() {
     }
 
     println!();
-    println!("Total minors: {}, non-negative: {}/{}", total_minors, nonneg_minors, total_minors);
+    println!(
+        "Total minors: {}, non-negative: {}/{}",
+        total_minors, nonneg_minors, total_minors
+    );
 
     // Report cross-zone negative examples
     if !rm_negative_examples.is_empty() {
@@ -585,18 +480,7 @@ fn main() {
     println!("Checking TN_2 of zone-restricted polynomials...\n");
 
     for n in 5..=max_n {
-        let perms_prev = all_permutations(n - 1);
-
-        let mut by_descent_prev: BTreeMap<u64, Vec<usize>> = BTreeMap::new();
-        let mut perm_prev_list: Vec<&Vec<u8>> = Vec::new();
-        for pi in &perms_prev {
-            let idx = perm_prev_list.len();
-            perm_prev_list.push(pi);
-            by_descent_prev
-                .entry(descent_set_bitmask(pi))
-                .or_default()
-                .push(idx);
-        }
+        let grouped_source_permutations = permutations_grouped_by_descent_set_bitmask(n - 1);
 
         for s_mask in 0u64..(1 << (n - 1)) {
             if s_mask & 1 != 0 {
@@ -609,7 +493,13 @@ fn main() {
 
             let mut source_dists: BTreeMap<u8, BTreeMap<(usize, u8), usize>> = BTreeMap::new();
             for &p in &vp {
-                let dist = build_source_dist(s_mask, p, n, &by_descent_prev, &perm_prev_list);
+                let dist = q_refined_modified_source_distribution_from_grouped_source_permutations(
+                    s_mask,
+                    p,
+                    n,
+                    &grouped_source_permutations,
+                )
+                .counts_by_modified_source_swaps_and_previous_maximum_position;
                 source_dists.insert(p, dist);
             }
 
@@ -694,22 +584,15 @@ fn main() {
     let mut neg_individual_examples: Vec<String> = Vec::new();
 
     for n in 5..=max_n.min(6) {
-        let perms_prev = all_permutations(n - 1);
-        let mut by_descent_prev: BTreeMap<u64, Vec<usize>> = BTreeMap::new();
-        let mut perm_prev_list: Vec<&Vec<u8>> = Vec::new();
-        for pi in &perms_prev {
-            let idx = perm_prev_list.len();
-            perm_prev_list.push(pi);
-            by_descent_prev
-                .entry(descent_set_bitmask(pi))
-                .or_default()
-                .push(idx);
-        }
+        let grouped_source_permutations = permutations_grouped_by_descent_set_bitmask(n - 1);
 
         let perms_n = all_permutations(n);
         let mut by_descent_n: BTreeMap<u64, Vec<&Vec<u8>>> = BTreeMap::new();
         for pi in &perms_n {
-            by_descent_n.entry(descent_set_bitmask(pi)).or_default().push(pi);
+            by_descent_n
+                .entry(descent_set_bitmask(pi))
+                .or_default()
+                .push(pi);
         }
 
         for s_mask in 0u64..(1 << (n - 1)) {
@@ -725,7 +608,13 @@ fn main() {
             for &p in &vp {
                 source_dists.insert(
                     p,
-                    build_source_dist(s_mask, p, n, &by_descent_prev, &perm_prev_list),
+                    q_refined_modified_source_distribution_from_grouped_source_permutations(
+                        s_mask,
+                        p,
+                        n,
+                        &grouped_source_permutations,
+                    )
+                    .counts_by_modified_source_swaps_and_previous_maximum_position,
                 );
             }
 
@@ -779,10 +668,26 @@ fn main() {
                                 let na_poly = &n_polys_a[&q_a];
                                 let nb_poly = &n_polys_b[&q_b];
 
-                                let na_k1 = if k1 >= e_a { coeff(na_poly, k1 - e_a) } else { 0 };
-                                let na_k2 = if k2 >= e_a { coeff(na_poly, k2 - e_a) } else { 0 };
-                                let nb_k1 = if k1 >= e_b { coeff(nb_poly, k1 - e_b) } else { 0 };
-                                let nb_k2 = if k2 >= e_b { coeff(nb_poly, k2 - e_b) } else { 0 };
+                                let na_k1 = if k1 >= e_a {
+                                    coeff(na_poly, k1 - e_a)
+                                } else {
+                                    0
+                                };
+                                let na_k2 = if k2 >= e_a {
+                                    coeff(na_poly, k2 - e_a)
+                                } else {
+                                    0
+                                };
+                                let nb_k1 = if k1 >= e_b {
+                                    coeff(nb_poly, k1 - e_b)
+                                } else {
+                                    0
+                                };
+                                let nb_k2 = if k2 >= e_b {
+                                    coeff(nb_poly, k2 - e_b)
+                                } else {
+                                    0
+                                };
 
                                 let contrib = na_k1 * nb_k2 - na_k2 * nb_k1;
 
@@ -810,7 +715,10 @@ fn main() {
         }
     }
 
-    println!("Total negative individual (q_a, q_b) contributions: {}", neg_individual_count);
+    println!(
+        "Total negative individual (q_a, q_b) contributions: {}",
+        neg_individual_count
+    );
     if !neg_individual_examples.is_empty() {
         println!("Examples:");
         for ex in &neg_individual_examples {
@@ -834,8 +742,14 @@ fn main() {
         .map(|zp| format!("({},{})", zone_label(zp.0), zone_label(zp.1)))
         .collect();
 
-    println!("Zone pairs that are ALWAYS non-negative: {:?}", always_nonneg_zones);
-    println!("Zone pairs that can be NEGATIVE:         {:?}", sometimes_neg_zones);
+    println!(
+        "Zone pairs that are ALWAYS non-negative: {:?}",
+        always_nonneg_zones
+    );
+    println!(
+        "Zone pairs that can be NEGATIVE:         {:?}",
+        sometimes_neg_zones
+    );
 
     if nonneg_minors == total_minors {
         println!("\nAll full minors are non-negative (TN_2 verified).");

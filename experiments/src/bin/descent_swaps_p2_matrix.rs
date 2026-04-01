@@ -24,11 +24,17 @@ use polynomial_tools::real_rootedness::{format_poly, is_real_rooted};
 use std::collections::BTreeMap;
 
 fn build_poly(vals: &[usize]) -> Vec<i64> {
-    if vals.is_empty() { return vec![0]; }
+    if vals.is_empty() {
+        return vec![0];
+    }
     let max_s = *vals.iter().max().unwrap();
     let mut coeffs = vec![0i64; max_s + 1];
-    for &s in vals { coeffs[s] += 1; }
-    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 { coeffs.pop(); }
+    for &s in vals {
+        coeffs[s] += 1;
+    }
+    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 {
+        coeffs.pop();
+    }
     coeffs
 }
 
@@ -39,57 +45,103 @@ fn valid_positions(s_mask: u64, n: u8) -> Vec<u8> {
             positions.push(p);
         }
     }
-    if n >= 2 && (s_mask >> (n - 2)) & 1 == 0 { positions.push(n); }
+    if n >= 2 && (s_mask >> (n - 2)) & 1 == 0 {
+        positions.push(n);
+    }
     positions
 }
 
 fn source_asc(s_mask: u64, p: u8, n: u8) -> u64 {
-    if n <= 2 { return 0; }
-    if p == n { return s_mask; }
+    if n <= 2 {
+        return 0;
+    }
+    if p == n {
+        return s_mask;
+    }
     let mut sp = 0u64;
     if p == 1 {
-        for j in 2..n { if (s_mask >> (j - 1)) & 1 == 1 { sp |= 1 << (j - 2); } }
+        for j in 2..n {
+            if (s_mask >> (j - 1)) & 1 == 1 {
+                sp |= 1 << (j - 2);
+            }
+        }
     } else {
         for pos in 1..=(p.saturating_sub(2)) {
-            if (s_mask >> (pos - 1)) & 1 == 1 { sp |= 1 << (pos - 1); }
+            if (s_mask >> (pos - 1)) & 1 == 1 {
+                sp |= 1 << (pos - 1);
+            }
         }
-        for j in (p + 1)..n { if (s_mask >> (j - 1)) & 1 == 1 { sp |= 1 << (j - 2); } }
+        for j in (p + 1)..n {
+            if (s_mask >> (j - 1)) & 1 == 1 {
+                sp |= 1 << (j - 2);
+            }
+        }
     }
     sp
 }
 
 fn source_desc(s_mask: u64, p: u8, n: u8) -> Option<u64> {
-    if p <= 1 || p >= n { return None; }
+    if p <= 1 || p >= n {
+        return None;
+    }
     Some(source_asc(s_mask, p, n) | (1 << (p - 2)))
 }
 
 fn epsilon1(pi: &[u8], p: u8) -> bool {
     let n = pi.len() as u8 + 1;
-    if p <= 1 || p >= n { return false; }
+    if p <= 1 || p >= n {
+        return false;
+    }
     pi[(p - 2) as usize] + 1 == pi[(p - 1) as usize]
 }
 
 fn check_pairwise_compatible(f: &[i64], g: &[i64]) -> bool {
-    if f.len() <= 1 || g.len() <= 1 { return true; }
-    if !is_real_rooted(f) || !is_real_rooted(g) { return false; }
+    if f.len() <= 1 || g.len() <= 1 {
+        return true;
+    }
+    if !is_real_rooted(f) || !is_real_rooted(g) {
+        return false;
+    }
     let weights: Vec<(i64, i64)> = vec![
-        (1,1),(1,2),(2,1),(1,3),(3,1),(1,5),(5,1),(2,3),(3,2),(1,7),(7,1),(3,5),(5,3),
+        (1, 1),
+        (1, 2),
+        (2, 1),
+        (1, 3),
+        (3, 1),
+        (1, 5),
+        (5, 1),
+        (2, 3),
+        (3, 2),
+        (1, 7),
+        (7, 1),
+        (3, 5),
+        (5, 3),
     ];
     let maxlen = f.len().max(g.len());
     for (a, b) in &weights {
         let mut combo = vec![0i64; maxlen];
-        for (i, &c) in f.iter().enumerate() { combo[i] += a * c; }
-        for (i, &c) in g.iter().enumerate() { combo[i] += b * c; }
-        while combo.len() > 1 && *combo.last().unwrap() == 0 { combo.pop(); }
-        if combo.len() > 1 && !is_real_rooted(&combo) { return false; }
+        for (i, &c) in f.iter().enumerate() {
+            combo[i] += a * c;
+        }
+        for (i, &c) in g.iter().enumerate() {
+            combo[i] += b * c;
+        }
+        while combo.len() > 1 && *combo.last().unwrap() == 0 {
+            combo.pop();
+        }
+        if combo.len() > 1 && !is_real_rooted(&combo) {
+            return false;
+        }
     }
     true
 }
 
 fn check_family(polys: &[Vec<i64>]) -> bool {
     for i in 0..polys.len() {
-        for j in (i+1)..polys.len() {
-            if !check_pairwise_compatible(&polys[i], &polys[j]) { return false; }
+        for j in (i + 1)..polys.len() {
+            if !check_pairwise_compatible(&polys[i], &polys[j]) {
+                return false;
+            }
         }
     }
     true
@@ -98,12 +150,24 @@ fn check_family(polys: &[Vec<i64>]) -> bool {
 fn descent_set_to_string(mask: u64, n: u8) -> String {
     let mut s = String::from("{");
     let mut first = true;
-    for i in 1..n { if (mask >> (i - 1)) & 1 == 1 { if !first { s.push(','); } s.push_str(&i.to_string()); first = false; } }
-    s.push('}'); s
+    for i in 1..n {
+        if (mask >> (i - 1)) & 1 == 1 {
+            if !first {
+                s.push(',');
+            }
+            s.push_str(&i.to_string());
+            first = false;
+        }
+    }
+    s.push('}');
+    s
 }
 
 fn main() {
-    let max_n: u8 = std::env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(9);
+    let max_n: u8 = std::env::args()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(9);
 
     println!("=== p=2 matrix structure with pos(1) refinement ===\n");
 
@@ -121,18 +185,32 @@ fn main() {
         let perms_prev = all_permutations(n - 1);
 
         let mut by_descent: BTreeMap<u64, Vec<&Vec<u8>>> = BTreeMap::new();
-        for pi in &perms { by_descent.entry(descent_set_bitmask(pi)).or_default().push(pi); }
+        for pi in &perms {
+            by_descent
+                .entry(descent_set_bitmask(pi))
+                .or_default()
+                .push(pi);
+        }
 
         let mut prev_by_des: BTreeMap<u64, Vec<&Vec<u8>>> = BTreeMap::new();
-        for pi in &perms_prev { prev_by_des.entry(descent_set_bitmask(pi)).or_default().push(pi); }
+        for pi in &perms_prev {
+            prev_by_des
+                .entry(descent_set_bitmask(pi))
+                .or_default()
+                .push(pi);
+        }
 
         let mut n_ok = 0u32;
         let mut n_total = 0u32;
 
         for (&mask, _) in &by_descent {
-            if mask & 1 != 0 { continue; } // 1 ∈ S
+            if mask & 1 != 0 {
+                continue;
+            } // 1 ∈ S
             let vp = valid_positions(mask, n);
-            if vp.len() < 2 { continue; }
+            if vp.len() < 2 {
+                continue;
+            }
             let has_p2 = vp.contains(&2);
 
             let mut all_polys: Vec<(String, Vec<i64>)> = Vec::new();
@@ -144,11 +222,15 @@ fn main() {
                 // Collect source perms
                 let mut source_perms: Vec<(&Vec<u8>, bool)> = Vec::new(); // (pi, is_desc_source)
                 if let Some(class) = prev_by_des.get(&sp_a) {
-                    for pi in class { source_perms.push((pi, false)); }
+                    for pi in class {
+                        source_perms.push((pi, false));
+                    }
                 }
                 if let Some(sp) = sp_d {
                     if let Some(class) = prev_by_des.get(&sp) {
-                        for pi in class { source_perms.push((pi, true)); }
+                        for pi in class {
+                            source_perms.push((pi, true));
+                        }
                     }
                 }
 
@@ -158,7 +240,9 @@ fn main() {
                     for &(pi, _is_desc) in &source_perms {
                         let r = pi.iter().position(|&v| v == 1).unwrap() as u8 + 1;
                         let e1 = if epsilon1(pi, p) { 1 } else { 0 };
-                        by_r.entry(r).or_default().push(compute(pi, Stat::Swaps) + e1);
+                        by_r.entry(r)
+                            .or_default()
+                            .push(compute(pi, Stat::Swaps) + e1);
                     }
                     for (r, vals) in &by_r {
                         all_polys.push((format!("p2_r{}", r), build_poly(vals)));
@@ -169,7 +253,9 @@ fn main() {
                     for &(pi, _) in &source_perms {
                         let q = pi.iter().position(|&v| v == n - 1).unwrap() as u8 + 1;
                         let e1 = if epsilon1(pi, p) { 1 } else { 0 };
-                        by_q.entry(q).or_default().push(compute(pi, Stat::Swaps) + e1);
+                        by_q.entry(q)
+                            .or_default()
+                            .push(compute(pi, Stat::Swaps) + e1);
                     }
                     for (q, vals) in &by_q {
                         all_polys.push((format!("p{}_q{}", p, q), build_poly(vals)));
@@ -188,17 +274,23 @@ fn main() {
                     // Find which pairs fail
                     let mut fail_count = 0;
                     for i in 0..polys.len() {
-                        for j in (i+1)..polys.len() {
+                        for j in (i + 1)..polys.len() {
                             if !check_pairwise_compatible(&polys[i], &polys[j]) {
                                 if fail_count < 2 {
                                     println!("    {} vs {}", all_polys[i].0, all_polys[j].0);
-                                    println!("    {} vs {}", format_poly(&polys[i]), format_poly(&polys[j]));
+                                    println!(
+                                        "    {} vs {}",
+                                        format_poly(&polys[i]),
+                                        format_poly(&polys[j])
+                                    );
                                 }
                                 fail_count += 1;
                             }
                         }
                     }
-                    if fail_count > 2 { println!("    ... {} more", fail_count - 2); }
+                    if fail_count > 2 {
+                        println!("    ... {} more", fail_count - 2);
+                    }
                 }
             }
         }

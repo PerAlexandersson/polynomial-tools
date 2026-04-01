@@ -2,9 +2,9 @@
 //! Check palindromicity and real-rootedness.
 
 use combpoly::cayley::for_each_fpf_cayley;
-use polynomial_tools::{format_poly, is_real_rooted};
 use combpoly::statistics;
 use combpoly::statistics::Stat;
+use polynomial_tools::{format_poly, is_real_rooted};
 
 fn accumulate_poly(coeffs: &mut Vec<i64>, val: usize) {
     if val >= coeffs.len() {
@@ -33,13 +33,19 @@ fn main() {
 
         println!("n = {}:", n);
         for mv in 1..=m {
-            if by_max[mv].is_empty() || by_max[mv].iter().all(|&c| c == 0) { continue; }
+            if by_max[mv].is_empty() || by_max[mv].iter().all(|&c| c == 0) {
+                continue;
+            }
             let count: i64 = by_max[mv].iter().sum();
             let rr = is_real_rooted(&by_max[mv]);
             let pal = is_palindromic(&by_max[mv]);
             println!(
                 "  max={}: {:>8} perms, rr={:5}, pal={:5}, poly = {}",
-                mv, count, rr, pal, format_poly(&by_max[mv])
+                mv,
+                count,
+                rr,
+                pal,
+                format_poly(&by_max[mv])
             );
         }
     }
@@ -63,11 +69,19 @@ fn main() {
         for mv in 1..=m {
             for k in 1..=m {
                 let p = &by_ml[mv][k];
-                if p.is_empty() || p.iter().all(|&c| c == 0) { continue; }
+                if p.is_empty() || p.iter().all(|&c| c == 0) {
+                    continue;
+                }
                 if !is_real_rooted(p) {
                     all_rr = false;
                     let count: i64 = p.iter().sum();
-                    failures.push(format!("  max={}, last={}: {} perms, poly = {}", mv, k, count, format_poly(p)));
+                    failures.push(format!(
+                        "  max={}, last={}: {} perms, poly = {}",
+                        mv,
+                        k,
+                        count,
+                        format_poly(p)
+                    ));
                 }
             }
         }

@@ -1,12 +1,16 @@
 use combpoly::permutation::all_permutations;
 use combpoly::polynomial_builder::build_generating_polynomial;
 use combpoly::statistics::Stat;
-use polynomial_tools::sequences::*;
 use polynomial_tools::real_rootedness::format_poly;
+use polynomial_tools::sequences::*;
 
 fn trim(p: &[i64]) -> Vec<i64> {
     let end = p.iter().rposition(|&c| c != 0).map_or(0, |i| i + 1);
-    if end == 0 { vec![0] } else { p[..end].to_vec() }
+    if end == 0 {
+        vec![0]
+    } else {
+        p[..end].to_vec()
+    }
 }
 
 fn main() {

@@ -12,11 +12,21 @@ use polynomial_tools::real_rootedness::{
 };
 
 fn build_poly(perms: &[Vec<u8>]) -> Vec<i64> {
-    if perms.is_empty() { return vec![0]; }
-    let max_s = perms.iter().map(|s| compute(s, Stat::Swaps)).max().unwrap_or(0);
+    if perms.is_empty() {
+        return vec![0];
+    }
+    let max_s = perms
+        .iter()
+        .map(|s| compute(s, Stat::Swaps))
+        .max()
+        .unwrap_or(0);
     let mut coeffs = vec![0i64; max_s + 1];
-    for s in perms { coeffs[compute(s, Stat::Swaps)] += 1; }
-    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 { coeffs.pop(); }
+    for s in perms {
+        coeffs[compute(s, Stat::Swaps)] += 1;
+    }
+    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 {
+        coeffs.pop();
+    }
     coeffs
 }
 
@@ -26,7 +36,9 @@ fn is_palindromic(p: &[i64]) -> bool {
 }
 
 fn check_il(f: &[i64], g: &[i64]) -> &'static str {
-    if f.len() <= 1 || g.len() <= 1 { return "triv"; }
+    if f.len() <= 1 || g.len() <= 1 {
+        return "triv";
+    }
     let (small, large) = if f.len() <= g.len() { (f, g) } else { (g, f) };
     match check_interlacing_sturm(small, large) {
         Some(true) => "✓",
@@ -61,13 +73,18 @@ fn main() {
         for n in 1..=max_n {
             let perms = avoiding_permutations(n, &[pattern.clone()]);
             let poly = build_poly(&perms);
-            let rr = if poly.len() <= 2 { true } else { is_real_rooted(&poly) };
+            let rr = if poly.len() <= 2 {
+                true
+            } else {
+                is_real_rooted(&poly)
+            };
             let pal = is_palindromic(&poly);
             let total: i64 = poly.iter().sum();
 
             println!(
                 "  n={:>2}: {:<6} {:<55} {} {}",
-                n, total,
+                n,
+                total,
                 format_poly(&poly),
                 if rr { "✓rr" } else { "✗rr" },
                 if pal { "pal" } else { "   " },

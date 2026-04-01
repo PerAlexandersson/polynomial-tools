@@ -15,15 +15,23 @@ use std::collections::BTreeSet;
 
 fn pt(p: &[i64]) -> Vec<i64> {
     let mut v = p.to_vec();
-    while v.len() > 1 && *v.last().unwrap() == 0 { v.pop(); }
+    while v.len() > 1 && *v.last().unwrap() == 0 {
+        v.pop();
+    }
     v
 }
-fn pz(p: &[i64]) -> bool { p.iter().all(|&c| c == 0) }
+fn pz(p: &[i64]) -> bool {
+    p.iter().all(|&c| c == 0)
+}
 fn pa(a: &[i64], b: &[i64]) -> Vec<i64> {
     let l = a.len().max(b.len());
     let mut r = vec![0i64; l];
-    for (i, &v) in a.iter().enumerate() { r[i] += v; }
-    for (i, &v) in b.iter().enumerate() { r[i] += v; }
+    for (i, &v) in a.iter().enumerate() {
+        r[i] += v;
+    }
+    for (i, &v) in b.iter().enumerate() {
+        r[i] += v;
+    }
     pt(&r)
 }
 /// Scalar multiply
@@ -32,20 +40,30 @@ fn ps(c: i64, p: &[i64]) -> Vec<i64> {
 }
 fn pmt(p: &[i64]) -> Vec<i64> {
     let mut r = vec![0i64; p.len() + 1];
-    for (i, &v) in p.iter().enumerate() { r[i + 1] = v; }
+    for (i, &v) in p.iter().enumerate() {
+        r[i + 1] = v;
+    }
     pt(&r)
 }
 fn pdeg(p: &[i64]) -> Option<usize> {
     let v = pt(p);
-    if pz(&v) { None } else { Some(v.len() - 1) }
+    if pz(&v) {
+        None
+    } else {
+        Some(v.len() - 1)
+    }
 }
 
 /// Check f << g (weak interlacing).
 fn interlaces(f: &[i64], g: &[i64]) -> bool {
     let f = pt(f);
     let g = pt(g);
-    if pz(&f) { return true; }
-    if pz(&g) { return false; }
+    if pz(&f) {
+        return true;
+    }
+    if pz(&g) {
+        return false;
+    }
     match check_weak_interlacing(&f, &g) {
         Some(true) => true,
         Some(false) => false,
@@ -59,7 +77,7 @@ fn interlaces(f: &[i64], g: &[i64]) -> bool {
                         Some(b) => b,
                         None => false,
                     }
-                },
+                }
                 _ => false,
             }
         }
@@ -89,7 +107,9 @@ fn bruhat_lower_ideal(perm: &[u8]) -> Vec<Vec<u8>> {
                 if cur[i] > cur[j] {
                     let mut c = cur.clone();
                     c.swap(i, j);
-                    if !vis.contains(&c) { q.insert(c); }
+                    if !vis.contains(&c) {
+                        q.insert(c);
+                    }
                 }
             }
         }
@@ -104,7 +124,11 @@ fn board_to_perm(b: &[u8]) -> Vec<u8> {
     let mut u = vec![false; n + 1];
     for i in 0..n {
         for c in (1..=(b[i] as usize).min(n)).rev() {
-            if !u[c] { p[i] = c as u8; u[c] = true; break; }
+            if !u[c] {
+                p[i] = c as u8;
+                u[c] = true;
+                break;
+            }
         }
     }
     p
@@ -115,7 +139,9 @@ fn is_312_avoiding(perm: &[u8]) -> bool {
     for i in 0..n {
         for j in i + 1..n {
             for k in j + 1..n {
-                if perm[k] < perm[i] && perm[i] < perm[j] { return false; }
+                if perm[k] < perm[i] && perm[i] < perm[j] {
+                    return false;
+                }
             }
         }
     }
@@ -123,8 +149,12 @@ fn is_312_avoiding(perm: &[u8]) -> bool {
 }
 
 fn peaks(w: &[u8]) -> usize {
-    if w.len() < 3 { return 0; }
-    (1..w.len() - 1).filter(|&i| w[i - 1] < w[i] && w[i] > w[i + 1]).count()
+    if w.len() < 3 {
+        return 0;
+    }
+    (1..w.len() - 1)
+        .filter(|&i| w[i - 1] < w[i] && w[i] > w[i + 1])
+        .count()
 }
 
 fn gen_boards(n: usize) -> Vec<Vec<u8>> {
@@ -135,7 +165,10 @@ fn gen_boards(n: usize) -> Vec<Vec<u8>> {
 }
 
 fn gb(n: usize, mx: usize, d: usize, c: &mut Vec<u8>, r: &mut Vec<Vec<u8>>) {
-    if d == n { r.push(c.clone()); return; }
+    if d == n {
+        r.push(c.clone());
+        return;
+    }
     for v in (d + 1).max(if d > 0 { c[d - 1] as usize } else { 1 })..=mx {
         c.push(v as u8);
         gb(n, mx, d + 1, c, r);
@@ -147,12 +180,16 @@ fn gb(n: usize, mx: usize, d: usize, c: &mut Vec<u8>, r: &mut Vec<Vec<u8>>) {
 /// λ = (m, μ_1+1, ..., μ_{n-1}+1) where m = λ_1.
 /// Returns (m, μ) or None if n=1 (base case).
 fn extract_prev_board(board: &[u8]) -> Option<(usize, Vec<u8>)> {
-    if board.len() <= 1 { return None; }
+    if board.len() <= 1 {
+        return None;
+    }
     let m = board[0] as usize;
     // μ_i = λ_{i+1} - 1 for i = 1, ..., n-1
     let mu: Vec<u8> = board[1..].iter().map(|&v| v - 1).collect();
     // Check μ is a valid board (all entries >= 1, non-decreasing starting from position index+1)
-    if mu.iter().any(|&v| v < 1) { return None; }
+    if mu.iter().any(|&v| v < 1) {
+        return None;
+    }
     Some((m, mu))
 }
 
@@ -161,7 +198,10 @@ fn extract_prev_board(board: &[u8]) -> Option<(usize, Vec<u8>)> {
 // ══════════════════════════════════════════════════════════════════════
 
 fn main() {
-    let max_n: usize = std::env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(7);
+    let max_n: usize = std::env::args()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(7);
     println!("================================================================");
     println!("  Partial-sum UU exploration");
     println!("  312-avoiding Ferrers boards, n <= {}", max_n);
@@ -228,7 +268,9 @@ fn main() {
             valid_boards += 1;
 
             let m = board[0] as usize;
-            if n <= 1 { continue; }
+            if n <= 1 {
+                continue;
+            }
 
             let ideal = bruhat_lower_ideal(&perm);
 
@@ -238,16 +280,22 @@ fn main() {
 
             for pi in &ideal {
                 let j = pi[0] as usize;
-                if j > m { continue; }
+                if j > m {
+                    continue;
+                }
                 let l = *pi.last().unwrap() as usize;
-                if l > m { continue; }
+                if l > m {
+                    continue;
+                }
                 let pk = peaks(pi);
                 let poly = if pi.len() >= 2 && pi[0] > pi[1] {
                     &mut d_jl[j][l]
                 } else {
                     &mut u_jl[j][l]
                 };
-                while poly.len() <= pk { poly.push(0); }
+                while poly.len() <= pk {
+                    poly.push(0);
+                }
                 poly[pk] += 1;
             }
 
@@ -262,13 +310,16 @@ fn main() {
             }
 
             // Store in cache
-            board_cache.insert(board.clone(), BoardData {
-                m,
-                d_jl: d_jl.clone(),
-                u_jl: u_jl.clone(),
-                w_jl: w_jl.clone(),
-                a_jl: a_jl.clone(),
-            });
+            board_cache.insert(
+                board.clone(),
+                BoardData {
+                    m,
+                    d_jl: d_jl.clone(),
+                    u_jl: u_jl.clone(),
+                    w_jl: w_jl.clone(),
+                    a_jl: a_jl.clone(),
+                },
+            );
 
             // ══════════════════════════════════════════════════════
             //  PART 1 & 2: Partial sum conditions
@@ -296,72 +347,84 @@ fn main() {
                 let total_w = prefix_w[m + 1].clone();
 
                 // suffix[j] = total - prefix[j]
-                let suffix_u = |j: usize| -> Vec<i64> {
-                    pa(&total_u, &ps(-1, &prefix_u[j]))
-                };
-                let suffix_a = |j: usize| -> Vec<i64> {
-                    pa(&total_a, &ps(-1, &prefix_a[j]))
-                };
-                let suffix_w = |j: usize| -> Vec<i64> {
-                    pa(&total_w, &ps(-1, &prefix_w[j]))
-                };
+                let suffix_u = |j: usize| -> Vec<i64> { pa(&total_u, &ps(-1, &prefix_u[j])) };
+                let suffix_a = |j: usize| -> Vec<i64> { pa(&total_a, &ps(-1, &prefix_a[j])) };
+                let suffix_w = |j: usize| -> Vec<i64> { pa(&total_w, &ps(-1, &prefix_w[j])) };
 
                 for j in 1..=m {
                     let pu = &prefix_u[j]; // Σ_{i<j} U_i
-                    let su = suffix_u(j);  // Σ_{i≥j} U_i
+                    let su = suffix_u(j); // Σ_{i≥j} U_i
 
                     // Part 1: Σ_{i<j} U_i ≪ Σ_{i≥j} U_i
                     if !pz(pu) && !pz(&su) {
                         puu[0] += 1;
-                        if !interlaces(pu, &su) { puu[1] += 1; }
+                        if !interlaces(pu, &su) {
+                            puu[1] += 1;
+                        }
                     }
 
                     // Part 2 α=0: same test (redundant but tracked)
                     if !pz(pu) && !pz(&su) {
                         wu_a0[0] += 1;
-                        if !interlaces(pu, &su) { wu_a0[1] += 1; }
+                        if !interlaces(pu, &su) {
+                            wu_a0[1] += 1;
+                        }
                     }
 
                     // Part 2 α=1: Σ_{i<j} U_i ≪ Σ_{i≥j} A_i
                     let sa = suffix_a(j);
                     if !pz(pu) && !pz(&sa) {
                         wu_a1[0] += 1;
-                        if !interlaces(pu, &sa) { wu_a1[1] += 1; }
+                        if !interlaces(pu, &sa) {
+                            wu_a1[1] += 1;
+                        }
                     }
 
                     // Part 2 α=t: Σ_{i<j} U_i ≪ Σ_{i≥j} W_i
                     let sw = suffix_w(j);
                     if !pz(pu) && !pz(&sw) {
                         wu_at[0] += 1;
-                        if !interlaces(pu, &sw) { wu_at[1] += 1; }
+                        if !interlaces(pu, &sw) {
+                            wu_at[1] += 1;
+                        }
                     }
 
                     // Bonus: Σ_{i<j} D_i ≪ Σ_{i≥j} U_i
                     let pd = &prefix_d[j];
                     if !pz(pd) && !pz(&su) {
                         pdu[0] += 1;
-                        if !interlaces(pd, &su) { pdu[1] += 1; }
+                        if !interlaces(pd, &su) {
+                            pdu[1] += 1;
+                        }
                     }
 
                     // Bonus: Σ_{i<j} A_i ≪ Σ_{i≥j} W_i
                     let pa_ = &prefix_a[j];
                     if !pz(pa_) && !pz(&sw) {
                         paw[0] += 1;
-                        if !interlaces(pa_, &sw) { paw[1] += 1; }
+                        if !interlaces(pa_, &sw) {
+                            paw[1] += 1;
+                        }
                     }
 
                     // Bonus: Σ_{i<j} W_i ≪ Σ_{i≥j} W_i
                     let pw = &prefix_w[j];
                     if !pz(pw) && !pz(&sw) {
                         pww[0] += 1;
-                        if !interlaces(pw, &sw) { pww[1] += 1; }
+                        if !interlaces(pw, &sw) {
+                            pww[1] += 1;
+                        }
                     }
                 }
             }
         }
 
-        println!("n={}: {} boards (cumulative: {})", n,
-                 all_boards_by_n[n].len(), valid_boards);
+        println!(
+            "n={}: {} boards (cumulative: {})",
+            n,
+            all_boards_by_n[n].len(),
+            valid_boards
+        );
     }
 
     // ══════════════════════════════════════════════════════
@@ -381,11 +444,15 @@ fn main() {
             if let Some((m_val, mu)) = extract_prev_board(board) {
                 assert_eq!(m_val, m);
                 let mu_n = mu.len();
-                if mu_n == 0 { continue; }
+                if mu_n == 0 {
+                    continue;
+                }
 
                 // Check if mu is a valid 312-avoiding Ferrers board
                 let mu_perm = board_to_perm(&mu);
-                if !is_312_avoiding(&mu_perm) { continue; }
+                if !is_312_avoiding(&mu_perm) {
+                    continue;
+                }
 
                 // Get data for mu from cache
                 let mu_data = match board_cache.get(&mu) {
@@ -411,15 +478,21 @@ fn main() {
                 let print_detail = n <= 4; // Print details for small boards
 
                 if print_detail {
-                    println!("  Board λ = {:?} (n={}), prev μ = {:?} (n={}), m={}, m_μ={}",
-                             board, n, mu, mu_n, m, m_mu);
+                    println!(
+                        "  Board λ = {:?} (n={}), prev μ = {:?} (n={}), m={}, m_μ={}",
+                        board, n, mu, mu_n, m, m_mu
+                    );
                 }
 
                 for l in 1..=m {
                     for k in 1..=m {
-                        if k == l { continue; }
+                        if k == l {
+                            continue;
+                        }
                         let lp = if k > l { l } else { l - 1 };
-                        if lp < 1 || lp > m_mu { continue; }
+                        if lp < 1 || lp > m_mu {
+                            continue;
+                        }
 
                         // Verify U_{k,l}^λ = T_k^{(lp)} = Σ_{j≥k} W_{j,lp}^μ
                         // But note: indices in μ go from 1 to m_mu
@@ -439,8 +512,14 @@ fn main() {
                         } else {
                             rec_verified += 1;
                             if print_detail && !pz(u_kl) {
-                                println!("    OK U_{{{},{}}}^λ = Σ_{{j≥{}}} W_{{j,{}}}^μ = {}",
-                                         k, l, k, lp, format_poly(u_kl));
+                                println!(
+                                    "    OK U_{{{},{}}}^λ = Σ_{{j≥{}}} W_{{j,{}}}^μ = {}",
+                                    k,
+                                    l,
+                                    k,
+                                    lp,
+                                    format_poly(u_kl)
+                                );
                             }
                         }
 
@@ -463,8 +542,14 @@ fn main() {
                         } else {
                             rec_verified += 1;
                             if print_detail && !pz(d_kl) {
-                                println!("    OK D_{{{},{}}}^λ = Σ_{{j<{}}} A_{{j,{}}}^μ = {}",
-                                         k, l, k, lp, format_poly(d_kl));
+                                println!(
+                                    "    OK D_{{{},{}}}^λ = Σ_{{j<{}}} A_{{j,{}}}^μ = {}",
+                                    k,
+                                    l,
+                                    k,
+                                    lp,
+                                    format_poly(d_kl)
+                                );
                             }
                         }
                     }
@@ -490,10 +575,17 @@ fn main() {
                 // pick the group k > l with input column lp = l.
                 for l_out in 1..m {
                     let lp = l_out;
-                    if lp > m_mu { continue; }
-                    if !print_detail { continue; }
+                    if lp > m_mu {
+                        continue;
+                    }
+                    if !print_detail {
+                        continue;
+                    }
 
-                    println!("    --- Weighted sum check for group k>l={} (lp={}) ---", l_out, lp);
+                    println!(
+                        "    --- Weighted sum check for group k>l={} (lp={}) ---",
+                        l_out, lp
+                    );
                     for cutoff in (l_out + 1)..=m {
                         // Direct: Σ_{i=l_out+1}^{cutoff-1} U_{i,l_out}^λ
                         let mut direct_sum = vec![0i64];
@@ -514,11 +606,20 @@ fn main() {
                         }
 
                         if pt(&direct_sum) != pt(&weighted_sum) {
-                            println!("      cutoff={}: MISMATCH direct={} vs weighted={}",
-                                     cutoff, format_poly(&direct_sum), format_poly(&weighted_sum));
+                            println!(
+                                "      cutoff={}: MISMATCH direct={} vs weighted={}",
+                                cutoff,
+                                format_poly(&direct_sum),
+                                format_poly(&weighted_sum)
+                            );
                         } else if !pz(&direct_sum) {
-                            println!("      cutoff={}: OK Sum_{{i<{}}} U_{{i,{}}} = weighted sum = {}",
-                                     cutoff, cutoff, l_out, format_poly(&direct_sum));
+                            println!(
+                                "      cutoff={}: OK Sum_{{i<{}}} U_{{i,{}}} = weighted sum = {}",
+                                cutoff,
+                                cutoff,
+                                l_out,
+                                format_poly(&direct_sum)
+                            );
                         }
                     }
                 }
@@ -530,8 +631,10 @@ fn main() {
         }
     }
 
-    println!("  Recursion structure: checked={}, verified={}, mismatch={}",
-             rec_checked, rec_verified, rec_mismatch);
+    println!(
+        "  Recursion structure: checked={}, verified={}, mismatch={}",
+        rec_checked, rec_verified, rec_mismatch
+    );
 
     // ══════════════════════════════════════════════════════
     //  PART 4: Brändén matrix
@@ -548,9 +651,13 @@ fn main() {
             let m = board[0] as usize;
             if let Some((_m_val, mu)) = extract_prev_board(board) {
                 let mu_n = mu.len();
-                if mu_n == 0 { continue; }
+                if mu_n == 0 {
+                    continue;
+                }
                 let mu_perm = board_to_perm(&mu);
-                if !is_312_avoiding(&mu_perm) { continue; }
+                if !is_312_avoiding(&mu_perm) {
+                    continue;
+                }
 
                 let mu_data = match board_cache.get(&mu) {
                     Some(d) => d,
@@ -563,7 +670,10 @@ fn main() {
 
                 let m_mu = mu_data.m;
 
-                println!("  Board λ = {:?} (n={}, m={}), prev μ = {:?} (m_μ={})", board, n, m, mu, m_mu);
+                println!(
+                    "  Board λ = {:?} (n={}, m={}), prev μ = {:?} (m_μ={})",
+                    board, n, m, mu, m_mu
+                );
 
                 // For a fixed input column lp (of μ), the recursion gives:
                 // Output D_{k}^+ and U_{k}^+ for k in the group using column lp.
@@ -594,9 +704,15 @@ fn main() {
                     };
                     // Both groups use the same input column lp.
 
-                    let all_out_ks: Vec<usize> = out_ks_below.iter().chain(out_ks_above.iter()).cloned().collect();
+                    let all_out_ks: Vec<usize> = out_ks_below
+                        .iter()
+                        .chain(out_ks_above.iter())
+                        .cloned()
+                        .collect();
 
-                    if all_out_ks.is_empty() { continue; }
+                    if all_out_ks.is_empty() {
+                        continue;
+                    }
 
                     println!("    Input column lp={}, m_μ={}", lp, m_mu);
                     println!("    Output k values (k<l={}): {:?}", lp + 1, out_ks_below);
@@ -624,14 +740,14 @@ fn main() {
                         // D_k^+ row (index idx)
                         for j in 1..=m_mu {
                             if j < k {
-                                matrix[idx][j - 1] = "1";        // coeff of D_j
+                                matrix[idx][j - 1] = "1"; // coeff of D_j
                                 matrix[idx][m_mu + j - 1] = "1"; // coeff of U_j
                             }
                         }
                         // U_k^+ row (index num_out + idx)
                         for j in 1..=m_mu {
                             if j >= k {
-                                matrix[num_out + idx][j - 1] = "t";        // coeff of D_j
+                                matrix[num_out + idx][j - 1] = "t"; // coeff of D_j
                                 matrix[num_out + idx][m_mu + j - 1] = "1"; // coeff of U_j
                             }
                         }
@@ -641,7 +757,8 @@ fn main() {
                     println!("    M ({} x {}):", 2 * num_out, num_in);
                     let d_labels: Vec<String> = (1..=m_mu).map(|j| format!("D{}", j)).collect();
                     let u_labels: Vec<String> = (1..=m_mu).map(|j| format!("U{}", j)).collect();
-                    let col_labels: Vec<String> = d_labels.iter().chain(u_labels.iter()).cloned().collect();
+                    let col_labels: Vec<String> =
+                        d_labels.iter().chain(u_labels.iter()).cloned().collect();
                     println!("      Cols: {:?}", col_labels);
                     for (idx, &k) in all_out_ks.iter().enumerate() {
                         println!("      D{}^+: {:?}", k, matrix[idx]);
@@ -653,7 +770,11 @@ fn main() {
                     // Verify M · input = output
                     for (idx, &k) in all_out_ks.iter().enumerate() {
                         // Determine output column l for this k
-                        let l = if out_ks_below.contains(&k) { lp + 1 } else { lp };
+                        let l = if out_ks_below.contains(&k) {
+                            lp + 1
+                        } else {
+                            lp
+                        };
 
                         // Compute D_k^+ from matrix
                         let mut d_from_mat = vec![0i64];
@@ -669,8 +790,13 @@ fn main() {
                         mat_checked += 1;
                         if pt(&d_from_mat) != pt(&board_data.d_jl[k][l]) {
                             mat_mismatch += 1;
-                            println!("      MISMATCH D_{{{}}}^+ (l={}): mat gives {} vs actual {}",
-                                     k, l, format_poly(&d_from_mat), format_poly(&board_data.d_jl[k][l]));
+                            println!(
+                                "      MISMATCH D_{{{}}}^+ (l={}): mat gives {} vs actual {}",
+                                k,
+                                l,
+                                format_poly(&d_from_mat),
+                                format_poly(&board_data.d_jl[k][l])
+                            );
                         } else {
                             mat_verified += 1;
                         }
@@ -689,8 +815,13 @@ fn main() {
                         mat_checked += 1;
                         if pt(&u_from_mat) != pt(&board_data.u_jl[k][l]) {
                             mat_mismatch += 1;
-                            println!("      MISMATCH U_{{{}}}^+ (l={}): mat gives {} vs actual {}",
-                                     k, l, format_poly(&u_from_mat), format_poly(&board_data.u_jl[k][l]));
+                            println!(
+                                "      MISMATCH U_{{{}}}^+ (l={}): mat gives {} vs actual {}",
+                                k,
+                                l,
+                                format_poly(&u_from_mat),
+                                format_poly(&board_data.u_jl[k][l])
+                            );
                         } else {
                             mat_verified += 1;
                         }
@@ -702,8 +833,10 @@ fn main() {
         }
     }
 
-    println!("  Brändén matrix: checked={}, verified={}, mismatch={}",
-             mat_checked, mat_verified, mat_mismatch);
+    println!(
+        "  Brändén matrix: checked={}, verified={}, mismatch={}",
+        mat_checked, mat_verified, mat_mismatch
+    );
 
     // ══════════════════════════════════════════════════════
     //  RESULTS SUMMARY

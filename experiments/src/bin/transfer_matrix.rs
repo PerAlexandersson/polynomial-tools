@@ -18,7 +18,11 @@ fn build_poly(perms: &[&Vec<u8>]) -> Vec<i64> {
     if perms.is_empty() {
         return vec![0];
     }
-    let max_s = perms.iter().map(|s| compute(s, Stat::Swaps)).max().unwrap_or(0);
+    let max_s = perms
+        .iter()
+        .map(|s| compute(s, Stat::Swaps))
+        .max()
+        .unwrap_or(0);
     let mut coeffs = vec![0i64; max_s + 1];
     for s in perms {
         coeffs[compute(s, Stat::Swaps)] += 1;
@@ -32,14 +36,20 @@ fn build_poly(perms: &[&Vec<u8>]) -> Vec<i64> {
 fn poly_add(a: &[i64], b: &[i64]) -> Vec<i64> {
     let len = a.len().max(b.len());
     let mut c = vec![0i64; len];
-    for (i, &v) in a.iter().enumerate() { c[i] += v; }
-    for (i, &v) in b.iter().enumerate() { c[i] += v; }
+    for (i, &v) in a.iter().enumerate() {
+        c[i] += v;
+    }
+    for (i, &v) in b.iter().enumerate() {
+        c[i] += v;
+    }
     c
 }
 
 fn poly_mul_t(a: &[i64]) -> Vec<i64> {
     let mut c = vec![0i64; a.len() + 1];
-    for (i, &v) in a.iter().enumerate() { c[i + 1] = v; }
+    for (i, &v) in a.iter().enumerate() {
+        c[i + 1] = v;
+    }
     c
 }
 
@@ -48,8 +58,11 @@ fn descent_set_str(s: u64, n: u8) -> String {
         .filter(|&i| s & (1 << i) != 0)
         .map(|i| (i + 1).to_string())
         .collect();
-    if positions.is_empty() { "∅".to_string() }
-    else { format!("{{{}}}", positions.join(",")) }
+    if positions.is_empty() {
+        "∅".to_string()
+    } else {
+        format!("{{{}}}", positions.join(","))
+    }
 }
 
 /// For target descent set S in S_n, compute the source descent set S'
@@ -149,9 +162,7 @@ fn main() {
         let mut source_groups: BTreeMap<(u64, usize), Vec<&Vec<u8>>> = BTreeMap::new();
         for s in &all_nm1 {
             let ds = descent_set_bitmask(s);
-            let pos_max = s.iter().position(|&v| v - 1 == 0)
-                .map(|_| 0)
-                .unwrap_or(0);
+            let pos_max = s.iter().position(|&v| v - 1 == 0).map(|_| 0).unwrap_or(0);
             // pos of max value n-1
             let pos_nm1 = s.iter().position(|&v| v == n - 1).unwrap() + 1;
             source_groups.entry((ds, pos_nm1)).or_default().push(s);
@@ -206,18 +217,26 @@ fn main() {
             for &p in &valid_pos {
                 // Insert n at position p
                 let mut sigma = Vec::with_capacity(n as usize);
-                for i in 0..p - 1 { sigma.push(pi[i]); }
+                for i in 0..p - 1 {
+                    sigma.push(pi[i]);
+                }
                 sigma.push(n);
-                for i in p - 1..pi.len() { sigma.push(pi[i]); }
+                for i in p - 1..pi.len() {
+                    sigma.push(pi[i]);
+                }
 
                 let target_ds = descent_set_bitmask(&sigma);
-                if target_ds != alt_des { continue; }
+                if target_ds != alt_des {
+                    continue;
+                }
 
                 let sw_pi = compute(pi, Stat::Swaps);
                 let sw_sigma = compute(&sigma, Stat::Swaps);
                 let eps = sw_sigma - sw_pi;
 
-                let entry = matrix_entries.entry((p, q, source_ds)).or_insert(vec![0i64; 3]);
+                let entry = matrix_entries
+                    .entry((p, q, source_ds))
+                    .or_insert(vec![0i64; 3]);
                 if eps < entry.len() {
                     entry[eps] += 1;
                 } else {
@@ -229,7 +248,8 @@ fn main() {
 
         // Print the transfer matrix grouped by target position
         // For each source descent set that contributes:
-        let source_des_sets: Vec<u64> = matrix_entries.keys()
+        let source_des_sets: Vec<u64> = matrix_entries
+            .keys()
             .map(|&(_, _, ds)| ds)
             .collect::<std::collections::BTreeSet<_>>()
             .into_iter()
@@ -239,7 +259,8 @@ fn main() {
             println!("  Source Des={}:", descent_set_str(sds, n - 1));
 
             // Source positions (q values that appear)
-            let source_pos: Vec<usize> = matrix_entries.keys()
+            let source_pos: Vec<usize> = matrix_entries
+                .keys()
                 .filter(|&&(_, _, ds)| ds == sds)
                 .map(|&(_, q, _)| q)
                 .collect::<std::collections::BTreeSet<_>>()
@@ -258,16 +279,25 @@ fn main() {
                     match matrix_entries.get(&(p, q, sds)) {
                         Some(entry) => {
                             // Format as polynomial
-                            let parts: Vec<String> = entry.iter().enumerate()
+                            let parts: Vec<String> = entry
+                                .iter()
+                                .enumerate()
                                 .filter(|(_, &c)| c > 0)
                                 .map(|(d, &c)| {
-                                    if d == 0 { format!("{}", c) }
-                                    else if c == 1 { format!("t^{}", d) }
-                                    else { format!("{}t^{}", c, d) }
+                                    if d == 0 {
+                                        format!("{}", c)
+                                    } else if c == 1 {
+                                        format!("t^{}", d)
+                                    } else {
+                                        format!("{}t^{}", c, d)
+                                    }
                                 })
                                 .collect();
-                            let s = if parts.is_empty() { "0".to_string() }
-                                    else { parts.join("+") };
+                            let s = if parts.is_empty() {
+                                "0".to_string()
+                            } else {
+                                parts.join("+")
+                            };
                             print!("{:>8}", s);
                         }
                         None => print!("{:>8}", "0"),

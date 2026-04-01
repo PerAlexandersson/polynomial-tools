@@ -34,11 +34,17 @@ use polynomial_tools::real_rootedness::format_poly;
 use std::collections::BTreeMap;
 
 fn build_poly(vals: &[usize]) -> Vec<i64> {
-    if vals.is_empty() { return vec![0]; }
+    if vals.is_empty() {
+        return vec![0];
+    }
     let max_s = *vals.iter().max().unwrap();
     let mut coeffs = vec![0i64; max_s + 1];
-    for &s in vals { coeffs[s] += 1; }
-    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 { coeffs.pop(); }
+    for &s in vals {
+        coeffs[s] += 1;
+    }
+    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 {
+        coeffs.pop();
+    }
     coeffs
 }
 
@@ -49,56 +55,91 @@ fn valid_positions(s_mask: u64, n: u8) -> Vec<u8> {
             positions.push(p);
         }
     }
-    if n >= 2 && (s_mask >> (n - 2)) & 1 == 0 { positions.push(n); }
+    if n >= 2 && (s_mask >> (n - 2)) & 1 == 0 {
+        positions.push(n);
+    }
     positions
 }
 
 fn source_asc(s_mask: u64, p: u8, n: u8) -> u64 {
-    if n <= 2 { return 0; }
-    if p == n { return s_mask; }
+    if n <= 2 {
+        return 0;
+    }
+    if p == n {
+        return s_mask;
+    }
     let mut sp = 0u64;
     if p == 1 {
-        for j in 2..n { if (s_mask >> (j - 1)) & 1 == 1 { sp |= 1 << (j - 2); } }
+        for j in 2..n {
+            if (s_mask >> (j - 1)) & 1 == 1 {
+                sp |= 1 << (j - 2);
+            }
+        }
     } else {
         for pos in 1..=(p.saturating_sub(2)) {
-            if (s_mask >> (pos - 1)) & 1 == 1 { sp |= 1 << (pos - 1); }
+            if (s_mask >> (pos - 1)) & 1 == 1 {
+                sp |= 1 << (pos - 1);
+            }
         }
-        for j in (p + 1)..n { if (s_mask >> (j - 1)) & 1 == 1 { sp |= 1 << (j - 2); } }
+        for j in (p + 1)..n {
+            if (s_mask >> (j - 1)) & 1 == 1 {
+                sp |= 1 << (j - 2);
+            }
+        }
     }
     sp
 }
 
 fn source_desc(s_mask: u64, p: u8, n: u8) -> Option<u64> {
-    if p <= 1 || p >= n { return None; }
+    if p <= 1 || p >= n {
+        return None;
+    }
     Some(source_asc(s_mask, p, n) | (1 << (p - 2)))
 }
 
 fn epsilon1(pi: &[u8], p: u8) -> bool {
     let n = pi.len() as u8 + 1;
-    if p <= 1 || p >= n { return false; }
+    if p <= 1 || p >= n {
+        return false;
+    }
     pi[(p - 2) as usize] + 1 == pi[(p - 1) as usize]
 }
 
 fn descent_set_to_string(mask: u64, n: u8) -> String {
     let mut s = String::from("{");
     let mut first = true;
-    for i in 1..n { if (mask >> (i - 1)) & 1 == 1 { if !first { s.push(','); } s.push_str(&i.to_string()); first = false; } }
-    s.push('}'); s
+    for i in 1..n {
+        if (mask >> (i - 1)) & 1 == 1 {
+            if !first {
+                s.push(',');
+            }
+            s.push_str(&i.to_string());
+            first = false;
+        }
+    }
+    s.push('}');
+    s
 }
 
 fn coeff(poly: &[i64], k: usize) -> i64 {
-    if k < poly.len() { poly[k] } else { 0 }
+    if k < poly.len() {
+        poly[k]
+    } else {
+        0
+    }
 }
 
 fn check_tp2(rows: &[Vec<i64>]) -> bool {
     let max_deg = rows.iter().map(|r| r.len()).max().unwrap_or(0);
     for i in 0..rows.len() {
-        for j in (i+1)..rows.len() {
+        for j in (i + 1)..rows.len() {
             for k1 in 0..max_deg {
-                for k2 in (k1+1)..max_deg {
+                for k2 in (k1 + 1)..max_deg {
                     let minor = coeff(&rows[i], k1) * coeff(&rows[j], k2)
-                              - coeff(&rows[i], k2) * coeff(&rows[j], k1);
-                    if minor < 0 { return false; }
+                        - coeff(&rows[i], k2) * coeff(&rows[j], k1);
+                    if minor < 0 {
+                        return false;
+                    }
                 }
             }
         }
@@ -107,7 +148,10 @@ fn check_tp2(rows: &[Vec<i64>]) -> bool {
 }
 
 fn main() {
-    let max_n: u8 = std::env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(9);
+    let max_n: u8 = std::env::args()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(9);
 
     println!("=== TP_2 of source coefficient matrices ===\n");
 
@@ -125,10 +169,20 @@ fn main() {
         let perms = all_permutations(n);
 
         let mut by_descent: BTreeMap<u64, Vec<&Vec<u8>>> = BTreeMap::new();
-        for pi in &perms { by_descent.entry(descent_set_bitmask(pi)).or_default().push(pi); }
+        for pi in &perms {
+            by_descent
+                .entry(descent_set_bitmask(pi))
+                .or_default()
+                .push(pi);
+        }
 
         let mut prev_by_des: BTreeMap<u64, Vec<&Vec<u8>>> = BTreeMap::new();
-        for pi in &perms_prev { prev_by_des.entry(descent_set_bitmask(pi)).or_default().push(pi); }
+        for pi in &perms_prev {
+            prev_by_des
+                .entry(descent_set_bitmask(pi))
+                .or_default()
+                .push(pi);
+        }
 
         let mut n_src_ok = 0u32;
         let mut n_src_total = 0u32;
@@ -138,19 +192,29 @@ fn main() {
         let mut n_p2_pos1_total = 0u32;
 
         for (&mask, _class) in &by_descent {
-            if mask & 1 != 0 { continue; }
+            if mask & 1 != 0 {
+                continue;
+            }
             let vp = valid_positions(mask, n);
-            if vp.len() < 2 { continue; }
+            if vp.len() < 2 {
+                continue;
+            }
 
             for &p in &vp {
-                if p <= 1 { continue; }
+                if p <= 1 {
+                    continue;
+                }
 
                 let sp_a = source_asc(mask, p, n);
                 let sp_d = source_desc(mask, p, n);
 
                 // Collect source permutations
                 let mut source_perms: Vec<(&Vec<u8>, usize)> = Vec::new(); // (perm, modified_swaps)
-                for &sp in &[Some(sp_a), sp_d].iter().filter_map(|x| *x).collect::<Vec<_>>() {
+                for &sp in &[Some(sp_a), sp_d]
+                    .iter()
+                    .filter_map(|x| *x)
+                    .collect::<Vec<_>>()
+                {
                     if let Some(cls) = prev_by_des.get(&sp) {
                         for pi in cls {
                             let e1 = if epsilon1(pi, p) { 1 } else { 0 };
@@ -160,7 +224,9 @@ fn main() {
                     }
                 }
 
-                if source_perms.is_empty() { continue; }
+                if source_perms.is_empty() {
+                    continue;
+                }
 
                 if p >= 3 {
                     // Refine by pos(n-1)
@@ -238,13 +304,23 @@ fn main() {
         p2_pos1_tp2_ok += n_p2_pos1_ok as u64;
         p2_pos1_tp2_total += n_p2_pos1_total as u64;
 
-        println!("n={}: source(p>=3) TP_2 {}/{}, p=2 pos(n-1) TP_2 {}/{}, p=2 pos(1) TP_2 {}/{}",
-            n, n_src_ok, n_src_total, n_p2_src_ok, n_p2_src_total,
-            n_p2_pos1_ok, n_p2_pos1_total);
+        println!(
+            "n={}: source(p>=3) TP_2 {}/{}, p=2 pos(n-1) TP_2 {}/{}, p=2 pos(1) TP_2 {}/{}",
+            n, n_src_ok, n_src_total, n_p2_src_ok, n_p2_src_total, n_p2_pos1_ok, n_p2_pos1_total
+        );
     }
 
     println!("\n=== SUMMARY ===");
-    println!("Source (p>=3, pos(n-1)-refined) TP_2:  {}/{}", src_tp2_ok, src_tp2_total);
-    println!("Source (p=2, pos(n-1)-refined) TP_2:   {}/{}", p2_src_tp2_ok, p2_src_tp2_total);
-    println!("Source (p=2, pos(1)-refined) TP_2:     {}/{}", p2_pos1_tp2_ok, p2_pos1_tp2_total);
+    println!(
+        "Source (p>=3, pos(n-1)-refined) TP_2:  {}/{}",
+        src_tp2_ok, src_tp2_total
+    );
+    println!(
+        "Source (p=2, pos(n-1)-refined) TP_2:   {}/{}",
+        p2_src_tp2_ok, p2_src_tp2_total
+    );
+    println!(
+        "Source (p=2, pos(1)-refined) TP_2:     {}/{}",
+        p2_pos1_tp2_ok, p2_pos1_tp2_total
+    );
 }

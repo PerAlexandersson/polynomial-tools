@@ -2,14 +2,18 @@
 //! interlace each other (for fixed n, varying r).
 //! If they form an interlacing family, their sum P_n is real-rooted.
 
-use polynomial_tools::{is_real_rooted, check_interlacing, check_weak_interlacing};
+use polynomial_tools::{check_interlacing, check_weak_interlacing, is_real_rooted};
 
 fn binom(n: i64, k: i64) -> i64 {
-    if k < 0 || k > n || n < 0 { return 0; }
+    if k < 0 || k > n || n < 0 {
+        return 0;
+    }
     let k = k.min(n - k) as usize;
     let n = n as usize;
     let mut r = 1i64;
-    for i in 0..k { r = r * (n - i) as i64 / (i + 1) as i64; }
+    for i in 0..k {
+        r = r * (n - i) as i64 / (i + 1) as i64;
+    }
     r
 }
 
@@ -20,10 +24,16 @@ fn q_poly(h: i64, n: i64, r: i64) -> Vec<i64> {
     for j in 0..=n {
         let s = n - 2 * j - 2 * r;
         let c = binom(h * r, j) * binom(j + 1, s);
-        if c > 0 { started = true; }
-        if started { coeffs.push(c); }
+        if c > 0 {
+            started = true;
+        }
+        if started {
+            coeffs.push(c);
+        }
     }
-    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 { coeffs.pop(); }
+    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 {
+        coeffs.pop();
+    }
     coeffs
 }
 
@@ -49,7 +59,9 @@ fn main() {
                 }
             }
 
-            if qs.len() < 2 { continue; }
+            if qs.len() < 2 {
+                continue;
+            }
 
             // Check consecutive interlacing: Q_{n,r} interlaces Q_{n,r+1}?
             for i in 0..qs.len() - 1 {
@@ -58,8 +70,10 @@ fn main() {
                 let result = check_weak_interlacing(q1, q2);
                 if result != Some(true) {
                     if all_interlace {
-                        println!("  Consecutive interlacing FAILS at n={}, r={}->{}: {:?}",
-                            n, r1, r2, result);
+                        println!(
+                            "  Consecutive interlacing FAILS at n={}, r={}->{}: {:?}",
+                            n, r1, r2, result
+                        );
                     }
                     all_interlace = false;
                 }
@@ -81,12 +95,16 @@ fn main() {
                     q[j] = c;
                     p_n[j] += c;
                 }
-                while q.len() > 1 && *q.last().unwrap() == 0 { q.pop(); }
+                while q.len() > 1 && *q.last().unwrap() == 0 {
+                    q.pop();
+                }
                 if !poly_is_trivial(&q) {
                     q_full.push((r as i64, q));
                 }
             }
-            while p_n.len() > 1 && *p_n.last().unwrap() == 0 { p_n.pop(); }
+            while p_n.len() > 1 && *p_n.last().unwrap() == 0 {
+                p_n.pop();
+            }
 
             // Check: does P_n interlace each Q_{n,r}?
             // (This would mean P_n is a common interlacer)
@@ -97,8 +115,10 @@ fn main() {
                         let result = check_weak_interlacing(q, &p_n);
                         if result != Some(true) {
                             if all_common {
-                                println!("  Common interlacing FAILS: Q_{{{},{}}} vs P_{}: {:?}",
-                                    n, r_val, n, result);
+                                println!(
+                                    "  Common interlacing FAILS: Q_{{{},{}}} vs P_{}: {:?}",
+                                    n, r_val, n, result
+                                );
                             }
                             all_common = false;
                         }
@@ -111,7 +131,10 @@ fn main() {
             println!("  Consecutive Q_{{n,r}} interlacing: PASS (n <= {})", max_n);
         }
         if all_common {
-            println!("  Q_{{n,r}} << P_n (common interlacing): PASS (n <= {})", max_n);
+            println!(
+                "  Q_{{n,r}} << P_n (common interlacing): PASS (n <= {})",
+                max_n
+            );
         }
         println!();
     }

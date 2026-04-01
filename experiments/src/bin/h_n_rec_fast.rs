@@ -15,47 +15,142 @@ fn main() {
         vec![1, 79, 937, 2951, 2951, 937, 79, 1],
         vec![1, 133, 2475, 12331, 20641, 12331, 2475, 133, 1],
         vec![1, 221, 6267, 47191, 123216, 123216, 47191, 6267, 221, 1],
-        vec![1, 364, 15393, 169416, 656683, 1019051, 656683, 169416, 15393, 364, 1],
-        vec![1, 596, 36976, 579889, 3217526, 7349140, 7349140, 3217526, 579889, 36976, 596, 1],
-        vec![1, 972, 87369, 1914226, 14786816, 47816612, 70148989, 47816612, 14786816, 1914226, 87369, 972, 1],
+        vec![
+            1, 364, 15393, 169416, 656683, 1019051, 656683, 169416, 15393, 364, 1,
+        ],
+        vec![
+            1, 596, 36976, 579889, 3217526, 7349140, 7349140, 3217526, 579889, 36976, 596, 1,
+        ],
+        vec![
+            1, 972, 87369, 1914226, 14786816, 47816612, 70148989, 47816612, 14786816, 1914226,
+            87369, 972, 1,
+        ],
     ];
 
     let arg = std::env::args().nth(1).unwrap_or("1".to_string());
     let search_id: usize = arg.parse().unwrap_or(1);
 
     let (desc, opts) = match search_id {
-        1 => ("len=2 vd=2 id=2 d=0", AdaptiveSearchOptions {
-            max_rec_len: 2, max_var_deg: 2, max_idx_deg: 2, max_diff_deg: 0,
-            try_inhomogeneous: false, try_denominator: false,
-            max_denom_var_deg: 0, max_denom_idx_deg: 0, min_margin: 2, verbose: false }),
-        2 => ("len=2 vd=2 id=2 d=1", AdaptiveSearchOptions {
-            max_rec_len: 2, max_var_deg: 2, max_idx_deg: 2, max_diff_deg: 1,
-            try_inhomogeneous: false, try_denominator: false,
-            max_denom_var_deg: 0, max_denom_idx_deg: 0, min_margin: 2, verbose: false }),
-        3 => ("len=3 vd=1 id=1 d=0", AdaptiveSearchOptions {
-            max_rec_len: 3, max_var_deg: 1, max_idx_deg: 1, max_diff_deg: 0,
-            try_inhomogeneous: false, try_denominator: false,
-            max_denom_var_deg: 0, max_denom_idx_deg: 0, min_margin: 2, verbose: false }),
-        4 => ("len=3 vd=2 id=2 d=0", AdaptiveSearchOptions {
-            max_rec_len: 3, max_var_deg: 2, max_idx_deg: 2, max_diff_deg: 0,
-            try_inhomogeneous: false, try_denominator: false,
-            max_denom_var_deg: 0, max_denom_idx_deg: 0, min_margin: 2, verbose: false }),
-        5 => ("len=2 vd=2 id=2 d=2", AdaptiveSearchOptions {
-            max_rec_len: 2, max_var_deg: 2, max_idx_deg: 2, max_diff_deg: 2,
-            try_inhomogeneous: false, try_denominator: false,
-            max_denom_var_deg: 0, max_denom_idx_deg: 0, min_margin: 2, verbose: false }),
-        6 => ("len=3 vd=1 id=1 d=1", AdaptiveSearchOptions {
-            max_rec_len: 3, max_var_deg: 1, max_idx_deg: 1, max_diff_deg: 1,
-            try_inhomogeneous: false, try_denominator: false,
-            max_denom_var_deg: 0, max_denom_idx_deg: 0, min_margin: 2, verbose: false }),
-        7 => ("len=2 vd=3 id=2 d=1", AdaptiveSearchOptions {
-            max_rec_len: 2, max_var_deg: 3, max_idx_deg: 2, max_diff_deg: 1,
-            try_inhomogeneous: false, try_denominator: false,
-            max_denom_var_deg: 0, max_denom_idx_deg: 0, min_margin: 2, verbose: false }),
-        8 => ("len=3 vd=2 id=1 d=1", AdaptiveSearchOptions {
-            max_rec_len: 3, max_var_deg: 2, max_idx_deg: 1, max_diff_deg: 1,
-            try_inhomogeneous: false, try_denominator: false,
-            max_denom_var_deg: 0, max_denom_idx_deg: 0, min_margin: 2, verbose: false }),
+        1 => (
+            "len=2 vd=2 id=2 d=0",
+            AdaptiveSearchOptions {
+                max_rec_len: 2,
+                max_var_deg: 2,
+                max_idx_deg: 2,
+                max_diff_deg: 0,
+                try_inhomogeneous: false,
+                try_denominator: false,
+                max_denom_var_deg: 0,
+                max_denom_idx_deg: 0,
+                min_margin: 2,
+                verbose: false,
+            },
+        ),
+        2 => (
+            "len=2 vd=2 id=2 d=1",
+            AdaptiveSearchOptions {
+                max_rec_len: 2,
+                max_var_deg: 2,
+                max_idx_deg: 2,
+                max_diff_deg: 1,
+                try_inhomogeneous: false,
+                try_denominator: false,
+                max_denom_var_deg: 0,
+                max_denom_idx_deg: 0,
+                min_margin: 2,
+                verbose: false,
+            },
+        ),
+        3 => (
+            "len=3 vd=1 id=1 d=0",
+            AdaptiveSearchOptions {
+                max_rec_len: 3,
+                max_var_deg: 1,
+                max_idx_deg: 1,
+                max_diff_deg: 0,
+                try_inhomogeneous: false,
+                try_denominator: false,
+                max_denom_var_deg: 0,
+                max_denom_idx_deg: 0,
+                min_margin: 2,
+                verbose: false,
+            },
+        ),
+        4 => (
+            "len=3 vd=2 id=2 d=0",
+            AdaptiveSearchOptions {
+                max_rec_len: 3,
+                max_var_deg: 2,
+                max_idx_deg: 2,
+                max_diff_deg: 0,
+                try_inhomogeneous: false,
+                try_denominator: false,
+                max_denom_var_deg: 0,
+                max_denom_idx_deg: 0,
+                min_margin: 2,
+                verbose: false,
+            },
+        ),
+        5 => (
+            "len=2 vd=2 id=2 d=2",
+            AdaptiveSearchOptions {
+                max_rec_len: 2,
+                max_var_deg: 2,
+                max_idx_deg: 2,
+                max_diff_deg: 2,
+                try_inhomogeneous: false,
+                try_denominator: false,
+                max_denom_var_deg: 0,
+                max_denom_idx_deg: 0,
+                min_margin: 2,
+                verbose: false,
+            },
+        ),
+        6 => (
+            "len=3 vd=1 id=1 d=1",
+            AdaptiveSearchOptions {
+                max_rec_len: 3,
+                max_var_deg: 1,
+                max_idx_deg: 1,
+                max_diff_deg: 1,
+                try_inhomogeneous: false,
+                try_denominator: false,
+                max_denom_var_deg: 0,
+                max_denom_idx_deg: 0,
+                min_margin: 2,
+                verbose: false,
+            },
+        ),
+        7 => (
+            "len=2 vd=3 id=2 d=1",
+            AdaptiveSearchOptions {
+                max_rec_len: 2,
+                max_var_deg: 3,
+                max_idx_deg: 2,
+                max_diff_deg: 1,
+                try_inhomogeneous: false,
+                try_denominator: false,
+                max_denom_var_deg: 0,
+                max_denom_idx_deg: 0,
+                min_margin: 2,
+                verbose: false,
+            },
+        ),
+        8 => (
+            "len=3 vd=2 id=1 d=1",
+            AdaptiveSearchOptions {
+                max_rec_len: 3,
+                max_var_deg: 2,
+                max_idx_deg: 1,
+                max_diff_deg: 1,
+                try_inhomogeneous: false,
+                try_denominator: false,
+                max_denom_var_deg: 0,
+                max_denom_idx_deg: 0,
+                min_margin: 2,
+                verbose: false,
+            },
+        ),
         _ => return,
     };
 

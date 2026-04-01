@@ -15,40 +15,58 @@
 //!
 //! Usage: cargo run --release --bin peak_du_overlap -- 7
 
-use polynomial_tools::real_rootedness::{check_weak_interlacing, is_real_rooted, format_poly};
+use polynomial_tools::real_rootedness::{check_weak_interlacing, format_poly, is_real_rooted};
 use std::collections::BTreeSet;
 
 // ── Polynomial helpers (i64 coefficient vectors, ascending degree) ──
 
 fn pt(p: &[i64]) -> Vec<i64> {
     let mut v = p.to_vec();
-    while v.len() > 1 && *v.last().unwrap() == 0 { v.pop(); }
+    while v.len() > 1 && *v.last().unwrap() == 0 {
+        v.pop();
+    }
     v
 }
-fn pz(p: &[i64]) -> bool { p.iter().all(|&c| c == 0) }
+fn pz(p: &[i64]) -> bool {
+    p.iter().all(|&c| c == 0)
+}
 fn pa(a: &[i64], b: &[i64]) -> Vec<i64> {
     let l = a.len().max(b.len());
     let mut r = vec![0i64; l];
-    for (i, &v) in a.iter().enumerate() { r[i] += v; }
-    for (i, &v) in b.iter().enumerate() { r[i] += v; }
+    for (i, &v) in a.iter().enumerate() {
+        r[i] += v;
+    }
+    for (i, &v) in b.iter().enumerate() {
+        r[i] += v;
+    }
     pt(&r)
 }
 fn pmt(p: &[i64]) -> Vec<i64> {
     let mut r = vec![0i64; p.len() + 1];
-    for (i, &v) in p.iter().enumerate() { r[i + 1] = v; }
+    for (i, &v) in p.iter().enumerate() {
+        r[i + 1] = v;
+    }
     pt(&r)
 }
 fn pdeg(p: &[i64]) -> Option<usize> {
     let v = pt(p);
-    if pz(&v) { None } else { Some(v.len() - 1) }
+    if pz(&v) {
+        None
+    } else {
+        Some(v.len() - 1)
+    }
 }
 
 /// Check f << g (weak interlacing).
 fn interlaces(f: &[i64], g: &[i64]) -> bool {
     let f = pt(f);
     let g = pt(g);
-    if pz(&f) { return true; }
-    if pz(&g) { return false; }
+    if pz(&f) {
+        return true;
+    }
+    if pz(&g) {
+        return false;
+    }
     match check_weak_interlacing(&f, &g) {
         Some(true) => true,
         Some(false) => false,
@@ -62,7 +80,7 @@ fn interlaces(f: &[i64], g: &[i64]) -> bool {
                         Some(b) => b,
                         None => false,
                     }
-                },
+                }
                 _ => false,
             }
         }
@@ -92,7 +110,9 @@ fn bruhat_lower_ideal(perm: &[u8]) -> Vec<Vec<u8>> {
                 if cur[i] > cur[j] {
                     let mut c = cur.clone();
                     c.swap(i, j);
-                    if !vis.contains(&c) { q.insert(c); }
+                    if !vis.contains(&c) {
+                        q.insert(c);
+                    }
                 }
             }
         }
@@ -107,7 +127,11 @@ fn board_to_perm(b: &[u8]) -> Vec<u8> {
     let mut u = vec![false; n + 1];
     for i in 0..n {
         for c in (1..=(b[i] as usize).min(n)).rev() {
-            if !u[c] { p[i] = c as u8; u[c] = true; break; }
+            if !u[c] {
+                p[i] = c as u8;
+                u[c] = true;
+                break;
+            }
         }
     }
     p
@@ -118,7 +142,9 @@ fn is_312_avoiding(perm: &[u8]) -> bool {
     for i in 0..n {
         for j in i + 1..n {
             for k in j + 1..n {
-                if perm[k] < perm[i] && perm[i] < perm[j] { return false; }
+                if perm[k] < perm[i] && perm[i] < perm[j] {
+                    return false;
+                }
             }
         }
     }
@@ -126,8 +152,12 @@ fn is_312_avoiding(perm: &[u8]) -> bool {
 }
 
 fn peaks(w: &[u8]) -> usize {
-    if w.len() < 3 { return 0; }
-    (1..w.len() - 1).filter(|&i| w[i - 1] < w[i] && w[i] > w[i + 1]).count()
+    if w.len() < 3 {
+        return 0;
+    }
+    (1..w.len() - 1)
+        .filter(|&i| w[i - 1] < w[i] && w[i] > w[i + 1])
+        .count()
 }
 
 fn gen_boards(n: usize) -> Vec<Vec<u8>> {
@@ -138,7 +168,10 @@ fn gen_boards(n: usize) -> Vec<Vec<u8>> {
 }
 
 fn gb(n: usize, mx: usize, d: usize, c: &mut Vec<u8>, r: &mut Vec<Vec<u8>>) {
-    if d == n { r.push(c.clone()); return; }
+    if d == n {
+        r.push(c.clone());
+        return;
+    }
     for v in (d + 1).max(if d > 0 { c[d - 1] as usize } else { 1 })..=mx {
         c.push(v as u8);
         gb(n, mx, d + 1, c, r);
@@ -151,13 +184,16 @@ struct FailDetail {
     col: usize,
     kp: usize,
     jp: usize,
-    i_val: Option<usize>,  // for strategy C/D, the index i
+    i_val: Option<usize>, // for strategy C/D, the index i
     f_poly: Vec<i64>,
     g_poly: Vec<i64>,
 }
 
 fn main() {
-    let max_n: usize = std::env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(7);
+    let max_n: usize = std::env::args()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(7);
     println!("================================================================");
     println!("  D_{{k'}}^+ ≪ U_{{j'}}^+ overlap (k' > j') proof strategies");
     println!("  312-avoiding Ferrers boards, n <= {}", max_n);
@@ -169,7 +205,7 @@ fn main() {
     //   because D_{k'}^+ = S_{k'} = S_{k'-1} + A_{k'-1} and we want S_{k'} ≪ T_{j'}
     //   by left-cone: if S_{k'-1} ≪ T_{j'} and A_{k'-1} ≪ T_{j'}, then S_{k'} ≪ T_{j'}
     // Test: A_{k'-1,col} ≪ U_{j'}^+ = T_{j'}^{(col)} for k' > j'
-    let mut sa_base = [0u64; 2];       // base case: D_{j'+1}^+ ≪ U_{j'}^+ (gap=1)
+    let mut sa_base = [0u64; 2]; // base case: D_{j'+1}^+ ≪ U_{j'}^+ (gap=1)
     let mut sa_ak_interl_ujp = [0u64; 2]; // A_{k'-1,col} ≪ T_{j'}  (the key new condition)
     let mut sa_ak_interl_ujp_fails: Vec<FailDetail> = Vec::new();
 
@@ -188,8 +224,8 @@ fn main() {
     // We already know D_{k'}^+ ≪ U_{k'}^+ (same-index DU).
     // If D_{k'}^+ ≪ W_{i,col} for each j' <= i < k', then by right-cone D_{k'}^+ ≪ U_{j'}^+
     // Test: S_{k'} ≪ W_{i,col} for i < k' (this is the sub-condition)
-    let mut sc_same_du = [0u64; 2];      // D_{k'}^+ ≪ U_{k'}^+ (same-index, should pass)
-    let mut sc_dk_interl_wi = [0u64; 2];  // S_{k'} ≪ W_{i,col} for i < k'
+    let mut sc_same_du = [0u64; 2]; // D_{k'}^+ ≪ U_{k'}^+ (same-index, should pass)
+    let mut sc_dk_interl_wi = [0u64; 2]; // S_{k'} ≪ W_{i,col} for i < k'
     let mut sc_dk_interl_wi_fails: Vec<FailDetail> = Vec::new();
 
     // Strategy D: Direct decomposition via P_{k'}^+
@@ -201,7 +237,7 @@ fn main() {
     // But if P_{k'}^+ is real-rooted and sum W_i ≪ P_{k'}^+, that means the total
     // D_{k'}^+ + U_{j'}^+ is real-rooted (by cone). That's a weaker statement.
     // Test: real-rootedness of P_{k'}^+ and sum W_i ≪ P_{k'}^+
-    let mut sd_pk_rr = [0u64; 2];         // P_{k'}^+ real-rooted
+    let mut sd_pk_rr = [0u64; 2]; // P_{k'}^+ real-rooted
     let mut sd_sumw_interl_pk = [0u64; 2]; // sum_{j'<=i<k'} W_{i,col} ≪ P_{k'}^+
     let mut sd_sumw_interl_pk_fails: Vec<FailDetail> = Vec::new();
     // Also check the reverse: P_{k'}^+ ≪ sum W_i (which would give sum W_i ≪ total by left-cone)
@@ -217,11 +253,15 @@ fn main() {
         let boards = gen_boards(n);
         for board in &boards {
             let perm = board_to_perm(board);
-            if !is_312_avoiding(&perm) { continue; }
+            if !is_312_avoiding(&perm) {
+                continue;
+            }
             valid_boards += 1;
 
             let m = board[0] as usize;
-            if n <= 1 { continue; }
+            if n <= 1 {
+                continue;
+            }
 
             let ideal = bruhat_lower_ideal(&perm);
 
@@ -231,16 +271,22 @@ fn main() {
 
             for pi in &ideal {
                 let j = pi[0] as usize;
-                if j > m { continue; }
+                if j > m {
+                    continue;
+                }
                 let l = *pi.last().unwrap() as usize;
-                if l > m { continue; }
+                if l > m {
+                    continue;
+                }
                 let pk = peaks(pi);
                 let poly = if pi.len() >= 2 && pi[0] > pi[1] {
                     &mut d_jl[j][l]
                 } else {
                     &mut u_jl[j][l]
                 };
-                while poly.len() <= pk { poly.push(0); }
+                while poly.len() <= pk {
+                    poly.push(0);
+                }
                 poly[pk] += 1;
             }
 
@@ -263,10 +309,14 @@ fn main() {
 
             for col in 1..=m {
                 for k in 1..=m {
-                    while s_col[col].len() <= k + 1 { s_col[col].push(vec![0i64]); }
+                    while s_col[col].len() <= k + 1 {
+                        s_col[col].push(vec![0i64]);
+                    }
                     s_col[col][k + 1] = pa(&s_col[col][k], &a_jl[k][col]);
                 }
-                while t_col[col].len() <= mp + 1 { t_col[col].push(vec![0i64]); }
+                while t_col[col].len() <= mp + 1 {
+                    t_col[col].push(vec![0i64]);
+                }
                 for k in (1..=m).rev() {
                     t_col[col][k] = pa(&t_col[col][k + 1], &w_jl[k][col]);
                 }
@@ -321,11 +371,15 @@ fn main() {
             for col in 1..=m {
                 for kp in 2..=m {
                     let d_kp = &s_col[col][kp]; // D_{k'}^+
-                    if pz(d_kp) { continue; }
+                    if pz(d_kp) {
+                        continue;
+                    }
 
                     for jp in 1..kp {
                         let u_jp = &t_col[col][jp]; // U_{j'}^+
-                        if pz(u_jp) { continue; }
+                        if pz(u_jp) {
+                            continue;
+                        }
 
                         // Ground truth: D_{k'}^+ ≪ U_{j'}^+
                         du_overlap[0] += 1;
@@ -333,8 +387,13 @@ fn main() {
                             du_overlap[1] += 1;
                             if du_overlap_fails.len() < 5 {
                                 du_overlap_fails.push(FailDetail {
-                                    board: board.clone(), col, kp, jp, i_val: None,
-                                    f_poly: pt(d_kp), g_poly: pt(u_jp),
+                                    board: board.clone(),
+                                    col,
+                                    kp,
+                                    jp,
+                                    i_val: None,
+                                    f_poly: pt(d_kp),
+                                    g_poly: pt(u_jp),
                                 });
                             }
                         }
@@ -361,8 +420,13 @@ fn main() {
                                     sa_ak_interl_ujp[1] += 1;
                                     if sa_ak_interl_ujp_fails.len() < 5 {
                                         sa_ak_interl_ujp_fails.push(FailDetail {
-                                            board: board.clone(), col, kp, jp, i_val: Some(km1),
-                                            f_poly: pt(a_km1), g_poly: pt(u_jp),
+                                            board: board.clone(),
+                                            col,
+                                            kp,
+                                            jp,
+                                            i_val: Some(km1),
+                                            f_poly: pt(a_km1),
+                                            g_poly: pt(u_jp),
                                         });
                                     }
                                 }
@@ -382,8 +446,13 @@ fn main() {
                                     sb_dk_interl_wjp[1] += 1;
                                     if sb_dk_interl_wjp_fails.len() < 5 {
                                         sb_dk_interl_wjp_fails.push(FailDetail {
-                                            board: board.clone(), col, kp, jp, i_val: None,
-                                            f_poly: pt(d_kp), g_poly: pt(w_jp),
+                                            board: board.clone(),
+                                            col,
+                                            kp,
+                                            jp,
+                                            i_val: None,
+                                            f_poly: pt(d_kp),
+                                            g_poly: pt(w_jp),
                                         });
                                     }
                                 }
@@ -396,7 +465,8 @@ fn main() {
                         if !pz(u_kp) {
                             // Only count once per (col, kp) but that's tricky;
                             // count per (col, kp, jp) pair to keep it simple
-                            if jp == 1 { // count same-index once per col,kp
+                            if jp == 1 {
+                                // count same-index once per col,kp
                                 sc_same_du[0] += 1;
                                 if !interlaces(d_kp, u_kp) {
                                     sc_same_du[1] += 1;
@@ -413,8 +483,13 @@ fn main() {
                                         sc_dk_interl_wi[1] += 1;
                                         if sc_dk_interl_wi_fails.len() < 5 {
                                             sc_dk_interl_wi_fails.push(FailDetail {
-                                                board: board.clone(), col, kp, jp: jp, i_val: Some(i),
-                                                f_poly: pt(d_kp), g_poly: pt(w_i),
+                                                board: board.clone(),
+                                                col,
+                                                kp,
+                                                jp: jp,
+                                                i_val: Some(i),
+                                                f_poly: pt(d_kp),
+                                                g_poly: pt(w_i),
                                             });
                                         }
                                     }
@@ -443,8 +518,13 @@ fn main() {
                                 sd_sumw_interl_pk[1] += 1;
                                 if sd_sumw_interl_pk_fails.len() < 5 {
                                     sd_sumw_interl_pk_fails.push(FailDetail {
-                                        board: board.clone(), col, kp, jp, i_val: None,
-                                        f_poly: pt(&sum_w), g_poly: pt(&p_kp),
+                                        board: board.clone(),
+                                        col,
+                                        kp,
+                                        jp,
+                                        i_val: None,
+                                        f_poly: pt(&sum_w),
+                                        g_poly: pt(&p_kp),
                                     });
                                 }
                             }
@@ -457,7 +537,10 @@ fn main() {
                 }
             }
         }
-        let nb = boards.iter().filter(|b| is_312_avoiding(&board_to_perm(b))).count();
+        let nb = boards
+            .iter()
+            .filter(|b| is_312_avoiding(&board_to_perm(b)))
+            .count();
         println!("n={}: {} boards (cumulative: {})", n, nb, valid_boards);
     }
 
@@ -466,10 +549,19 @@ fn main() {
     println!("================================================================");
     show("D_{k'}^+ ≪ U_{j'}^+", du_overlap);
     if !du_overlap_fails.is_empty() {
-        println!("\n  --- First {} DU overlap failures ---", du_overlap_fails.len());
+        println!(
+            "\n  --- First {} DU overlap failures ---",
+            du_overlap_fails.len()
+        );
         for (i, f) in du_overlap_fails.iter().enumerate() {
-            println!("  #{}: board={:?}, col={}, k'={}, j'={}",
-                     i+1, f.board, f.col, f.kp, f.jp);
+            println!(
+                "  #{}: board={:?}, col={}, k'={}, j'={}",
+                i + 1,
+                f.board,
+                f.col,
+                f.kp,
+                f.jp
+            );
             println!("    D_{{k'}}^+ = {}", format_poly(&f.f_poly));
             println!("    U_{{j'}}^+ = {}", format_poly(&f.g_poly));
         }
@@ -482,10 +574,20 @@ fn main() {
     show("Base (gap=1): D_{j'+1}^+ ≪ U_{j'}^+", sa_base);
     show("Key: A_{k'-1,col} ≪ U_{j'}^+", sa_ak_interl_ujp);
     if !sa_ak_interl_ujp_fails.is_empty() {
-        println!("\n  --- First {} Strategy A failures ---", sa_ak_interl_ujp_fails.len());
+        println!(
+            "\n  --- First {} Strategy A failures ---",
+            sa_ak_interl_ujp_fails.len()
+        );
         for (i, f) in sa_ak_interl_ujp_fails.iter().enumerate() {
-            println!("  #{}: board={:?}, col={}, k'={}, j'={}, k'-1={}",
-                     i+1, f.board, f.col, f.kp, f.jp, f.i_val.unwrap());
+            println!(
+                "  #{}: board={:?}, col={}, k'={}, j'={}, k'-1={}",
+                i + 1,
+                f.board,
+                f.col,
+                f.kp,
+                f.jp,
+                f.i_val.unwrap()
+            );
             println!("    A_{{k'-1,col}} = {}", format_poly(&f.f_poly));
             println!("    U_{{j'}}^+ = {}", format_poly(&f.g_poly));
         }
@@ -497,10 +599,19 @@ fn main() {
     println!("================================================================");
     show("Key: D_{k'}^+ ≪ W_{j',col}", sb_dk_interl_wjp);
     if !sb_dk_interl_wjp_fails.is_empty() {
-        println!("\n  --- First {} Strategy B failures ---", sb_dk_interl_wjp_fails.len());
+        println!(
+            "\n  --- First {} Strategy B failures ---",
+            sb_dk_interl_wjp_fails.len()
+        );
         for (i, f) in sb_dk_interl_wjp_fails.iter().enumerate() {
-            println!("  #{}: board={:?}, col={}, k'={}, j'={}",
-                     i+1, f.board, f.col, f.kp, f.jp);
+            println!(
+                "  #{}: board={:?}, col={}, k'={}, j'={}",
+                i + 1,
+                f.board,
+                f.col,
+                f.kp,
+                f.jp
+            );
             println!("    D_{{k'}}^+ = S_{{k'}} = {}", format_poly(&f.f_poly));
             println!("    W_{{j',col}} = {}", format_poly(&f.g_poly));
         }
@@ -513,10 +624,20 @@ fn main() {
     show("Same-index: D_{k'}^+ ≪ U_{k'}^+ (known)", sc_same_du);
     show("Key: S_{k'} ≪ W_{i,col} for i < k'", sc_dk_interl_wi);
     if !sc_dk_interl_wi_fails.is_empty() {
-        println!("\n  --- First {} Strategy C failures ---", sc_dk_interl_wi_fails.len());
+        println!(
+            "\n  --- First {} Strategy C failures ---",
+            sc_dk_interl_wi_fails.len()
+        );
         for (i, f) in sc_dk_interl_wi_fails.iter().enumerate() {
-            println!("  #{}: board={:?}, col={}, k'={}, j'={}, i={}",
-                     i+1, f.board, f.col, f.kp, f.jp, f.i_val.unwrap());
+            println!(
+                "  #{}: board={:?}, col={}, k'={}, j'={}, i={}",
+                i + 1,
+                f.board,
+                f.col,
+                f.kp,
+                f.jp,
+                f.i_val.unwrap()
+            );
             println!("    S_{{k'}} = {}", format_poly(&f.f_poly));
             println!("    W_{{i,col}} = {}", format_poly(&f.g_poly));
         }
@@ -530,10 +651,19 @@ fn main() {
     show("sum W_{i} ≪ P_{k'}^+", sd_sumw_interl_pk);
     show("P_{k'}^+ ≪ sum W_{i}", sd_pk_interl_sumw);
     if !sd_sumw_interl_pk_fails.is_empty() {
-        println!("\n  --- First {} Strategy D (sum W ≪ P) failures ---", sd_sumw_interl_pk_fails.len());
+        println!(
+            "\n  --- First {} Strategy D (sum W ≪ P) failures ---",
+            sd_sumw_interl_pk_fails.len()
+        );
         for (i, f) in sd_sumw_interl_pk_fails.iter().enumerate() {
-            println!("  #{}: board={:?}, col={}, k'={}, j'={}",
-                     i+1, f.board, f.col, f.kp, f.jp);
+            println!(
+                "  #{}: board={:?}, col={}, k'={}, j'={}",
+                i + 1,
+                f.board,
+                f.col,
+                f.kp,
+                f.jp
+            );
             println!("    sum W = {}", format_poly(&f.f_poly));
             println!("    P_{{k'}}^+ = {}", format_poly(&f.g_poly));
         }
@@ -550,9 +680,13 @@ fn main() {
         ("Strategy D (sum W ≪ P_{k'}^+)", sd_sumw_interl_pk),
     ];
     for (name, c) in &strategies {
-        let status = if c[0] == 0 { "NO DATA" }
-                     else if c[1] == 0 { "ALL PASS  <-- potential proof path!" }
-                     else { "HAS FAILURES" };
+        let status = if c[0] == 0 {
+            "NO DATA"
+        } else if c[1] == 0 {
+            "ALL PASS  <-- potential proof path!"
+        } else {
+            "HAS FAILURES"
+        };
         println!("  {}: {}", name, status);
     }
 

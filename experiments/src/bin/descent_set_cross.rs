@@ -9,7 +9,11 @@ fn build_poly(perms: &[&Vec<u8>]) -> Vec<i64> {
     if perms.is_empty() {
         return vec![0];
     }
-    let max_s = perms.iter().map(|s| compute(s, Stat::Swaps)).max().unwrap_or(0);
+    let max_s = perms
+        .iter()
+        .map(|s| compute(s, Stat::Swaps))
+        .max()
+        .unwrap_or(0);
     let mut coeffs = vec![0i64; max_s + 1];
     for s in perms {
         coeffs[compute(s, Stat::Swaps)] += 1;
@@ -82,15 +86,9 @@ fn main() {
         }
         let total_pairs = polys.len() * (polys.len() - 1) / 2;
         if all_compatible {
-            println!(
-                "n={}: all {} pairs compatible ✓",
-                n, total_pairs,
-            );
+            println!("n={}: all {} pairs compatible ✓", n, total_pairs,);
         } else {
-            println!(
-                "n={}: {} / {} pairs fail",
-                n, fail_count, total_pairs,
-            );
+            println!("n={}: {} / {} pairs fail", n, fail_count, total_pairs,);
         }
     }
 

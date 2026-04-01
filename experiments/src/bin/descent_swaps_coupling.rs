@@ -244,10 +244,7 @@ fn main() {
             // Build L^{(p)} polynomials
             let mut polys: BTreeMap<u8, Vec<i64>> = BTreeMap::new();
             for &p in &vp {
-                let vals: Vec<usize> = sources[&p]
-                    .iter()
-                    .map(|pi| modified_swaps(pi, p))
-                    .collect();
+                let vals: Vec<usize> = sources[&p].iter().map(|pi| modified_swaps(pi, p)).collect();
                 polys.insert(p, build_poly(&vals));
             }
 
@@ -293,8 +290,7 @@ fn main() {
                 };
 
                 let src_a = &sources[&pa];
-                let src_b_set: BTreeSet<Vec<u8>> =
-                    sources[&pb].iter().cloned().collect();
+                let src_b_set: BTreeSet<Vec<u8>> = sources[&pb].iter().cloned().collect();
 
                 // For each source pi_a for p_a, try to map it to a source pi_b for p_b
                 let mut pair_attempts = 0u64;
@@ -327,11 +323,7 @@ fn main() {
                     // Combined: diffs between (S'_pa ∪ S''_pa) and (S'_pb ∪ S''_pb)
                     // But actually, a single pi_a belongs to exactly one of S'_pa or S''_pa.
                     let pi_a_des = descent_set_bitmask(pi_a);
-                    let pi_a_source_type = if pi_a_des == spa_asc {
-                        "asc"
-                    } else {
-                        "desc"
-                    };
+                    let pi_a_source_type = if pi_a_des == spa_asc { "asc" } else { "desc" };
 
                     // Determine which source descent set pi_a belongs to
                     let pi_a_source_mask = pi_a_des;
@@ -464,8 +456,7 @@ fn main() {
                                         if !found_any || swaps_b > best_swaps_b {
                                             best_candidate = Some(c.clone());
                                             best_swaps_b = swaps_b;
-                                            best_op_desc =
-                                                format!("nonadj_swap({},{})", i, j);
+                                            best_op_desc = format!("nonadj_swap({},{})", i, j);
                                             found_any = true;
                                         }
                                     }
@@ -476,10 +467,7 @@ fn main() {
 
                     if found_any {
                         pair_best_local += 1;
-                        best_images.push(Some((
-                            best_candidate.unwrap(),
-                            best_op_desc.clone(),
-                        )));
+                        best_images.push(Some((best_candidate.unwrap(), best_op_desc.clone())));
                     } else {
                         best_images.push(None);
                     }
@@ -493,10 +481,8 @@ fn main() {
 
                 // Check injectivity of the naive map
                 let naive_injective = {
-                    let images: Vec<&Vec<u8>> = naive_images
-                        .iter()
-                        .filter_map(|x| x.as_ref())
-                        .collect();
+                    let images: Vec<&Vec<u8>> =
+                        naive_images.iter().filter_map(|x| x.as_ref()).collect();
                     let unique: BTreeSet<&Vec<u8>> = images.iter().copied().collect();
                     images.len() == unique.len()
                 };
@@ -549,16 +535,10 @@ fn main() {
 
                     // Show source set diffs
                     if !diff_asc.is_empty() {
-                        println!(
-                            "  Diff S'_asc: {:?}",
-                            diff_asc
-                        );
+                        println!("  Diff S'_asc: {:?}", diff_asc);
                     }
                     if !diff_desc.is_empty() {
-                        println!(
-                            "  Diff S''_desc: {:?}",
-                            diff_desc
-                        );
+                        println!("  Diff S''_desc: {:?}", diff_desc);
                     }
 
                     println!(
@@ -574,7 +554,10 @@ fn main() {
                         pair_best_local, pair_attempts, best_injective, all_monotone
                     );
                     if !delta_histogram.is_empty() {
-                        println!("  Delta histogram (swaps_b - swaps_a): {:?}", delta_histogram);
+                        println!(
+                            "  Delta histogram (swaps_b - swaps_a): {:?}",
+                            delta_histogram
+                        );
                     }
 
                     // Show unmapped sources
@@ -599,8 +582,7 @@ fn main() {
 
                     // Show collisions if not injective
                     if !best_injective {
-                        let mut image_count: BTreeMap<&Vec<u8>, Vec<usize>> =
-                            BTreeMap::new();
+                        let mut image_count: BTreeMap<&Vec<u8>, Vec<usize>> = BTreeMap::new();
                         for (idx, img) in best_images.iter().enumerate() {
                             if let Some((ref v, _)) = img {
                                 image_count.entry(v).or_default().push(idx);
@@ -632,8 +614,13 @@ fn main() {
 
         println!(
             "--- n={}: LR ok {}/{}, naive_swap {}/{}, best_local {}/{} ---\n",
-            n, lr_ok, total_pairs, naive_swap_works, total_coupling_attempts,
-            best_local_works, total_coupling_attempts
+            n,
+            lr_ok,
+            total_pairs,
+            naive_swap_works,
+            total_coupling_attempts,
+            best_local_works,
+            total_coupling_attempts
         );
     }
 
@@ -882,10 +869,7 @@ fn main() {
                 // Print detailed diff for small n
                 if n <= 6 {
                     let s_str = descent_set_to_string(s_mask, n);
-                    println!(
-                        "n={} S={} pa={} pb={}:",
-                        n, s_str, pa, pb
-                    );
+                    println!("n={} S={} pa={} pb={}:", n, s_str, pa, pb);
                     println!(
                         "  S'_asc(pa)={} S'_asc(pb)={}",
                         descent_set_to_string(spa_asc, n - 1),

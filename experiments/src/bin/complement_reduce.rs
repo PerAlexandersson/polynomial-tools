@@ -11,16 +11,18 @@
 /// works for S_bar, giving us real-rootedness of L_{n,S_bar} = L_{n,S} for free.
 use combpoly::permutation::all_permutations;
 use combpoly::statistics::{compute, descent_set_bitmask, Stat};
-use polynomial_tools::real_rootedness::{
-    check_weak_interlacing, format_poly, is_real_rooted,
-};
+use polynomial_tools::real_rootedness::{check_weak_interlacing, format_poly, is_real_rooted};
 use std::collections::BTreeMap;
 
 fn build_poly(perms: &[&Vec<u8>]) -> Vec<i64> {
     if perms.is_empty() {
         return vec![0];
     }
-    let max_s = perms.iter().map(|s| compute(s, Stat::Swaps)).max().unwrap_or(0);
+    let max_s = perms
+        .iter()
+        .map(|s| compute(s, Stat::Swaps))
+        .max()
+        .unwrap_or(0);
     let mut coeffs = vec![0i64; max_s + 1];
     for s in perms {
         coeffs[compute(s, Stat::Swaps)] += 1;
@@ -44,8 +46,11 @@ fn descent_set_str(s: u64, n: u8) -> String {
         .filter(|&i| s & (1 << i) != 0)
         .map(|i| (i + 1).to_string())
         .collect();
-    if positions.is_empty() { "{}".to_string() }
-    else { format!("{{{}}}", positions.join(",")) }
+    if positions.is_empty() {
+        "{}".to_string()
+    } else {
+        format!("{{{}}}", positions.join(","))
+    }
 }
 
 /// Compute complement of descent set: S_bar = {n-i : i in S} where S is a subset of [n-1].
@@ -84,10 +89,7 @@ fn check_pos_compatible(perms: &[&Vec<u8>], n: u8) -> bool {
         by_pos.entry(pos).or_default().push(s);
     }
 
-    let pos_polys: Vec<Vec<i64>> = by_pos
-        .values()
-        .map(|grp| build_poly(grp))
-        .collect();
+    let pos_polys: Vec<Vec<i64>> = by_pos.values().map(|grp| build_poly(grp)).collect();
 
     for i in 0..pos_polys.len() {
         for j in i + 1..pos_polys.len() {
@@ -135,12 +137,10 @@ fn main() {
             }
         }
 
-        let total_1_in_s: Vec<u64> = by_des.keys()
-            .filter(|&&ds| ds & 1 != 0)
-            .copied()
-            .collect();
+        let total_1_in_s: Vec<u64> = by_des.keys().filter(|&&ds| ds & 1 != 0).copied().collect();
 
-        let bad_with_1: Vec<u64> = bad_sets.iter()
+        let bad_with_1: Vec<u64> = bad_sets
+            .iter()
             .filter(|&&ds| ds & 1 != 0)
             .copied()
             .collect();
@@ -185,8 +185,11 @@ fn main() {
                 if not_reduced_details.len() < 5 {
                     not_reduced_details.push(format!(
                         "  S={} -> S_bar={} (1_in_S_bar:{}, bar_good:{}, match:{})",
-                        descent_set_str(ds, n), descent_set_str(ds_bar, n),
-                        bar_has_1, bar_is_good, polys_match,
+                        descent_set_str(ds, n),
+                        descent_set_str(ds_bar, n),
+                        bar_has_1,
+                        bar_is_good,
+                        polys_match,
                     ));
                 }
             }
@@ -200,9 +203,7 @@ fn main() {
             let poly_s = build_poly(perms);
 
             // Alternative: compute L_{n,S_bar} by complementing permutations
-            let compl_perms: Vec<Vec<u8>> = perms.iter()
-                .map(|s| complement_perm(s))
-                .collect();
+            let compl_perms: Vec<Vec<u8>> = perms.iter().map(|s| complement_perm(s)).collect();
 
             // Verify each complemented perm has descent set ds_bar
             let mut all_correct_des = true;
@@ -234,27 +235,48 @@ fn main() {
                     complement_verified += 1;
                 } else {
                     complement_failed += 1;
-                    println!("  MISMATCH: S={} poly={}, S_bar={} poly={}",
-                        descent_set_str(ds, n), format_poly(&poly_s),
-                        descent_set_str(ds_bar, n), format_poly(&poly_bar));
+                    println!(
+                        "  MISMATCH: S={} poly={}, S_bar={} poly={}",
+                        descent_set_str(ds, n),
+                        format_poly(&poly_s),
+                        descent_set_str(ds_bar, n),
+                        format_poly(&poly_bar)
+                    );
                 }
             } else {
                 complement_failed += 1;
                 if !all_correct_des {
-                    println!("  Des set mismatch for complement of S={}!", descent_set_str(ds, n));
+                    println!(
+                        "  Des set mismatch for complement of S={}!",
+                        descent_set_str(ds, n)
+                    );
                 }
                 if !swaps_match {
-                    println!("  Swaps NOT invariant for complement of S={}!", descent_set_str(ds, n));
+                    println!(
+                        "  Swaps NOT invariant for complement of S={}!",
+                        descent_set_str(ds, n)
+                    );
                 }
             }
         }
 
-        println!("  Complement identity verified: {}/{}", complement_verified, by_des.len());
+        println!(
+            "  Complement identity verified: {}/{}",
+            complement_verified,
+            by_des.len()
+        );
         if complement_failed > 0 {
-            println!("  WARNING: complement identity failed for {} sets!", complement_failed);
+            println!(
+                "  WARNING: complement identity failed for {} sets!",
+                complement_failed
+            );
         }
 
-        println!("  Bad sets reduced via complement (1 not in S_bar): {}/{}", n_reduced, bad_sets.len());
+        println!(
+            "  Bad sets reduced via complement (1 not in S_bar): {}/{}",
+            n_reduced,
+            bad_sets.len()
+        );
         if n_not_reduced > 0 {
             println!("  NOT reduced (both S and S_bar have 1): {}", n_not_reduced);
             for detail in &not_reduced_details {
@@ -271,9 +293,15 @@ fn main() {
     println!("================================================================");
     println!("  Grand summary");
     println!("================================================================");
-    println!("Total bad (pos-incompatible) descent sets: {}", grand_total_bad);
+    println!(
+        "Total bad (pos-incompatible) descent sets: {}",
+        grand_total_bad
+    );
     println!("Reduced via complement (1 not in S_bar): {}", grand_reduced);
-    println!("Not reducible (both S and S_bar have 1): {}", grand_not_reduced);
+    println!(
+        "Not reducible (both S and S_bar have 1): {}",
+        grand_not_reduced
+    );
     if grand_not_reduced > 0 {
         println!("\n--- Characterizing irreducible cases ---");
         println!("These S satisfy: 1 in S AND n-1 in S (so both S and S_bar have 1).\n");
@@ -287,27 +315,39 @@ fn main() {
             }
 
             for (&ds, perms) in &by_des {
-                if ds & 1 == 0 { continue; } // skip if 1 not in S
+                if ds & 1 == 0 {
+                    continue;
+                } // skip if 1 not in S
                 let ds_bar = complement_descent_set(ds, n);
-                if ds_bar & 1 == 0 { continue; } // reducible
+                if ds_bar & 1 == 0 {
+                    continue;
+                } // reducible
 
                 // This set is irreducible: 1 in S and 1 in S_bar
                 // Equivalently: 1 in S and n-1 in S
                 let compatible = check_pos_compatible(perms, n);
-                if compatible { continue; } // actually good after all
+                if compatible {
+                    continue;
+                } // actually good after all
 
                 let poly = build_poly(perms);
                 let rr = poly.len() <= 2 || is_real_rooted(&poly);
 
                 // Characterize S
-                let elements: Vec<usize> = (0..n-1)
+                let elements: Vec<usize> = (0..n - 1)
                     .filter(|&i| ds & (1u64 << i) != 0)
                     .map(|i| (i + 1) as usize)
                     .collect();
 
-                println!("  n={} S={} |S|={} poly={} rr={} self-complement={}",
-                    n, descent_set_str(ds, n), elements.len(), format_poly(&poly), rr,
-                    ds == ds_bar);
+                println!(
+                    "  n={} S={} |S|={} poly={} rr={} self-complement={}",
+                    n,
+                    descent_set_str(ds, n),
+                    elements.len(),
+                    format_poly(&poly),
+                    rr,
+                    ds == ds_bar
+                );
             }
         }
     }
@@ -331,7 +371,9 @@ fn main() {
 
         for (&ds, perms) in &by_des {
             let compatible = check_pos_compatible(perms, n);
-            if compatible { continue; }
+            if compatible {
+                continue;
+            }
 
             bad += 1;
             let ds_bar = complement_descent_set(ds, n);
@@ -356,7 +398,9 @@ fn main() {
             unresolved += 1;
         }
 
-        println!("n={}: {} bad, {} resolved by complement, {} unresolved",
-            n, bad, resolved_by_complement, unresolved);
+        println!(
+            "n={}: {} bad, {} resolved by complement, {} unresolved",
+            n, bad, resolved_by_complement, unresolved
+        );
     }
 }

@@ -24,7 +24,6 @@
 ///   2. Operator: Build via M_p applied to source polynomials, verify it matches Υ,
 ///      then check if individual M_p[Q_p] are bivariate stable.
 ///   3. Operator generality: Check if M_p maps *arbitrary* stable polynomials to stable.
-
 use combpoly::permutation::all_permutations;
 use combpoly::statistics::{compute, descent_set_bitmask, Stat};
 use std::collections::BTreeMap;
@@ -41,7 +40,9 @@ fn csub(a: (f64, f64), b: (f64, f64)) -> (f64, f64) {
 }
 fn cpow(base: (f64, f64), exp: u32) -> (f64, f64) {
     let mut r = (1.0_f64, 0.0_f64);
-    for _ in 0..exp { r = cmul(r, base); }
+    for _ in 0..exp {
+        r = cmul(r, base);
+    }
     r
 }
 fn cabs(a: (f64, f64)) -> f64 {
@@ -51,10 +52,14 @@ fn cabs(a: (f64, f64)) -> f64 {
 // ── Simple PRNG ───────────────────────────────────────────────────────────────
 struct Rng(u64);
 impl Rng {
-    fn new(seed: u64) -> Self { Rng(seed.wrapping_add(1)) }
+    fn new(seed: u64) -> Self {
+        Rng(seed.wrapping_add(1))
+    }
     fn next_u64(&mut self) -> u64 {
-        self.0 = self.0.wrapping_mul(6364136223846793005)
-                       .wrapping_add(1442695040888963407);
+        self.0 = self
+            .0
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         self.0
     }
     fn next_f64(&mut self) -> f64 {
@@ -72,7 +77,9 @@ fn descent_set_str(mask: u64, n: u8) -> String {
     let mut first = true;
     for i in 1..n {
         if (mask >> (i - 1)) & 1 == 1 {
-            if !first { s.push(','); }
+            if !first {
+                s.push(',');
+            }
             s.push_str(&i.to_string());
             first = false;
         }
@@ -86,39 +93,57 @@ fn valid_positions(s_mask: u64, n: u8) -> Vec<u8> {
     for p in 1..n {
         let p_in = (s_mask >> (p - 1)) & 1 == 1;
         let pm1_in = p >= 2 && (s_mask >> (p - 2)) & 1 == 1;
-        if p_in && !pm1_in { pos.push(p); }
+        if p_in && !pm1_in {
+            pos.push(p);
+        }
     }
-    if n >= 2 && (s_mask >> (n - 2)) & 1 == 0 { pos.push(n); }
+    if n >= 2 && (s_mask >> (n - 2)) & 1 == 0 {
+        pos.push(n);
+    }
     pos
 }
 
 fn source_asc(s_mask: u64, p: u8, n: u8) -> u64 {
-    if n <= 2 { return 0; }
-    if p == n { return s_mask; }
+    if n <= 2 {
+        return 0;
+    }
+    if p == n {
+        return s_mask;
+    }
     let mut sp = 0u64;
     if p == 1 {
         for j in 2..n {
-            if (s_mask >> (j - 1)) & 1 == 1 { sp |= 1 << (j - 2); }
+            if (s_mask >> (j - 1)) & 1 == 1 {
+                sp |= 1 << (j - 2);
+            }
         }
     } else {
         for pos in 1..=(p.saturating_sub(2)) {
-            if (s_mask >> (pos - 1)) & 1 == 1 { sp |= 1 << (pos - 1); }
+            if (s_mask >> (pos - 1)) & 1 == 1 {
+                sp |= 1 << (pos - 1);
+            }
         }
         for j in (p + 1)..n {
-            if (s_mask >> (j - 1)) & 1 == 1 { sp |= 1 << (j - 2); }
+            if (s_mask >> (j - 1)) & 1 == 1 {
+                sp |= 1 << (j - 2);
+            }
         }
     }
     sp
 }
 
 fn source_desc(s_mask: u64, p: u8, n: u8) -> Option<u64> {
-    if p <= 1 || p >= n { return None; }
+    if p <= 1 || p >= n {
+        return None;
+    }
     Some(source_asc(s_mask, p, n) | (1 << (p - 2)))
 }
 
 fn epsilon1(pi: &[u8], p: u8) -> bool {
     let n = pi.len() as u8 + 1;
-    if p <= 1 || p >= n { return false; }
+    if p <= 1 || p >= n {
+        return false;
+    }
     pi[(p - 2) as usize] + 1 == pi[(p - 1) as usize]
 }
 
@@ -134,23 +159,23 @@ fn epsilon1(pi: &[u8], p: u8) -> bool {
 
 // ── Build Υ directly from target permutations ─────────────────────────────────
 
-fn build_upsilon_direct(
-    n: u8,
-    s_mask: u64,
-    all_perms: &[Vec<u8>],
-) -> Vec<Vec<Vec<i64>>> {
+fn build_upsilon_direct(n: u8, s_mask: u64, all_perms: &[Vec<u8>]) -> Vec<Vec<Vec<i64>>> {
     // upsilon[p-1][q-1][k] = [x^p z^q t^k] Υ
     let n_usize = n as usize;
     let mut upsilon: Vec<Vec<Vec<i64>>> = vec![vec![vec![]; n_usize]; n_usize];
 
     for pi in all_perms {
-        if descent_set_bitmask(pi) != s_mask { continue; }
-        let p = pi.iter().position(|&v| v == n).unwrap() + 1;  // pos of n (1-indexed)
-        let q = pi.iter().position(|&v| v == n - 1).unwrap() + 1;  // pos of n-1 (1-indexed)
+        if descent_set_bitmask(pi) != s_mask {
+            continue;
+        }
+        let p = pi.iter().position(|&v| v == n).unwrap() + 1; // pos of n (1-indexed)
+        let q = pi.iter().position(|&v| v == n - 1).unwrap() + 1; // pos of n-1 (1-indexed)
         let sw = compute(pi, Stat::Swaps);
 
         let row = &mut upsilon[p - 1][q - 1];
-        if row.len() <= sw { row.resize(sw + 1, 0); }
+        if row.len() <= sw {
+            row.resize(sw + 1, 0);
+        }
         row[sw] += 1;
     }
 
@@ -179,7 +204,9 @@ fn build_q_source(
     for (desc_mask, class) in source_by_descent.iter() {
         let is_asc = *desc_mask == sp_asc;
         let is_desc = sp_desc.map_or(false, |sd| *desc_mask == sd);
-        if !is_asc && !is_desc { continue; }
+        if !is_asc && !is_desc {
+            continue;
+        }
 
         for pi in class {
             let q = pi.iter().position(|&v| v == n - 1).unwrap() + 1;
@@ -188,7 +215,9 @@ fn build_q_source(
             let mod_sw = sw + eps;
 
             let row = &mut q_poly[q - 1];
-            if row.len() <= mod_sw { row.resize(mod_sw + 1, 0); }
+            if row.len() <= mod_sw {
+                row.resize(mod_sw + 1, 0);
+            }
             row[mod_sw] += 1;
         }
     }
@@ -204,15 +233,19 @@ fn apply_mp(q_poly: &[Vec<i64>], p: u8) -> Vec<Vec<i64>> {
     let mut out: Vec<Vec<i64>> = vec![vec![]; n_minus_1 + 1];
 
     for (q_idx, t_coeffs) in q_poly.iter().enumerate() {
-        let q = q_idx + 1;  // q is 1-indexed
-        if t_coeffs.is_empty() { continue; }
+        let q = q_idx + 1; // q is 1-indexed
+        if t_coeffs.is_empty() {
+            continue;
+        }
 
         if p >= 2 && q <= (p - 2) as usize {
             // Zone L: multiply by t → shift k by 1 (prepend 0)
             let out_q_idx = q_idx;
             let row = &mut out[out_q_idx];
             let needed = t_coeffs.len() + 1;
-            if row.len() < needed { row.resize(needed, 0); }
+            if row.len() < needed {
+                row.resize(needed, 0);
+            }
             for (k, &c) in t_coeffs.iter().enumerate() {
                 row[k + 1] += c;
             }
@@ -220,16 +253,22 @@ fn apply_mp(q_poly: &[Vec<i64>], p: u8) -> Vec<Vec<i64>> {
             // Zone M: unchanged (q = p-1, out_q_idx = q_idx)
             let out_q_idx = q_idx;
             let row = &mut out[out_q_idx];
-            if row.len() < t_coeffs.len() { row.resize(t_coeffs.len(), 0); }
+            if row.len() < t_coeffs.len() {
+                row.resize(t_coeffs.len(), 0);
+            }
             for (k, &c) in t_coeffs.iter().enumerate() {
                 row[k] += c;
             }
         } else {
             // Zone R: shift z-index by 1 (q → q+1, so out_q_idx = q_idx + 1)
             let out_q_idx = q_idx + 1;
-            if out_q_idx >= out.len() { out.resize(out_q_idx + 1, vec![]); }
+            if out_q_idx >= out.len() {
+                out.resize(out_q_idx + 1, vec![]);
+            }
             let row = &mut out[out_q_idx];
-            if row.len() < t_coeffs.len() { row.resize(t_coeffs.len(), 0); }
+            if row.len() < t_coeffs.len() {
+                row.resize(t_coeffs.len(), 0);
+            }
             for (k, &c) in t_coeffs.iter().enumerate() {
                 row[k] += c;
             }
@@ -267,10 +306,14 @@ fn eval_upsilon(
 ) -> (f64, f64) {
     let mut result = (0.0_f64, 0.0_f64);
     for (p_idx, z_rows) in upsilon.iter().enumerate() {
-        if z_rows.is_empty() { continue; }
+        if z_rows.is_empty() {
+            continue;
+        }
         let xp = cpow(x, (p_idx + 1) as u32);
         for (q_idx, t_coeffs) in z_rows.iter().enumerate() {
-            if t_coeffs.is_empty() { continue; }
+            if t_coeffs.is_empty() {
+                continue;
+            }
             let zq = cpow(z, (q_idx + 1) as u32);
             let mut tpoly = (0.0_f64, 0.0_f64);
             for (k, &c) in t_coeffs.iter().enumerate() {
@@ -285,14 +328,12 @@ fn eval_upsilon(
 }
 
 // Evaluate bivariate poly (z_rows[q_idx][k] = coeff of z^{q+1} t^k)
-fn eval_bivariate(
-    z_rows: &[Vec<i64>],
-    z: (f64, f64),
-    t: (f64, f64),
-) -> (f64, f64) {
+fn eval_bivariate(z_rows: &[Vec<i64>], z: (f64, f64), t: (f64, f64)) -> (f64, f64) {
     let mut result = (0.0_f64, 0.0_f64);
     for (q_idx, t_coeffs) in z_rows.iter().enumerate() {
-        if t_coeffs.is_empty() { continue; }
+        if t_coeffs.is_empty() {
+            continue;
+        }
         let zq = cpow(z, (q_idx + 1) as u32);
         let mut tpoly = (0.0_f64, 0.0_f64);
         for (k, &c) in t_coeffs.iter().enumerate() {
@@ -310,17 +351,35 @@ fn eval_bivariate(
 fn upsilon_equal(a: &[Vec<Vec<i64>>], b: &[Vec<Vec<i64>>]) -> bool {
     let max_p = a.len().max(b.len());
     for p_idx in 0..max_p {
-        let a_rows = if p_idx < a.len() { &a[p_idx] } else { &[] as &[Vec<i64>] };
-        let b_rows = if p_idx < b.len() { &b[p_idx] } else { &[] as &[Vec<i64>] };
+        let a_rows = if p_idx < a.len() {
+            &a[p_idx]
+        } else {
+            &[] as &[Vec<i64>]
+        };
+        let b_rows = if p_idx < b.len() {
+            &b[p_idx]
+        } else {
+            &[] as &[Vec<i64>]
+        };
         let max_q = a_rows.len().max(b_rows.len());
         for q_idx in 0..max_q {
-            let a_tk = if q_idx < a_rows.len() { &a_rows[q_idx] } else { &[] as &[i64] };
-            let b_tk = if q_idx < b_rows.len() { &b_rows[q_idx] } else { &[] as &[i64] };
+            let a_tk = if q_idx < a_rows.len() {
+                &a_rows[q_idx]
+            } else {
+                &[] as &[i64]
+            };
+            let b_tk = if q_idx < b_rows.len() {
+                &b_rows[q_idx]
+            } else {
+                &[] as &[i64]
+            };
             let max_k = a_tk.len().max(b_tk.len());
             for k in 0..max_k {
                 let av = if k < a_tk.len() { a_tk[k] } else { 0 };
                 let bv = if k < b_tk.len() { b_tk[k] } else { 0 };
-                if av != bv { return false; }
+                if av != bv {
+                    return false;
+                }
             }
         }
     }
@@ -342,11 +401,14 @@ fn main() {
 
     println!("=== Trivariate stability of Υ(x,z,t) ===");
     println!("Υ = Σ_{{σ∈D(n,S)}} x^{{pos(n)}} z^{{pos(n-1)}} t^{{swaps(σ)}}");
-    println!("Checking n=3..{}, {} random test points each\n", max_n, num_tests);
+    println!(
+        "Checking n=3..{}, {} random test points each\n",
+        max_n, num_tests
+    );
 
-    let mut grand_total  = 0u64;
-    let mut grand_pass   = 0u64;
-    let mut grand_match  = 0u64;  // operator == direct
+    let mut grand_total = 0u64;
+    let mut grand_pass = 0u64;
+    let mut grand_match = 0u64; // operator == direct
 
     for n in 3..=max_n {
         let all_perms = all_permutations(n);
@@ -354,38 +416,50 @@ fn main() {
         // Group level-n perms by descent set
         let mut by_descent: BTreeMap<u64, Vec<Vec<u8>>> = BTreeMap::new();
         for pi in &all_perms {
-            by_descent.entry(descent_set_bitmask(pi)).or_default().push(pi.clone());
+            by_descent
+                .entry(descent_set_bitmask(pi))
+                .or_default()
+                .push(pi.clone());
         }
 
         // Group level-(n-1) perms by descent set (for source)
         let source_perms = all_permutations(n - 1);
         let mut source_by_descent: BTreeMap<u64, Vec<Vec<u8>>> = BTreeMap::new();
         for pi in &source_perms {
-            source_by_descent.entry(descent_set_bitmask(pi)).or_default().push(pi.clone());
+            source_by_descent
+                .entry(descent_set_bitmask(pi))
+                .or_default()
+                .push(pi.clone());
         }
 
         println!("========== n = {} ==========", n);
 
         let mut n_total = 0u64;
-        let mut n_pass  = 0u64;
+        let mut n_pass = 0u64;
         let mut n_match = 0u64;
 
         for (&s_mask, _class) in &by_descent {
-            if s_mask & 1 != 0 { continue; }  // only S with 1 ∉ S
+            if s_mask & 1 != 0 {
+                continue;
+            } // only S with 1 ∉ S
 
             let positions = valid_positions(s_mask, n);
-            if positions.len() < 1 { continue; }
+            if positions.len() < 1 {
+                continue;
+            }
 
             n_total += 1;
             let s_str = descent_set_str(s_mask, n);
 
             // Build Υ both ways
-            let ups_direct   = build_upsilon_direct(n, s_mask, &all_perms);
+            let ups_direct = build_upsilon_direct(n, s_mask, &all_perms);
             let ups_operator = build_upsilon_operator(n, s_mask, &positions, &source_by_descent);
 
             // Verify they match
             let matched = upsilon_equal(&ups_direct, &ups_operator);
-            if matched { n_match += 1; }
+            if matched {
+                n_match += 1;
+            }
 
             // Stability check: evaluate at num_tests random points with Im > 0
             let mut pass = true;
@@ -394,13 +468,13 @@ fn main() {
 
             'outer: for test_idx in 0..num_tests {
                 let (x, z, t) = if test_idx < 6 {
-                    let cases: &[(f64,f64, f64,f64, f64,f64)] = &[
-                        (0.0, 1.0,  0.0, 1.0,  0.0, 1.0),
-                        (1.0, 1.0,  1.0, 1.0,  1.0, 1.0),
+                    let cases: &[(f64, f64, f64, f64, f64, f64)] = &[
+                        (0.0, 1.0, 0.0, 1.0, 0.0, 1.0),
+                        (1.0, 1.0, 1.0, 1.0, 1.0, 1.0),
                         (-1.0, 0.5, 0.0, 0.5, -1.0, 0.5),
-                        (0.5, 2.0,  0.5, 0.5,  0.5, 2.0),
+                        (0.5, 2.0, 0.5, 0.5, 0.5, 2.0),
                         (-0.3, 0.1, 0.7, 0.3, -0.5, 0.4),
-                        (2.0, 0.1, -1.0, 0.2,  0.3, 0.7),
+                        (2.0, 0.1, -1.0, 0.2, 0.3, 0.7),
                     ];
                     let c = cases[test_idx];
                     ((c.0, c.1), (c.2, c.3), (c.4, c.5))
@@ -416,38 +490,51 @@ fn main() {
 
                 let val = eval_upsilon(&ups_direct, x, z, t);
                 let abs_val = cabs(val);
-                if abs_val < min_abs { min_abs = abs_val; }
+                if abs_val < min_abs {
+                    min_abs = abs_val;
+                }
 
                 if abs_val < 1e-9 {
                     pass = false;
                     println!("  FAIL S={} pos={:?}", s_str, positions);
-                    println!("    Υ({:.3}+{:.3}i, {:.3}+{:.3}i, {:.3}+{:.3}i) ≈ 0  (|Υ|={:.2e})",
-                        x.0, x.1, z.0, z.1, t.0, t.1, abs_val);
+                    println!(
+                        "    Υ({:.3}+{:.3}i, {:.3}+{:.3}i, {:.3}+{:.3}i) ≈ 0  (|Υ|={:.2e})",
+                        x.0, x.1, z.0, z.1, t.0, t.1, abs_val
+                    );
                     break 'outer;
                 }
             }
 
-            if pass { n_pass += 1; }
+            if pass {
+                n_pass += 1;
+            }
 
             let match_str = if matched { "✓" } else { "MISMATCH" };
-            println!("  S={}  pos={:?}  {}  {}  min|Υ|={:.3e}",
-                s_str, positions,
+            println!(
+                "  S={}  pos={:?}  {}  {}  min|Υ|={:.3e}",
+                s_str,
+                positions,
                 if pass { "PASS" } else { "FAIL" },
                 match_str,
-                min_abs);
+                min_abs
+            );
         }
 
         grand_total += n_total;
-        grand_pass  += n_pass;
+        grand_pass += n_pass;
         grand_match += n_match;
 
-        println!("n={}: {}/{} passed, {}/{} operator==direct\n",
-            n, n_pass, n_total, n_match, n_total);
+        println!(
+            "n={}: {}/{} passed, {}/{} operator==direct\n",
+            n, n_pass, n_total, n_match, n_total
+        );
     }
 
     println!("==========================================");
-    println!("TOTAL: {}/{} trivariate stable, {}/{} operator matches",
-             grand_pass, grand_total, grand_match, grand_total);
+    println!(
+        "TOTAL: {}/{} trivariate stable, {}/{} operator matches",
+        grand_pass, grand_total, grand_match, grand_total
+    );
 
     if grand_pass == grand_total && grand_total > 0 {
         println!();
@@ -463,40 +550,49 @@ fn main() {
     println!("Test: evaluate M_p[Q] at random Im>0 points for various n, S, p.");
 
     let mut op_total = 0u64;
-    let mut op_pass  = 0u64;
+    let mut op_pass = 0u64;
 
     for n in 3..=max_n {
         let source_perms = all_permutations(n - 1);
         let mut source_by_descent: BTreeMap<u64, Vec<Vec<u8>>> = BTreeMap::new();
         for pi in &source_perms {
-            source_by_descent.entry(descent_set_bitmask(pi)).or_default().push(pi.clone());
+            source_by_descent
+                .entry(descent_set_bitmask(pi))
+                .or_default()
+                .push(pi.clone());
         }
 
         let all_perms = all_permutations(n);
         let mut by_descent: BTreeMap<u64, Vec<Vec<u8>>> = BTreeMap::new();
         for pi in &all_perms {
-            by_descent.entry(descent_set_bitmask(pi)).or_default().push(pi.clone());
+            by_descent
+                .entry(descent_set_bitmask(pi))
+                .or_default()
+                .push(pi.clone());
         }
 
         for (&s_mask, _class) in &by_descent {
-            if s_mask & 1 != 0 { continue; }
+            if s_mask & 1 != 0 {
+                continue;
+            }
             let positions = valid_positions(s_mask, n);
 
             for &p in &positions {
                 let q_src = build_q_source(n, p, s_mask, &source_by_descent);
-                let mp_q  = apply_mp(&q_src, p);
+                let mp_q = apply_mp(&q_src, p);
 
                 op_total += 1;
                 let mut pass = true;
                 let mut rng = Rng::new(
-                    s_mask.wrapping_mul(99991)
-                         .wrapping_add(p as u64 * 7)
-                         .wrapping_add(n as u64 * 1009)
+                    s_mask
+                        .wrapping_mul(99991)
+                        .wrapping_add(p as u64 * 7)
+                        .wrapping_add(n as u64 * 1009),
                 );
 
                 'op_outer: for test_idx in 0..num_tests {
                     let (z, t) = if test_idx < 4 {
-                        let cases: &[(f64,f64,f64,f64)] = &[
+                        let cases: &[(f64, f64, f64, f64)] = &[
                             (0.0, 1.0, 0.0, 1.0),
                             (1.0, 1.0, 1.0, 1.0),
                             (0.5, 0.5, 0.5, 0.5),
@@ -517,13 +613,17 @@ fn main() {
                         pass = false;
                         let s_str = descent_set_str(s_mask, n);
                         println!("  FAIL M_p[Q_p]: n={} S={} p={}", n, s_str, p);
-                        println!("    M_{}[Q]({:.3}+{:.3}i, {:.3}+{:.3}i) ≈ 0",
-                            p, z.0, z.1, t.0, t.1);
+                        println!(
+                            "    M_{}[Q]({:.3}+{:.3}i, {:.3}+{:.3}i) ≈ 0",
+                            p, z.0, z.1, t.0, t.1
+                        );
                         break 'op_outer;
                     }
                 }
 
-                if pass { op_pass += 1; }
+                if pass {
+                    op_pass += 1;
+                }
             }
         }
     }

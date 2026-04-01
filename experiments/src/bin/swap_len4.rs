@@ -7,11 +7,21 @@ use polynomial_tools::real_rootedness::{
 };
 
 fn build_poly(perms: &[Vec<u8>]) -> Vec<i64> {
-    if perms.is_empty() { return vec![0]; }
-    let max_s = perms.iter().map(|s| compute(s, Stat::Swaps)).max().unwrap_or(0);
+    if perms.is_empty() {
+        return vec![0];
+    }
+    let max_s = perms
+        .iter()
+        .map(|s| compute(s, Stat::Swaps))
+        .max()
+        .unwrap_or(0);
     let mut coeffs = vec![0i64; max_s + 1];
-    for s in perms { coeffs[compute(s, Stat::Swaps)] += 1; }
-    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 { coeffs.pop(); }
+    for s in perms {
+        coeffs[compute(s, Stat::Swaps)] += 1;
+    }
+    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 {
+        coeffs.pop();
+    }
     coeffs
 }
 
@@ -25,18 +35,27 @@ fn reverse(p: &[u8]) -> Vec<u8> {
 }
 
 fn main() {
-    let max_n: u8 = std::env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(10);
+    let max_n: u8 = std::env::args()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(10);
 
     // All 24 permutations of [4]
     let all4: Vec<Vec<u8>> = {
         let mut v = Vec::new();
         for a in 1..=4u8 {
             for b in 1..=4u8 {
-                if b == a { continue; }
+                if b == a {
+                    continue;
+                }
                 for c in 1..=4u8 {
-                    if c == a || c == b { continue; }
+                    if c == a || c == b {
+                        continue;
+                    }
                     for d in 1..=4u8 {
-                        if d == a || d == b || d == c { continue; }
+                        if d == a || d == b || d == c {
+                            continue;
+                        }
                         v.push(vec![a, b, c, d]);
                     }
                 }
@@ -50,7 +69,9 @@ fn main() {
     let mut assigned: Vec<bool> = vec![false; 24];
 
     for i in 0..24 {
-        if assigned[i] { continue; }
+        if assigned[i] {
+            continue;
+        }
         let p = &all4[i];
         let comp = complement(p);
         let rev = reverse(p);
@@ -70,7 +91,10 @@ fn main() {
         groups.push(group);
     }
 
-    println!("=== {} symmetry classes of length-4 patterns ===\n", groups.len());
+    println!(
+        "=== {} symmetry classes of length-4 patterns ===\n",
+        groups.len()
+    );
 
     // For each group, compute polynomials and check properties
     // Collect results to compare polynomial families
@@ -78,7 +102,8 @@ fn main() {
 
     for group in &groups {
         let repr = &group[0];
-        let name: String = group.iter()
+        let name: String = group
+            .iter()
             .map(|p| p.iter().map(|v| v.to_string()).collect::<String>())
             .collect::<Vec<_>>()
             .join(" = ");
@@ -89,11 +114,17 @@ fn main() {
         for n in 1..=max_n {
             let perms = avoiding_permutations(n, &[repr.clone()]);
             let poly = build_poly(&perms);
-            let rr = if poly.len() <= 2 { true } else { is_real_rooted(&poly) };
+            let rr = if poly.len() <= 2 {
+                true
+            } else {
+                is_real_rooted(&poly)
+            };
             let total: i64 = poly.iter().sum();
             println!(
                 "  n={:>2}: {:<7} {:<65} {}",
-                n, total, format_poly(&poly),
+                n,
+                total,
+                format_poly(&poly),
                 if rr { "✓" } else { "✗" }
             );
             polys.push(poly);
@@ -103,7 +134,9 @@ fn main() {
         let mut all_il = true;
         for i in 0..polys.len() - 1 {
             let (f, g) = (&polys[i], &polys[i + 1]);
-            if f.len() <= 1 || g.len() <= 1 { continue; }
+            if f.len() <= 1 || g.len() <= 1 {
+                continue;
+            }
             let (small, large) = if f.len() <= g.len() { (f, g) } else { (g, f) };
             let ok = match check_interlacing_sturm(small, large) {
                 Some(true) => true,
@@ -111,11 +144,19 @@ fn main() {
                     Some(true) => true,
                     _ => false,
                 },
-                None => { all_il = false; false },
+                None => {
+                    all_il = false;
+                    false
+                }
             };
-            if !ok { all_il = false; }
+            if !ok {
+                all_il = false;
+            }
         }
-        println!("  Interlacing: {}\n", if all_il { "ALL ✓" } else { "SOME ✗" });
+        println!(
+            "  Interlacing: {}\n",
+            if all_il { "ALL ✓" } else { "SOME ✗" }
+        );
 
         all_results.push((name, polys));
     }
@@ -126,10 +167,14 @@ fn main() {
     let mut matched: Vec<bool> = vec![false; all_results.len()];
 
     for i in 0..all_results.len() {
-        if matched[i] { continue; }
+        if matched[i] {
+            continue;
+        }
         let mut class = vec![i];
         for j in (i + 1)..all_results.len() {
-            if matched[j] { continue; }
+            if matched[j] {
+                continue;
+            }
             if all_results[i].1 == all_results[j].1 {
                 class.push(j);
                 matched[j] = true;

@@ -2,6 +2,7 @@
 
 pub mod catalan;
 pub mod cayley;
+pub mod fixed_descent;
 pub mod order;
 pub mod parking;
 pub mod permutation;

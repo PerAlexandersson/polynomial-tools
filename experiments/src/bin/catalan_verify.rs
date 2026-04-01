@@ -3,9 +3,9 @@
 /// Since backtrack_π(S_n) = π⁻¹, we just compute stat on Av_{τ⁻¹}(n).
 /// This avoids the expensive backtrack computation and lets us go to n=12+.
 use combpoly::permutation::{all_permutations, contains_pattern};
+use combpoly::statistics::{self, Stat};
 use polynomial_tools::real_rootedness as polynomial;
 use polynomial_tools::recurrence::{find_recurrence_adaptive, AdaptiveSearchOptions};
-use combpoly::statistics::{self, Stat};
 use std::env;
 use std::io::{self, Write};
 
@@ -37,8 +37,16 @@ fn main() {
         ("Av_312→exc = exc on Av_231", vec![2, 3, 1], "exc"),
         ("Av_321→exc = exc on Av_321", vec![3, 2, 1], "exc"),
         // Peak cases
-        ("Av_132→peak = peak on Av_132 (ClassA)", vec![1, 3, 2], "peak"),
-        ("Av_231→peak = peak on Av_312 (ClassB)", vec![3, 1, 2], "peak"),
+        (
+            "Av_132→peak = peak on Av_132 (ClassA)",
+            vec![1, 3, 2],
+            "peak",
+        ),
+        (
+            "Av_231→peak = peak on Av_312 (ClassB)",
+            vec![3, 1, 2],
+            "peak",
+        ),
         // Valley
         ("Av_231→valley = valley on Av_312", vec![3, 1, 2], "valley"),
     ];
@@ -176,7 +184,10 @@ fn main() {
             eprint!("\r    searching {} ...         ", rlabel);
             io::stderr().flush().ok();
             match find_recurrence_adaptive(&polys, opts) {
-                Some(r) => println!("    {}: {}  (eqs={}, unk={})", rlabel, r.recurrence, r.num_equations, r.num_unknowns),
+                Some(r) => println!(
+                    "    {}: {}  (eqs={}, unk={})",
+                    rlabel, r.recurrence, r.num_equations, r.num_unknowns
+                ),
                 None => println!("    {}: (none found)", rlabel),
             }
         }

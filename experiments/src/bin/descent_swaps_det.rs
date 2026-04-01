@@ -116,7 +116,11 @@ fn poly_degree(a: &[i64]) -> Option<usize> {
 }
 
 fn coeff(p: &[i64], k: usize) -> i64 {
-    if k < p.len() { p[k] } else { 0 }
+    if k < p.len() {
+        p[k]
+    } else {
+        0
+    }
 }
 
 /// Approximate polynomial GCD using numerical evaluation.
@@ -144,9 +148,13 @@ fn poly_gcd_degree(a: &[i64], b: &[i64]) -> usize {
     let mut shared_t_factor = 0;
     {
         let mut ka = 0;
-        while ka < a.len() && a[ka] == 0 { ka += 1; }
+        while ka < a.len() && a[ka] == 0 {
+            ka += 1;
+        }
         let mut kb = 0;
-        while kb < b.len() && b[kb] == 0 { kb += 1; }
+        while kb < b.len() && b[kb] == 0 {
+            kb += 1;
+        }
         shared_t_factor = ka.min(kb);
     }
 
@@ -169,10 +177,17 @@ fn poly_gcd_display(a: &[i64], b: &[i64]) -> String {
         // Check if the common factor is just t^d
         let mut a_stripped: Vec<i64> = a[d..].to_vec();
         let mut b_stripped: Vec<i64> = b[d..].to_vec();
-        while a_stripped.len() > 1 && *a_stripped.last().unwrap() == 0 { a_stripped.pop(); }
-        while b_stripped.len() > 1 && *b_stripped.last().unwrap() == 0 { b_stripped.pop(); }
-        if d == 1 { "t".to_string() }
-        else { format!("t^{}", d) }
+        while a_stripped.len() > 1 && *a_stripped.last().unwrap() == 0 {
+            a_stripped.pop();
+        }
+        while b_stripped.len() > 1 && *b_stripped.last().unwrap() == 0 {
+            b_stripped.pop();
+        }
+        if d == 1 {
+            "t".to_string()
+        } else {
+            format!("t^{}", d)
+        }
     }
 }
 
@@ -211,9 +226,14 @@ fn poly_eval_c(coeffs: &[i64], z: (f64, f64)) -> (f64, f64) {
 
 struct Rng(u64);
 impl Rng {
-    fn new(seed: u64) -> Self { Rng(seed.wrapping_add(1)) }
+    fn new(seed: u64) -> Self {
+        Rng(seed.wrapping_add(1))
+    }
     fn next_u64(&mut self) -> u64 {
-        self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        self.0 = self
+            .0
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         self.0
     }
     fn next_f64(&mut self) -> f64 {
@@ -230,11 +250,18 @@ fn valid_positions_alt(n: u8) -> Vec<u8> {
     // For alternating S = {2,4,6,...}, valid positions are even numbers and n (if n is even
     // in certain cases). Let's just compute it from the definition:
     // p in S and p-1 not in S, or p=n and n-1 not in S
-    let s_mask: u64 = (1..n as u64).filter(|&i| i % 2 == 0).map(|i| 1u64 << (i - 1)).fold(0, |a, b| a | b);
+    let s_mask: u64 = (1..n as u64)
+        .filter(|&i| i % 2 == 0)
+        .map(|i| 1u64 << (i - 1))
+        .fold(0, |a, b| a | b);
     let mut positions = Vec::new();
     for p in 1..n {
         let p_in_s = (s_mask >> (p - 1)) & 1 == 1;
-        let pm1_in_s = if p >= 2 { (s_mask >> (p - 2)) & 1 == 1 } else { false };
+        let pm1_in_s = if p >= 2 {
+            (s_mask >> (p - 2)) & 1 == 1
+        } else {
+            false
+        };
         if p_in_s && !pm1_in_s {
             positions.push(p);
         }
@@ -258,10 +285,7 @@ fn poly_det(m: &[Vec<Vec<i64>>]) -> Vec<i64> {
         return m[0][0].clone();
     }
     if n == 2 {
-        return poly_sub(
-            &poly_mul(&m[0][0], &m[1][1]),
-            &poly_mul(&m[0][1], &m[1][0]),
-        );
+        return poly_sub(&poly_mul(&m[0][0], &m[1][1]), &poly_mul(&m[0][1], &m[1][0]));
     }
     // Cofactor expansion along first row
     let mut result = vec![0i64];
@@ -312,13 +336,15 @@ fn main() {
         let mut by_pos: BTreeMap<u8, Vec<usize>> = BTreeMap::new();
         for sigma in &alt {
             let pos = sigma.iter().position(|&v| v == n).unwrap() as u8 + 1;
-            by_pos.entry(pos).or_default().push(compute(sigma, Stat::Swaps));
+            by_pos
+                .entry(pos)
+                .or_default()
+                .push(compute(sigma, Stat::Swaps));
         }
 
-        let h_polys: Vec<(u8, Vec<i64>)> = positions.iter()
-            .filter_map(|&p| {
-                by_pos.get(&p).map(|vals| (p, build_poly(vals)))
-            })
+        let h_polys: Vec<(u8, Vec<i64>)> = positions
+            .iter()
+            .filter_map(|&p| by_pos.get(&p).map(|vals| (p, build_poly(vals))))
             .collect();
 
         let total_poly: Vec<i64> = {
@@ -329,8 +355,12 @@ fn main() {
         let used_positions: Vec<u8> = h_polys.iter().map(|(p, _)| *p).collect();
         let num_pos = used_positions.len();
 
-        println!("=============== n = {} ({} alt perms, {} valid positions) ===============",
-            n, alt.len(), num_pos);
+        println!(
+            "=============== n = {} ({} alt perms, {} valid positions) ===============",
+            n,
+            alt.len(),
+            num_pos
+        );
         println!("Valid positions: {:?}", used_positions);
         println!("H_{}(t) = {}", n, format_poly(&total_poly));
         println!();
@@ -347,7 +377,8 @@ fn main() {
 
         // ── Analysis 1: Coefficient matrix and its properties ─────────
         println!("  --- Coefficient matrix a[p][k] (rows=positions, cols=t-powers) ---");
-        let coeff_matrix: Vec<Vec<i64>> = h_polys.iter()
+        let coeff_matrix: Vec<Vec<i64>> = h_polys
+            .iter()
             .map(|(_, poly)| {
                 let mut row = poly.clone();
                 row.resize(max_t_deg + 1, 0);
@@ -358,7 +389,9 @@ fn main() {
         for (i, &(p, _)) in h_polys.iter().enumerate() {
             print!("    p={}: [", p);
             for (k, &c) in coeff_matrix[i].iter().enumerate() {
-                if k > 0 { print!(", "); }
+                if k > 0 {
+                    print!(", ");
+                }
                 print!("{:>4}", c);
             }
             println!("]");
@@ -372,8 +405,10 @@ fn main() {
             for i in 0..h_polys.len() {
                 for j in (i + 1)..h_polys.len() {
                     let gd = poly_gcd_display(&h_polys[i].1, &h_polys[j].1);
-                    println!("    gcd(L^({}), L^({})) = {}",
-                        h_polys[i].0, h_polys[j].0, gd);
+                    println!(
+                        "    gcd(L^({}), L^({})) = {}",
+                        h_polys[i].0, h_polys[j].0, gd
+                    );
                 }
             }
         }
@@ -388,15 +423,22 @@ fn main() {
                 // Check if poly = c * t^k * base for some c, k
                 let gd = poly_gcd_degree(base, poly);
                 if gd > 0 {
-                    println!("    L^({}) and L^({}) share common factor t^{}",
-                        p0, pi, gd);
+                    println!("    L^({}) and L^({}) share common factor t^{}", p0, pi, gd);
                 }
                 // Check eval ratio at several points
                 let test_points: [f64; 5] = [1.0, 2.0, 3.0, 0.5, -1.0];
                 let mut ratios = Vec::new();
                 for &tv in &test_points {
-                    let bval: f64 = base.iter().enumerate().map(|(k, &c)| c as f64 * tv.powi(k as i32)).sum();
-                    let pval: f64 = poly.iter().enumerate().map(|(k, &c)| c as f64 * tv.powi(k as i32)).sum();
+                    let bval: f64 = base
+                        .iter()
+                        .enumerate()
+                        .map(|(k, &c)| c as f64 * tv.powi(k as i32))
+                        .sum();
+                    let pval: f64 = poly
+                        .iter()
+                        .enumerate()
+                        .map(|(k, &c)| c as f64 * tv.powi(k as i32))
+                        .sum();
                     if bval.abs() > 1e-10 {
                         ratios.push((tv, pval / bval));
                     }
@@ -444,9 +486,12 @@ fn main() {
         for t0 in &[1i64, 2, 3, -1] {
             let t0f = *t0 as f64;
             // Evaluate each L^{(p)} at t=t0
-            let lp_vals: Vec<(u8, f64)> = h_polys.iter()
+            let lp_vals: Vec<(u8, f64)> = h_polys
+                .iter()
                 .map(|(p, poly)| {
-                    let val: f64 = poly.iter().enumerate()
+                    let val: f64 = poly
+                        .iter()
+                        .enumerate()
                         .map(|(k, &c)| c as f64 * t0f.powi(k as i32))
                         .sum();
                     (*p, val)
@@ -490,8 +535,14 @@ fn main() {
                 false
             };
 
-            println!("      t={}: Phi(x,{}) = {} [RR={}, all_neg_roots={}]",
-                t0, t0, format_poly(&trimmed), rr, all_neg);
+            println!(
+                "      t={}: Phi(x,{}) = {} [RR={}, all_neg_roots={}]",
+                t0,
+                t0,
+                format_poly(&trimmed),
+                rr,
+                all_neg
+            );
         }
         println!();
 
@@ -534,7 +585,10 @@ fn main() {
 
             let mut prev_by_des: BTreeMap<u64, Vec<&Vec<u8>>> = BTreeMap::new();
             for pi in &perms_prev {
-                prev_by_des.entry(descent_set_bitmask(pi)).or_default().push(pi);
+                prev_by_des
+                    .entry(descent_set_bitmask(pi))
+                    .or_default()
+                    .push(pi);
             }
 
             // For each valid position p, find the source descent set(s)
@@ -549,8 +603,16 @@ fn main() {
                     .fold(0, |a, b| a | b);
 
                 let is_alt_source = source_mask == alt_prev_mask;
-                println!("    p={}: S'_p={} {}", p, source_str,
-                    if is_alt_source { "(ALTERNATING)" } else { "(non-alternating)" });
+                println!(
+                    "    p={}: S'_p={} {}",
+                    p,
+                    source_str,
+                    if is_alt_source {
+                        "(ALTERNATING)"
+                    } else {
+                        "(non-alternating)"
+                    }
+                );
 
                 if let Some(source2) = source_mask2 {
                     let source2_str = descent_set_to_string(source2, n - 1);
@@ -586,13 +648,20 @@ fn main() {
                 let pos_n = sigma.iter().position(|&v| v == n).unwrap() as u8 + 1;
                 // Remove value n to get pi (a permutation of [n-1])
                 let pi: Vec<u8> = sigma.iter().filter(|&&v| v != n).copied().collect();
-                let pos_nm1 = pi.iter().position(|&v| v == n - 1).map(|i| i as u8 + 1).unwrap_or(0);
+                let pos_nm1 = pi
+                    .iter()
+                    .position(|&v| v == n - 1)
+                    .map(|i| i as u8 + 1)
+                    .unwrap_or(0);
                 let swaps_sigma = compute(sigma, Stat::Swaps);
                 let swaps_pi = compute(&pi, Stat::Swaps);
                 // The "extra" swaps from the insertion
                 let delta_swaps = swaps_sigma - swaps_pi;
 
-                transfer.entry((pos_n, pos_nm1)).or_default().push(swaps_sigma);
+                transfer
+                    .entry((pos_n, pos_nm1))
+                    .or_default()
+                    .push(swaps_sigma);
             }
 
             // Also compute the prev positions
@@ -601,7 +670,10 @@ fn main() {
             let mut prev_by_pos: BTreeMap<u8, Vec<usize>> = BTreeMap::new();
             for sigma in &prev_alt {
                 let pos = sigma.iter().position(|&v| v == n - 1).unwrap() as u8 + 1;
-                prev_by_pos.entry(pos).or_default().push(compute(sigma, Stat::Swaps));
+                prev_by_pos
+                    .entry(pos)
+                    .or_default()
+                    .push(compute(sigma, Stat::Swaps));
             }
 
             // Display the transfer
@@ -720,10 +792,10 @@ fn main() {
                         } else if qdeg == 1 {
                             // mpq = (q_0 + q_1*t) * lq
                             let prod_01 = poly_mul(&vec![0, 1], &lq); // t * lq
-                            // mpq = q_0 * lq + q_1 * t * lq
-                            // Two unknowns, use first two equations:
-                            // mpq[0] = q_0 * lq[0]
-                            // mpq[1] = q_0 * lq[1] + q_1 * lq[0]
+                                                                      // mpq = q_0 * lq + q_1 * t * lq
+                                                                      // Two unknowns, use first two equations:
+                                                                      // mpq[0] = q_0 * lq[0]
+                                                                      // mpq[1] = q_0 * lq[1] + q_1 * lq[0]
                             if lq[0] != 0 {
                                 let q0_cand = coeff(&mpq, 0);
                                 if q0_cand % lq[0] == 0 {
@@ -734,7 +806,9 @@ fn main() {
                                     if !poly_is_zero(&t_lq) {
                                         let first_nz = t_lq.iter().position(|&c| c != 0);
                                         if let Some(idx) = first_nz {
-                                            if t_lq[idx] != 0 && coeff(&remainder, idx) % t_lq[idx] == 0 {
+                                            if t_lq[idx] != 0
+                                                && coeff(&remainder, idx) % t_lq[idx] == 0
+                                            {
                                                 let q1 = coeff(&remainder, idx) / t_lq[idx];
                                                 let check = poly_add(
                                                     &poly_scale(&lq, q0),
@@ -767,7 +841,10 @@ fn main() {
             if scalar_transfer_works {
                 println!("    ==> Scalar transfer matrix EXISTS for n={}", n);
             } else {
-                println!("    ==> Scalar transfer matrix does NOT work cleanly for n={}", n);
+                println!(
+                    "    ==> Scalar transfer matrix does NOT work cleanly for n={}",
+                    n
+                );
             }
             println!();
         }
@@ -787,9 +864,14 @@ fn main() {
 
             // Test points: t = a + bi with b > 0
             let test_t_vals: Vec<(f64, f64)> = vec![
-                (0.0, 1.0), (1.0, 1.0), (-1.0, 1.0),
-                (0.5, 0.5), (2.0, 0.1), (-0.5, 2.0),
-                (0.0, 0.01), (1.0, 0.01),
+                (0.0, 1.0),
+                (1.0, 1.0),
+                (-1.0, 1.0),
+                (0.5, 0.5),
+                (2.0, 0.1),
+                (-0.5, 2.0),
+                (0.0, 0.01),
+                (1.0, 0.01),
             ];
 
             for &(ta, tb) in &test_t_vals {
@@ -815,12 +897,19 @@ fn main() {
                     }
                 }
 
-                print!("      t = {:.2}+{:.2}i: {} roots, UHP-free={}",
-                    ta, tb, roots.len(), all_upper_half_free);
+                print!(
+                    "      t = {:.2}+{:.2}i: {} roots, UHP-free={}",
+                    ta,
+                    tb,
+                    roots.len(),
+                    all_upper_half_free
+                );
                 if roots.len() <= 6 {
                     print!(" [");
                     for (i, &(rx, ry)) in roots.iter().enumerate() {
-                        if i > 0 { print!(", "); }
+                        if i > 0 {
+                            print!(", ");
+                        }
                         print!("{:.3}{:+.3}i", rx, ry);
                     }
                     print!("]");
@@ -856,11 +945,19 @@ fn main() {
             let h_n = total_poly.clone();
             let h_nm1: Vec<i64> = {
                 let vals: Vec<usize> = alt_nm1.iter().map(|s| compute(s, Stat::Swaps)).collect();
-                if vals.is_empty() { vec![0] } else { build_poly(&vals) }
+                if vals.is_empty() {
+                    vec![0]
+                } else {
+                    build_poly(&vals)
+                }
             };
             let h_nm2: Vec<i64> = {
                 let vals: Vec<usize> = alt_nm2.iter().map(|s| compute(s, Stat::Swaps)).collect();
-                if vals.is_empty() { vec![0] } else { build_poly(&vals) }
+                if vals.is_empty() {
+                    vec![0]
+                } else {
+                    build_poly(&vals)
+                }
             };
 
             // Check: H_n = t * H_{n-1} + ??? * H_{n-2}
@@ -878,14 +975,30 @@ fn main() {
                     let test_ts: [f64; 5] = [1.0, 2.0, 3.0, -1.0, 0.5];
                     let mut quotients = Vec::new();
                     for &tv in &test_ts {
-                        let dv: f64 = diff.iter().enumerate().map(|(k, &c)| c as f64 * tv.powi(k as i32)).sum();
-                        let hv: f64 = h_nm2.iter().enumerate().map(|(k, &c)| c as f64 * tv.powi(k as i32)).sum();
+                        let dv: f64 = diff
+                            .iter()
+                            .enumerate()
+                            .map(|(k, &c)| c as f64 * tv.powi(k as i32))
+                            .sum();
+                        let hv: f64 = h_nm2
+                            .iter()
+                            .enumerate()
+                            .map(|(k, &c)| c as f64 * tv.powi(k as i32))
+                            .sum();
                         if hv.abs() > 1e-10 {
                             quotients.push((tv, dv / hv));
                         }
                     }
-                    println!("    (H_{}-t*H_{})/H_{} at t=: {:?}", n, n - 1, n - 2,
-                        quotients.iter().map(|(t, r)| format!("{}: {:.4}", t, r)).collect::<Vec<_>>());
+                    println!(
+                        "    (H_{}-t*H_{})/H_{} at t=: {:?}",
+                        n,
+                        n - 1,
+                        n - 2,
+                        quotients
+                            .iter()
+                            .map(|(t, r)| format!("{}: {:.4}", t, r))
+                            .collect::<Vec<_>>()
+                    );
                 }
             }
 
@@ -909,8 +1022,15 @@ fn main() {
                 // Minimum degree of alpha to make deg(alpha*H_{n-1}) = deg(H_n)
                 let alpha_deg_needed = h_n_deg.saturating_sub(h_nm1_deg);
 
-                println!("    deg(H_{})={}, deg(H_{})={}, deg(H_{})={}",
-                    n, h_n_deg, n-1, h_nm1_deg, n-2, h_nm2_deg);
+                println!(
+                    "    deg(H_{})={}, deg(H_{})={}, deg(H_{})={}",
+                    n,
+                    h_n_deg,
+                    n - 1,
+                    h_nm1_deg,
+                    n - 2,
+                    h_nm2_deg
+                );
                 println!("    alpha needs degree >= {}", alpha_deg_needed);
             }
             println!();
@@ -927,18 +1047,26 @@ fn main() {
 
     for n in 4..=max_n {
         let alt = alternating_permutations(n);
-        if alt.is_empty() { continue; }
+        if alt.is_empty() {
+            continue;
+        }
 
         let positions = valid_positions_alt(n);
-        if positions.len() < 2 { continue; }
+        if positions.len() < 2 {
+            continue;
+        }
 
         let mut by_pos: BTreeMap<u8, Vec<usize>> = BTreeMap::new();
         for sigma in &alt {
             let pos = sigma.iter().position(|&v| v == n).unwrap() as u8 + 1;
-            by_pos.entry(pos).or_default().push(compute(sigma, Stat::Swaps));
+            by_pos
+                .entry(pos)
+                .or_default()
+                .push(compute(sigma, Stat::Swaps));
         }
 
-        let h_polys: Vec<(u8, Vec<i64>)> = positions.iter()
+        let h_polys: Vec<(u8, Vec<i64>)> = positions
+            .iter()
             .filter_map(|&p| by_pos.get(&p).map(|vals| (p, build_poly(vals))))
             .collect();
 
@@ -966,14 +1094,19 @@ fn main() {
             }
             if abs_val < 1e-10 {
                 stable = false;
-                println!("  n={}: FAIL at x={:.4}+{:.4}i, t={:.4}+{:.4}i, |Phi|={:.2e}",
-                    n, xa, xb, ta, tb, abs_val);
+                println!(
+                    "  n={}: FAIL at x={:.4}+{:.4}i, t={:.4}+{:.4}i, |Phi|={:.2e}",
+                    n, xa, xb, ta, tb, abs_val
+                );
                 break;
             }
         }
 
         if stable {
-            println!("  n={}: STABLE (min |Phi| = {:.4e} over {} tests)", n, min_abs, num_tests);
+            println!(
+                "  n={}: STABLE (min |Phi| = {:.4e} over {} tests)",
+                n, min_abs, num_tests
+            );
         }
     }
 }
@@ -982,19 +1115,29 @@ fn main() {
 
 fn source_descent_set(s_mask: u64, p: u8, n: u8) -> u64 {
     // S'_p: ascending source (p-1 not added to S)
-    if n <= 2 { return 0; }
-    if p == n { return s_mask; }
+    if n <= 2 {
+        return 0;
+    }
+    if p == n {
+        return s_mask;
+    }
     let mut sp = 0u64;
     if p == 1 {
         for j in 2..n {
-            if (s_mask >> (j - 1)) & 1 == 1 { sp |= 1 << (j - 2); }
+            if (s_mask >> (j - 1)) & 1 == 1 {
+                sp |= 1 << (j - 2);
+            }
         }
     } else {
         for pos in 1..=(p.saturating_sub(2)) {
-            if (s_mask >> (pos - 1)) & 1 == 1 { sp |= 1 << (pos - 1); }
+            if (s_mask >> (pos - 1)) & 1 == 1 {
+                sp |= 1 << (pos - 1);
+            }
         }
         for j in (p + 1)..n {
-            if (s_mask >> (j - 1)) & 1 == 1 { sp |= 1 << (j - 2); }
+            if (s_mask >> (j - 1)) & 1 == 1 {
+                sp |= 1 << (j - 2);
+            }
         }
     }
     sp
@@ -1002,7 +1145,9 @@ fn source_descent_set(s_mask: u64, p: u8, n: u8) -> u64 {
 
 fn source_descent_set_2(s_mask: u64, p: u8, n: u8) -> Option<u64> {
     // S''_p: descending source (p-1 added to S)
-    if p <= 1 || p >= n { return None; }
+    if p <= 1 || p >= n {
+        return None;
+    }
     Some(source_descent_set(s_mask, p, n) | (1 << (p - 2)))
 }
 
@@ -1011,7 +1156,9 @@ fn descent_set_to_string(mask: u64, n: u8) -> String {
     let mut first = true;
     for i in 1..n {
         if (mask >> (i - 1)) & 1 == 1 {
-            if !first { s.push(','); }
+            if !first {
+                s.push(',');
+            }
             s.push_str(&i.to_string());
             first = false;
         }
@@ -1038,7 +1185,10 @@ fn find_roots_dk(coeffs: &[(f64, f64)], degree_hint: usize) -> Vec<(f64, f64)> {
 
     // Normalize: leading coefficient = 1
     let lc = coeffs[deg];
-    let lc_inv = (lc.0 / (lc.0 * lc.0 + lc.1 * lc.1), -lc.1 / (lc.0 * lc.0 + lc.1 * lc.1));
+    let lc_inv = (
+        lc.0 / (lc.0 * lc.0 + lc.1 * lc.1),
+        -lc.1 / (lc.0 * lc.0 + lc.1 * lc.1),
+    );
     let norm_coeffs: Vec<(f64, f64)> = (0..=deg).map(|i| cmul(coeffs[i], lc_inv)).collect();
 
     // Initial guesses: points on a circle

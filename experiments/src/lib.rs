@@ -1,2 +1,7 @@
-// Experiment binaries live in src/bin/.
-// This file exists so the crate compiles; shared helpers can go here if needed.
+//! Shared helpers for research binaries in `src/bin`.
+//!
+//! These helpers are intentionally lightweight: they factor out duplicated
+//! plumbing used by many exploratory binaries without promoting half-baked
+//! APIs into the reusable crates too early.
+
+pub mod peak_utils;

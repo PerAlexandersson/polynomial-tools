@@ -283,7 +283,9 @@ fn main() {
                 let window = compute_window(s_mask, p_a, p_b, n);
                 let full_window = compute_full_window(s_mask, p_a, p_b, n);
                 *window_size_counts.entry(window.len()).or_insert(0) += 1;
-                *full_window_size_counts.entry(full_window.len()).or_insert(0) += 1;
+                *full_window_size_counts
+                    .entry(full_window.len())
+                    .or_insert(0) += 1;
 
                 let case = if p_a == 1 && p_b == n {
                     "D(pa=1,pb=n)"
@@ -305,9 +307,13 @@ fn main() {
                     println!(
                         "    S={} p_a={} p_b={} [{}]: W(S')={} (size {})  W(full)={} (size {})",
                         mask_to_string(s_mask, n),
-                        p_a, p_b, case,
-                        set_to_string(&window), window.len(),
-                        set_to_string(&full_window), full_window.len(),
+                        p_a,
+                        p_b,
+                        case,
+                        set_to_string(&window),
+                        window.len(),
+                        set_to_string(&full_window),
+                        full_window.len(),
                     );
                     println!(
                         "      S'_pa={} S'_pb={}",
@@ -336,13 +342,13 @@ fn main() {
 
                     // Check which pairs are equal
                     for i in 0..all_source_sets.len() {
-                        for j in (i+1)..all_source_sets.len() {
+                        for j in (i + 1)..all_source_sets.len() {
                             if all_source_sets[i].1 == all_source_sets[j].1 {
                                 println!(
                                     "      {} = {} = {}",
                                     all_source_sets[i].0,
                                     all_source_sets[j].0,
-                                    mask_to_string(all_source_sets[i].1, n-1),
+                                    mask_to_string(all_source_sets[i].1, n - 1),
                                 );
                             }
                         }
@@ -352,8 +358,14 @@ fn main() {
         }
     }
 
-    println!("\n  Window size distribution (S' only): {:?}", window_size_counts);
-    println!("  Full window size distribution: {:?}", full_window_size_counts);
+    println!(
+        "\n  Window size distribution (S' only): {:?}",
+        window_size_counts
+    );
+    println!(
+        "  Full window size distribution: {:?}",
+        full_window_size_counts
+    );
     println!("  Case distribution: {:?}", case_counts);
 
     // ========================================================================
@@ -434,54 +446,39 @@ fn main() {
                 }
 
                 // Outside indices
-                let outside_indices: Vec<usize> = (0..len)
-                    .filter(|i| !inside_indices.contains(i))
-                    .collect();
-                let inside_idx_vec: Vec<usize> =
-                    inside_indices.iter().copied().collect();
+                let outside_indices: Vec<usize> =
+                    (0..len).filter(|i| !inside_indices.contains(i)).collect();
+                let inside_idx_vec: Vec<usize> = inside_indices.iter().copied().collect();
 
                 // Group source permutations by outside configuration
                 // outside_config = values at outside positions (in order)
-                let extract_outside = |pi: &[u8]| -> Vec<u8> {
-                    outside_indices.iter().map(|&i| pi[i]).collect()
-                };
-                let extract_inside = |pi: &[u8]| -> Vec<u8> {
-                    inside_idx_vec.iter().map(|&i| pi[i]).collect()
-                };
+                let extract_outside =
+                    |pi: &[u8]| -> Vec<u8> { outside_indices.iter().map(|&i| pi[i]).collect() };
+                let extract_inside =
+                    |pi: &[u8]| -> Vec<u8> { inside_idx_vec.iter().map(|&i| pi[i]).collect() };
 
                 // Group A: config -> [(inside_vals, swaps, q)]
-                let mut groups_a: BTreeMap<Vec<u8>, Vec<(Vec<u8>, usize, u8)>> =
-                    BTreeMap::new();
+                let mut groups_a: BTreeMap<Vec<u8>, Vec<(Vec<u8>, usize, u8)>> = BTreeMap::new();
                 for pi in &src_a {
                     let cfg = extract_outside(pi);
                     let s = modified_swaps(pi, p_a);
                     let q = pos_of_nm1(pi);
                     let inside = extract_inside(pi);
-                    groups_a
-                        .entry(cfg)
-                        .or_default()
-                        .push((inside, s, q));
+                    groups_a.entry(cfg).or_default().push((inside, s, q));
                 }
 
-                let mut groups_b: BTreeMap<Vec<u8>, Vec<(Vec<u8>, usize, u8)>> =
-                    BTreeMap::new();
+                let mut groups_b: BTreeMap<Vec<u8>, Vec<(Vec<u8>, usize, u8)>> = BTreeMap::new();
                 for pi in &src_b {
                     let cfg = extract_outside(pi);
                     let s = modified_swaps(pi, p_b);
                     let q = pos_of_nm1(pi);
                     let inside = extract_inside(pi);
-                    groups_b
-                        .entry(cfg)
-                        .or_default()
-                        .push((inside, s, q));
+                    groups_b.entry(cfg).or_default().push((inside, s, q));
                 }
 
                 // Analyze relationship
-                let all_configs: BTreeSet<Vec<u8>> = groups_a
-                    .keys()
-                    .chain(groups_b.keys())
-                    .cloned()
-                    .collect();
+                let all_configs: BTreeSet<Vec<u8>> =
+                    groups_a.keys().chain(groups_b.keys()).cloned().collect();
 
                 let only_in_a = all_configs
                     .iter()
@@ -517,9 +514,10 @@ fn main() {
                 // For shared configs, show the inside arrangements and (s,q) distributions
                 if n <= 6 || window_size <= 2 {
                     let mut mismatch_count = 0;
-                    for cfg in all_configs.iter().filter(|c| {
-                        groups_a.contains_key(*c) && groups_b.contains_key(*c)
-                    }) {
+                    for cfg in all_configs
+                        .iter()
+                        .filter(|c| groups_a.contains_key(*c) && groups_b.contains_key(*c))
+                    {
                         let entries_a = &groups_a[cfg];
                         let entries_b = &groups_b[cfg];
 
@@ -534,11 +532,8 @@ fn main() {
                         }
 
                         // Compare
-                        let all_keys: BTreeSet<(usize, u8)> = dist_a
-                            .keys()
-                            .chain(dist_b.keys())
-                            .copied()
-                            .collect();
+                        let all_keys: BTreeSet<(usize, u8)> =
+                            dist_a.keys().chain(dist_b.keys()).copied().collect();
 
                         let same = dist_a == dist_b;
 
@@ -661,14 +656,8 @@ fn main() {
                         swap_is_identity,
                     );
                     if !swap_delta_s.is_empty() {
-                        println!(
-                            "    delta(modified_swaps): {:?}",
-                            swap_delta_s
-                        );
-                        println!(
-                            "    delta(q=pos(n-1)): {:?}",
-                            swap_delta_q
-                        );
+                        println!("    delta(modified_swaps): {:?}", swap_delta_s);
+                        println!("    delta(q=pos(n-1)): {:?}", swap_delta_q);
                     }
                 }
 
@@ -677,13 +666,14 @@ fn main() {
                 // ============================================================
                 if window_size == 2 {
                     let w_vec: Vec<u8> = full_window.iter().copied().collect();
-                    println!(
-                        "    >>> Window size 2: positions {:?}",
-                        w_vec
-                    );
+                    println!("    >>> Window size 2: positions {:?}", w_vec);
 
                     // The inside indices might be 2 or 3 positions.
-                    println!("    inside_indices = {:?} ({} positions)", inside_idx_vec, inside_idx_vec.len());
+                    println!(
+                        "    inside_indices = {:?} ({} positions)",
+                        inside_idx_vec,
+                        inside_idx_vec.len()
+                    );
 
                     // Enumerate all distinct inside arrangements seen
                     let mut inside_arrangements_a: BTreeSet<Vec<u8>> = BTreeSet::new();
@@ -707,19 +697,13 @@ fn main() {
                         let inside = extract_inside(pi);
                         let mut vals = inside.clone();
                         vals.sort();
-                        inside_by_values_a
-                            .entry(vals)
-                            .or_default()
-                            .insert(inside);
+                        inside_by_values_a.entry(vals).or_default().insert(inside);
                     }
                     for pi in &src_b {
                         let inside = extract_inside(pi);
                         let mut vals = inside.clone();
                         vals.sort();
-                        inside_by_values_b
-                            .entry(vals)
-                            .or_default()
-                            .insert(inside);
+                        inside_by_values_b.entry(vals).or_default().insert(inside);
                     }
 
                     let all_val_sets: BTreeSet<Vec<u8>> = inside_by_values_a
@@ -753,8 +737,14 @@ fn main() {
     // Part 5: Summary statistics
     // ========================================================================
     println!("\n\n=== SUMMARY ===");
-    println!("Window size (S' sym diff) distribution: {:?}", window_size_counts);
-    println!("Full window size distribution: {:?}", full_window_size_counts);
+    println!(
+        "Window size (S' sym diff) distribution: {:?}",
+        window_size_counts
+    );
+    println!(
+        "Full window size distribution: {:?}",
+        full_window_size_counts
+    );
 
     // ========================================================================
     // Part 6: For window size 1 cases, deeper analysis of the bijection
@@ -968,11 +958,7 @@ fn main() {
 
                 // Check: for FIXED q, is the swaps polynomial for source(p_a) LR-ordered
                 // against the swaps polynomial for source(p_b)?
-                let all_qs: BTreeSet<u8> = joint_a
-                    .keys()
-                    .chain(joint_b.keys())
-                    .copied()
-                    .collect();
+                let all_qs: BTreeSet<u8> = joint_a.keys().chain(joint_b.keys()).copied().collect();
 
                 let mut all_lr_ok = true;
                 for &q in &all_qs {
@@ -1136,7 +1122,10 @@ fn main() {
                         if n <= 7 {
                             println!(
                                 "  S'_pa = S''_pb! n={} S={} pa={} pb={} set={}",
-                                n, mask_to_string(s_mask, n), p_a, p_b,
+                                n,
+                                mask_to_string(s_mask, n),
+                                p_a,
+                                p_b,
                                 mask_to_string(sp_a, n - 1),
                             );
                         }
@@ -1148,7 +1137,10 @@ fn main() {
                         if n <= 7 {
                             println!(
                                 "  S''_pa = S'_pb! n={} S={} pa={} pb={} set={}",
-                                n, mask_to_string(s_mask, n), p_a, p_b,
+                                n,
+                                mask_to_string(s_mask, n),
+                                p_a,
+                                p_b,
                                 mask_to_string(sp_b, n - 1),
                             );
                         }
@@ -1210,7 +1202,8 @@ fn main() {
                     let poly_sp_b = get_swaps_poly(sp_b, p_b);
                     println!(
                         "    poly(S'_pa, pa)={} poly(S'_pb, pb)={}",
-                        format_poly(&poly_sp_a), format_poly(&poly_sp_b),
+                        format_poly(&poly_sp_a),
+                        format_poly(&poly_sp_b),
                     );
                     if let Some(da) = spp_a {
                         let poly_spp_a = get_swaps_poly(da, p_a);
@@ -1237,7 +1230,9 @@ fn main() {
     println!("\n\n--- Part 9: Toggle-descent bijection for S'-window of size 1 ---\n");
     println!("When S'_pa and S'_pb differ at exactly one position j*,");
     println!("can we biject D(n-1, S'_pa) <-> D(n-1, S'_pb) by swapping values at j*-1, j* ?");
-    println!("And what is the effect on modified_swaps(pi, p_a) vs modified_swaps(swapped, p_b)?\n");
+    println!(
+        "And what is the effect on modified_swaps(pi, p_a) vs modified_swaps(swapped, p_b)?\n"
+    );
 
     let mut bij_results: BTreeMap<(String, String), usize> = BTreeMap::new();
 
@@ -1277,10 +1272,12 @@ fn main() {
                 let a_has_j = (sp_a >> (j_star - 1)) & 1 == 1;
                 let b_has_j = (sp_b >> (j_star - 1)) & 1 == 1;
 
-                let src_a: Vec<Vec<u8>> = prev_by_des.get(&sp_a)
+                let src_a: Vec<Vec<u8>> = prev_by_des
+                    .get(&sp_a)
                     .map(|v| v.clone())
                     .unwrap_or_default();
-                let src_b: Vec<Vec<u8>> = prev_by_des.get(&sp_b)
+                let src_b: Vec<Vec<u8>> = prev_by_des
+                    .get(&sp_b)
                     .map(|v| v.clone())
                     .unwrap_or_default();
 
@@ -1397,7 +1394,13 @@ fn main() {
                 if n <= 7 {
                     println!(
                         "  n={} S={} pa={} pb={}: W(S')={{{},{}}} {}",
-                        n, mask_to_string(s_mask, n), p_a, p_b, j1, j2, pattern,
+                        n,
+                        mask_to_string(s_mask, n),
+                        p_a,
+                        p_b,
+                        j1,
+                        j2,
+                        pattern,
                     );
                 }
             }
@@ -1454,10 +1457,12 @@ fn main() {
                 let spp_b = source_desc(s_mask, p_b, n);
 
                 // Work with S'-only sources first
-                let src_a_prime: Vec<Vec<u8>> = prev_by_des.get(&sp_a)
+                let src_a_prime: Vec<Vec<u8>> = prev_by_des
+                    .get(&sp_a)
                     .map(|v| v.clone())
                     .unwrap_or_default();
-                let src_b_prime: Vec<Vec<u8>> = prev_by_des.get(&sp_b)
+                let src_b_prime: Vec<Vec<u8>> = prev_by_des
+                    .get(&sp_b)
                     .map(|v| v.clone())
                     .unwrap_or_default();
 
@@ -1473,7 +1478,8 @@ fn main() {
                     swapped.swap(j1 - 1, j2 - 1);
                     if src_b_prime_set.contains(&swapped) {
                         s1_hits += 1;
-                        let ds = modified_swaps(&swapped, p_b) as i32 - modified_swaps(pi, p_a) as i32;
+                        let ds =
+                            modified_swaps(&swapped, p_b) as i32 - modified_swaps(pi, p_a) as i32;
                         let dq = pos_of_nm1(&swapped) as i32 - pos_of_nm1(pi) as i32;
                         *s1_delta_swaps.entry(ds).or_insert(0) += 1;
                         *s1_delta_q.entry(dq).or_insert(0) += 1;
@@ -1525,7 +1531,8 @@ fn main() {
                         swapped.swap(j1, j2 - 1);
                         if src_b_prime_set.contains(&swapped) {
                             s5_hits += 1;
-                            let ds = modified_swaps(&swapped, p_b) as i32 - modified_swaps(pi, p_a) as i32;
+                            let ds = modified_swaps(&swapped, p_b) as i32
+                                - modified_swaps(pi, p_a) as i32;
                             let dq = pos_of_nm1(&swapped) as i32 - pos_of_nm1(pi) as i32;
                             *s5_delta_swaps.entry(ds).or_insert(0) += 1;
                             *s5_delta_q.entry(dq).or_insert(0) += 1;
@@ -1533,16 +1540,33 @@ fn main() {
                     }
                 }
 
-                let is_s1_perfect = s1_hits == src_a_prime.len() && src_a_prime.len() == src_b_prime.len();
-                let best = *[s1_hits, s2_hits, s3_hits, s4_hits, s5_hits].iter().max().unwrap();
-                let best_name = if best == s1_hits { "S1(j1-1<->j2-1)" }
-                    else if best == s2_hits { "S2(adj-j2)" }
-                    else if best == s3_hits { "S3(adj-j1)" }
-                    else if best == s4_hits { "S4(both-adj)" }
-                    else { "S5(j1<->j2-1)" };
+                let is_s1_perfect =
+                    s1_hits == src_a_prime.len() && src_a_prime.len() == src_b_prime.len();
+                let best = *[s1_hits, s2_hits, s3_hits, s4_hits, s5_hits]
+                    .iter()
+                    .max()
+                    .unwrap();
+                let best_name = if best == s1_hits {
+                    "S1(j1-1<->j2-1)"
+                } else if best == s2_hits {
+                    "S2(adj-j2)"
+                } else if best == s3_hits {
+                    "S3(adj-j1)"
+                } else if best == s4_hits {
+                    "S4(both-adj)"
+                } else {
+                    "S5(j1<->j2-1)"
+                };
 
                 *w2_bij_results
-                    .entry(if is_s1_perfect { "S1_PERFECT" } else { "S1_partial" }.to_string())
+                    .entry(
+                        if is_s1_perfect {
+                            "S1_PERFECT"
+                        } else {
+                            "S1_partial"
+                        }
+                        .to_string(),
+                    )
                     .or_insert(0) += 1;
 
                 println!(
@@ -1585,7 +1609,8 @@ fn main() {
                 }
                 println!(
                     "    full: |src_a|={} |src_b|={} (S''_a adds {}, S''_b adds {})",
-                    full_src_a.len(), full_src_b.len(),
+                    full_src_a.len(),
+                    full_src_b.len(),
                     full_src_a.len() - src_a_prime.len(),
                     full_src_b.len() - src_b_prime.len(),
                 );
@@ -1740,8 +1765,12 @@ fn main() {
                 // Let me just record j* vs p_a.
                 println!(
                     "  n={} S={} pa={} pb=n: j*={} (j*==pa-1? {}, j*==pa? {})",
-                    n, mask_to_string(s_mask, n), p_a,
-                    j_star, j_star == p_a - 1, j_star == p_a as u8,
+                    n,
+                    mask_to_string(s_mask, n),
+                    p_a,
+                    j_star,
+                    j_star == p_a - 1,
+                    j_star == p_a as u8,
                 );
             }
         }

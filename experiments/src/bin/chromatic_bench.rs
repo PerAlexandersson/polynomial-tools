@@ -39,10 +39,7 @@ fn main() {
             total,
             100.0 * e_pos_count as f64 / total as f64
         );
-        println!(
-            "  avg per graph: {:.2?}",
-            elapsed / total as u32
-        );
+        println!("  avg per graph: {:.2?}", elapsed / total as u32);
         println!();
     }
 }

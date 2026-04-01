@@ -48,11 +48,17 @@ use polynomial_tools::real_rootedness::format_poly;
 use std::collections::{BTreeMap, BTreeSet};
 
 fn build_poly(vals: &[usize]) -> Vec<i64> {
-    if vals.is_empty() { return vec![0]; }
+    if vals.is_empty() {
+        return vec![0];
+    }
     let max_s = *vals.iter().max().unwrap();
     let mut coeffs = vec![0i64; max_s + 1];
-    for &s in vals { coeffs[s] += 1; }
-    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 { coeffs.pop(); }
+    for &s in vals {
+        coeffs[s] += 1;
+    }
+    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 {
+        coeffs.pop();
+    }
     coeffs
 }
 
@@ -63,58 +69,100 @@ fn valid_positions(s_mask: u64, n: u8) -> Vec<u8> {
             positions.push(p);
         }
     }
-    if n >= 2 && (s_mask >> (n - 2)) & 1 == 0 { positions.push(n); }
+    if n >= 2 && (s_mask >> (n - 2)) & 1 == 0 {
+        positions.push(n);
+    }
     positions
 }
 
 fn source_asc(s_mask: u64, p: u8, n: u8) -> u64 {
-    if n <= 2 { return 0; }
-    if p == n { return s_mask; }
+    if n <= 2 {
+        return 0;
+    }
+    if p == n {
+        return s_mask;
+    }
     let mut sp = 0u64;
     if p == 1 {
-        for j in 2..n { if (s_mask >> (j - 1)) & 1 == 1 { sp |= 1 << (j - 2); } }
+        for j in 2..n {
+            if (s_mask >> (j - 1)) & 1 == 1 {
+                sp |= 1 << (j - 2);
+            }
+        }
     } else {
         for pos in 1..=(p.saturating_sub(2)) {
-            if (s_mask >> (pos - 1)) & 1 == 1 { sp |= 1 << (pos - 1); }
+            if (s_mask >> (pos - 1)) & 1 == 1 {
+                sp |= 1 << (pos - 1);
+            }
         }
-        for j in (p + 1)..n { if (s_mask >> (j - 1)) & 1 == 1 { sp |= 1 << (j - 2); } }
+        for j in (p + 1)..n {
+            if (s_mask >> (j - 1)) & 1 == 1 {
+                sp |= 1 << (j - 2);
+            }
+        }
     }
     sp
 }
 
 fn source_desc(s_mask: u64, p: u8, n: u8) -> Option<u64> {
-    if p <= 1 || p >= n { return None; }
+    if p <= 1 || p >= n {
+        return None;
+    }
     Some(source_asc(s_mask, p, n) | (1 << (p - 2)))
 }
 
 fn epsilon1(pi: &[u8], p: u8) -> bool {
     let n = pi.len() as u8 + 1;
-    if p <= 1 || p >= n { return false; }
+    if p <= 1 || p >= n {
+        return false;
+    }
     pi[(p - 2) as usize] + 1 == pi[(p - 1) as usize]
 }
 
 fn descent_set_to_string(mask: u64, n: u8) -> String {
     let mut s = String::from("{");
     let mut first = true;
-    for i in 1..n { if (mask >> (i - 1)) & 1 == 1 { if !first { s.push(','); } s.push_str(&i.to_string()); first = false; } }
-    s.push('}'); s
+    for i in 1..n {
+        if (mask >> (i - 1)) & 1 == 1 {
+            if !first {
+                s.push(',');
+            }
+            s.push_str(&i.to_string());
+            first = false;
+        }
+    }
+    s.push('}');
+    s
 }
 
 fn coeff(poly: &[i64], k: usize) -> i64 {
-    if k < poly.len() { poly[k] } else { 0 }
+    if k < poly.len() {
+        poly[k]
+    } else {
+        0
+    }
 }
 
 fn poly_add(a: &[i64], b: &[i64]) -> Vec<i64> {
     let len = a.len().max(b.len());
     let mut r = vec![0i64; len];
-    for (i, &c) in a.iter().enumerate() { r[i] += c; }
-    for (i, &c) in b.iter().enumerate() { r[i] += c; }
-    while r.len() > 1 && *r.last().unwrap() == 0 { r.pop(); }
+    for (i, &c) in a.iter().enumerate() {
+        r[i] += c;
+    }
+    for (i, &c) in b.iter().enumerate() {
+        r[i] += c;
+    }
+    while r.len() > 1 && *r.last().unwrap() == 0 {
+        r.pop();
+    }
     r
 }
 
 fn main() {
-    let max_n: u8 = std::env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(8);
+    let max_n: u8 = std::env::args()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(8);
 
     println!("=== Direct TP_2 Induction Analysis ===\n");
 
@@ -126,23 +174,42 @@ fn main() {
         let perms_prev = all_permutations(n - 1);
 
         let mut by_descent: BTreeMap<u64, Vec<&Vec<u8>>> = BTreeMap::new();
-        for pi in &perms { by_descent.entry(descent_set_bitmask(pi)).or_default().push(pi); }
+        for pi in &perms {
+            by_descent
+                .entry(descent_set_bitmask(pi))
+                .or_default()
+                .push(pi);
+        }
 
         let mut prev_by_des: BTreeMap<u64, Vec<&Vec<u8>>> = BTreeMap::new();
-        for pi in &perms_prev { prev_by_des.entry(descent_set_bitmask(pi)).or_default().push(pi); }
+        for pi in &perms_prev {
+            prev_by_des
+                .entry(descent_set_bitmask(pi))
+                .or_default()
+                .push(pi);
+        }
 
         println!("--- n = {} ---", n);
 
         // Look at alternating descent set
-        let alt_mask: u64 = (1..n).filter(|&i| i % 2 == 0).map(|i| 1u64 << (i - 1)).fold(0, |a, b| a | b);
+        let alt_mask: u64 = (1..n)
+            .filter(|&i| i % 2 == 0)
+            .map(|i| 1u64 << (i - 1))
+            .fold(0, |a, b| a | b);
         // Actually just check {2,4,...} intersected with [n-1]
 
         for (&mask, class) in &by_descent {
-            if mask & 1 != 0 { continue; }
+            if mask & 1 != 0 {
+                continue;
+            }
             let vp = valid_positions(mask, n);
-            if !vp.contains(&2) || vp.len() < 2 { continue; }
+            if !vp.contains(&2) || vp.len() < 2 {
+                continue;
+            }
             // Only show cases with exactly 2 or 3 valid positions for clarity
-            if vp.len() > 3 { continue; }
+            if vp.len() > 3 {
+                continue;
+            }
 
             let s_str = descent_set_to_string(mask, n);
 
@@ -161,18 +228,26 @@ fn main() {
             let mut f_partial: BTreeMap<u8, Vec<i64>> = BTreeMap::new();
 
             for &p in &vp {
-                if p <= 1 { continue; }
+                if p <= 1 {
+                    continue;
+                }
 
                 let sp_a = source_asc(mask, p, n);
                 let sp_d = source_desc(mask, p, n);
 
                 let mut by_q: BTreeMap<u8, Vec<usize>> = BTreeMap::new();
-                for &sp in &[Some(sp_a), sp_d].iter().filter_map(|x| *x).collect::<Vec<_>>() {
+                for &sp in &[Some(sp_a), sp_d]
+                    .iter()
+                    .filter_map(|x| *x)
+                    .collect::<Vec<_>>()
+                {
                     if let Some(cls) = prev_by_des.get(&sp) {
                         for pi in cls {
                             let q = pi.iter().position(|&v| v == n - 1).unwrap() as u8 + 1;
                             let e1 = if epsilon1(pi, p) { 1 } else { 0 };
-                            by_q.entry(q).or_default().push(compute(pi, Stat::Swaps) + e1);
+                            by_q.entry(q)
+                                .or_default()
+                                .push(compute(pi, Stat::Swaps) + e1);
                         }
                     }
                 }
@@ -203,31 +278,52 @@ fn main() {
             };
 
             if all_same_total {
-                println!("  S={}: ALL F_p EQUAL! F = {}", s_str, format_poly(f_total.values().next().unwrap()));
+                println!(
+                    "  S={}: ALL F_p EQUAL! F = {}",
+                    s_str,
+                    format_poly(f_total.values().next().unwrap())
+                );
             }
 
             // Print the decomposition for small cases
             if vp.len() <= 3 && n <= 7 {
                 println!("  S={} (|P(S)|={})", s_str, vp.len());
                 for &p in &vp {
-                    if p <= 1 { continue; }
+                    if p <= 1 {
+                        continue;
+                    }
                     let ft = f_total.get(&p).unwrap();
                     let fp = f_partial.get(&p).unwrap();
-                    println!("    p={}: F_total={}, F_partial(<= p-2)={}", p, format_poly(ft), format_poly(fp));
+                    println!(
+                        "    p={}: F_total={}, F_partial(<= p-2)={}",
+                        p,
+                        format_poly(ft),
+                        format_poly(fp)
+                    );
 
                     // Verify: L^{(p)} should equal F_total + (t-1)*F_partial
                     // = F_total - F_partial + t*F_partial
                     let mut check = vec![0i64; ft.len().max(fp.len() + 1)];
-                    for (i, &c) in ft.iter().enumerate() { check[i] += c; }
-                    for (i, &c) in fp.iter().enumerate() { check[i] -= c; } // subtract F_partial
-                    for (i, &c) in fp.iter().enumerate() { // add t*F_partial
-                        if i + 1 >= check.len() { check.resize(i + 2, 0); }
+                    for (i, &c) in ft.iter().enumerate() {
+                        check[i] += c;
+                    }
+                    for (i, &c) in fp.iter().enumerate() {
+                        check[i] -= c;
+                    } // subtract F_partial
+                    for (i, &c) in fp.iter().enumerate() {
+                        // add t*F_partial
+                        if i + 1 >= check.len() {
+                            check.resize(i + 2, 0);
+                        }
                         check[i + 1] += c;
                     }
-                    while check.len() > 1 && *check.last().unwrap() == 0 { check.pop(); }
+                    while check.len() > 1 && *check.last().unwrap() == 0 {
+                        check.pop();
+                    }
 
                     // Compare with actual L^{(p)}
-                    let lp_vals: Vec<usize> = class.iter()
+                    let lp_vals: Vec<usize> = class
+                        .iter()
                         .filter(|pi| pi.iter().position(|&v| v == n).unwrap() as u8 + 1 == p)
                         .map(|pi| compute(pi, Stat::Swaps))
                         .collect();
@@ -235,7 +331,11 @@ fn main() {
                     if check == lp {
                         println!("      [verified: F + (t-1)*F_partial = L^({})]", p);
                     } else {
-                        println!("      [MISMATCH: computed={}, actual={}]", format_poly(&check), format_poly(&lp));
+                        println!(
+                            "      [MISMATCH: computed={}, actual={}]",
+                            format_poly(&check),
+                            format_poly(&lp)
+                        );
                     }
                 }
             }
@@ -262,15 +362,29 @@ fn main() {
         let perms_prev = all_permutations(n - 1);
 
         let mut by_descent: BTreeMap<u64, Vec<&Vec<u8>>> = BTreeMap::new();
-        for pi in &perms { by_descent.entry(descent_set_bitmask(pi)).or_default().push(pi); }
+        for pi in &perms {
+            by_descent
+                .entry(descent_set_bitmask(pi))
+                .or_default()
+                .push(pi);
+        }
 
         let mut prev_by_des: BTreeMap<u64, Vec<&Vec<u8>>> = BTreeMap::new();
-        for pi in &perms_prev { prev_by_des.entry(descent_set_bitmask(pi)).or_default().push(pi); }
+        for pi in &perms_prev {
+            prev_by_des
+                .entry(descent_set_bitmask(pi))
+                .or_default()
+                .push(pi);
+        }
 
         for (&mask, _) in &by_descent {
-            if mask & 1 != 0 { continue; }
+            if mask & 1 != 0 {
+                continue;
+            }
             let vp = valid_positions(mask, n);
-            if vp.len() != 2 || !vp.contains(&2) { continue; }
+            if vp.len() != 2 || !vp.contains(&2) {
+                continue;
+            }
 
             let s_str = descent_set_to_string(mask, n);
             let p2 = 2u8;
@@ -280,7 +394,11 @@ fn main() {
             let mut f2_vals: Vec<usize> = Vec::new();
             let mut fp_vals: Vec<usize> = Vec::new();
 
-            for &sp in &[Some(source_asc(mask, p2, n)), source_desc(mask, p2, n)].iter().filter_map(|x| *x).collect::<Vec<_>>() {
+            for &sp in &[Some(source_asc(mask, p2, n)), source_desc(mask, p2, n)]
+                .iter()
+                .filter_map(|x| *x)
+                .collect::<Vec<_>>()
+            {
                 if let Some(cls) = prev_by_des.get(&sp) {
                     for pi in cls {
                         let e1 = if epsilon1(pi, p2) { 1 } else { 0 };
@@ -289,7 +407,14 @@ fn main() {
                 }
             }
 
-            for &sp in &[Some(source_asc(mask, p_max, n)), source_desc(mask, p_max, n)].iter().filter_map(|x| *x).collect::<Vec<_>>() {
+            for &sp in &[
+                Some(source_asc(mask, p_max, n)),
+                source_desc(mask, p_max, n),
+            ]
+            .iter()
+            .filter_map(|x| *x)
+            .collect::<Vec<_>>()
+            {
                 if let Some(cls) = prev_by_des.get(&sp) {
                     for pi in cls {
                         let e1 = if epsilon1(pi, p_max) { 1 } else { 0 };
@@ -303,13 +428,21 @@ fn main() {
 
             // Check: is F_2 = F_p?
             if f2 == fp {
-                println!("n={} S={}: F_2 = F_p (p={})  F={}", n, s_str, p_max, format_poly(&f2));
+                println!(
+                    "n={} S={}: F_2 = F_p (p={})  F={}",
+                    n,
+                    s_str,
+                    p_max,
+                    format_poly(&f2)
+                );
             } else {
                 // Check ratio
                 let f2_sum: i64 = f2.iter().sum();
                 let fp_sum: i64 = fp.iter().sum();
-                println!("n={} S={}: F_2 != F_p (p={})  |F_2|={} |F_p|={}",
-                    n, s_str, p_max, f2_sum, fp_sum);
+                println!(
+                    "n={} S={}: F_2 != F_p (p={})  |F_2|={} |F_p|={}",
+                    n, s_str, p_max, f2_sum, fp_sum
+                );
                 println!("    F_2 = {}", format_poly(&f2));
                 println!("    F_p = {}", format_poly(&fp));
             }

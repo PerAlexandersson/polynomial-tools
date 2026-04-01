@@ -1,8 +1,8 @@
 use combpoly::cayley::for_each_fpf_cayley;
-use polynomial_tools::{check_interlacing, format_poly, is_real_rooted};
-use polynomial_tools::recurrence::{find_recurrence_adaptive, AdaptiveSearchOptions};
 use combpoly::statistics;
 use combpoly::statistics::Stat;
+use polynomial_tools::recurrence::{find_recurrence_adaptive, AdaptiveSearchOptions};
+use polynomial_tools::{check_interlacing, format_poly, is_real_rooted};
 
 fn main() {
     let max_n: u8 = 11;
@@ -107,10 +107,7 @@ fn main() {
         Some(result) => {
             println!(
                 "Found recurrence (rec_len={}, var_deg={}, idx_deg={}, diff_deg={}):",
-                result.opts.rec_len,
-                result.opts.var_deg,
-                result.opts.idx_deg,
-                result.opts.diff_deg
+                result.opts.rec_len, result.opts.var_deg, result.opts.idx_deg, result.opts.diff_deg
             );
             println!("  {}", result.recurrence);
         }
@@ -122,10 +119,7 @@ fn main() {
         Some(result) => {
             println!(
                 "Found recurrence (rec_len={}, var_deg={}, idx_deg={}, diff_deg={}):",
-                result.opts.rec_len,
-                result.opts.var_deg,
-                result.opts.idx_deg,
-                result.opts.diff_deg
+                result.opts.rec_len, result.opts.var_deg, result.opts.idx_deg, result.opts.diff_deg
             );
             println!("  {}", result.recurrence);
         }

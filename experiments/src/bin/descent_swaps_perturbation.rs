@@ -351,8 +351,7 @@ fn main() {
             // Build source distributions
             let mut source_dists: BTreeMap<u8, BTreeMap<(usize, u8), usize>> = BTreeMap::new();
             for &p in &vp {
-                let dist =
-                    build_source_dist(s_mask, p, n, &by_descent_prev, &perm_prev_list);
+                let dist = build_source_dist(s_mask, p, n, &by_descent_prev, &perm_prev_list);
                 source_dists.insert(p, dist);
             }
 
@@ -640,10 +639,16 @@ fn main() {
                         };
 
                         // Verify: bd_ma_k + delta_mab_k = D_M(k)
-                        assert_eq!(bd_ma_k1 + delta_mab_k1, d_m_k1,
-                            "pure staircase decomp fail at k1");
-                        assert_eq!(bd_ma_k2 + delta_mab_k2, d_m_k2,
-                            "pure staircase decomp fail at k2");
+                        assert_eq!(
+                            bd_ma_k1 + delta_mab_k1,
+                            d_m_k1,
+                            "pure staircase decomp fail at k1"
+                        );
+                        assert_eq!(
+                            bd_ma_k2 + delta_mab_k2,
+                            d_m_k2,
+                            "pure staircase decomp fail at k2"
+                        );
 
                         let pure_staircase = a_k2 * bd_ma_k1 - a_k1 * bd_ma_k2;
                         let m_pert = a_k2 * delta_mab_k1 - a_k1 * delta_mab_k2;
@@ -688,7 +693,10 @@ fn main() {
     println!("  bracket_R = A_{{k2}} D_R(k1) - A_{{k1}} D_R(k2)  [R zone source perturbation]");
     println!();
 
-    println!("{:<20} {:>10} {:>10} {:>10}", "Bracket", "Positive", "Zero", "Negative");
+    println!(
+        "{:<20} {:>10} {:>10} {:>10}",
+        "Bracket", "Positive", "Zero", "Negative"
+    );
     println!("{}", "-".repeat(55));
     println!(
         "{:<20} {:>10} {:>10} {:>10}  {}",
@@ -737,7 +745,11 @@ fn main() {
         ml_bracket_pos,
         ml_bracket_zero,
         ml_bracket_neg,
-        if ml_bracket_neg == 0 { "ALWAYS >= 0" } else { "CAN BE NEGATIVE" }
+        if ml_bracket_neg == 0 {
+            "ALWAYS >= 0"
+        } else {
+            "CAN BE NEGATIVE"
+        }
     );
     println!(
         "{:<20} {:>10} {:>10} {:>10}  {}",
@@ -745,7 +757,11 @@ fn main() {
         mr_bracket_pos,
         mr_bracket_zero,
         mr_bracket_neg,
-        if mr_bracket_neg == 0 { "ALWAYS >= 0" } else { "CAN BE NEGATIVE" }
+        if mr_bracket_neg == 0 {
+            "ALWAYS >= 0"
+        } else {
+            "CAN BE NEGATIVE"
+        }
     );
     println!(
         "{:<20} {:>10} {:>10} {:>10}  {}",
@@ -753,7 +769,11 @@ fn main() {
         lr_bracket_pos,
         lr_bracket_zero,
         lr_bracket_neg,
-        if lr_bracket_neg == 0 { "ALWAYS >= 0" } else { "CAN BE NEGATIVE" }
+        if lr_bracket_neg == 0 {
+            "ALWAYS >= 0"
+        } else {
+            "CAN BE NEGATIVE"
+        }
     );
     println!(
         "{:<20} {:>10} {:>10} {:>10}  (= Delta)",
@@ -777,7 +797,11 @@ fn main() {
         pure_staircase_pos,
         pure_staircase_zero,
         pure_staircase_neg,
-        if pure_staircase_neg == 0 { "ALWAYS >= 0" } else { "CAN BE NEGATIVE" }
+        if pure_staircase_neg == 0 {
+            "ALWAYS >= 0"
+        } else {
+            "CAN BE NEGATIVE"
+        }
     );
     println!(
         "{:<20} {:>10} {:>10} {:>10}  {}",
@@ -785,7 +809,11 @@ fn main() {
         m_pert_pos,
         m_pert_zero,
         m_pert_neg,
-        if m_pert_neg == 0 { "ALWAYS >= 0" } else { "CAN BE NEGATIVE" }
+        if m_pert_neg == 0 {
+            "ALWAYS >= 0"
+        } else {
+            "CAN BE NEGATIVE"
+        }
     );
 
     println!();
@@ -802,9 +830,7 @@ fn main() {
         "Cases where Delta>=0 but some perturbation<0: {} / {}",
         pert_compensated, nontrivial_minors
     );
-    println!(
-        "Patterns of negative perturbations:",
-    );
+    println!("Patterns of negative perturbations:",);
     println!("  Only bracket_L < 0: {}", staircase_with_lpert_neg);
     println!("  Only bracket_R < 0: {}", staircase_with_rpert_neg);
     println!("  Both bracket_L,R < 0: {}", staircase_with_both_neg);
@@ -1007,10 +1033,26 @@ fn main() {
                                 let na_poly = &n_polys_a[&q_a];
                                 let nb_poly = &n_polys_b[&q_b];
 
-                                let na_k1 = if k1 >= e_a { coeff(na_poly, k1 - e_a) } else { 0 };
-                                let na_k2 = if k2 >= e_a { coeff(na_poly, k2 - e_a) } else { 0 };
-                                let nb_k1 = if k1 >= e_b { coeff(nb_poly, k1 - e_b) } else { 0 };
-                                let nb_k2 = if k2 >= e_b { coeff(nb_poly, k2 - e_b) } else { 0 };
+                                let na_k1 = if k1 >= e_a {
+                                    coeff(na_poly, k1 - e_a)
+                                } else {
+                                    0
+                                };
+                                let na_k2 = if k2 >= e_a {
+                                    coeff(na_poly, k2 - e_a)
+                                } else {
+                                    0
+                                };
+                                let nb_k1 = if k1 >= e_b {
+                                    coeff(nb_poly, k1 - e_b)
+                                } else {
+                                    0
+                                };
+                                let nb_k2 = if k2 >= e_b {
+                                    coeff(nb_poly, k2 - e_b)
+                                } else {
+                                    0
+                                };
 
                                 let c = na_k1 * nb_k2 - na_k2 * nb_k1;
                                 *zp_contribs.entry((z_a, z_b)).or_default() += c;
@@ -1083,14 +1125,26 @@ fn main() {
     println!(
         "{:<20} {:>10} {:>10} {:>10}  {}",
         "M-any (M in pair)",
-        m_any_pos, m_any_zero, m_any_neg,
-        if m_any_neg == 0 { "ALWAYS >= 0" } else { "CAN BE NEGATIVE" }
+        m_any_pos,
+        m_any_zero,
+        m_any_neg,
+        if m_any_neg == 0 {
+            "ALWAYS >= 0"
+        } else {
+            "CAN BE NEGATIVE"
+        }
     );
     println!(
         "{:<20} {:>10} {:>10} {:>10}  {}",
         "no-M ({L,R}x{L,R})",
-        no_m_pos, no_m_zero, no_m_neg,
-        if no_m_neg == 0 { "ALWAYS >= 0" } else { "CAN BE NEGATIVE" }
+        no_m_pos,
+        no_m_zero,
+        no_m_neg,
+        if no_m_neg == 0 {
+            "ALWAYS >= 0"
+        } else {
+            "CAN BE NEGATIVE"
+        }
     );
 
     println!();

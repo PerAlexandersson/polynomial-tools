@@ -8,7 +8,7 @@
 //!   cargo run --release --bin tiling_rr -- 3,3,3 5    # specific mu and max d
 //!   cargo run --release --bin tiling_rr -- scan       # systematic scan
 
-use polynomial_tools::{is_real_rooted, format_poly};
+use polynomial_tools::{format_poly, is_real_rooted};
 use std::env;
 
 /// Polynomial represented as Vec<i128> to avoid overflow for large n.
@@ -180,7 +180,7 @@ fn compute_and_check(mu: &[usize], d: usize, max_n: usize) -> (Vec<Poly>, Option
                     // Coefficients too large for i64 — skip this n
                     // (could use BigInt path, but for now mark as overflow)
                     first_fail = Some(n); // conservative: stop here
-                    // Distinguish overflow from genuine failure
+                                          // Distinguish overflow from genuine failure
                     return (polys, Some(n + 10000)); // signal overflow with large n
                 }
             }
@@ -205,79 +205,100 @@ fn compute_and_check(mu: &[usize], d: usize, max_n: usize) -> (Vec<Poly>, Option
 
 /// Systematic scan over many Ferrers shapes.
 fn scan(max_n: usize) {
-    println!("{:<22} {:>3} {:>10} {:<30}", "mu", "d", "claw-free", "result");
+    println!(
+        "{:<22} {:>3} {:>10} {:<30}",
+        "mu", "d", "claw-free", "result"
+    );
     println!("{}", "-".repeat(72));
 
     let test_cases: Vec<(&str, Vec<(Vec<usize>, Vec<usize>)>)> = vec![
-        ("3-col rectangles", vec![
-            (vec![2,2,2], (1..=5).collect()),
-            (vec![3,3,3], (1..=6).collect()),
-            (vec![4,4,4], (1..=6).collect()),
-            (vec![5,5,5], (1..=6).collect()),
-        ]),
-        ("3-col hooks", vec![
-            (vec![3,1,1], (1..=5).collect()),
-            (vec![4,1,1], (1..=5).collect()),
-            (vec![5,1,1], (1..=5).collect()),
-            (vec![6,1,1], (1..=5).collect()),
-        ]),
-        ("3-col staircase/other", vec![
-            (vec![3,2,1], (1..=4).collect()),
-            (vec![4,3,2], (1..=4).collect()),
-            (vec![5,4,3], (1..=4).collect()),
-            (vec![5,3,1], (1..=4).collect()),
-            (vec![4,2,1], (1..=4).collect()),
-        ]),
-        ("3-col with mu_ell=2", vec![
-            (vec![3,2,2], (1..=4).collect()),
-            (vec![3,3,2], (1..=4).collect()),
-            (vec![4,2,2], (1..=4).collect()),
-            (vec![4,3,2], (1..=4).collect()),
-            (vec![4,4,2], (1..=4).collect()),
-            (vec![4,3,3], (1..=4).collect()),
-            (vec![4,4,3], (1..=5).collect()),
-            (vec![5,3,2], (1..=4).collect()),
-            (vec![5,4,2], (1..=4).collect()),
-            (vec![5,5,2], (1..=4).collect()),
-            (vec![5,4,3], (1..=5).collect()),
-            (vec![5,5,3], (1..=5).collect()),
-            (vec![5,5,4], (1..=5).collect()),
-            (vec![6,4,2], (1..=4).collect()),
-            (vec![6,5,3], (1..=5).collect()),
-            (vec![6,6,4], (1..=5).collect()),
-        ]),
-        ("4-col shapes", vec![
-            (vec![2,2,2,2], (1..=3).collect()),
-            (vec![3,3,3,3], (1..=4).collect()),
-            (vec![4,4,4,4], (1..=5).collect()),
-            (vec![3,2,2,1], (1..=3).collect()),
-            (vec![3,2,2,2], (1..=3).collect()),
-            (vec![3,3,2,2], (1..=3).collect()),
-            (vec![3,3,3,2], (1..=3).collect()),
-            (vec![4,3,2,1], (1..=3).collect()),
-            (vec![4,3,2,2], (1..=3).collect()),
-            (vec![4,3,3,2], (1..=3).collect()),
-            (vec![4,3,3,3], (1..=4).collect()),
-            (vec![4,4,3,2], (1..=3).collect()),
-            (vec![4,4,3,3], (1..=4).collect()),
-            (vec![4,4,4,3], (1..=4).collect()),
-            (vec![3,2,1,1], (1..=3).collect()),
-            (vec![4,2,1,1], (1..=3).collect()),
-            (vec![3,1,1,1], (1..=3).collect()),
-            (vec![4,1,1,1], (1..=3).collect()),
-            (vec![5,3,3,2], (1..=3).collect()),
-            (vec![5,4,3,2], (1..=3).collect()),
-            (vec![5,5,4,3], (1..=4).collect()),
-        ]),
-        ("5-col shapes", vec![
-            (vec![2,2,2,2,2], (1..=2).collect()),
-            (vec![3,3,3,3,3], (1..=3).collect()),
-            (vec![3,2,2,1,1], (1..=2).collect()),
-            (vec![3,2,1,1,1], (1..=2).collect()),
-            (vec![4,3,2,1,1], (1..=2).collect()),
-            (vec![4,4,3,2,2], (1..=2).collect()),
-            (vec![4,3,3,2,2], (1..=2).collect()),
-        ]),
+        (
+            "3-col rectangles",
+            vec![
+                (vec![2, 2, 2], (1..=5).collect()),
+                (vec![3, 3, 3], (1..=6).collect()),
+                (vec![4, 4, 4], (1..=6).collect()),
+                (vec![5, 5, 5], (1..=6).collect()),
+            ],
+        ),
+        (
+            "3-col hooks",
+            vec![
+                (vec![3, 1, 1], (1..=5).collect()),
+                (vec![4, 1, 1], (1..=5).collect()),
+                (vec![5, 1, 1], (1..=5).collect()),
+                (vec![6, 1, 1], (1..=5).collect()),
+            ],
+        ),
+        (
+            "3-col staircase/other",
+            vec![
+                (vec![3, 2, 1], (1..=4).collect()),
+                (vec![4, 3, 2], (1..=4).collect()),
+                (vec![5, 4, 3], (1..=4).collect()),
+                (vec![5, 3, 1], (1..=4).collect()),
+                (vec![4, 2, 1], (1..=4).collect()),
+            ],
+        ),
+        (
+            "3-col with mu_ell=2",
+            vec![
+                (vec![3, 2, 2], (1..=4).collect()),
+                (vec![3, 3, 2], (1..=4).collect()),
+                (vec![4, 2, 2], (1..=4).collect()),
+                (vec![4, 3, 2], (1..=4).collect()),
+                (vec![4, 4, 2], (1..=4).collect()),
+                (vec![4, 3, 3], (1..=4).collect()),
+                (vec![4, 4, 3], (1..=5).collect()),
+                (vec![5, 3, 2], (1..=4).collect()),
+                (vec![5, 4, 2], (1..=4).collect()),
+                (vec![5, 5, 2], (1..=4).collect()),
+                (vec![5, 4, 3], (1..=5).collect()),
+                (vec![5, 5, 3], (1..=5).collect()),
+                (vec![5, 5, 4], (1..=5).collect()),
+                (vec![6, 4, 2], (1..=4).collect()),
+                (vec![6, 5, 3], (1..=5).collect()),
+                (vec![6, 6, 4], (1..=5).collect()),
+            ],
+        ),
+        (
+            "4-col shapes",
+            vec![
+                (vec![2, 2, 2, 2], (1..=3).collect()),
+                (vec![3, 3, 3, 3], (1..=4).collect()),
+                (vec![4, 4, 4, 4], (1..=5).collect()),
+                (vec![3, 2, 2, 1], (1..=3).collect()),
+                (vec![3, 2, 2, 2], (1..=3).collect()),
+                (vec![3, 3, 2, 2], (1..=3).collect()),
+                (vec![3, 3, 3, 2], (1..=3).collect()),
+                (vec![4, 3, 2, 1], (1..=3).collect()),
+                (vec![4, 3, 2, 2], (1..=3).collect()),
+                (vec![4, 3, 3, 2], (1..=3).collect()),
+                (vec![4, 3, 3, 3], (1..=4).collect()),
+                (vec![4, 4, 3, 2], (1..=3).collect()),
+                (vec![4, 4, 3, 3], (1..=4).collect()),
+                (vec![4, 4, 4, 3], (1..=4).collect()),
+                (vec![3, 2, 1, 1], (1..=3).collect()),
+                (vec![4, 2, 1, 1], (1..=3).collect()),
+                (vec![3, 1, 1, 1], (1..=3).collect()),
+                (vec![4, 1, 1, 1], (1..=3).collect()),
+                (vec![5, 3, 3, 2], (1..=3).collect()),
+                (vec![5, 4, 3, 2], (1..=3).collect()),
+                (vec![5, 5, 4, 3], (1..=4).collect()),
+            ],
+        ),
+        (
+            "5-col shapes",
+            vec![
+                (vec![2, 2, 2, 2, 2], (1..=2).collect()),
+                (vec![3, 3, 3, 3, 3], (1..=3).collect()),
+                (vec![3, 2, 2, 1, 1], (1..=2).collect()),
+                (vec![3, 2, 1, 1, 1], (1..=2).collect()),
+                (vec![4, 3, 2, 1, 1], (1..=2).collect()),
+                (vec![4, 4, 3, 2, 2], (1..=2).collect()),
+                (vec![4, 3, 3, 2, 2], (1..=2).collect()),
+            ],
+        ),
     ];
 
     for (section, cases) in &test_cases {
@@ -304,8 +325,12 @@ fn scan(max_n: usize) {
 fn detailed(mu: &[usize], d: usize, max_n: usize) {
     println!("Ferrers tile mu = {:?}, d = {}", mu, d);
     let mu_ell = *mu.last().unwrap();
-    println!("ell = {}, mu_ell = {}, claw-free (d <= mu_ell): {}",
-             mu.len() - 1, mu_ell, if d <= mu_ell { "yes" } else { "no" });
+    println!(
+        "ell = {}, mu_ell = {}, claw-free (d <= mu_ell): {}",
+        mu.len() - 1,
+        mu_ell,
+        if d <= mu_ell { "yes" } else { "no" }
+    );
     println!();
 
     let (polys, first_fail) = compute_and_check(mu, d, max_n);
@@ -315,7 +340,11 @@ fn detailed(mu: &[usize], d: usize, max_n: usize) {
         let rr = if p.len() <= 2 {
             "  (trivial)".to_string()
         } else if let Some(ref p64v) = p64 {
-            if is_real_rooted(p64v) { "  RR".to_string() } else { "  NOT RR  <---".to_string() }
+            if is_real_rooted(p64v) {
+                "  RR".to_string()
+            } else {
+                "  NOT RR  <---".to_string()
+            }
         } else {
             "  (overflow)".to_string()
         };

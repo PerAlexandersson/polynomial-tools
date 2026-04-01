@@ -60,11 +60,17 @@ use combpoly::statistics::{compute, descent_set_bitmask, Stat};
 use std::collections::BTreeMap;
 
 fn build_poly(vals: &[usize]) -> Vec<i64> {
-    if vals.is_empty() { return vec![0]; }
+    if vals.is_empty() {
+        return vec![0];
+    }
     let max_s = *vals.iter().max().unwrap();
     let mut coeffs = vec![0i64; max_s + 1];
-    for &s in vals { coeffs[s] += 1; }
-    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 { coeffs.pop(); }
+    for &s in vals {
+        coeffs[s] += 1;
+    }
+    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 {
+        coeffs.pop();
+    }
     coeffs
 }
 
@@ -82,37 +88,55 @@ fn valid_positions(s_mask: u64, n: u8) -> Vec<u8> {
 }
 
 fn source_asc(s_mask: u64, p: u8, n: u8) -> u64 {
-    if n <= 2 { return 0; }
-    if p == n { return s_mask; }
+    if n <= 2 {
+        return 0;
+    }
+    if p == n {
+        return s_mask;
+    }
     let mut sp = 0u64;
     if p == 1 {
         for j in 2..n {
-            if (s_mask >> (j - 1)) & 1 == 1 { sp |= 1 << (j - 2); }
+            if (s_mask >> (j - 1)) & 1 == 1 {
+                sp |= 1 << (j - 2);
+            }
         }
     } else {
         for pos in 1..=(p.saturating_sub(2)) {
-            if (s_mask >> (pos - 1)) & 1 == 1 { sp |= 1 << (pos - 1); }
+            if (s_mask >> (pos - 1)) & 1 == 1 {
+                sp |= 1 << (pos - 1);
+            }
         }
         for j in (p + 1)..n {
-            if (s_mask >> (j - 1)) & 1 == 1 { sp |= 1 << (j - 2); }
+            if (s_mask >> (j - 1)) & 1 == 1 {
+                sp |= 1 << (j - 2);
+            }
         }
     }
     sp
 }
 
 fn source_desc(s_mask: u64, p: u8, n: u8) -> Option<u64> {
-    if p <= 1 || p >= n { return None; }
+    if p <= 1 || p >= n {
+        return None;
+    }
     Some(source_asc(s_mask, p, n) | (1 << (p - 2)))
 }
 
 fn epsilon1(pi: &[u8], p: u8) -> bool {
     let n = pi.len() as u8 + 1;
-    if p <= 1 || p >= n { return false; }
+    if p <= 1 || p >= n {
+        return false;
+    }
     pi[(p - 2) as usize] + 1 == pi[(p - 1) as usize]
 }
 
 fn eps2(p: u8, q: u8) -> usize {
-    if p >= 2 && q <= p - 2 { 1 } else { 0 }
+    if p >= 2 && q <= p - 2 {
+        1
+    } else {
+        0
+    }
 }
 
 fn descent_set_to_string(mask: u64, n: u8) -> String {
@@ -120,7 +144,9 @@ fn descent_set_to_string(mask: u64, n: u8) -> String {
     let mut first = true;
     for i in 1..n {
         if (mask >> (i - 1)) & 1 == 1 {
-            if !first { s.push(','); }
+            if !first {
+                s.push(',');
+            }
             s.push_str(&i.to_string());
             first = false;
         }
@@ -130,24 +156,42 @@ fn descent_set_to_string(mask: u64, n: u8) -> String {
 }
 
 fn coeff(poly: &[i64], k: usize) -> i64 {
-    if k < poly.len() { poly[k] } else { 0 }
+    if k < poly.len() {
+        poly[k]
+    } else {
+        0
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-enum Zone { L, M, R }
+enum Zone {
+    L,
+    M,
+    R,
+}
 
 fn classify_zone(q: u8, p_a: u8, p_b: u8) -> Zone {
-    if p_a >= 2 && q <= p_a - 2 { Zone::L }
-    else if p_b >= 2 && q <= p_b - 2 { Zone::M }
-    else { Zone::R }
+    if p_a >= 2 && q <= p_a - 2 {
+        Zone::L
+    } else if p_b >= 2 && q <= p_b - 2 {
+        Zone::M
+    } else {
+        Zone::R
+    }
 }
 
 fn zone_label(z: Zone) -> &'static str {
-    match z { Zone::L => "L", Zone::M => "M", Zone::R => "R" }
+    match z {
+        Zone::L => "L",
+        Zone::M => "M",
+        Zone::R => "R",
+    }
 }
 
 fn build_source_dist(
-    s_mask: u64, p: u8, n: u8,
+    s_mask: u64,
+    p: u8,
+    n: u8,
     by_descent_prev: &BTreeMap<u64, Vec<usize>>,
     perm_prev_list: &[&Vec<u8>],
 ) -> BTreeMap<(usize, u8), usize> {
@@ -256,9 +300,15 @@ fn main() {
     // Let me just focus on the data analysis now.
 
     let zone_pairs = [
-        (Zone::L, Zone::L), (Zone::L, Zone::M), (Zone::L, Zone::R),
-        (Zone::M, Zone::L), (Zone::M, Zone::M), (Zone::M, Zone::R),
-        (Zone::R, Zone::L), (Zone::R, Zone::M), (Zone::R, Zone::R),
+        (Zone::L, Zone::L),
+        (Zone::L, Zone::M),
+        (Zone::L, Zone::R),
+        (Zone::M, Zone::L),
+        (Zone::M, Zone::M),
+        (Zone::M, Zone::R),
+        (Zone::R, Zone::L),
+        (Zone::R, Zone::M),
+        (Zone::R, Zone::R),
     ];
 
     // Grouping 1: "qb = M" vs rest
@@ -266,7 +316,9 @@ fn main() {
     // Grouping 3: staircase (0,1) vs same (matching) vs reverse (1,0)
 
     let mut zp_signs: BTreeMap<(Zone, Zone), (u64, u64, u64)> = BTreeMap::new();
-    for &zp in &zone_pairs { zp_signs.insert(zp, (0, 0, 0)); }
+    for &zp in &zone_pairs {
+        zp_signs.insert(zp, (0, 0, 0));
+    }
 
     let mut qb_m_pos = 0u64;
     let mut qb_m_zero = 0u64;
@@ -299,34 +351,49 @@ fn main() {
         for pi in &perms_prev {
             let idx = perm_prev_list.len();
             perm_prev_list.push(pi);
-            by_descent_prev.entry(descent_set_bitmask(pi)).or_default().push(idx);
+            by_descent_prev
+                .entry(descent_set_bitmask(pi))
+                .or_default()
+                .push(idx);
         }
 
         let perms_n = all_permutations(n);
         let mut by_descent_n: BTreeMap<u64, Vec<&Vec<u8>>> = BTreeMap::new();
         for pi in &perms_n {
-            by_descent_n.entry(descent_set_bitmask(pi)).or_default().push(pi);
+            by_descent_n
+                .entry(descent_set_bitmask(pi))
+                .or_default()
+                .push(pi);
         }
 
         for s_mask in 0u64..(1 << (n - 1)) {
-            if s_mask & 1 != 0 { continue; }
+            if s_mask & 1 != 0 {
+                continue;
+            }
             let vp = valid_positions(s_mask, n);
-            if vp.len() < 2 { continue; }
+            if vp.len() < 2 {
+                continue;
+            }
 
             let mut source_dists: BTreeMap<u8, BTreeMap<(usize, u8), usize>> = BTreeMap::new();
             for &p in &vp {
-                source_dists.insert(p,
-                    build_source_dist(s_mask, p, n, &by_descent_prev, &perm_prev_list));
+                source_dists.insert(
+                    p,
+                    build_source_dist(s_mask, p, n, &by_descent_prev, &perm_prev_list),
+                );
             }
 
             let mut lp_polys: BTreeMap<u8, Vec<i64>> = BTreeMap::new();
             if let Some(class) = by_descent_n.get(&s_mask) {
                 for &p in &vp {
-                    let vals: Vec<usize> = class.iter()
+                    let vals: Vec<usize> = class
+                        .iter()
                         .filter(|pi| pi.iter().position(|&v| v == n).unwrap() as u8 + 1 == p)
                         .map(|pi| compute(pi, Stat::Swaps))
                         .collect();
-                    if !vals.is_empty() { lp_polys.insert(p, build_poly(&vals)); }
+                    if !vals.is_empty() {
+                        lp_polys.insert(p, build_poly(&vals));
+                    }
                 }
             }
 
@@ -338,28 +405,48 @@ fn main() {
                 let dist_b = &source_dists[&p_b];
 
                 let mut all_qs_a: Vec<u8> = dist_a.keys().map(|&(_, q)| q).collect();
-                all_qs_a.sort(); all_qs_a.dedup();
+                all_qs_a.sort();
+                all_qs_a.dedup();
                 let mut all_qs_b: Vec<u8> = dist_b.keys().map(|&(_, q)| q).collect();
-                all_qs_b.sort(); all_qs_b.dedup();
+                all_qs_b.sort();
+                all_qs_b.dedup();
 
-                let n_polys_a: BTreeMap<u8, Vec<i64>> = all_qs_a.iter().map(|&q| {
-                    let mut poly = vec![0i64; 20];
-                    for (&(s, qq), &c) in dist_a { if qq == q {
-                        if s >= poly.len() { poly.resize(s + 1, 0); }
-                        poly[s] += c as i64;
-                    }}
-                    while poly.len() > 1 && *poly.last().unwrap() == 0 { poly.pop(); }
-                    (q, poly)
-                }).collect();
-                let n_polys_b: BTreeMap<u8, Vec<i64>> = all_qs_b.iter().map(|&q| {
-                    let mut poly = vec![0i64; 20];
-                    for (&(s, qq), &c) in dist_b { if qq == q {
-                        if s >= poly.len() { poly.resize(s + 1, 0); }
-                        poly[s] += c as i64;
-                    }}
-                    while poly.len() > 1 && *poly.last().unwrap() == 0 { poly.pop(); }
-                    (q, poly)
-                }).collect();
+                let n_polys_a: BTreeMap<u8, Vec<i64>> = all_qs_a
+                    .iter()
+                    .map(|&q| {
+                        let mut poly = vec![0i64; 20];
+                        for (&(s, qq), &c) in dist_a {
+                            if qq == q {
+                                if s >= poly.len() {
+                                    poly.resize(s + 1, 0);
+                                }
+                                poly[s] += c as i64;
+                            }
+                        }
+                        while poly.len() > 1 && *poly.last().unwrap() == 0 {
+                            poly.pop();
+                        }
+                        (q, poly)
+                    })
+                    .collect();
+                let n_polys_b: BTreeMap<u8, Vec<i64>> = all_qs_b
+                    .iter()
+                    .map(|&q| {
+                        let mut poly = vec![0i64; 20];
+                        for (&(s, qq), &c) in dist_b {
+                            if qq == q {
+                                if s >= poly.len() {
+                                    poly.resize(s + 1, 0);
+                                }
+                                poly[s] += c as i64;
+                            }
+                        }
+                        while poly.len() > 1 && *poly.last().unwrap() == 0 {
+                            poly.pop();
+                        }
+                        (q, poly)
+                    })
+                    .collect();
 
                 let max_deg = lp_polys.values().map(|p| p.len()).max().unwrap_or(1);
 
@@ -370,12 +457,18 @@ fn main() {
                         let b_k1 = lp_polys.get(&p_b).map(|p| coeff(p, k1)).unwrap_or(0);
                         let b_k2 = lp_polys.get(&p_b).map(|p| coeff(p, k2)).unwrap_or(0);
 
-                        if (a_k1 == 0 && a_k2 == 0) || (b_k1 == 0 && b_k2 == 0) { continue; }
+                        if (a_k1 == 0 && a_k2 == 0) || (b_k1 == 0 && b_k2 == 0) {
+                            continue;
+                        }
                         let delta = a_k1 * b_k2 - a_k2 * b_k1;
-                        if delta == 0 && a_k1 * b_k2 == 0 { continue; }
+                        if delta == 0 && a_k1 * b_k2 == 0 {
+                            continue;
+                        }
 
                         let mut zp_contribs: BTreeMap<(Zone, Zone), i64> = BTreeMap::new();
-                        for &zp in &zone_pairs { zp_contribs.insert(zp, 0); }
+                        for &zp in &zone_pairs {
+                            zp_contribs.insert(zp, 0);
+                        }
 
                         for &q_a in &all_qs_a {
                             let e_a = eps2(p_a, q_a);
@@ -385,10 +478,26 @@ fn main() {
                                 let z_b = classify_zone(q_b, p_a, p_b);
                                 let na_poly = &n_polys_a[&q_a];
                                 let nb_poly = &n_polys_b[&q_b];
-                                let na_k1 = if k1 >= e_a { coeff(na_poly, k1 - e_a) } else { 0 };
-                                let na_k2 = if k2 >= e_a { coeff(na_poly, k2 - e_a) } else { 0 };
-                                let nb_k1 = if k1 >= e_b { coeff(nb_poly, k1 - e_b) } else { 0 };
-                                let nb_k2 = if k2 >= e_b { coeff(nb_poly, k2 - e_b) } else { 0 };
+                                let na_k1 = if k1 >= e_a {
+                                    coeff(na_poly, k1 - e_a)
+                                } else {
+                                    0
+                                };
+                                let na_k2 = if k2 >= e_a {
+                                    coeff(na_poly, k2 - e_a)
+                                } else {
+                                    0
+                                };
+                                let nb_k1 = if k1 >= e_b {
+                                    coeff(nb_poly, k1 - e_b)
+                                } else {
+                                    0
+                                };
+                                let nb_k2 = if k2 >= e_b {
+                                    coeff(nb_poly, k2 - e_b)
+                                } else {
+                                    0
+                                };
                                 let c = na_k1 * nb_k2 - na_k2 * nb_k1;
                                 *zp_contribs.entry((z_a, z_b)).or_default() += c;
                             }
@@ -397,43 +506,89 @@ fn main() {
                         for &zp in &zone_pairs {
                             let c = zp_contribs[&zp];
                             let (pos, zero, neg) = zp_signs.get_mut(&zp).unwrap();
-                            if c > 0 { *pos += 1; } else if c == 0 { *zero += 1; } else { *neg += 1; }
+                            if c > 0 {
+                                *pos += 1;
+                            } else if c == 0 {
+                                *zero += 1;
+                            } else {
+                                *neg += 1;
+                            }
                         }
 
                         // qb = M grouping
-                        let qb_m: i64 = [(Zone::L, Zone::M), (Zone::M, Zone::M), (Zone::R, Zone::M)]
-                            .iter().map(|zp| zp_contribs[zp]).sum();
-                        if qb_m > 0 { qb_m_pos += 1; }
-                        else if qb_m == 0 { qb_m_zero += 1; }
-                        else { qb_m_neg += 1; }
+                        let qb_m: i64 =
+                            [(Zone::L, Zone::M), (Zone::M, Zone::M), (Zone::R, Zone::M)]
+                                .iter()
+                                .map(|zp| zp_contribs[zp])
+                                .sum();
+                        if qb_m > 0 {
+                            qb_m_pos += 1;
+                        } else if qb_m == 0 {
+                            qb_m_zero += 1;
+                        } else {
+                            qb_m_neg += 1;
+                        }
 
                         // qa = M grouping
-                        let qa_m: i64 = [(Zone::M, Zone::L), (Zone::M, Zone::M), (Zone::M, Zone::R)]
-                            .iter().map(|zp| zp_contribs[zp]).sum();
-                        if qa_m > 0 { qa_m_pos += 1; }
-                        else if qa_m == 0 { qa_m_zero += 1; }
-                        else { qa_m_neg += 1; }
+                        let qa_m: i64 =
+                            [(Zone::M, Zone::L), (Zone::M, Zone::M), (Zone::M, Zone::R)]
+                                .iter()
+                                .map(|zp| zp_contribs[zp])
+                                .sum();
+                        if qa_m > 0 {
+                            qa_m_pos += 1;
+                        } else if qa_m == 0 {
+                            qa_m_zero += 1;
+                        } else {
+                            qa_m_neg += 1;
+                        }
 
                         // Shift pattern grouping
                         // (0,1) staircase: (M,L), (M,M), (R,L), (R,M)
-                        let s01: i64 = [(Zone::M, Zone::L), (Zone::M, Zone::M), (Zone::R, Zone::L), (Zone::R, Zone::M)]
-                            .iter().map(|zp| zp_contribs[zp]).sum();
-                        if s01 > 0 { shift_01_pos += 1; }
-                        else if s01 == 0 { shift_01_zero += 1; }
-                        else { shift_01_neg += 1; }
+                        let s01: i64 = [
+                            (Zone::M, Zone::L),
+                            (Zone::M, Zone::M),
+                            (Zone::R, Zone::L),
+                            (Zone::R, Zone::M),
+                        ]
+                        .iter()
+                        .map(|zp| zp_contribs[zp])
+                        .sum();
+                        if s01 > 0 {
+                            shift_01_pos += 1;
+                        } else if s01 == 0 {
+                            shift_01_zero += 1;
+                        } else {
+                            shift_01_neg += 1;
+                        }
 
                         // same shift: (L,L)=(1,1), (L,M)=(1,1), (M,R)=(0,0), (R,R)=(0,0)
-                        let s_same: i64 = [(Zone::L, Zone::L), (Zone::L, Zone::M), (Zone::M, Zone::R), (Zone::R, Zone::R)]
-                            .iter().map(|zp| zp_contribs[zp]).sum();
-                        if s_same > 0 { shift_same_pos += 1; }
-                        else if s_same == 0 { shift_same_zero += 1; }
-                        else { shift_same_neg += 1; }
+                        let s_same: i64 = [
+                            (Zone::L, Zone::L),
+                            (Zone::L, Zone::M),
+                            (Zone::M, Zone::R),
+                            (Zone::R, Zone::R),
+                        ]
+                        .iter()
+                        .map(|zp| zp_contribs[zp])
+                        .sum();
+                        if s_same > 0 {
+                            shift_same_pos += 1;
+                        } else if s_same == 0 {
+                            shift_same_zero += 1;
+                        } else {
+                            shift_same_neg += 1;
+                        }
 
                         // reverse staircase (1,0): (L,R)
                         let s10 = zp_contribs[&(Zone::L, Zone::R)];
-                        if s10 > 0 { shift_10_pos += 1; }
-                        else if s10 == 0 { shift_10_zero += 1; }
-                        else { shift_10_neg += 1; }
+                        if s10 > 0 {
+                            shift_10_pos += 1;
+                        } else if s10 == 0 {
+                            shift_10_zero += 1;
+                        } else {
+                            shift_10_neg += 1;
+                        }
 
                         // Track M+L bracket negative (from the perturbation view)
                         // bracket_M + bracket_L < 0 means staircase doesn't compensate L perturbation
@@ -460,16 +615,33 @@ fn main() {
     println!("ZONE-PAIR SIGN PATTERN (n=4..{})", max_n);
     println!("{}", "=".repeat(80));
     println!();
-    println!("{:<12} {:>10} {:>10} {:>10}  {:<6}  shift", "Zone pair", "Pos", "Zero", "Neg", ">=0?");
+    println!(
+        "{:<12} {:>10} {:>10} {:>10}  {:<6}  shift",
+        "Zone pair", "Pos", "Zero", "Neg", ">=0?"
+    );
     println!("{}", "-".repeat(70));
     for &zp in &zone_pairs {
         let (pos, zero, neg) = zp_signs[&zp];
-        let ea = match zp.0 { Zone::L => 1, Zone::M => 0, Zone::R => 0 };
-        let eb = match zp.1 { Zone::L => 1, Zone::M => 1, Zone::R => 0 };
-        println!("({},{})        {:>10} {:>10} {:>10}  {:<6}  ({},{})",
-            zone_label(zp.0), zone_label(zp.1), pos, zero, neg,
+        let ea = match zp.0 {
+            Zone::L => 1,
+            Zone::M => 0,
+            Zone::R => 0,
+        };
+        let eb = match zp.1 {
+            Zone::L => 1,
+            Zone::M => 1,
+            Zone::R => 0,
+        };
+        println!(
+            "({},{})        {:>10} {:>10} {:>10}  {:<6}  ({},{})",
+            zone_label(zp.0),
+            zone_label(zp.1),
+            pos,
+            zero,
+            neg,
             if neg == 0 { "YES" } else { "NO" },
-            ea, eb
+            ea,
+            eb
         );
     }
 
@@ -478,28 +650,51 @@ fn main() {
     println!("GROUPINGS");
     println!("{}", "=".repeat(80));
     println!();
-    println!("{:<30} {:>10} {:>10} {:>10}  {}", "Group", "Pos", "Zero", "Neg", "Always>=0?");
+    println!(
+        "{:<30} {:>10} {:>10} {:>10}  {}",
+        "Group", "Pos", "Zero", "Neg", "Always>=0?"
+    );
     println!("{}", "-".repeat(70));
-    println!("{:<30} {:>10} {:>10} {:>10}  {}",
+    println!(
+        "{:<30} {:>10} {:>10} {:>10}  {}",
         "qb = M (col M)",
-        qb_m_pos, qb_m_zero, qb_m_neg,
-        if qb_m_neg == 0 { "YES" } else { "NO" });
-    println!("{:<30} {:>10} {:>10} {:>10}  {}",
+        qb_m_pos,
+        qb_m_zero,
+        qb_m_neg,
+        if qb_m_neg == 0 { "YES" } else { "NO" }
+    );
+    println!(
+        "{:<30} {:>10} {:>10} {:>10}  {}",
         "qa = M (row M)",
-        qa_m_pos, qa_m_zero, qa_m_neg,
-        if qa_m_neg == 0 { "YES" } else { "NO" });
-    println!("{:<30} {:>10} {:>10} {:>10}  {}",
+        qa_m_pos,
+        qa_m_zero,
+        qa_m_neg,
+        if qa_m_neg == 0 { "YES" } else { "NO" }
+    );
+    println!(
+        "{:<30} {:>10} {:>10} {:>10}  {}",
         "staircase (0,1)",
-        shift_01_pos, shift_01_zero, shift_01_neg,
-        if shift_01_neg == 0 { "YES" } else { "NO" });
-    println!("{:<30} {:>10} {:>10} {:>10}  {}",
+        shift_01_pos,
+        shift_01_zero,
+        shift_01_neg,
+        if shift_01_neg == 0 { "YES" } else { "NO" }
+    );
+    println!(
+        "{:<30} {:>10} {:>10} {:>10}  {}",
         "same-shift (0,0)+(1,1)",
-        shift_same_pos, shift_same_zero, shift_same_neg,
-        if shift_same_neg == 0 { "YES" } else { "NO" });
-    println!("{:<30} {:>10} {:>10} {:>10}  {}",
+        shift_same_pos,
+        shift_same_zero,
+        shift_same_neg,
+        if shift_same_neg == 0 { "YES" } else { "NO" }
+    );
+    println!(
+        "{:<30} {:>10} {:>10} {:>10}  {}",
         "reverse staircase (1,0)",
-        shift_10_pos, shift_10_zero, shift_10_neg,
-        if shift_10_neg == 0 { "YES" } else { "NO" });
+        shift_10_pos,
+        shift_10_zero,
+        shift_10_neg,
+        if shift_10_neg == 0 { "YES" } else { "NO" }
+    );
 
     // NEW: Check a finer grouping. The key question: which groups are always >= 0?
     //

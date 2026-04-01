@@ -10,9 +10,7 @@
 /// Conjectured: H_n(t) is real-rooted and H_n ≪ H_{n+1}.
 use combpoly::permutation::alternating_permutations;
 use combpoly::statistics::{compute, Stat};
-use polynomial_tools::real_rootedness::{
-    check_interlacing_sturm, format_poly, is_real_rooted,
-};
+use polynomial_tools::real_rootedness::{check_interlacing_sturm, format_poly, is_real_rooted};
 use polynomial_tools::recurrence::{find_recurrence_adaptive, AdaptiveSearchOptions};
 use std::time::Instant;
 
@@ -32,7 +30,11 @@ fn main() {
         let count = alt.len();
 
         // Build generating polynomial
-        let max_swap = alt.iter().map(|s| compute(s, Stat::Swaps)).max().unwrap_or(0);
+        let max_swap = alt
+            .iter()
+            .map(|s| compute(s, Stat::Swaps))
+            .max()
+            .unwrap_or(0);
         let mut coeffs = vec![0i64; max_swap + 1];
         for s in &alt {
             coeffs[compute(s, Stat::Swaps)] += 1;
@@ -53,7 +55,11 @@ fn main() {
             n,
             count,
             elapsed,
-            if rr { "✓ real-rooted" } else { "✗ NOT real-rooted" }
+            if rr {
+                "✓ real-rooted"
+            } else {
+                "✗ NOT real-rooted"
+            }
         );
 
         polys.push(coeffs);

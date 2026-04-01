@@ -43,7 +43,10 @@ impl Rng {
         Rng(seed.wrapping_add(1))
     }
     fn next_u64(&mut self) -> u64 {
-        self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        self.0 = self
+            .0
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         self.0
     }
     /// Uniform in [0, 1)
@@ -115,11 +118,7 @@ fn build_poly(vals: &[usize]) -> Vec<i64> {
 /// Returns (positions_used, coeffs_2d, max_k).
 /// positions_used[i] = the actual position p.
 /// coeffs_2d[i][k] = coefficient of x^{positions_used[i]} t^k.
-fn build_bivariate_coeffs(
-    class: &[&Vec<u8>],
-    positions: &[u8],
-    n: u8,
-) -> (Vec<u8>, Vec<Vec<i64>>) {
+fn build_bivariate_coeffs(class: &[&Vec<u8>], positions: &[u8], n: u8) -> (Vec<u8>, Vec<Vec<i64>>) {
     let mut pos_polys: Vec<(u8, Vec<i64>)> = Vec::new();
     for &p in positions {
         let vals: Vec<usize> = class
@@ -267,8 +266,8 @@ fn check_tn3(coeffs: &[Vec<i64>]) -> bool {
                             let g = coeffs[i3][j1];
                             let h = coeffs[i3][j2];
                             let k = coeffs[i3][j3];
-                            let det = a * (e * k - f * h) - b * (d * k - f * g)
-                                + c * (d * h - e * g);
+                            let det =
+                                a * (e * k - f * h) - b * (d * k - f * g) + c * (d * h - e * g);
                             if det < 0 {
                                 return false;
                             }
@@ -283,10 +282,7 @@ fn check_tn3(coeffs: &[Vec<i64>]) -> bool {
 
 /// Compute Newton polygon support: set of (p, k) with a_{p,k} > 0.
 /// Check M-convexity of the support (exchange axiom).
-fn check_newton_polygon(
-    positions: &[u8],
-    coeffs: &[Vec<i64>],
-) -> (Vec<(u8, usize)>, bool) {
+fn check_newton_polygon(positions: &[u8], coeffs: &[Vec<i64>]) -> (Vec<(u8, usize)>, bool) {
     let mut support: Vec<(u8, usize)> = Vec::new();
     for (i, &p) in positions.iter().enumerate() {
         for (k, &c) in coeffs[i].iter().enumerate() {
@@ -410,7 +406,12 @@ fn main() {
             let max_k = coeffs[0].len();
 
             // Print Phi_S
-            println!("  S={}, positions={:?}, max t-degree={}", s_str, pos_used, max_k - 1);
+            println!(
+                "  S={}, positions={:?}, max t-degree={}",
+                s_str,
+                pos_used,
+                max_k - 1
+            );
             for (i, &p) in pos_used.iter().enumerate() {
                 println!("    L^({}) = {}", p, format_poly(&coeffs[i]));
             }
@@ -475,8 +476,7 @@ fn main() {
             let mut rr_all_ok = true;
             let test_x_all: Vec<f64> = {
                 let mut v = vec![
-                    -10.0, -5.0, -2.0, -1.0, -0.5, -0.1, -0.01,
-                    0.01, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0,
+                    -10.0, -5.0, -2.0, -1.0, -0.5, -0.1, -0.01, 0.01, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0,
                 ];
                 let mut rng3 = Rng::new(mask + 12345);
                 for _ in 0..num_rr_tests_all {

@@ -11,8 +11,8 @@
 ///
 /// Also tries: generating polynomial Σ_π t^{depth(π,S)} (truncated).
 use combpoly::permutation::{
-    all_permutations, avoiding_permutations, backtrack_image, contains_pattern,
-    is_derangement, is_involution, parse_sequence,
+    all_permutations, avoiding_permutations, backtrack_image, contains_pattern, is_derangement,
+    is_involution, parse_sequence,
 };
 use std::collections::BTreeMap;
 use std::env;
@@ -41,10 +41,7 @@ fn compose(a: &[u8], b: &[u8]) -> Vec<u8> {
 }
 
 fn main() {
-    let max_n: u8 = env::args()
-        .nth(1)
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(7);
+    let max_n: u8 = env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(7);
 
     let patterns = ["123", "132", "213", "231", "312", "321"];
 
@@ -52,7 +49,10 @@ fn main() {
 
     // Pattern-avoiding sets
     println!("--- Pattern-avoiding constraint sets ---\n");
-    println!("{:<12} {:>4} {:>10} {:>14} {:>10} {:>8}", "S-set", "n", "|S|", "total_depth", "avg_depth", "max_dep");
+    println!(
+        "{:<12} {:>4} {:>10} {:>14} {:>10} {:>8}",
+        "S-set", "n", "|S|", "total_depth", "avg_depth", "max_dep"
+    );
     println!("{}", "-".repeat(65));
 
     for pat_str in &patterns {
@@ -77,7 +77,12 @@ fn main() {
 
             println!(
                 "Av_{:<8} {:>4} {:>10} {:>14} {:>10.4} {:>8}",
-                pat_str, n, s_set.len(), total_depth, avg, max_depth
+                pat_str,
+                n,
+                s_set.len(),
+                total_depth,
+                avg,
+                max_depth
             );
         }
         println!();
@@ -181,5 +186,9 @@ fn main() {
 }
 
 fn gcd(a: u64, b: u64) -> u64 {
-    if b == 0 { a } else { gcd(b, a % b) }
+    if b == 0 {
+        a
+    } else {
+        gcd(b, a % b)
+    }
 }

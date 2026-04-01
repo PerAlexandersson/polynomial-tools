@@ -391,16 +391,21 @@ fn main() {
             });
 
             // ── Print ──
-            println!(
-                "\n  S={}, P(S)={:?}, G_p match: {}",
-                s_str, vp, gp_match
-            );
+            println!("\n  S={}, P(S)={:?}, G_p match: {}", s_str, vp, gp_match);
 
             if !gp_match {
                 println!("    *** G_p MISMATCH - bug in source computation! ***");
                 for &p in &vp {
-                    println!("      G_{}(computed) = {}", p, format_poly(gp_polys.get(&p).unwrap_or(&vec![0])));
-                    println!("      G_{}(direct)   = {}", p, format_poly(gp_direct.get(&p).unwrap_or(&vec![0])));
+                    println!(
+                        "      G_{}(computed) = {}",
+                        p,
+                        format_poly(gp_polys.get(&p).unwrap_or(&vec![0]))
+                    );
+                    println!(
+                        "      G_{}(direct)   = {}",
+                        p,
+                        format_poly(gp_direct.get(&p).unwrap_or(&vec![0]))
+                    );
                 }
                 continue;
             }
@@ -409,9 +414,21 @@ fn main() {
                 let ap = ap_polys.get(&p).unwrap();
                 let bp = bp_polys.get(&p).unwrap();
                 let gp = gp_polys.get(&p).unwrap();
-                let ap_rr = if ap.len() <= 2 { true } else { is_real_rooted(ap) };
-                let bp_rr = if bp.len() <= 2 { true } else { is_real_rooted(bp) };
-                let gp_rr = if gp.len() <= 2 { true } else { is_real_rooted(gp) };
+                let ap_rr = if ap.len() <= 2 {
+                    true
+                } else {
+                    is_real_rooted(ap)
+                };
+                let bp_rr = if bp.len() <= 2 {
+                    true
+                } else {
+                    is_real_rooted(bp)
+                };
+                let gp_rr = if gp.len() <= 2 {
+                    true
+                } else {
+                    is_real_rooted(gp)
+                };
 
                 if ap_rr {
                     total_ap_rr += 1;
@@ -619,10 +636,16 @@ fn main() {
                         let (_, ref a) = q_polys[i];
                         let (_, ref b) = q_polys[i + 1];
                         if a.len() > 1 && b.len() > 1 {
-                            let (s, l) = if a.len() <= b.len() { (a.as_slice(), b.as_slice()) } else { (b.as_slice(), a.as_slice()) };
+                            let (s, l) = if a.len() <= b.len() {
+                                (a.as_slice(), b.as_slice())
+                            } else {
+                                (b.as_slice(), a.as_slice())
+                            };
                             match check_weak_interlacing(s, l) {
                                 Some(true) => {}
-                                _ => { chain_q_ok = false; }
+                                _ => {
+                                    chain_q_ok = false;
+                                }
                             }
                         }
                     }
@@ -644,10 +667,16 @@ fn main() {
                         let (_, ref a) = p_polys[i];
                         let (_, ref b) = p_polys[i + 1];
                         if a.len() > 1 && b.len() > 1 {
-                            let (s, l) = if a.len() <= b.len() { (a.as_slice(), b.as_slice()) } else { (b.as_slice(), a.as_slice()) };
+                            let (s, l) = if a.len() <= b.len() {
+                                (a.as_slice(), b.as_slice())
+                            } else {
+                                (b.as_slice(), a.as_slice())
+                            };
                             match check_weak_interlacing(s, l) {
                                 Some(true) => {}
-                                _ => { chain_p_ok = false; }
+                                _ => {
+                                    chain_p_ok = false;
+                                }
                             }
                         }
                     }
@@ -696,7 +725,12 @@ fn main() {
                         .iter()
                         .map(|&p| format!("e2={}", epsilon2(p, q)))
                         .collect();
-                    println!("      q={}: [{}]  eps2=[{}]", q, row.join(" | "), e2_row.join(","));
+                    println!(
+                        "      q={}: [{}]  eps2=[{}]",
+                        q,
+                        row.join(" | "),
+                        e2_row.join(",")
+                    );
                 }
             }
         }

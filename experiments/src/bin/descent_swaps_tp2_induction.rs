@@ -18,37 +18,61 @@ use polynomial_tools::real_rootedness::format_poly;
 use std::collections::BTreeMap;
 
 fn build_poly(vals: &[usize]) -> Vec<i64> {
-    if vals.is_empty() { return vec![0]; }
+    if vals.is_empty() {
+        return vec![0];
+    }
     let max_s = *vals.iter().max().unwrap();
     let mut coeffs = vec![0i64; max_s + 1];
-    for &s in vals { coeffs[s] += 1; }
-    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 { coeffs.pop(); }
+    for &s in vals {
+        coeffs[s] += 1;
+    }
+    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 {
+        coeffs.pop();
+    }
     coeffs
 }
 
 fn source_asc(s_mask: u64, p: u8, n: u8) -> u64 {
-    if n <= 2 { return 0; }
-    if p == n { return s_mask; }
+    if n <= 2 {
+        return 0;
+    }
+    if p == n {
+        return s_mask;
+    }
     let mut sp = 0u64;
     if p == 1 {
-        for j in 2..n { if (s_mask >> (j - 1)) & 1 == 1 { sp |= 1 << (j - 2); } }
+        for j in 2..n {
+            if (s_mask >> (j - 1)) & 1 == 1 {
+                sp |= 1 << (j - 2);
+            }
+        }
     } else {
         for pos in 1..=(p.saturating_sub(2)) {
-            if (s_mask >> (pos - 1)) & 1 == 1 { sp |= 1 << (pos - 1); }
+            if (s_mask >> (pos - 1)) & 1 == 1 {
+                sp |= 1 << (pos - 1);
+            }
         }
-        for j in (p + 1)..n { if (s_mask >> (j - 1)) & 1 == 1 { sp |= 1 << (j - 2); } }
+        for j in (p + 1)..n {
+            if (s_mask >> (j - 1)) & 1 == 1 {
+                sp |= 1 << (j - 2);
+            }
+        }
     }
     sp
 }
 
 fn source_desc(s_mask: u64, p: u8, n: u8) -> Option<u64> {
-    if p <= 1 || p >= n { return None; }
+    if p <= 1 || p >= n {
+        return None;
+    }
     Some(source_asc(s_mask, p, n) | (1 << (p - 2)))
 }
 
 fn epsilon1(pi: &[u8], p: u8) -> bool {
     let n = pi.len() as u8 + 1;
-    if p <= 1 || p >= n { return false; }
+    if p <= 1 || p >= n {
+        return false;
+    }
     pi[(p - 2) as usize] + 1 == pi[(p - 1) as usize]
 }
 
@@ -59,7 +83,9 @@ fn valid_positions(s_mask: u64, n: u8) -> Vec<u8> {
             positions.push(p);
         }
     }
-    if n >= 2 && (s_mask >> (n - 2)) & 1 == 0 { positions.push(n); }
+    if n >= 2 && (s_mask >> (n - 2)) & 1 == 0 {
+        positions.push(n);
+    }
     positions
 }
 
@@ -68,7 +94,9 @@ fn descent_set_to_string(mask: u64, n: u8) -> String {
     let mut first = true;
     for i in 1..n {
         if (mask >> (i - 1)) & 1 == 1 {
-            if !first { s.push(','); }
+            if !first {
+                s.push(',');
+            }
             s.push_str(&i.to_string());
             first = false;
         }
@@ -78,12 +106,18 @@ fn descent_set_to_string(mask: u64, n: u8) -> String {
 }
 
 fn coeff(poly: &[i64], k: usize) -> i64 {
-    if k < poly.len() { poly[k] } else { 0 }
+    if k < poly.len() {
+        poly[k]
+    } else {
+        0
+    }
 }
 
 fn is_tp2(rows: &[Vec<i64>]) -> bool {
     let nrows = rows.len();
-    if nrows < 2 { return true; }
+    if nrows < 2 {
+        return true;
+    }
     let max_deg = rows.iter().map(|r| r.len()).max().unwrap_or(0);
     for i1 in 0..nrows {
         for i2 in (i1 + 1)..nrows {
@@ -104,7 +138,9 @@ fn is_tp2(rows: &[Vec<i64>]) -> bool {
 /// Find the first negative 2x2 minor (for diagnostics).
 fn first_neg_minor(rows: &[Vec<i64>]) -> Option<(usize, usize, usize, usize, i64)> {
     let nrows = rows.len();
-    if nrows < 2 { return None; }
+    if nrows < 2 {
+        return None;
+    }
     let max_deg = rows.iter().map(|r| r.len()).max().unwrap_or(0);
     for i1 in 0..nrows {
         for i2 in (i1 + 1)..nrows {
@@ -223,18 +259,13 @@ fn main() {
                             n_src_p_ge3_ok += 1;
                         } else {
                             let s_str = descent_set_to_string(mask, n);
-                            let (i1, i2, j1, j2, val) =
-                                first_neg_minor(&source_rows).unwrap();
+                            let (i1, i2, j1, j2, val) = first_neg_minor(&source_rows).unwrap();
                             println!(
                                 "  FAIL p>=3 src TP_2: n={} S={} p={} rows({},{}) cols({},{}) minor={}",
                                 n, s_str, p, keys[i1], keys[i2], j1, j2, val
                             );
                             for (idx, q) in keys.iter().enumerate() {
-                                println!(
-                                    "    q={}: {}",
-                                    q,
-                                    format_poly(&source_rows[idx])
-                                );
+                                println!("    q={}: {}", q, format_poly(&source_rows[idx]));
                             }
                         }
                     }
@@ -245,8 +276,7 @@ fn main() {
                     {
                         let mut by_q: BTreeMap<u8, Vec<usize>> = BTreeMap::new();
                         for (pi, ms) in &source_perms {
-                            let q =
-                                pi.iter().position(|&v| v == n - 1).unwrap() as u8 + 1;
+                            let q = pi.iter().position(|&v| v == n - 1).unwrap() as u8 + 1;
                             by_q.entry(q).or_default().push(*ms);
                         }
 
@@ -262,18 +292,13 @@ fn main() {
                                 n_p2_posn1_ok += 1;
                             } else {
                                 let s_str = descent_set_to_string(mask, n);
-                                let (i1, i2, j1, j2, val) =
-                                    first_neg_minor(&source_rows).unwrap();
+                                let (i1, i2, j1, j2, val) = first_neg_minor(&source_rows).unwrap();
                                 println!(
                                     "  FAIL p=2 pos(n-1) src TP_2: n={} S={} rows({},{}) cols({},{}) minor={}",
                                     n, s_str, keys[i1], keys[i2], j1, j2, val
                                 );
                                 for (idx, q) in keys.iter().enumerate() {
-                                    println!(
-                                        "    q={}: {}",
-                                        q,
-                                        format_poly(&source_rows[idx])
-                                    );
+                                    println!("    q={}: {}", q, format_poly(&source_rows[idx]));
                                 }
                             }
                         }
@@ -299,18 +324,13 @@ fn main() {
                                 n_p2_pos1_ok += 1;
                             } else {
                                 let s_str = descent_set_to_string(mask, n);
-                                let (i1, i2, j1, j2, val) =
-                                    first_neg_minor(&pos1_rows).unwrap();
+                                let (i1, i2, j1, j2, val) = first_neg_minor(&pos1_rows).unwrap();
                                 println!(
                                     "  FAIL p=2 pos(1) src TP_2: n={} S={} rows({},{}) cols({},{}) minor={}",
                                     n, s_str, keys[i1], keys[i2], j1, j2, val
                                 );
                                 for (idx, r) in keys.iter().enumerate() {
-                                    println!(
-                                        "    r={}: {}",
-                                        r,
-                                        format_poly(&pos1_rows[idx])
-                                    );
+                                    println!("    r={}: {}", r, format_poly(&pos1_rows[idx]));
                                 }
                             }
                         }
@@ -336,9 +356,7 @@ fn main() {
             for &p in &vp {
                 let vals: Vec<usize> = class
                     .iter()
-                    .filter(|pi| {
-                        pi.iter().position(|&v| v == n).unwrap() as u8 + 1 == p
-                    })
+                    .filter(|pi| pi.iter().position(|&v| v == n).unwrap() as u8 + 1 == p)
                     .map(|pi| compute(pi, Stat::Swaps))
                     .collect();
                 if !vals.is_empty() {
@@ -389,8 +407,7 @@ fn main() {
         ok_src_p2_pos1, total_src_p2_pos1
     );
 
-    let all_ok = ok_src_p_ge3 == total_src_p_ge3
-        && ok_src_p2_pos1 == total_src_p2_pos1;
+    let all_ok = ok_src_p_ge3 == total_src_p_ge3 && ok_src_p2_pos1 == total_src_p2_pos1;
     println!(
         "\nInductive source TP_2 (p>=3 + p=2 pos(1)): {}",
         if all_ok { "ALL PASS" } else { "SOME FAIL" }

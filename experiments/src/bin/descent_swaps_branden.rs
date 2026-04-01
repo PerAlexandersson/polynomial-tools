@@ -9,18 +9,35 @@
 /// (a) The pure staircase matrix (entries 1 and t)
 /// (b) The actual transfer matrix with corrections
 ///
-use polynomial_tools::real_rootedness::{is_real_rooted, format_poly, check_weak_interlacing};
+use polynomial_tools::real_rootedness::{check_weak_interlacing, format_poly, is_real_rooted};
 
 /// Check Brändén's condition for a 2x2 submatrix [[a,b],[c,d]]
 /// at several (lambda, mu) values.
 /// Returns true if the condition holds for all tested values.
 fn check_branden_2x2(a: &[i64], b: &[i64], c: &[i64], d: &[i64]) -> bool {
     let test_pairs: Vec<(f64, f64)> = vec![
-        (1.0, 1.0), (1.0, 2.0), (2.0, 1.0), (1.0, 0.5), (0.5, 1.0),
-        (3.0, 1.0), (1.0, 3.0), (5.0, 1.0), (1.0, 5.0), (0.1, 1.0),
-        (1.0, 0.1), (10.0, 1.0), (1.0, 10.0), (2.0, 3.0), (3.0, 2.0),
-        (0.01, 1.0), (1.0, 0.01), (100.0, 1.0), (1.0, 100.0),
-        (7.0, 3.0), (3.0, 7.0), (0.5, 0.5),
+        (1.0, 1.0),
+        (1.0, 2.0),
+        (2.0, 1.0),
+        (1.0, 0.5),
+        (0.5, 1.0),
+        (3.0, 1.0),
+        (1.0, 3.0),
+        (5.0, 1.0),
+        (1.0, 5.0),
+        (0.1, 1.0),
+        (1.0, 0.1),
+        (10.0, 1.0),
+        (1.0, 10.0),
+        (2.0, 3.0),
+        (3.0, 2.0),
+        (0.01, 1.0),
+        (1.0, 0.01),
+        (100.0, 1.0),
+        (1.0, 100.0),
+        (7.0, 3.0),
+        (3.0, 7.0),
+        (0.5, 0.5),
     ];
 
     for &(lambda, mu) in &test_pairs {
@@ -45,14 +62,27 @@ fn check_branden_2x2(a: &[i64], b: &[i64], c: &[i64], d: &[i64]) -> bool {
 
         // Check: every convex combination is real-rooted
         let combos: Vec<(i64, i64)> = vec![
-            (1, 0), (0, 1), (1, 1), (1, 2), (2, 1), (1, 3), (3, 1),
-            (1, 5), (5, 1), (2, 3), (3, 2),
+            (1, 0),
+            (0, 1),
+            (1, 1),
+            (1, 2),
+            (2, 1),
+            (1, 3),
+            (3, 1),
+            (1, 5),
+            (5, 1),
+            (2, 3),
+            (3, 2),
         ];
         for &(alpha, beta) in &combos {
             let maxlen = lhs_t.len().max(rhs_t.len());
             let mut combo = vec![0i64; maxlen];
-            for (i, &c) in lhs_t.iter().enumerate() { combo[i] += alpha * c; }
-            for (i, &c) in rhs_t.iter().enumerate() { combo[i] += beta * c; }
+            for (i, &c) in lhs_t.iter().enumerate() {
+                combo[i] += alpha * c;
+            }
+            for (i, &c) in rhs_t.iter().enumerate() {
+                combo[i] += beta * c;
+            }
             let combo = trim(&combo);
             if combo.len() > 2 && !is_real_rooted(&combo) {
                 return false;
@@ -87,7 +117,9 @@ fn lin_mul_plus(lambda: f64, mu: f64, b: &[i64], d: &[i64]) -> Vec<f64> {
 
 fn trim(p: &[i64]) -> Vec<i64> {
     let mut v = p.to_vec();
-    while v.len() > 1 && *v.last().unwrap() == 0 { v.pop(); }
+    while v.len() > 1 && *v.last().unwrap() == 0 {
+        v.pop();
+    }
     v
 }
 
@@ -98,11 +130,11 @@ fn main() {
     // The possible 2x2 submatrices
     let submatrices: Vec<(&str, [i64; 2], [i64; 2], [i64; 2], [i64; 2])> = vec![
         ("[[t,t],[t,t]]", [0, 1], [0, 1], [0, 1], [0, 1]),
-        ("[[t,1],[t,t]]", [0, 1], [1],    [0, 1], [0, 1]),
-        ("[[t,1],[t,1]]", [0, 1], [1],    [0, 1], [1]),
-        ("[[1,1],[t,t]]", [1],    [1],    [0, 1], [0, 1]),
-        ("[[1,1],[t,1]]", [1],    [1],    [0, 1], [1]),
-        ("[[1,1],[1,1]]", [1],    [1],    [1],    [1]),
+        ("[[t,1],[t,t]]", [0, 1], [1], [0, 1], [0, 1]),
+        ("[[t,1],[t,1]]", [0, 1], [1], [0, 1], [1]),
+        ("[[1,1],[t,t]]", [1], [1], [0, 1], [0, 1]),
+        ("[[1,1],[t,1]]", [1], [1], [0, 1], [1]),
+        ("[[1,1],[1,1]]", [1], [1], [1], [1]),
     ];
 
     for (name, a, b, c, d) in &submatrices {
@@ -131,15 +163,57 @@ fn main() {
         // already checked above
         // From mixing A (mult t^eps2) and C (mult t^{eps2+1}):
         // When eps2=0: A gets 1, C gets t
-        ("[[1,t],[1,t]]",   vec![1], vec![0,1], vec![1], vec![0,1]),
-        ("[[1,t],[t,t^2]]", vec![1], vec![0,1], vec![0,1], vec![0,0,1]),
-        ("[[t,t^2],[1,t]]", vec![0,1], vec![0,0,1], vec![1], vec![0,1]),
-        ("[[t,t^2],[t,t^2]]", vec![0,1], vec![0,0,1], vec![0,1], vec![0,0,1]),
+        ("[[1,t],[1,t]]", vec![1], vec![0, 1], vec![1], vec![0, 1]),
+        (
+            "[[1,t],[t,t^2]]",
+            vec![1],
+            vec![0, 1],
+            vec![0, 1],
+            vec![0, 0, 1],
+        ),
+        (
+            "[[t,t^2],[1,t]]",
+            vec![0, 1],
+            vec![0, 0, 1],
+            vec![1],
+            vec![0, 1],
+        ),
+        (
+            "[[t,t^2],[t,t^2]]",
+            vec![0, 1],
+            vec![0, 0, 1],
+            vec![0, 1],
+            vec![0, 0, 1],
+        ),
         // When eps2=1 for top, eps2=0 for bottom (or vice versa):
-        ("[[t,t^2],[1,1]]", vec![0,1], vec![0,0,1], vec![1], vec![1]),
-        ("[[1,1],[t,t^2]]", vec![1], vec![1], vec![0,1], vec![0,0,1]),
-        ("[[t,t],[t,t^2]]", vec![0,1], vec![0,1], vec![0,1], vec![0,0,1]),
-        ("[[t^2,t],[t^2,t]]", vec![0,0,1], vec![0,1], vec![0,0,1], vec![0,1]),
+        (
+            "[[t,t^2],[1,1]]",
+            vec![0, 1],
+            vec![0, 0, 1],
+            vec![1],
+            vec![1],
+        ),
+        (
+            "[[1,1],[t,t^2]]",
+            vec![1],
+            vec![1],
+            vec![0, 1],
+            vec![0, 0, 1],
+        ),
+        (
+            "[[t,t],[t,t^2]]",
+            vec![0, 1],
+            vec![0, 1],
+            vec![0, 1],
+            vec![0, 0, 1],
+        ),
+        (
+            "[[t^2,t],[t^2,t]]",
+            vec![0, 0, 1],
+            vec![0, 1],
+            vec![0, 0, 1],
+            vec![0, 1],
+        ),
         // Mixing D columns (same as A columns but from desc source):
         // Same as pure staircase — already checked
     ];

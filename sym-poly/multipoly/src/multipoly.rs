@@ -6,7 +6,7 @@
 
 use std::collections::BTreeMap;
 use std::fmt;
-use std::ops::{Add, Neg, Sub, Mul};
+use std::ops::{Add, Mul, Neg, Sub};
 
 use sym_poly_core::Ring;
 
@@ -23,7 +23,10 @@ pub struct MultiPoly<C: Ring> {
 impl<C: Ring> MultiPoly<C> {
     /// Create the zero polynomial in n variables.
     pub fn zero(num_vars: usize) -> Self {
-        MultiPoly { num_vars, terms: BTreeMap::new() }
+        MultiPoly {
+            num_vars,
+            terms: BTreeMap::new(),
+        }
     }
 
     /// Create from a map of exponent vectors to coefficients. Strips zeros.
@@ -70,9 +73,15 @@ impl<C: Ring> MultiPoly<C> {
     // Accessors
     // -----------------------------------------------------------------------
 
-    pub fn num_vars(&self) -> usize { self.num_vars }
-    pub fn terms(&self) -> &BTreeMap<Vec<u32>, C> { &self.terms }
-    pub fn is_zero(&self) -> bool { self.terms.is_empty() }
+    pub fn num_vars(&self) -> usize {
+        self.num_vars
+    }
+    pub fn terms(&self) -> &BTreeMap<Vec<u32>, C> {
+        &self.terms
+    }
+    pub fn is_zero(&self) -> bool {
+        self.terms.is_empty()
+    }
 
     pub fn coefficient(&self, exponents: &[u32]) -> C {
         self.terms.get(exponents).cloned().unwrap_or_else(C::zero)
@@ -94,30 +103,46 @@ impl<C: Ring> MultiPoly<C> {
     /// Apply the simple transposition s_i: swap x_i and x_{i+1} (0-indexed).
     pub fn swap_vars(&self, i: usize) -> Self {
         assert!(i + 1 < self.num_vars, "swap index out of bounds");
-        let terms = self.terms.iter().map(|(exp, c)| {
-            let mut new_exp = exp.clone();
-            new_exp.swap(i, i + 1);
-            (new_exp, c.clone())
-        }).collect();
-        MultiPoly { num_vars: self.num_vars, terms }
+        let terms = self
+            .terms
+            .iter()
+            .map(|(exp, c)| {
+                let mut new_exp = exp.clone();
+                new_exp.swap(i, i + 1);
+                (new_exp, c.clone())
+            })
+            .collect();
+        MultiPoly {
+            num_vars: self.num_vars,
+            terms,
+        }
     }
 
     /// Multiply by x_i (0-indexed).
     pub fn mul_var(&self, i: usize) -> Self {
         assert!(i < self.num_vars);
-        let terms = self.terms.iter().map(|(exp, c)| {
-            let mut new_exp = exp.clone();
-            new_exp[i] += 1;
-            (new_exp, c.clone())
-        }).collect();
-        MultiPoly { num_vars: self.num_vars, terms }
+        let terms = self
+            .terms
+            .iter()
+            .map(|(exp, c)| {
+                let mut new_exp = exp.clone();
+                new_exp[i] += 1;
+                (new_exp, c.clone())
+            })
+            .collect();
+        MultiPoly {
+            num_vars: self.num_vars,
+            terms,
+        }
     }
 
     pub fn scale(&self, scalar: &C) -> Self {
         if scalar.is_zero() {
             return Self::zero(self.num_vars);
         }
-        let terms = self.terms.iter()
+        let terms = self
+            .terms
+            .iter()
             .map(|(e, c)| (e.clone(), c.clone() * scalar.clone()))
             .collect();
         Self::from_terms(self.num_vars, terms)
@@ -143,14 +168,19 @@ impl<C: Ring> Add for MultiPoly<C> {
 
 impl<C: Ring> Sub for MultiPoly<C> {
     type Output = Self;
-    fn sub(self, rhs: Self) -> Self { self + (-rhs) }
+    fn sub(self, rhs: Self) -> Self {
+        self + (-rhs)
+    }
 }
 
 impl<C: Ring> Neg for MultiPoly<C> {
     type Output = Self;
     fn neg(self) -> Self {
         let terms = self.terms.into_iter().map(|(e, c)| (e, -c)).collect();
-        MultiPoly { num_vars: self.num_vars, terms }
+        MultiPoly {
+            num_vars: self.num_vars,
+            terms,
+        }
     }
 }
 
@@ -161,7 +191,9 @@ impl<C: Ring> Mul for MultiPoly<C> {
         let n = self.num_vars;
         let mut terms: BTreeMap<Vec<u32>, C> = BTreeMap::new();
         for (e1, c1) in &self.terms {
-            if c1.is_zero() { continue; }
+            if c1.is_zero() {
+                continue;
+            }
             for (e2, c2) in &rhs.terms {
                 let exp: Vec<u32> = (0..n).map(|i| e1[i] + e2[i]).collect();
                 let coeff = c1.clone() * c2.clone();
@@ -187,13 +219,19 @@ impl<C: Ring> fmt::Display for MultiPoly<C> {
         }
         let mut first = true;
         for (exp, coeff) in &self.terms {
-            if !first { write!(f, " + ")?; }
+            if !first {
+                write!(f, " + ")?;
+            }
             first = false;
             // Format monomial
             let mut mono = String::new();
             for (i, &e) in exp.iter().enumerate() {
-                if e == 0 { continue; }
-                if !mono.is_empty() { mono.push('*'); }
+                if e == 0 {
+                    continue;
+                }
+                if !mono.is_empty() {
+                    mono.push('*');
+                }
                 if e == 1 {
                     mono.push_str(&format!("x{}", i + 1));
                 } else {

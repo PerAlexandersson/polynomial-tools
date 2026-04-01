@@ -7,13 +7,13 @@
 /// sufficient conditions.
 use combpoly::permutation::all_permutations;
 use combpoly::statistics::{compute, descent_set_bitmask, Stat};
-use polynomial_tools::real_rootedness::{
-    check_weak_interlacing, format_poly, is_real_rooted, real_roots,
-};
-use polynomial_tools::{Polynomial, FieldRing};
 use num_bigint::BigInt;
 use num_rational::Ratio;
 use num_traits::ToPrimitive;
+use polynomial_tools::real_rootedness::{
+    check_weak_interlacing, format_poly, is_real_rooted, real_roots,
+};
+use polynomial_tools::{FieldRing, Polynomial};
 use std::collections::BTreeMap;
 
 type Q = Ratio<BigInt>;
@@ -22,7 +22,11 @@ fn build_poly(perms: &[&Vec<u8>]) -> Vec<i64> {
     if perms.is_empty() {
         return vec![0];
     }
-    let max_s = perms.iter().map(|s| compute(s, Stat::Swaps)).max().unwrap_or(0);
+    let max_s = perms
+        .iter()
+        .map(|s| compute(s, Stat::Swaps))
+        .max()
+        .unwrap_or(0);
     let mut coeffs = vec![0i64; max_s + 1];
     for s in perms {
         coeffs[compute(s, Stat::Swaps)] += 1;
@@ -40,8 +44,12 @@ fn trim(p: &mut Vec<i64>) {
 fn poly_add(a: &[i64], b: &[i64]) -> Vec<i64> {
     let len = a.len().max(b.len());
     let mut c = vec![0i64; len];
-    for (i, &v) in a.iter().enumerate() { c[i] += v; }
-    for (i, &v) in b.iter().enumerate() { c[i] += v; }
+    for (i, &v) in a.iter().enumerate() {
+        c[i] += v;
+    }
+    for (i, &v) in b.iter().enumerate() {
+        c[i] += v;
+    }
     trim(&mut c);
     c
 }
@@ -51,7 +59,9 @@ fn poly_mul_t(a: &[i64]) -> Vec<i64> {
         return vec![0];
     }
     let mut c = vec![0i64; a.len() + 1];
-    for (i, &v) in a.iter().enumerate() { c[i + 1] = v; }
+    for (i, &v) in a.iter().enumerate() {
+        c[i + 1] = v;
+    }
     c
 }
 
@@ -59,8 +69,12 @@ fn poly_mul_t_minus_1(a: &[i64]) -> Vec<i64> {
     let ta = poly_mul_t(a);
     let len = ta.len().max(a.len());
     let mut c = vec![0i64; len];
-    for (i, &v) in ta.iter().enumerate() { c[i] += v; }
-    for (i, &v) in a.iter().enumerate() { c[i] -= v; }
+    for (i, &v) in ta.iter().enumerate() {
+        c[i] += v;
+    }
+    for (i, &v) in a.iter().enumerate() {
+        c[i] -= v;
+    }
     trim(&mut c);
     c
 }
@@ -78,28 +92,50 @@ fn descent_set_str(s: u64, n: u8) -> String {
         .filter(|&i| s & (1 << i) != 0)
         .map(|i| (i + 1).to_string())
         .collect();
-    if positions.is_empty() { "{}".to_string() }
-    else { format!("{{{}}}", positions.join(",")) }
+    if positions.is_empty() {
+        "{}".to_string()
+    } else {
+        format!("{{{}}}", positions.join(","))
+    }
 }
 
 fn epsilon1(pi: &[u8], p: usize, n: u8) -> usize {
-    if p <= 1 || p >= n as usize { return 0; }
-    if pi[p - 2] + 1 == pi[p - 1] { 1 } else { 0 }
+    if p <= 1 || p >= n as usize {
+        return 0;
+    }
+    if pi[p - 2] + 1 == pi[p - 1] {
+        1
+    } else {
+        0
+    }
 }
 
 fn epsilon2(q: usize, p: usize) -> usize {
-    if q + 2 <= p { 1 } else { 0 }
+    if q + 2 <= p {
+        1
+    } else {
+        0
+    }
 }
 
 fn roots_as_floats(coeffs: &[i64]) -> String {
     if let Some(roots) = real_roots(coeffs) {
-        let mut sorted: Vec<f64> = roots.iter().map(|r| {
-            let num = r.numer().to_f64().unwrap_or(f64::NAN);
-            let den = r.denom().to_f64().unwrap_or(1.0);
-            num / den
-        }).collect();
+        let mut sorted: Vec<f64> = roots
+            .iter()
+            .map(|r| {
+                let num = r.numer().to_f64().unwrap_or(f64::NAN);
+                let den = r.denom().to_f64().unwrap_or(1.0);
+                num / den
+            })
+            .collect();
         sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-        format!("{:?}", sorted.iter().map(|x| format!("{:.4}", x)).collect::<Vec<_>>())
+        format!(
+            "{:?}",
+            sorted
+                .iter()
+                .map(|x| format!("{:.4}", x))
+                .collect::<Vec<_>>()
+        )
     } else {
         "NOT REAL-ROOTED".to_string()
     }
@@ -112,10 +148,14 @@ fn poly_degree(p: &[i64]) -> Option<usize> {
 /// Compute GCD of two polynomials over Q using polynomial-tools Polynomial type.
 fn poly_gcd_i64(f: &[i64], g: &[i64]) -> Vec<i64> {
     let fq: Polynomial<Q> = Polynomial::new(
-        f.iter().map(|&c| Q::from_integer(BigInt::from(c))).collect()
+        f.iter()
+            .map(|&c| Q::from_integer(BigInt::from(c)))
+            .collect(),
     );
     let gq: Polynomial<Q> = Polynomial::new(
-        g.iter().map(|&c| Q::from_integer(BigInt::from(c))).collect()
+        g.iter()
+            .map(|&c| Q::from_integer(BigInt::from(c)))
+            .collect(),
     );
     let d = fq.gcd(&gq);
     // Convert back to i64 by clearing denominators
@@ -130,19 +170,26 @@ fn poly_gcd_i64(f: &[i64], g: &[i64]) -> Vec<i64> {
         lcm = num::integer::lcm(lcm, den);
     }
     let lcm_q = Q::from_integer(lcm);
-    coeffs.iter().map(|c| {
-        let scaled = c * &lcm_q;
-        scaled.to_integer().to_i64().unwrap_or(0)
-    }).collect()
+    coeffs
+        .iter()
+        .map(|c| {
+            let scaled = c * &lcm_q;
+            scaled.to_integer().to_i64().unwrap_or(0)
+        })
+        .collect()
 }
 
 /// Try to divide f by g exactly. Returns Some(quotient) if exact, None otherwise.
 fn try_exact_div(f: &[i64], g: &[i64]) -> Option<Vec<i64>> {
     let fq: Polynomial<Q> = Polynomial::new(
-        f.iter().map(|&c| Q::from_integer(BigInt::from(c))).collect()
+        f.iter()
+            .map(|&c| Q::from_integer(BigInt::from(c)))
+            .collect(),
     );
     let gq: Polynomial<Q> = Polynomial::new(
-        g.iter().map(|&c| Q::from_integer(BigInt::from(c))).collect()
+        g.iter()
+            .map(|&c| Q::from_integer(BigInt::from(c)))
+            .collect(),
     );
     if gq.is_zero() {
         return None;
@@ -160,10 +207,15 @@ fn try_exact_div(f: &[i64], g: &[i64]) -> Option<Vec<i64>> {
                     lcm = num::integer::lcm(lcm, cc.denom().clone());
                 }
                 let lcm_q = Q::from_integer(lcm);
-                return Some(coeffs.iter().map(|cc| {
-                    let scaled = cc * &lcm_q;
-                    scaled.to_integer().to_i64().unwrap_or(0)
-                }).collect());
+                return Some(
+                    coeffs
+                        .iter()
+                        .map(|cc| {
+                            let scaled = cc * &lcm_q;
+                            scaled.to_integer().to_i64().unwrap_or(0)
+                        })
+                        .collect(),
+                );
             }
             result.push(c.to_integer().to_i64().unwrap_or(0));
         }
@@ -198,7 +250,10 @@ fn main() {
         // Group target by descent set
         let mut target_by_des: BTreeMap<u64, Vec<&Vec<u8>>> = BTreeMap::new();
         for s in &all_n {
-            target_by_des.entry(descent_set_bitmask(s)).or_default().push(s);
+            target_by_des
+                .entry(descent_set_bitmask(s))
+                .or_default()
+                .push(s);
         }
 
         let mut n_failures = 0u32;
@@ -228,9 +283,13 @@ fn main() {
 
                 for pi in &all_nm1 {
                     let mut sigma = Vec::with_capacity(n as usize);
-                    for i in 0..p - 1 { sigma.push(pi[i]); }
+                    for i in 0..p - 1 {
+                        sigma.push(pi[i]);
+                    }
                     sigma.push(n);
-                    for i in p - 1..pi.len() { sigma.push(pi[i]); }
+                    for i in p - 1..pi.len() {
+                        sigma.push(pi[i]);
+                    }
 
                     if descent_set_bitmask(&sigma) != target_ds {
                         continue;
@@ -242,12 +301,16 @@ fn main() {
                     let e2 = epsilon2(q, p);
 
                     let f_deg = e2 + sw;
-                    if f_deg >= f_p.len() { f_p.resize(f_deg + 1, 0); }
+                    if f_deg >= f_p.len() {
+                        f_p.resize(f_deg + 1, 0);
+                    }
                     f_p[f_deg] += 1;
 
                     if e1 == 1 {
                         let h_deg = e2 + sw;
-                        if h_deg >= h_p.len() { h_p.resize(h_deg + 1, 0); }
+                        if h_deg >= h_p.len() {
+                            h_p.resize(h_deg + 1, 0);
+                        }
                         h_p[h_deg] += 1;
                     }
                 }
@@ -267,7 +330,10 @@ fn main() {
                 let correction = poly_mul_t_minus_1(&h_p);
                 let l_p = poly_add(&f_p, &correction);
                 let l_rr = l_p.len() <= 2 || is_real_rooted(&l_p);
-                if l_rr { l_always_rr += 1; n_l_rr += 1; }
+                if l_rr {
+                    l_always_rr += 1;
+                    n_l_rr += 1;
+                }
 
                 let deg_f = poly_degree(&f_p);
                 let deg_h = poly_degree(&h_p);
@@ -278,7 +344,9 @@ fn main() {
                 } else {
                     false
                 };
-                if h_div_f { h_divides_f += 1; }
+                if h_div_f {
+                    h_divides_f += 1;
+                }
 
                 // Check: does f divide h?
                 let f_div_h = if deg_f.is_some() && deg_f.unwrap() > 0 {
@@ -286,13 +354,17 @@ fn main() {
                 } else {
                     false
                 };
-                if f_div_h { f_divides_h += 1; }
+                if f_div_h {
+                    f_divides_h += 1;
+                }
 
                 // Compute gcd(f, h)
                 let gcd = poly_gcd_i64(&f_p, &h_p);
                 let gcd_deg = poly_degree(&gcd).unwrap_or(0);
                 let has_nontrivial_gcd = gcd_deg > 0;
-                if has_nontrivial_gcd { nontrivial_gcd += 1; }
+                if has_nontrivial_gcd {
+                    nontrivial_gcd += 1;
+                }
 
                 // Check if f/h is a polynomial with all real roots
                 // (only if h divides f)
@@ -302,17 +374,26 @@ fn main() {
                 } else {
                     false
                 };
-                if ratio_is_rr { ratio_rr += 1; }
+                if ratio_is_rr {
+                    ratio_rr += 1;
+                }
 
                 // Check degree relationship
                 let deg_h_val = deg_h.unwrap_or(0);
                 let deg_f_val = deg_f.unwrap_or(0);
                 let deg_check = deg_f_val > 0 && deg_h_val <= deg_f_val / 2;
-                if deg_check { deg_h_le_half_deg_f += 1; }
+                if deg_check {
+                    deg_h_le_half_deg_f += 1;
+                }
 
                 // Print details for first few failures per n
                 if n_failures <= 8 {
-                    println!("--- n={} Des={} p={} ---", n, descent_set_str(target_ds, n), p);
+                    println!(
+                        "--- n={} Des={} p={} ---",
+                        n,
+                        descent_set_str(target_ds, n),
+                        p
+                    );
                     println!("  f  = {}  (deg {})", format_poly(&f_p), deg_f.unwrap_or(0));
                     println!("  h  = {}  (deg {})", format_poly(&h_p), deg_h.unwrap_or(0));
                     println!("  L  = {}  real-rooted: {}", format_poly(&l_p), l_rr);
@@ -320,8 +401,11 @@ fn main() {
                     println!("  h divides f: {}", h_div_f);
                     if h_div_f {
                         let q = try_exact_div(&f_p, &h_p).unwrap();
-                        println!("  f/h = {}  real-rooted: {}", format_poly(&q),
-                            q.len() <= 2 || is_real_rooted(&q));
+                        println!(
+                            "  f/h = {}  real-rooted: {}",
+                            format_poly(&q),
+                            q.len() <= 2 || is_real_rooted(&q)
+                        );
                     }
                     println!("  f divides h: {}", f_div_h);
                     println!("  gcd(f,h) = {}  (deg {})", format_poly(&gcd), gcd_deg);
@@ -348,7 +432,10 @@ fn main() {
                         let f_shifted: Vec<i64> = f_p[common_t_pow..].to_vec();
                         let h_shifted: Vec<i64> = h_p[common_t_pow..].to_vec();
                         let int_after_shift = weakly_interlace(&h_shifted, &f_shifted);
-                        println!("  After removing t^{}: h' interlaces f': {}", common_t_pow, int_after_shift);
+                        println!(
+                            "  After removing t^{}: h' interlaces f': {}",
+                            common_t_pow, int_after_shift
+                        );
                     }
                     println!();
                 }
@@ -356,8 +443,10 @@ fn main() {
         }
 
         if n_failures > 0 {
-            println!("n={}: {} shift lemma failures (1 in S), {} of {} have L real-rooted",
-                n, n_failures, n_l_rr, n_failures);
+            println!(
+                "n={}: {} shift lemma failures (1 in S), {} of {} have L real-rooted",
+                n, n_failures, n_l_rr, n_failures
+            );
         } else {
             println!("n={}: no shift lemma failures with 1 in S", n);
         }
@@ -366,13 +455,34 @@ fn main() {
     println!("\n================================================================");
     println!("  Summary across all n");
     println!("================================================================");
-    println!("Total failure cases (h does NOT interlace f): {}", total_failures);
-    println!("L = f + (t-1)h is always real-rooted: {} / {}", l_always_rr, total_failures);
+    println!(
+        "Total failure cases (h does NOT interlace f): {}",
+        total_failures
+    );
+    println!(
+        "L = f + (t-1)h is always real-rooted: {} / {}",
+        l_always_rr, total_failures
+    );
     println!();
     println!("Structural checks:");
-    println!("  h divides f:                {} / {}", h_divides_f, total_failures);
-    println!("  f divides h:                {} / {}", f_divides_h, total_failures);
-    println!("  nontrivial gcd(f,h):        {} / {}", nontrivial_gcd, total_failures);
-    println!("  f/h is real-rooted (when h|f): {} / {}", ratio_rr, total_failures);
-    println!("  deg(h) <= deg(f)/2:         {} / {}", deg_h_le_half_deg_f, total_failures);
+    println!(
+        "  h divides f:                {} / {}",
+        h_divides_f, total_failures
+    );
+    println!(
+        "  f divides h:                {} / {}",
+        f_divides_h, total_failures
+    );
+    println!(
+        "  nontrivial gcd(f,h):        {} / {}",
+        nontrivial_gcd, total_failures
+    );
+    println!(
+        "  f/h is real-rooted (when h|f): {} / {}",
+        ratio_rr, total_failures
+    );
+    println!(
+        "  deg(h) <= deg(f)/2:         {} / {}",
+        deg_h_le_half_deg_f, total_failures
+    );
 }

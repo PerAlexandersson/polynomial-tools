@@ -6,9 +6,9 @@
 //! weakly decreasing order) and π_w = π_{i_1} ... π_{i_k} for any
 //! reduced word i_1 ... i_k of w.
 
-use sym_poly_core::Ring;
 use crate::multipoly::MultiPoly;
-use crate::operators::pi_i;
+use crate::operators::{pi_i, tpi_word};
+use sym_poly_core::Ring;
 
 /// Compute the key polynomial κ_α for a weak composition α = (α_1, ..., α_n).
 ///
@@ -23,8 +23,7 @@ pub fn key_polynomial<C: Ring>(alpha: &[u32]) -> MultiPoly<C> {
     }
 
     // Step 1: Sort α into weakly decreasing order to get λ
-    let mut lambda: Vec<u32> = alpha.to_vec();
-    lambda.sort_unstable_by(|a, b| b.cmp(a));
+    let lambda = dominant_rearrangement(alpha);
 
     // Step 2: Find the reduced word for the permutation w such that
     // applying w to λ gives α. We use bubble sort to find adjacent transpositions.
@@ -43,15 +42,42 @@ pub fn key_polynomial<C: Ring>(alpha: &[u32]) -> MultiPoly<C> {
     result
 }
 
+/// t-deformed operator key polynomial.
+pub fn t_key_polynomial<C: Ring>(alpha: &[u32], t: &C) -> MultiPoly<C> {
+    let n = alpha.len();
+    if n == 0 {
+        return MultiPoly::constant(0, C::one());
+    }
+
+    let lambda = dominant_rearrangement(alpha);
+    let reduced_word = sorting_reduced_word(alpha);
+    let init = MultiPoly::x_power(n, lambda);
+    tpi_word(
+        &init,
+        &reduced_word.iter().rev().copied().collect::<Vec<_>>(),
+        t,
+    )
+}
+
+pub(crate) fn dominant_rearrangement(alpha: &[u32]) -> Vec<u32> {
+    let mut lambda = alpha.to_vec();
+    lambda.sort_unstable_by(|a, b| b.cmp(a));
+    lambda
+}
+
 /// Find a reduced word for the permutation that sorts α into weakly
 /// decreasing order, expressed as a sequence of simple transpositions.
 ///
 /// Uses bubble sort: each swap s_i that moves a larger value left contributes
 /// to the reduced word.
-fn sorting_reduced_word(alpha: &[u32]) -> Vec<usize> {
+pub(crate) fn sorting_reduced_word(alpha: &[u32]) -> Vec<usize> {
     let mut perm: Vec<u32> = alpha.to_vec();
     let mut word = Vec::new();
     let n = perm.len();
+
+    if n < 2 {
+        return word;
+    }
 
     // Bubble sort into weakly decreasing order
     loop {
@@ -153,5 +179,12 @@ mod tests {
         // (1,2,3) -> (3,2,1): w_0 = s_0 s_1 s_0
         let word = sorting_reduced_word(&[1, 2, 3]);
         assert_eq!(word.len(), 3); // length of w_0 in S_3
+    }
+
+    #[test]
+    fn test_t_key_specialization_at_zero() {
+        let key: MultiPoly<i64> = key_polynomial(&[2, 3, 1]);
+        let t_key: MultiPoly<i64> = t_key_polynomial(&[2, 3, 1], &0);
+        assert_eq!(key, t_key);
     }
 }

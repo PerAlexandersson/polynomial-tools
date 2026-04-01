@@ -81,6 +81,73 @@ pub fn chromatic_symmetric<C: Ring>(g: &Graph) -> SymmetricFunction<C> {
     SymmetricFunction::from_terms(Basis::Monomial, terms)
 }
 
+/// Compute the ordered non-proper coloring symmetric function `f_(G, Ω)`.
+///
+/// Fix a total order `Ω` on the edges of `G`, supplied as `edge_order`.
+/// For each non-proper coloring `κ`, let `e = ij` be the first monochromatic
+/// edge in that order and set `ν(κ) = κ(i) = κ(j)`. Then
+///
+/// ```text
+/// f_(G, Ω)(x) = Σ_κ (1 / x_{ν(κ)}) ∏_{v ∈ V} x_{κ(v)}
+/// ```
+///
+/// where the sum is over all non-proper colorings.
+///
+/// This implementation uses the equivalent decomposition
+///
+/// ```text
+/// f_(G, Ω) = Σ_{e ∈ E} X_{G_e},
+/// ```
+///
+/// where `G_e` is obtained by taking the graph of edges earlier than `e` in
+/// `Ω` and then identifying the endpoints of `e`.
+pub fn first_bad_edge_symmetric<C: Ring>(
+    g: &Graph,
+    edge_order: &[(usize, usize)],
+) -> SymmetricFunction<C> {
+    let mut normalized_order: Vec<_> = edge_order.iter().copied().map(normalize_edge).collect();
+    normalized_order.sort_unstable();
+    normalized_order.dedup();
+    assert_eq!(
+        normalized_order.len(),
+        edge_order.len(),
+        "edge_order must not contain duplicates"
+    );
+    assert_eq!(
+        normalized_order.as_slice(),
+        g.edges(),
+        "edge_order must list each edge of the graph exactly once"
+    );
+
+    let mut terms: BTreeMap<Partition, C> = BTreeMap::new();
+
+    for idx in 0..edge_order.len() {
+        let prefix_edges: Vec<_> = edge_order[..idx]
+            .iter()
+            .copied()
+            .map(normalize_edge)
+            .collect();
+        let (u, v) = normalize_edge(edge_order[idx]);
+        let prefix_graph = Graph::new(g.num_vertices(), &prefix_edges);
+        let ge = prefix_graph.contract_edge(u, v);
+        let contribution = chromatic_symmetric::<C>(&ge);
+        for (partition, coeff) in contribution.terms() {
+            let entry = terms.entry(partition.clone()).or_insert_with(C::zero);
+            *entry = entry.clone() + coeff.clone();
+        }
+    }
+
+    SymmetricFunction::from_terms(Basis::Monomial, terms)
+}
+
+fn normalize_edge((u, v): (usize, usize)) -> (usize, usize) {
+    if u < v {
+        (u, v)
+    } else {
+        (v, u)
+    }
+}
+
 /// Count proper colorings whose sorted color-frequency vector equals λ,
 /// divided by the number of monomials of type λ (giving the m_λ coefficient).
 ///
@@ -354,6 +421,25 @@ mod tests {
         assert_eq!(x.trivial_specialization(3), 27);
     }
 
+    #[test]
+    fn test_first_bad_edge_single_edge() {
+        let g = Graph::new(2, &[(0, 1)]);
+        let f = first_bad_edge_symmetric::<i64>(&g, &[(0, 1)]);
+        let m = f.to_monomial_basis();
+        assert_eq!(m.coefficient(&Partition::new(vec![1])), 1);
+        assert_eq!(m.terms().len(), 1);
+    }
+
+    #[test]
+    fn test_first_bad_edge_path3() {
+        let g = Graph::path(3);
+        let f = first_bad_edge_symmetric::<i64>(&g, &[(0, 1), (1, 2)]);
+        let m = f.to_monomial_basis();
+        assert_eq!(m.coefficient(&Partition::new(vec![2])), 1);
+        assert_eq!(m.coefficient(&Partition::new(vec![1, 1])), 4);
+        assert_eq!(m.terms().len(), 2);
+    }
+
     // -- q-Chromatic tests (Mathematica-verified) --
 
     #[test]
@@ -402,5 +488,4 @@ mod tests {
         let m = x.to_monomial_basis();
         assert_eq!(m.coefficient(&Partition::new(vec![1])), 1);
     }
-
 }

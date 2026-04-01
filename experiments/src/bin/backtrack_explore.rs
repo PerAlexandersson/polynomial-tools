@@ -7,17 +7,14 @@ use combpoly::permutation::{
     all_permutations, backtrack_stat_poly, backtrack_stat_poly_subset, contains_pattern,
     is_alternating, is_derangement, is_grassmann, is_involution, is_vexillary, parse_sequence,
 };
+use combpoly::statistics::Stat;
 use polynomial_tools::real_rootedness as polynomial;
 use polynomial_tools::recurrence::{find_recurrence_adaptive, AdaptiveSearchOptions};
-use combpoly::statistics::Stat;
 use std::env;
 use std::io::{self, Write};
 
 fn main() {
-    let max_n: u8 = env::args()
-        .nth(1)
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(7);
+    let max_n: u8 = env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(7);
 
     let patterns = ["123", "132", "213", "231", "312", "321"];
     let stats = [
@@ -131,7 +128,10 @@ fn main() {
         let pat132 = parse_sequence("132");
         let pat321 = parse_sequence("321");
 
-        println!("\n=== Catalan triangle: Av_132 π-set + Av_321 S-set + exc (n=1..{}) ===", max_n);
+        println!(
+            "\n=== Catalan triangle: Av_132 π-set + Av_321 S-set + exc (n=1..{}) ===",
+            max_n
+        );
         let mut polys: Vec<Vec<i64>> = Vec::new();
 
         for n in 1..=max_n {

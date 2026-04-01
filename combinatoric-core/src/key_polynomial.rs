@@ -19,11 +19,11 @@
 //! We use (w₀σ)(i) = σ(w₀(i)), i.e., w₀ acts first. This matches the
 //! Demazure operator definition κ_{λ,σ} = π_σ(z^λ).
 
-use std::collections::{BTreeMap, HashSet};
+use crate::partition::Partition;
 use num_bigint::BigInt;
 use num_rational::BigRational;
-use num_traits::{Zero, One};
-use crate::partition::Partition;
+use num_traits::{One, Zero};
+use std::collections::{BTreeMap, HashSet};
 
 /// A GT-pattern for shape λ with n = λ.num_parts().
 /// Stored as rows[i] = entries of row i+1 (0-indexed), so rows[n-1] = λ.
@@ -113,9 +113,15 @@ fn gt_patterns_inner(
         }
     }
 
-    let top_row: Vec<u32> = (0..n).map(|j| {
-        if j < lambda.num_parts() { lambda.part(j) } else { 0 }
-    }).collect();
+    let top_row: Vec<u32> = (0..n)
+        .map(|j| {
+            if j < lambda.num_parts() {
+                lambda.part(j)
+            } else {
+                0
+            }
+        })
+        .collect();
 
     let mut results = Vec::new();
     let mut rows_built: Vec<Vec<u32>> = vec![top_row];
@@ -147,7 +153,15 @@ fn enumerate_gt_rows(
     let mut current_row = vec![0u32; num_entries];
 
     enumerate_gt_entries(
-        n, row_idx, eq_set, strict, &above, &mut current_row, 0, rows_built, results,
+        n,
+        row_idx,
+        eq_set,
+        strict,
+        &above,
+        &mut current_row,
+        0,
+        rows_built,
+        results,
     );
 }
 
@@ -174,12 +188,14 @@ fn enumerate_gt_entries(
 
     // Bounds from interlacing: x_{row_idx+1, j} ≥ x_{row_idx, j} ≥ x_{row_idx+1, j+1}
     // In strict mode (non-forced): use > instead of ≥.
-    let mut upper = above[pos];     // x_{row_idx+1, j}
+    let mut upper = above[pos]; // x_{row_idx+1, j}
     let mut lower = above[pos + 1]; // x_{row_idx+1, j+1}
 
     if strict && !is_forced {
         // Strict left interlacing: x_{i+1,j} > x_{i,j} → upper = above[pos] - 1
-        if above[pos] == 0 { return; } // can't go below 0
+        if above[pos] == 0 {
+            return;
+        } // can't go below 0
         upper = above[pos] - 1;
         // Strict right interlacing: x_{i,j} > x_{i+1,j+1} → lower = above[pos+1] + 1
         lower = above[pos + 1] + 1;
@@ -194,16 +210,38 @@ fn enumerate_gt_entries(
         let forced = above[pos];
         if forced >= lower && forced <= upper {
             current[pos] = forced;
-            enumerate_gt_entries(n, row_idx, eq_set, strict, above, current, pos + 1, rows_built, results);
+            enumerate_gt_entries(
+                n,
+                row_idx,
+                eq_set,
+                strict,
+                above,
+                current,
+                pos + 1,
+                rows_built,
+                results,
+            );
         }
         return;
     }
 
-    if lower > upper { return; }
+    if lower > upper {
+        return;
+    }
 
     for val in lower..=upper {
         current[pos] = val;
-        enumerate_gt_entries(n, row_idx, eq_set, strict, above, current, pos + 1, rows_built, results);
+        enumerate_gt_entries(
+            n,
+            row_idx,
+            eq_set,
+            strict,
+            above,
+            current,
+            pos + 1,
+            rows_built,
+            results,
+        );
     }
 }
 
@@ -371,10 +409,7 @@ fn invert_perm(perm: &[usize]) -> Vec<usize> {
 ///
 /// Returns a map: weight → multiplicity (always 1 for key polynomials, but
 /// the union might have overlapping faces).
-pub fn key_polynomial_weights(
-    lambda: &Partition,
-    sigma: &[usize],
-) -> BTreeMap<Vec<u32>, u64> {
+pub fn key_polynomial_weights(lambda: &Partition, sigma: &[usize]) -> BTreeMap<Vec<u32>, u64> {
     let n = sigma.len();
 
     let w0 = longest_perm(n);
@@ -410,11 +445,7 @@ pub fn key_polynomial_weights(
 /// This is the "key Kostka number": the number of integer GT-patterns
 /// of shape λ in the union of reduced Kogan faces of type w₀σ that
 /// have weight μ.
-pub fn key_kostka(
-    lambda: &Partition,
-    sigma: &[usize],
-    mu: &[u32],
-) -> u64 {
+pub fn key_kostka(lambda: &Partition, sigma: &[usize], mu: &[u32]) -> u64 {
     let weights = key_polynomial_weights(lambda, sigma);
     weights.get(mu).copied().unwrap_or(0)
 }
@@ -459,7 +490,9 @@ impl KeyEhrhartPoly {
         let mut terms: Vec<String> = Vec::new();
         for i in (0..=self.degree).rev() {
             let c = &self.coeffs[i];
-            if c.is_zero() { continue; }
+            if c.is_zero() {
+                continue;
+            }
             let c_str = if c.denom() == &BigInt::one() {
                 format!("{}", c.numer())
             } else {
@@ -467,8 +500,20 @@ impl KeyEhrhartPoly {
             };
             let term = match i {
                 0 => c_str,
-                1 => if *c == BigRational::one() { "k".into() } else { format!("{}k", c_str) },
-                _ => if *c == BigRational::one() { format!("k^{}", i) } else { format!("{}k^{}", c_str, i) },
+                1 => {
+                    if *c == BigRational::one() {
+                        "k".into()
+                    } else {
+                        format!("{}k", c_str)
+                    }
+                }
+                _ => {
+                    if *c == BigRational::one() {
+                        format!("k^{}", i)
+                    } else {
+                        format!("{}k^{}", c_str, i)
+                    }
+                }
             };
             terms.push(term);
         }
@@ -480,11 +525,7 @@ impl KeyEhrhartPoly {
 ///
 /// This is the key polynomial evaluated at z = (1,1,...,1), i.e.,
 /// κ_{kλ,σ}(1,...,1).
-pub fn key_lattice_point_count(
-    lambda: &Partition,
-    sigma: &[usize],
-    dilation: u32,
-) -> u64 {
+pub fn key_lattice_point_count(lambda: &Partition, sigma: &[usize], dilation: u32) -> u64 {
     let n = sigma.len();
     let kl = scale_partition(lambda, n, dilation);
     let weights = key_polynomial_weights(&kl, sigma);
@@ -495,11 +536,7 @@ pub fn key_lattice_point_count(
 ///
 /// Used for Ehrhart-Macdonald reciprocity:
 /// P(-k) = (-1)^d · strict_count(k).
-pub fn key_strict_lattice_point_count(
-    lambda: &Partition,
-    sigma: &[usize],
-    dilation: u32,
-) -> u64 {
+pub fn key_strict_lattice_point_count(lambda: &Partition, sigma: &[usize], dilation: u32) -> u64 {
     let n = sigma.len();
     let kl = scale_partition(lambda, n, dilation);
 
@@ -520,10 +557,16 @@ pub fn key_strict_lattice_point_count(
 
 fn scale_partition(lambda: &Partition, n: usize, k: u32) -> Partition {
     Partition::new(
-        (0..n).map(|j| {
-            let p = if j < lambda.num_parts() { lambda.part(j) } else { 0 };
-            p * k
-        }).collect()
+        (0..n)
+            .map(|j| {
+                let p = if j < lambda.num_parts() {
+                    lambda.part(j)
+                } else {
+                    0
+                };
+                p * k
+            })
+            .collect(),
     )
 }
 
@@ -575,11 +618,17 @@ fn key_ehrhart_polynomial_inner(
             .collect();
 
         let coeffs = poly_interpolate_q(&points);
-        let true_degree = coeffs.iter().enumerate().rev()
+        let true_degree = coeffs
+            .iter()
+            .enumerate()
+            .rev()
             .find(|(_, c)| !c.is_zero())
             .map(|(i, _)| i)
             .unwrap_or(0);
-        return KeyEhrhartPoly { coeffs, degree: true_degree };
+        return KeyEhrhartPoly {
+            coeffs,
+            degree: true_degree,
+        };
     }
 
     // Reciprocity method: first determine the actual degree by
@@ -593,19 +642,27 @@ fn key_ehrhart_polynomial_inner(
     }
 
     // Try interpolation and find actual degree
-    let points: Vec<(i64, BigRational)> = pos_values.iter().enumerate()
+    let points: Vec<(i64, BigRational)> = pos_values
+        .iter()
+        .enumerate()
         .map(|(k, &v)| (k as i64, BigRational::from(BigInt::from(v))))
         .collect();
 
     let coeffs = poly_interpolate_q(&points);
-    let actual_degree = coeffs.iter().enumerate().rev()
+    let actual_degree = coeffs
+        .iter()
+        .enumerate()
+        .rev()
         .find(|(_, c)| !c.is_zero())
         .map(|(i, _)| i)
         .unwrap_or(0);
 
     // Verify: does the polynomial predict the next value correctly?
     // If so, we have the right degree.
-    let ep = KeyEhrhartPoly { coeffs, degree: actual_degree };
+    let ep = KeyEhrhartPoly {
+        coeffs,
+        degree: actual_degree,
+    };
 
     // Optionally verify by checking P at one more point
     let verify_k = (d + 1) as u32;
@@ -617,12 +674,17 @@ fn key_ehrhart_polynomial_inner(
 
     // If verification failed, d was too small. Increase and retry.
     // (This shouldn't happen if max_degree is correct.)
-    let mut extended_points: Vec<(i64, BigRational)> = pos_values.iter().enumerate()
+    let mut extended_points: Vec<(i64, BigRational)> = pos_values
+        .iter()
+        .enumerate()
         .map(|(k, &v)| (k as i64, BigRational::from(BigInt::from(v))))
         .collect();
     extended_points.push((verify_k as i64, BigRational::from(BigInt::from(actual))));
     let coeffs = poly_interpolate_q(&extended_points);
-    let degree = coeffs.iter().enumerate().rev()
+    let degree = coeffs
+        .iter()
+        .enumerate()
+        .rev()
         .find(|(_, c)| !c.is_zero())
         .map(|(i, _)| i)
         .unwrap_or(0);
@@ -659,9 +721,13 @@ fn poly_interpolate_q(points: &[(i64, BigRational)]) -> Vec<BigRational> {
             mat[col][j] = v;
         }
         for row in 0..d {
-            if row == col { continue; }
+            if row == col {
+                continue;
+            }
             let factor = mat[row][col].clone();
-            if factor.is_zero() { continue; }
+            if factor.is_zero() {
+                continue;
+            }
             for j in col..=d {
                 let sub = factor.clone() * &mat[col][j];
                 mat[row][j] -= sub;
@@ -897,8 +963,12 @@ mod tests {
         for k in 0..=4 {
             let predicted = ep.eval(k as i64);
             let actual = key_lattice_point_count(&p(&[2, 1]), &[2, 1, 3], k);
-            assert_eq!(predicted, BigRational::from(BigInt::from(actual)),
-                "Mismatch at k={}", k);
+            assert_eq!(
+                predicted,
+                BigRational::from(BigInt::from(actual)),
+                "Mismatch at k={}",
+                k
+            );
         }
     }
 
@@ -914,9 +984,13 @@ mod tests {
         ];
         for (lam, sigma) in &cases {
             let ep = key_ehrhart_polynomial(&p(lam), sigma, Some(3));
-            assert!(!ep.has_negative_coefficient(),
+            assert!(
+                !ep.has_negative_coefficient(),
                 "Negative coefficient for lambda={:?}, sigma={:?}: {}",
-                lam, sigma, ep.display());
+                lam,
+                sigma,
+                ep.display()
+            );
         }
     }
 }

@@ -6,17 +6,25 @@
 /// Check real-rootedness, palindromicity, and interlacing.
 use combpoly::permutation::k_alternating_permutations;
 use combpoly::statistics::{compute, Stat};
-use polynomial_tools::real_rootedness::{
-    check_interlacing_sturm, format_poly, is_real_rooted,
-};
+use polynomial_tools::real_rootedness::{check_interlacing_sturm, format_poly, is_real_rooted};
 use std::time::Instant;
 
 fn build_poly(perms: &[Vec<u8>]) -> Vec<i64> {
-    if perms.is_empty() { return vec![0]; }
-    let max_s = perms.iter().map(|s| compute(s, Stat::Swaps)).max().unwrap_or(0);
+    if perms.is_empty() {
+        return vec![0];
+    }
+    let max_s = perms
+        .iter()
+        .map(|s| compute(s, Stat::Swaps))
+        .max()
+        .unwrap_or(0);
     let mut coeffs = vec![0i64; max_s + 1];
-    for s in perms { coeffs[compute(s, Stat::Swaps)] += 1; }
-    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 { coeffs.pop(); }
+    for s in perms {
+        coeffs[compute(s, Stat::Swaps)] += 1;
+    }
+    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 {
+        coeffs.pop();
+    }
     coeffs
 }
 
@@ -56,12 +64,17 @@ fn main() {
             }
 
             let poly = build_poly(&perms);
-            let rr = if poly.len() <= 2 { true } else { is_real_rooted(&poly) };
+            let rr = if poly.len() <= 2 {
+                true
+            } else {
+                is_real_rooted(&poly)
+            };
             let pal = is_palindromic(&poly);
 
             println!(
                 "n={:>2}: count={:<8} {:<60} {} {} {:>8.2?}",
-                n, count,
+                n,
+                count,
                 format_poly(&poly),
                 if rr { "✓rr" } else { "✗rr" },
                 if pal { "pal" } else { "   " },

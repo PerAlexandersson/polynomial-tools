@@ -2,10 +2,10 @@
 //! Pass variant number 1-6 as command line argument.
 
 use combpoly::parking::{for_each_runsorted_pf, RunBreak, RunSort};
-use polynomial_tools::format_poly;
-use polynomial_tools::recurrence::{find_recurrence_adaptive, AdaptiveSearchOptions};
 use combpoly::statistics;
 use combpoly::statistics::Stat;
+use polynomial_tools::format_poly;
+use polynomial_tools::recurrence::{find_recurrence_adaptive, AdaptiveSearchOptions};
 
 fn accumulate_poly(coeffs: &mut Vec<i64>, val: usize) {
     if val >= coeffs.len() {
@@ -19,11 +19,27 @@ fn main() {
     let variant: usize = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(1);
 
     let (label, rb, rs): (&str, RunBreak, RunSort) = match variant {
-        1 => ("strict-asc runs, strict mins", RunBreak::StrictAsc, RunSort::StrictMin),
-        2 => ("strict-asc runs, weak mins", RunBreak::StrictAsc, RunSort::WeakMin),
+        1 => (
+            "strict-asc runs, strict mins",
+            RunBreak::StrictAsc,
+            RunSort::StrictMin,
+        ),
+        2 => (
+            "strict-asc runs, weak mins",
+            RunBreak::StrictAsc,
+            RunSort::WeakMin,
+        ),
         3 => ("strict-asc runs, lex", RunBreak::StrictAsc, RunSort::Lex),
-        4 => ("non-decr runs, strict mins", RunBreak::NonDecr, RunSort::StrictMin),
-        5 => ("non-decr runs, weak mins", RunBreak::NonDecr, RunSort::WeakMin),
+        4 => (
+            "non-decr runs, strict mins",
+            RunBreak::NonDecr,
+            RunSort::StrictMin,
+        ),
+        5 => (
+            "non-decr runs, weak mins",
+            RunBreak::NonDecr,
+            RunSort::WeakMin,
+        ),
         6 => ("non-decr runs, lex", RunBreak::NonDecr, RunSort::Lex),
         _ => panic!("variant must be 1-6"),
     };
@@ -52,7 +68,12 @@ fn main() {
         if coeffs.is_empty() {
             coeffs.push(0);
         }
-        println!("n={}: {:>10} objects, poly = {}", n, count, format_poly(&coeffs));
+        println!(
+            "n={}: {:>10} objects, poly = {}",
+            n,
+            count,
+            format_poly(&coeffs)
+        );
         polys.push(coeffs);
     }
 

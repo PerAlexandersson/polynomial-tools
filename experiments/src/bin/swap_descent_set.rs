@@ -22,16 +22,29 @@ fn descent_set_str(s: u64, n: u8) -> String {
 }
 
 fn build_poly(perms: &[&Vec<u8>]) -> Vec<i64> {
-    if perms.is_empty() { return vec![0]; }
-    let max_s = perms.iter().map(|s| compute(s, Stat::Swaps)).max().unwrap_or(0);
+    if perms.is_empty() {
+        return vec![0];
+    }
+    let max_s = perms
+        .iter()
+        .map(|s| compute(s, Stat::Swaps))
+        .max()
+        .unwrap_or(0);
     let mut coeffs = vec![0i64; max_s + 1];
-    for s in perms { coeffs[compute(s, Stat::Swaps)] += 1; }
-    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 { coeffs.pop(); }
+    for s in perms {
+        coeffs[compute(s, Stat::Swaps)] += 1;
+    }
+    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 {
+        coeffs.pop();
+    }
     coeffs
 }
 
 fn main() {
-    let max_n: u8 = std::env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(8);
+    let max_n: u8 = std::env::args()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(8);
 
     for n in 3..=max_n {
         let all = all_permutations(n);
@@ -50,7 +63,11 @@ fn main() {
 
         for (&ds, perms) in &by_des {
             let poly = build_poly(perms);
-            let rr = if poly.len() <= 2 { true } else { is_real_rooted(&poly) };
+            let rr = if poly.len() <= 2 {
+                true
+            } else {
+                is_real_rooted(&poly)
+            };
             if rr {
                 rr_count += 1;
             } else {

@@ -14,10 +14,10 @@
 ///
 use combpoly::permutation::all_permutations;
 use combpoly::statistics::{compute, descent_set_bitmask, Stat};
+use num_traits::Signed;
 use polynomial_tools::real_rootedness::{
     check_weak_interlacing, format_poly, is_real_rooted, real_roots,
 };
-use num_traits::Signed;
 use std::collections::BTreeMap;
 
 fn build_poly(vals: &[usize]) -> Vec<i64> {
@@ -183,10 +183,7 @@ fn check_chain_interlacing(polys: &[Vec<i64>]) -> bool {
 }
 
 /// Compute the staircase output L^{(p)} = sum_q t^{eps2(p,q)} * f_{p,q}
-fn staircase_output(
-    f_polys: &[(u8, Vec<i64>)],
-    p: u8,
-) -> Vec<i64> {
+fn staircase_output(f_polys: &[(u8, Vec<i64>)], p: u8) -> Vec<i64> {
     let mut result = vec![0i64; 1];
     for (q, poly) in f_polys {
         let eps2 = if *q <= p.saturating_sub(2) { 1usize } else { 0 };
@@ -253,7 +250,9 @@ fn main() {
         .unwrap_or(8);
 
     println!("=== Cross-chain interlacing analysis ===");
-    println!("For consecutive valid positions p_a < p_b, analyze how source chains A and B relate.\n");
+    println!(
+        "For consecutive valid positions p_a < p_b, analyze how source chains A and B relate.\n"
+    );
 
     // Global counters
     let mut total_pairs = 0u64;
@@ -313,8 +312,7 @@ fn main() {
             // Build staircase outputs for all valid positions
             let mut staircase_outputs: Vec<(u8, Vec<i64>)> = Vec::new();
             for (p, qs, fs) in &chains {
-                let qf: Vec<(u8, Vec<i64>)> =
-                    qs.iter().copied().zip(fs.iter().cloned()).collect();
+                let qf: Vec<(u8, Vec<i64>)> = qs.iter().copied().zip(fs.iter().cloned()).collect();
                 let l_p = staircase_output(&qf, *p);
                 staircase_outputs.push((*p, l_p));
             }
@@ -353,10 +351,7 @@ fn main() {
                 if full_cross {
                     n_full_cross_ok += 1;
                 } else if n <= 7 {
-                    println!(
-                        "  CROSS FAIL: n={} S={} p_a={} p_b={}",
-                        n, s_str, p_a, p_b
-                    );
+                    println!("  CROSS FAIL: n={} S={} p_a={} p_b={}", n, s_str, p_a, p_b);
                     for (i, q) in qs_a.iter().enumerate() {
                         println!("    f_{{p_a={},q={}}} = {}", p_a, q, format_poly(&fs_a[i]));
                     }
@@ -412,10 +407,7 @@ fn main() {
                 if concat_interlaces {
                     n_concat_ok += 1;
                 } else if n <= 7 {
-                    println!(
-                        "  CONCAT FAIL: n={} S={} p_a={} p_b={}",
-                        n, s_str, p_a, p_b
-                    );
+                    println!("  CONCAT FAIL: n={} S={} p_a={} p_b={}", n, s_str, p_a, p_b);
                 }
 
                 // ---- TEST 5: Ratio analysis for shared q ----
@@ -440,10 +432,20 @@ fn main() {
                         // LR ordering (B dominates A): for all k, A[k]*B[k+1] >= A[k+1]*B[k]
                         // where A = f_{p_a,q}, B = f_{p_b,q}.
                         let max_deg = fa.len().max(fb.len());
-                        let coeff_a =
-                            |k: usize| -> i64 { if k < fa.len() { fa[k] } else { 0 } };
-                        let coeff_b =
-                            |k: usize| -> i64 { if k < fb.len() { fb[k] } else { 0 } };
+                        let coeff_a = |k: usize| -> i64 {
+                            if k < fa.len() {
+                                fa[k]
+                            } else {
+                                0
+                            }
+                        };
+                        let coeff_b = |k: usize| -> i64 {
+                            if k < fb.len() {
+                                fb[k]
+                            } else {
+                                0
+                            }
+                        };
 
                         let mut is_lr = true;
                         for k in 0..max_deg.saturating_sub(1) {
@@ -514,10 +516,7 @@ fn main() {
 
                 // Print detailed info for small n
                 if n <= 6 {
-                    println!(
-                        "\nn={} S={} p_a={} p_b={}",
-                        n, s_str, p_a, p_b
-                    );
+                    println!("\nn={} S={} p_a={} p_b={}", n, s_str, p_a, p_b);
                     println!("  Chain A (p_a={}):", p_a);
                     for (i, q) in qs_a.iter().enumerate() {
                         println!("    q={}: {}", q, format_poly(&fs_a[i]));

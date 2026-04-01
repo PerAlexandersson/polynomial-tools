@@ -5,9 +5,9 @@
 /// through n = max_n, checks real-rootedness, identifies equivalence classes,
 /// and searches for recurrences.
 use combpoly::permutation::{all_permutations, backtrack_stat_poly, contains_pattern};
+use combpoly::statistics::Stat;
 use polynomial_tools::real_rootedness as polynomial;
 use polynomial_tools::recurrence::{find_recurrence_adaptive, AdaptiveSearchOptions};
-use combpoly::statistics::Stat;
 use std::collections::BTreeMap;
 use std::env;
 use std::io::{self, Write};
@@ -17,20 +17,14 @@ fn pat_label(pat: &[u8]) -> String {
 }
 
 fn main() {
-    let max_n: u8 = env::args()
-        .nth(1)
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(8);
+    let max_n: u8 = env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(8);
 
     let run_recurrence = env::args().any(|a| a == "-r" || a == "--recurrence");
     let verbose = env::args().any(|a| a == "-v" || a == "--verbose");
 
     let patterns = all_permutations(4);
-    let stats: Vec<(&str, Stat)> = vec![
-        ("des", Stat::Des),
-        ("exc", Stat::Exc),
-        ("peak", Stat::Peak),
-    ];
+    let stats: Vec<(&str, Stat)> =
+        vec![("des", Stat::Des), ("exc", Stat::Exc), ("peak", Stat::Peak)];
 
     // Precompute all permutations and avoidance sets
     eprintln!("Precomputing avoidance sets for n=1..{} ...", max_n);
@@ -87,10 +81,7 @@ fn main() {
                 .collect::<Vec<_>>()
                 .join("|");
 
-            equiv_classes
-                .entry(key)
-                .or_default()
-                .push(label.clone());
+            equiv_classes.entry(key).or_default().push(label.clone());
 
             pat_data.push((label, polys, first_fail));
         }
@@ -142,10 +133,7 @@ fn main() {
 
         // Print real-rootedness summary table
         println!("\n--- Real-rootedness summary ---\n");
-        println!(
-            "  {:>6}  {:>12}",
-            "Av_τ", "Real-rooted?"
-        );
+        println!("  {:>6}  {:>12}", "Av_τ", "Real-rooted?");
         println!("  {:->6}  {:->12}", "", "");
         for (label, _, first_fail) in &pat_data {
             let status = match first_fail {
@@ -181,15 +169,15 @@ fn main() {
                     format!("Av_{}", rep)
                 };
 
-                eprint!("\r  Searching recurrence for {} + {} ...         ", class_label, stat_name);
+                eprint!(
+                    "\r  Searching recurrence for {} + {} ...         ",
+                    class_label, stat_name
+                );
                 io::stderr().flush().ok();
 
                 match find_recurrence_adaptive(polys, &search) {
                     Some(result) => {
-                        println!(
-                            "  {} + {}: {}",
-                            class_label, stat_name, result.recurrence
-                        );
+                        println!("  {} + {}: {}", class_label, stat_name, result.recurrence);
                     }
                     None => {
                         println!("  {} + {}: (none found)", class_label, stat_name);

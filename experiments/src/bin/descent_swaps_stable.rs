@@ -13,7 +13,7 @@
 ///
 use combpoly::permutation::all_permutations;
 use combpoly::statistics::{compute_set, descent_set_bitmask, SetStat};
-use polynomial_tools::real_rootedness::{is_real_rooted, format_poly};
+use polynomial_tools::real_rootedness::{format_poly, is_real_rooted};
 use std::collections::HashMap;
 
 /// Multi-affine polynomial represented as map from monomial support (bitmask) to coefficient.
@@ -36,12 +36,7 @@ fn compute_multiaffine(perms: &[&Vec<u8>]) -> MultiAffine {
 
 /// Evaluate the multi-affine polynomial Φ at x_i = a_i + b_i * z,
 /// returning the resulting univariate polynomial in z as a coefficient vector.
-fn substitute_linear(
-    phi: &MultiAffine,
-    a: &[f64],
-    b: &[f64],
-    num_vars: usize,
-) -> Vec<f64> {
+fn substitute_linear(phi: &MultiAffine, a: &[f64], b: &[f64], num_vars: usize) -> Vec<f64> {
     // Degree is at most num_vars
     let mut result = vec![0.0f64; num_vars + 1];
 
@@ -223,14 +218,20 @@ fn main() {
             // Use a simple PRNG for reproducibility
             let mut rng_state: u64 = mask.wrapping_mul(12345).wrapping_add(n as u64 * 67890);
             let next_rand = |state: &mut u64| -> f64 {
-                *state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                *state = state
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
                 // Map to [-2, 2] for a values, [0, 2] for b values
                 ((*state >> 33) as f64) / (1u64 << 31) as f64
             };
 
             for _ in 0..num_random_tests {
-                let a: Vec<f64> = (0..num_vars).map(|_| next_rand(&mut rng_state) * 4.0 - 2.0).collect();
-                let b: Vec<f64> = (0..num_vars).map(|_| next_rand(&mut rng_state).abs() * 2.0).collect();
+                let a: Vec<f64> = (0..num_vars)
+                    .map(|_| next_rand(&mut rng_state) * 4.0 - 2.0)
+                    .collect();
+                let b: Vec<f64> = (0..num_vars)
+                    .map(|_| next_rand(&mut rng_state).abs() * 2.0)
+                    .collect();
 
                 let univar = substitute_linear(&phi, &a, &b, num_vars);
                 if univar.len() > 2 && !is_approx_real_rooted(&univar) {

@@ -5,7 +5,9 @@
 //! in some planar graph where non-crossing only occurs for the identity matching?
 
 fn binom(n: i64, k: i64) -> i64 {
-    if k < 0 || k > n || n < 0 { return 0; }
+    if k < 0 || k > n || n < 0 {
+        return 0;
+    }
     let k = k.min(n - k) as usize;
     let n = n as usize;
     let mut result = 1i64;
@@ -19,8 +21,12 @@ fn m_entry(h: i64, n: i64, j: i64) -> i64 {
     let mut total = 0i64;
     for r in 0..=100 {
         let s = n - 2 * j - 2 * r;
-        if s < 0 { break; }
-        if s > j + 1 { continue; }
+        if s < 0 {
+            break;
+        }
+        if s > j + 1 {
+            continue;
+        }
         total += binom(h * r, j) * binom(j + 1, s);
     }
     total
@@ -29,9 +35,14 @@ fn m_entry(h: i64, n: i64, j: i64) -> i64 {
 fn main() {
     // Print M_{n,j} for h=2 and look for patterns
     println!("=== h=2: M_{{n,j}} ===");
-    println!("{:>4} | {:>6} {:>6} {:>6} {:>6} {:>6} {:>6}", "n", "j=0", "j=1", "j=2", "j=3", "j=4", "j=5");
+    println!(
+        "{:>4} | {:>6} {:>6} {:>6} {:>6} {:>6} {:>6}",
+        "n", "j=0", "j=1", "j=2", "j=3", "j=4", "j=5"
+    );
     for n in 0..=20 {
-        let row: Vec<String> = (0..=5).map(|j| format!("{:>6}", m_entry(2, n, j))).collect();
+        let row: Vec<String> = (0..=5)
+            .map(|j| format!("{:>6}", m_entry(2, n, j)))
+            .collect();
         println!("{:>4} | {}", n, row.join(" "));
     }
 
@@ -95,15 +106,31 @@ fn main() {
     for n in 6..=16 {
         let mut terms = Vec::new();
         for r in 0..=20 {
-            let s = n - 2*2 - 2*r;
-            if s < 0 { break; }
-            if s > 3 { continue; }
-            let val = binom(2*r, 2) * binom(3, s);
+            let s = n - 2 * 2 - 2 * r;
+            if s < 0 {
+                break;
+            }
+            if s > 3 {
+                continue;
+            }
+            let val = binom(2 * r, 2) * binom(3, s);
             if val > 0 {
-                terms.push(format!("C({},2)*C(3,{})={}*{}={}", 2*r, s, binom(2*r,2), binom(3,s), val));
+                terms.push(format!(
+                    "C({},2)*C(3,{})={}*{}={}",
+                    2 * r,
+                    s,
+                    binom(2 * r, 2),
+                    binom(3, s),
+                    val
+                ));
             }
         }
-        println!("  M_{{{},2}} = {} = {}", n, m_entry(2, n, 2), terms.join(" + "));
+        println!(
+            "  M_{{{},2}} = {} = {}",
+            n,
+            m_entry(2, n, 2),
+            terms.join(" + ")
+        );
     }
 
     // Check if the M matrix can be written as a product of two TP matrices
@@ -145,11 +172,17 @@ fn main() {
     // For h=2: C(2(n-2j), j) = C(2n-4j, j).
 
     println!("\n=== Comparison: rigid vs (h,h,1,1) for h=2 ===");
-    println!("{:>4} | {:>8} {:>8} {:>8} | {:>8} {:>8} {:>8}",
-        "n", "M^rig_0", "M^rig_1", "M^rig_2", "M_0", "M_1", "M_2");
+    println!(
+        "{:>4} | {:>8} {:>8} {:>8} | {:>8} {:>8} {:>8}",
+        "n", "M^rig_0", "M^rig_1", "M^rig_2", "M_0", "M_1", "M_2"
+    );
     for n in 0..=14 {
-        let rig: Vec<String> = (0..=2).map(|j| format!("{:>8}", binom(2*(n-2*j), j))).collect();
-        let our: Vec<String> = (0..=2).map(|j| format!("{:>8}", m_entry(2, n, j))).collect();
+        let rig: Vec<String> = (0..=2)
+            .map(|j| format!("{:>8}", binom(2 * (n - 2 * j), j)))
+            .collect();
+        let our: Vec<String> = (0..=2)
+            .map(|j| format!("{:>8}", m_entry(2, n, j)))
+            .collect();
         println!("{:>4} | {} | {}", n, rig.join(" "), our.join(" "));
     }
 }

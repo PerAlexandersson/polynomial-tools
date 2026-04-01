@@ -15,11 +15,17 @@ use polynomial_tools::real_rootedness::{format_poly, is_real_rooted};
 use std::collections::BTreeMap;
 
 fn build_poly(vals: &[usize]) -> Vec<i64> {
-    if vals.is_empty() { return vec![0]; }
+    if vals.is_empty() {
+        return vec![0];
+    }
     let max_s = *vals.iter().max().unwrap();
     let mut coeffs = vec![0i64; max_s + 1];
-    for &s in vals { coeffs[s] += 1; }
-    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 { coeffs.pop(); }
+    for &s in vals {
+        coeffs[s] += 1;
+    }
+    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 {
+        coeffs.pop();
+    }
     coeffs
 }
 
@@ -30,49 +36,93 @@ fn valid_positions(s_mask: u64, n: u8) -> Vec<u8> {
             positions.push(p);
         }
     }
-    if n >= 2 && (s_mask >> (n - 2)) & 1 == 0 { positions.push(n); }
+    if n >= 2 && (s_mask >> (n - 2)) & 1 == 0 {
+        positions.push(n);
+    }
     positions
 }
 
 fn source_asc(s_mask: u64, p: u8, n: u8) -> u64 {
-    if n <= 2 { return 0; }
-    if p == n { return s_mask; }
+    if n <= 2 {
+        return 0;
+    }
+    if p == n {
+        return s_mask;
+    }
     let mut sp = 0u64;
     if p == 1 {
-        for j in 2..n { if (s_mask >> (j - 1)) & 1 == 1 { sp |= 1 << (j - 2); } }
+        for j in 2..n {
+            if (s_mask >> (j - 1)) & 1 == 1 {
+                sp |= 1 << (j - 2);
+            }
+        }
     } else {
         for pos in 1..=(p.saturating_sub(2)) {
-            if (s_mask >> (pos - 1)) & 1 == 1 { sp |= 1 << (pos - 1); }
+            if (s_mask >> (pos - 1)) & 1 == 1 {
+                sp |= 1 << (pos - 1);
+            }
         }
-        for j in (p + 1)..n { if (s_mask >> (j - 1)) & 1 == 1 { sp |= 1 << (j - 2); } }
+        for j in (p + 1)..n {
+            if (s_mask >> (j - 1)) & 1 == 1 {
+                sp |= 1 << (j - 2);
+            }
+        }
     }
     sp
 }
 
 fn source_desc(s_mask: u64, p: u8, n: u8) -> Option<u64> {
-    if p <= 1 || p >= n { return None; }
+    if p <= 1 || p >= n {
+        return None;
+    }
     Some(source_asc(s_mask, p, n) | (1 << (p - 2)))
 }
 
 fn epsilon1(pi: &[u8], p: u8) -> bool {
     let n = pi.len() as u8 + 1;
-    if p <= 1 || p >= n { return false; }
+    if p <= 1 || p >= n {
+        return false;
+    }
     pi[(p - 2) as usize] + 1 == pi[(p - 1) as usize]
 }
 
 fn check_pairwise_compatible(f: &[i64], g: &[i64]) -> bool {
-    if f.len() <= 1 || g.len() <= 1 { return true; }
-    if !is_real_rooted(f) || !is_real_rooted(g) { return false; }
+    if f.len() <= 1 || g.len() <= 1 {
+        return true;
+    }
+    if !is_real_rooted(f) || !is_real_rooted(g) {
+        return false;
+    }
     let weights: Vec<(i64, i64)> = vec![
-        (1,1),(1,2),(2,1),(1,3),(3,1),(1,5),(5,1),(2,3),(3,2),(1,7),(7,1),(3,5),(5,3),
+        (1, 1),
+        (1, 2),
+        (2, 1),
+        (1, 3),
+        (3, 1),
+        (1, 5),
+        (5, 1),
+        (2, 3),
+        (3, 2),
+        (1, 7),
+        (7, 1),
+        (3, 5),
+        (5, 3),
     ];
     let maxlen = f.len().max(g.len());
     for (a, b) in &weights {
         let mut combo = vec![0i64; maxlen];
-        for (i, &c) in f.iter().enumerate() { combo[i] += a * c; }
-        for (i, &c) in g.iter().enumerate() { combo[i] += b * c; }
-        while combo.len() > 1 && *combo.last().unwrap() == 0 { combo.pop(); }
-        if combo.len() > 1 && !is_real_rooted(&combo) { return false; }
+        for (i, &c) in f.iter().enumerate() {
+            combo[i] += a * c;
+        }
+        for (i, &c) in g.iter().enumerate() {
+            combo[i] += b * c;
+        }
+        while combo.len() > 1 && *combo.last().unwrap() == 0 {
+            combo.pop();
+        }
+        if combo.len() > 1 && !is_real_rooted(&combo) {
+            return false;
+        }
     }
     true
 }
@@ -80,12 +130,24 @@ fn check_pairwise_compatible(f: &[i64], g: &[i64]) -> bool {
 fn descent_set_to_string(mask: u64, n: u8) -> String {
     let mut s = String::from("{");
     let mut first = true;
-    for i in 1..n { if (mask >> (i - 1)) & 1 == 1 { if !first { s.push(','); } s.push_str(&i.to_string()); first = false; } }
-    s.push('}'); s
+    for i in 1..n {
+        if (mask >> (i - 1)) & 1 == 1 {
+            if !first {
+                s.push(',');
+            }
+            s.push_str(&i.to_string());
+            first = false;
+        }
+    }
+    s.push('}');
+    s
 }
 
 fn main() {
-    let max_n: u8 = std::env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(9);
+    let max_n: u8 = std::env::args()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(9);
 
     println!("=== Modified source approach: absorb eps1 into source statistic ===\n");
     println!("For each target (S, p), compute F_q = sum t^{{swaps+eps1}} over source perms at q.");
@@ -105,11 +167,19 @@ fn main() {
         for pi in &perms_prev {
             let idx = perm_prev_list.len();
             perm_prev_list.push(pi);
-            by_descent_prev.entry(descent_set_bitmask(pi)).or_default().push(idx);
+            by_descent_prev
+                .entry(descent_set_bitmask(pi))
+                .or_default()
+                .push(idx);
         }
 
         let mut by_descent: BTreeMap<u64, Vec<&Vec<u8>>> = BTreeMap::new();
-        for pi in &perms { by_descent.entry(descent_set_bitmask(pi)).or_default().push(pi); }
+        for pi in &perms {
+            by_descent
+                .entry(descent_set_bitmask(pi))
+                .or_default()
+                .push(pi);
+        }
 
         let mut n_src_ok = 0u32;
         let mut n_src_tested = 0u32;
@@ -119,7 +189,9 @@ fn main() {
         for (&mask, _) in &by_descent {
             let one_not_in_s = (mask & 1) == 0;
             let vp = valid_positions(mask, n);
-            if vp.len() < 2 { continue; }
+            if vp.len() < 2 {
+                continue;
+            }
 
             // For each p, compute modified source vector and check interlacing
             let mut target_polys: Vec<(u8, Vec<i64>)> = Vec::new();
@@ -157,16 +229,15 @@ fn main() {
                 let mut sorted_qs: Vec<u8> = by_q.keys().copied().collect();
                 sorted_qs.sort();
 
-                let f_polys: Vec<Vec<i64>> = sorted_qs.iter()
-                    .map(|q| build_poly(&by_q[q]))
-                    .collect();
+                let f_polys: Vec<Vec<i64>> =
+                    sorted_qs.iter().map(|q| build_poly(&by_q[q])).collect();
 
                 // Check: is (F_q)_q interlacing?
                 if f_polys.len() >= 2 {
                     n_src_tested += 1;
                     let mut all_compat = true;
                     'outer: for i in 0..f_polys.len() {
-                        for j in (i+1)..f_polys.len() {
+                        for j in (i + 1)..f_polys.len() {
                             if !check_pairwise_compatible(&f_polys[i], &f_polys[j]) {
                                 all_compat = false;
                                 break 'outer;
@@ -192,11 +263,15 @@ fn main() {
                     let eps2 = if q <= p.saturating_sub(2) { 1usize } else { 0 };
                     for (k, &c) in f_polys[qi].iter().enumerate() {
                         let idx = k + eps2;
-                        if idx >= reconstructed.len() { reconstructed.resize(idx + 1, 0); }
+                        if idx >= reconstructed.len() {
+                            reconstructed.resize(idx + 1, 0);
+                        }
                         reconstructed[idx] += c;
                     }
                 }
-                while reconstructed.len() > 1 && *reconstructed.last().unwrap() == 0 { reconstructed.pop(); }
+                while reconstructed.len() > 1 && *reconstructed.last().unwrap() == 0 {
+                    reconstructed.pop();
+                }
                 target_polys.push((p, reconstructed));
             }
 
@@ -205,14 +280,15 @@ fn main() {
                 n_tgt_tested += 1;
                 let mut all_compat = true;
                 for i in 0..target_polys.len() {
-                    for j in (i+1)..target_polys.len() {
+                    for j in (i + 1)..target_polys.len() {
                         if !check_pairwise_compatible(&target_polys[i].1, &target_polys[j].1) {
                             all_compat = false;
                         }
                     }
                 }
-                if all_compat { n_tgt_ok += 1; }
-                else if one_not_in_s {
+                if all_compat {
+                    n_tgt_ok += 1;
+                } else if one_not_in_s {
                     let s_str = descent_set_to_string(mask, n);
                     println!("  TGT FAIL (1 not in S): n={} S={}", n, s_str);
                 }
@@ -224,13 +300,18 @@ fn main() {
         total_target_ok += n_tgt_ok as u64;
         total_target_tested += n_tgt_tested as u64;
 
-        println!("n={}: modified source interlacing {}/{}, target interlacing {}/{}",
-            n, n_src_ok, n_src_tested, n_tgt_ok, n_tgt_tested);
+        println!(
+            "n={}: modified source interlacing {}/{}, target interlacing {}/{}",
+            n, n_src_ok, n_src_tested, n_tgt_ok, n_tgt_tested
+        );
     }
 
     println!("\n=== SUMMARY ===");
     println!("Modified source interlacing: {}/{}", total_ok, total_tested);
-    println!("Target interlacing: {}/{}", total_target_ok, total_target_tested);
+    println!(
+        "Target interlacing: {}/{}",
+        total_target_ok, total_target_tested
+    );
     println!("\nIf modified source is always interlacing (for 1 not in S),");
     println!("then Branden's Thm 7.8.5 on the staircase matrix proves the conjecture.");
 }

@@ -1,6 +1,6 @@
-use std::fmt;
 use num_bigint::BigUint;
 use num_traits::One;
+use std::fmt;
 
 /// A partition of a non-negative integer: a weakly decreasing sequence of positive integers.
 ///
@@ -259,11 +259,7 @@ impl Partition {
     /// n(λ) = Σ (i) * λ_i (0-indexed i), equivalently Σ binom(λ'_j, 2).
     /// `PartitionN` in Mathematica.
     pub fn partition_n(&self) -> u32 {
-        self.0
-            .iter()
-            .enumerate()
-            .map(|(i, &p)| i as u32 * p)
-            .sum()
+        self.0.iter().enumerate().map(|(i, &p)| i as u32 * p).sum()
     }
 
     /// Part multiplicity vector: m_i = number of parts equal to i.
@@ -318,9 +314,7 @@ impl Partition {
     /// β_i = λ_i + (ℓ(λ) - 1 - i) for i = 0..ℓ(λ)-1.
     fn to_beta_set(&self) -> Vec<u32> {
         let n = self.num_parts();
-        (0..n)
-            .map(|i| self.0[i] + (n - 1 - i) as u32)
-            .collect()
+        (0..n).map(|i| self.0[i] + (n - 1 - i) as u32).collect()
     }
 
     /// Reconstruct partition from beta-set (sorted descending).
@@ -436,7 +430,14 @@ impl Partition {
             }
             let mut next = current.clone();
             next.push(new_r);
-            Self::horizontal_strip_helper(outer, conj_outer, remaining - remove, row + 1, next, results);
+            Self::horizontal_strip_helper(
+                outer,
+                conj_outer,
+                remaining - remove,
+                row + 1,
+                next,
+                results,
+            );
         }
     }
 
@@ -501,7 +502,10 @@ impl Partition {
             }
         }
 
-        (Partition::from_sorted(rho_parts), Partition::from_sorted(sigma_parts))
+        (
+            Partition::from_sorted(rho_parts),
+            Partition::from_sorted(sigma_parts),
+        )
     }
 
     /// Reduce a Kostka coefficient to a Littlewood-Richardson coefficient.
@@ -746,7 +750,10 @@ mod tests {
 
     #[test]
     fn test_parse() {
-        assert_eq!(Partition::parse("5,3,1").unwrap(), Partition::new(vec![5, 3, 1]));
+        assert_eq!(
+            Partition::parse("5,3,1").unwrap(),
+            Partition::new(vec![5, 3, 1])
+        );
         assert_eq!(Partition::parse("0").unwrap(), Partition::empty());
     }
 

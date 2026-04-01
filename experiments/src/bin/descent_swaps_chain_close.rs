@@ -391,14 +391,28 @@ fn main() {
 
                 // Verify: Fb = Tb + Rb
                 let tb_plus_rb = poly_add(&tb, &rb);
-                assert_eq!(fb, tb_plus_rb, "Fb != Tb + Rb for n={} S={} pa={} pb={}",
-                    n, descent_set_to_string(s_mask, n), p_a, p_b);
+                assert_eq!(
+                    fb,
+                    tb_plus_rb,
+                    "Fb != Tb + Rb for n={} S={} pa={} pb={}",
+                    n,
+                    descent_set_to_string(s_mask, n),
+                    p_a,
+                    p_b
+                );
 
                 // Verify: L^{(pb)} = t*Tb + Rb
                 let t_tb = poly_mul_t(&tb);
                 let lpb_check = poly_add(&t_tb, &rb);
-                assert_eq!(lpb, lpb_check, "L^(pb) != t*Tb + Rb for n={} S={} pa={} pb={}",
-                    n, descent_set_to_string(s_mask, n), p_a, p_b);
+                assert_eq!(
+                    lpb,
+                    lpb_check,
+                    "L^(pb) != t*Tb + Rb for n={} S={} pa={} pb={}",
+                    n,
+                    descent_set_to_string(s_mask, n),
+                    p_a,
+                    p_b
+                );
 
                 if is_zero_poly(&sa) || is_zero_poly(&fb) {
                     continue;
@@ -414,7 +428,10 @@ fn main() {
                     sa_fb_fail += 1;
                     println!(
                         "  FAIL Sa<<Fb: n={} S={} pa={} pb={}",
-                        n, descent_set_to_string(s_mask, n), p_a, p_b
+                        n,
+                        descent_set_to_string(s_mask, n),
+                        p_a,
+                        p_b
                     );
                     println!("    Sa = {}", format_poly(&sa));
                     println!("    Fb = {}", format_poly(&fb));
@@ -428,7 +445,10 @@ fn main() {
                     fb_lpb_fail += 1;
                     println!(
                         "  FAIL Fb<<Lpb: n={} S={} pa={} pb={}",
-                        n, descent_set_to_string(s_mask, n), p_a, p_b
+                        n,
+                        descent_set_to_string(s_mask, n),
+                        p_a,
+                        p_b
                     );
                     println!("    Fb  = {}", format_poly(&fb));
                     println!("    Lpb = {}", format_poly(&lpb));
@@ -443,7 +463,10 @@ fn main() {
                         sa_sb_fail += 1;
                         println!(
                             "  FAIL Sa<<Sb: n={} S={} pa={} pb={}",
-                            n, descent_set_to_string(s_mask, n), p_a, p_b
+                            n,
+                            descent_set_to_string(s_mask, n),
+                            p_a,
+                            p_b
                         );
                         println!("    Sa = {}", format_poly(&sa));
                         println!("    Sb = {}", format_poly(&sb));
@@ -459,7 +482,10 @@ fn main() {
                         sb_fb_fail += 1;
                         println!(
                             "  FAIL Sb<<Fb: n={} S={} pa={} pb={}",
-                            n, descent_set_to_string(s_mask, n), p_a, p_b
+                            n,
+                            descent_set_to_string(s_mask, n),
+                            p_a,
+                            p_b
                         );
                         println!("    Sb = {}", format_poly(&sb));
                         println!("    Fb = {}", format_poly(&fb));
@@ -475,7 +501,10 @@ fn main() {
                         tb_fb_fail += 1;
                         println!(
                             "  FAIL Tb<<Fb: n={} S={} pa={} pb={}",
-                            n, descent_set_to_string(s_mask, n), p_a, p_b
+                            n,
+                            descent_set_to_string(s_mask, n),
+                            p_a,
+                            p_b
                         );
                         println!("    Tb = {}", format_poly(&tb));
                         println!("    Fb = {}", format_poly(&fb));
@@ -495,7 +524,10 @@ fn main() {
                     sa_lpb_direct_fail += 1;
                     println!(
                         "  FAIL Sa<<Lpb (direct): n={} S={} pa={} pb={}",
-                        n, descent_set_to_string(s_mask, n), p_a, p_b
+                        n,
+                        descent_set_to_string(s_mask, n),
+                        p_a,
+                        p_b
                     );
                     println!("    Sa  = {}", format_poly(&sa));
                     println!("    Lpb = {}", format_poly(&lpb));
@@ -505,14 +537,38 @@ fn main() {
     }
 
     println!("\n=== SUMMARY (n=5..{}) ===", max_n);
-    println!("Total consecutive pairs (1 not in S, nontrivial): {}", total);
+    println!(
+        "Total consecutive pairs (1 not in S, nontrivial): {}",
+        total
+    );
     println!();
-    println!("(1) Sa << Fb:        pass={} fail={}", sa_fb_pass, sa_fb_fail);
-    println!("(2) Fb << L^(pb):    pass={} fail={}", fb_lpb_pass, fb_lpb_fail);
-    println!("(3) Sa << Sb:        pass={} fail={}", sa_sb_pass, sa_sb_fail);
-    println!("(4) Sb << Fb:        pass={} fail={}", sb_fb_pass, sb_fb_fail);
-    println!("    Tb << Fb:        pass={} fail={}", tb_fb_pass, tb_fb_fail);
+    println!(
+        "(1) Sa << Fb:        pass={} fail={}",
+        sa_fb_pass, sa_fb_fail
+    );
+    println!(
+        "(2) Fb << L^(pb):    pass={} fail={}",
+        fb_lpb_pass, fb_lpb_fail
+    );
+    println!(
+        "(3) Sa << Sb:        pass={} fail={}",
+        sa_sb_pass, sa_sb_fail
+    );
+    println!(
+        "(4) Sb << Fb:        pass={} fail={}",
+        sb_fb_pass, sb_fb_fail
+    );
+    println!(
+        "    Tb << Fb:        pass={} fail={}",
+        tb_fb_pass, tb_fb_fail
+    );
     println!();
-    println!("Chain Sa<<Fb<<Lpb:   complete={} / {}", chain_complete, total);
-    println!("Direct Sa<<Lpb:      pass={} fail={}", sa_lpb_direct_pass, sa_lpb_direct_fail);
+    println!(
+        "Chain Sa<<Fb<<Lpb:   complete={} / {}",
+        chain_complete, total
+    );
+    println!(
+        "Direct Sa<<Lpb:      pass={} fail={}",
+        sa_lpb_direct_pass, sa_lpb_direct_fail
+    );
 }

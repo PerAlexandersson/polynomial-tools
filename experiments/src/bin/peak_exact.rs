@@ -6,7 +6,6 @@
 
 use std::collections::BTreeSet;
 
-
 /// Check if polynomial is real-rooted with all roots in (-inf, 0].
 fn is_rr_nonpos(coeffs: &[i64]) -> bool {
     // Check real-rootedness first
@@ -167,7 +166,11 @@ fn gen_rec(
         results.push(current.clone());
         return;
     }
-    let min_val = (depth + 1).max(if depth > 0 { current[depth - 1] as usize } else { 1 });
+    let min_val = (depth + 1).max(if depth > 0 {
+        current[depth - 1] as usize
+    } else {
+        1
+    });
     for v in min_val..=max_col {
         current.push(v as u8);
         gen_rec(n, max_col, depth + 1, current, results);
@@ -176,7 +179,10 @@ fn gen_rec(
 }
 
 fn main() {
-    let max_n: usize = std::env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(7);
+    let max_n: usize = std::env::args()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(7);
     println!(
         "EXACT interlacing test: (mP-R) ≼ tR for all boards with n <= {}\n",
         max_n

@@ -144,7 +144,11 @@ fn mask_diff_positions(a: u64, b: u64, n: u8) -> Vec<(u8, bool, bool)> {
 }
 
 fn coeff(poly: &[i64], k: usize) -> i64 {
-    if k < poly.len() { poly[k] } else { 0 }
+    if k < poly.len() {
+        poly[k]
+    } else {
+        0
+    }
 }
 
 fn main() {
@@ -395,8 +399,7 @@ fn main() {
                         *des_sigma_prime_diffs.entry(des_sp).or_insert(0) += 1;
                         *des_tau_prime_diffs.entry(des_tp).or_insert(0) += 1;
 
-                        let sw_orig =
-                            compute(sigma, Stat::Swaps) + compute(tau, Stat::Swaps);
+                        let sw_orig = compute(sigma, Stat::Swaps) + compute(tau, Stat::Swaps);
                         let sw_new =
                             compute(&sigma_prime, Stat::Swaps) + compute(&tau_prime, Stat::Swaps);
                         let diff = sw_new as i32 - sw_orig as i32;
@@ -479,21 +482,13 @@ fn main() {
                 if des_sigma_prime_diffs.len() <= 5 {
                     println!("    Des(sigma') values:");
                     for (&d, &cnt) in &des_sigma_prime_diffs {
-                        println!(
-                            "      {} : {} times",
-                            descent_set_to_string(d, n),
-                            cnt
-                        );
+                        println!("      {} : {} times", descent_set_to_string(d, n), cnt);
                     }
                 }
                 if des_tau_prime_diffs.len() <= 5 {
                     println!("    Des(tau') values:");
                     for (&d, &cnt) in &des_tau_prime_diffs {
-                        println!(
-                            "      {} : {} times",
-                            descent_set_to_string(d, n),
-                            cnt
-                        );
+                        println!("      {} : {} times", descent_set_to_string(d, n), cnt);
                     }
                 }
                 println!();
@@ -676,8 +671,7 @@ fn main() {
                         let sigma_prime = insert(&pi_b, pa as usize);
                         let tau_prime = insert(&pi_a, pb as usize);
 
-                        let sw_orig =
-                            compute(sigma, Stat::Swaps) + compute(tau, Stat::Swaps);
+                        let sw_orig = compute(sigma, Stat::Swaps) + compute(tau, Stat::Swaps);
                         let sw_new =
                             compute(&sigma_prime, Stat::Swaps) + compute(&tau_prime, Stat::Swaps);
                         let diff = sw_new as i32 - sw_orig as i32;

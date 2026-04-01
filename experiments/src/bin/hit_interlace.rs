@@ -8,40 +8,58 @@
 //!
 //! Usage: cargo run --release --bin hit_interlace -- 6
 
-use polynomial_tools::real_rootedness::{check_weak_interlacing, is_real_rooted, format_poly};
+use polynomial_tools::real_rootedness::{check_weak_interlacing, format_poly, is_real_rooted};
 use std::collections::BTreeSet;
 
 // ── Polynomial helpers (i64 coefficient vectors, ascending degree) ──
 
 fn pt(p: &[i64]) -> Vec<i64> {
     let mut v = p.to_vec();
-    while v.len() > 1 && *v.last().unwrap() == 0 { v.pop(); }
+    while v.len() > 1 && *v.last().unwrap() == 0 {
+        v.pop();
+    }
     v
 }
-fn pz(p: &[i64]) -> bool { p.iter().all(|&c| c == 0) }
+fn pz(p: &[i64]) -> bool {
+    p.iter().all(|&c| c == 0)
+}
 fn pa(a: &[i64], b: &[i64]) -> Vec<i64> {
     let l = a.len().max(b.len());
     let mut r = vec![0i64; l];
-    for (i, &v) in a.iter().enumerate() { r[i] += v; }
-    for (i, &v) in b.iter().enumerate() { r[i] += v; }
+    for (i, &v) in a.iter().enumerate() {
+        r[i] += v;
+    }
+    for (i, &v) in b.iter().enumerate() {
+        r[i] += v;
+    }
     pt(&r)
 }
 fn pmt(p: &[i64]) -> Vec<i64> {
     let mut r = vec![0i64; p.len() + 1];
-    for (i, &v) in p.iter().enumerate() { r[i + 1] = v; }
+    for (i, &v) in p.iter().enumerate() {
+        r[i + 1] = v;
+    }
     pt(&r)
 }
 fn pdeg(p: &[i64]) -> Option<usize> {
     let v = pt(p);
-    if pz(&v) { None } else { Some(v.len() - 1) }
+    if pz(&v) {
+        None
+    } else {
+        Some(v.len() - 1)
+    }
 }
 
 /// Check f ≪ g (weak interlacing).
 fn interlaces(f: &[i64], g: &[i64]) -> bool {
     let f = pt(f);
     let g = pt(g);
-    if pz(&f) { return true; }
-    if pz(&g) { return false; }
+    if pz(&f) {
+        return true;
+    }
+    if pz(&g) {
+        return false;
+    }
     check_weak_interlacing(&f, &g).unwrap_or(false)
 }
 
@@ -68,7 +86,9 @@ fn bruhat_lower_ideal(perm: &[u8]) -> Vec<Vec<u8>> {
                 if cur[i] > cur[j] {
                     let mut c = cur.clone();
                     c.swap(i, j);
-                    if !vis.contains(&c) { q.insert(c); }
+                    if !vis.contains(&c) {
+                        q.insert(c);
+                    }
                 }
             }
         }
@@ -83,7 +103,11 @@ fn board_to_perm(b: &[u8]) -> Vec<u8> {
     let mut u = vec![false; n + 1];
     for i in 0..n {
         for c in (1..=(b[i] as usize).min(n)).rev() {
-            if !u[c] { p[i] = c as u8; u[c] = true; break; }
+            if !u[c] {
+                p[i] = c as u8;
+                u[c] = true;
+                break;
+            }
         }
     }
     p
@@ -94,7 +118,9 @@ fn is_312_avoiding(perm: &[u8]) -> bool {
     for i in 0..n {
         for j in i + 1..n {
             for k in j + 1..n {
-                if perm[k] < perm[i] && perm[i] < perm[j] { return false; }
+                if perm[k] < perm[i] && perm[i] < perm[j] {
+                    return false;
+                }
             }
         }
     }
@@ -109,7 +135,10 @@ fn gen_boards(n: usize) -> Vec<Vec<u8>> {
 }
 
 fn gb(n: usize, mx: usize, d: usize, c: &mut Vec<u8>, r: &mut Vec<Vec<u8>>) {
-    if d == n { r.push(c.clone()); return; }
+    if d == n {
+        r.push(c.clone());
+        return;
+    }
     for v in (d + 1).max(if d > 0 { c[d - 1] as usize } else { 1 })..=mx {
         c.push(v as u8);
         gb(n, mx, d + 1, c, r);
@@ -122,9 +151,15 @@ fn sub_partitions(lambda: &[u8]) -> Vec<Vec<u8>> {
     let mut result = Vec::new();
     let mut mu = vec![0u8; lambda.len()];
     fn gen(lambda: &[u8], mu: &mut Vec<u8>, pos: usize, max_val: u8, result: &mut Vec<Vec<u8>>) {
-        if pos == lambda.len() { result.push(mu.clone()); return; }
+        if pos == lambda.len() {
+            result.push(mu.clone());
+            return;
+        }
         let upper = lambda[pos].min(max_val);
-        for v in 0..=upper { mu[pos] = v; gen(lambda, mu, pos + 1, v, result); }
+        for v in 0..=upper {
+            mu[pos] = v;
+            gen(lambda, mu, pos + 1, v, result);
+        }
     }
     gen(lambda, &mut mu, 0, lambda[0], &mut result);
     result
@@ -140,26 +175,29 @@ struct FailInfo {
 }
 
 fn main() {
-    let max_n: usize = std::env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(6);
+    let max_n: usize = std::env::args()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(6);
     println!("================================================================");
     println!("  Hit polynomial interlacing conditions");
     println!("  312-avoiding Ferrers boards, n <= {}", max_n);
     println!("================================================================\n");
 
     // Condition counters: [total, fails]
-    let mut c_rr = [0u64; 2];        // real-rootedness of D_k, U_k, A_k
-    let mut c_du = [0u64; 2];        // D_k ≪ U_j for all k, j
-    let mut c_dd_rev = [0u64; 2];    // D_k ≪ D_{k'} for k > k' (reversed DD)
-    let mut c_aa_rev = [0u64; 2];    // A_k ≪ A_{k'} for k > k' (reversed AA)
-    let mut c_aw_fwd = [0u64; 2];    // A_j ≪ W_j' for j ≤ j' (forward AW)
-    let mut c_aw_all = [0u64; 2];    // A_j ≪ W_j' for all j, j'
-    let mut c_dw = [0u64; 2];        // D_k ≪ W_j for all k, j
-    let mut c_uu_fwd = [0u64; 2];    // U_j ≪ U_{j'} for j ≤ j' (forward UU)
-    let mut c_ww_fwd = [0u64; 2];    // W_j ≪ W_{j'} for j ≤ j' (forward WW)
+    let mut c_rr = [0u64; 2]; // real-rootedness of D_k, U_k, A_k
+    let mut c_du = [0u64; 2]; // D_k ≪ U_j for all k, j
+    let mut c_dd_rev = [0u64; 2]; // D_k ≪ D_{k'} for k > k' (reversed DD)
+    let mut c_aa_rev = [0u64; 2]; // A_k ≪ A_{k'} for k > k' (reversed AA)
+    let mut c_aw_fwd = [0u64; 2]; // A_j ≪ W_j' for j ≤ j' (forward AW)
+    let mut c_aw_all = [0u64; 2]; // A_j ≪ W_j' for all j, j'
+    let mut c_dw = [0u64; 2]; // D_k ≪ W_j for all k, j
+    let mut c_uu_fwd = [0u64; 2]; // U_j ≪ U_{j'} for j ≤ j' (forward UU)
+    let mut c_ww_fwd = [0u64; 2]; // W_j ≪ W_{j'} for j ≤ j' (forward WW)
 
     // Additional conditions: partial sums
-    let mut c_dplus_rr = [0u64; 2];  // D_k^+ = Σ_{j<k} A_j real-rooted
-    let mut c_uplus_rr = [0u64; 2];  // U_k^+ = Σ_{j≥k} W_j real-rooted
+    let mut c_dplus_rr = [0u64; 2]; // D_k^+ = Σ_{j<k} A_j real-rooted
+    let mut c_uplus_rr = [0u64; 2]; // U_k^+ = Σ_{j≥k} W_j real-rooted
 
     // Failure details
     let mut du_fails: Vec<FailInfo> = Vec::new();
@@ -175,7 +213,9 @@ fn main() {
         let boards = gen_boards(n);
         for board in &boards {
             let perm = board_to_perm(board);
-            if !is_312_avoiding(&perm) { continue; }
+            if !is_312_avoiding(&perm) {
+                continue;
+            }
 
             let m = board[0] as usize; // max column value
             let ideal = bruhat_lower_ideal(&perm);
@@ -194,20 +234,26 @@ fn main() {
 
                 for sigma in &ideal {
                     let k = sigma[0] as usize;
-                    if k == 0 || k > m { continue; }
+                    if k == 0 || k > m {
+                        continue;
+                    }
 
                     // Count hits
-                    let hits: usize = (0..n).filter(|&i| {
-                        let mu_i = if i < mu.len() { mu[i] as usize } else { 0 };
-                        (sigma[i] as usize) > mu_i
-                    }).count();
+                    let hits: usize = (0..n)
+                        .filter(|&i| {
+                            let mu_i = if i < mu.len() { mu[i] as usize } else { 0 };
+                            (sigma[i] as usize) > mu_i
+                        })
+                        .count();
 
                     let poly = if n >= 2 && sigma[0] > sigma[1] {
                         &mut d_k[k]
                     } else {
                         &mut u_k[k]
                     };
-                    while poly.len() <= hits { poly.push(0); }
+                    while poly.len() <= hits {
+                        poly.push(0);
+                    }
                     poly[hits] += 1;
                 }
 
@@ -256,17 +302,24 @@ fn main() {
 
                 // DU: D_k ≪ U_j for all k, j
                 for &k in &active {
-                    if pz(&d_k[k]) { continue; }
+                    if pz(&d_k[k]) {
+                        continue;
+                    }
                     for &j in &active {
-                        if pz(&u_k[j]) { continue; }
+                        if pz(&u_k[j]) {
+                            continue;
+                        }
                         c_du[0] += 1;
                         if !interlaces(&d_k[k], &u_k[j]) {
                             c_du[1] += 1;
                             if du_fails.len() < 5 {
                                 du_fails.push(FailInfo {
-                                    board: board.clone(), mu: mu.clone(),
-                                    k1: k, k2: j,
-                                    f: d_k[k].clone(), g: u_k[j].clone(),
+                                    board: board.clone(),
+                                    mu: mu.clone(),
+                                    k1: k,
+                                    k2: j,
+                                    f: d_k[k].clone(),
+                                    g: u_k[j].clone(),
                                 });
                             }
                         }
@@ -275,18 +328,27 @@ fn main() {
 
                 // Reversed DD: D_k ≪ D_{k'} for k > k'
                 for &k in &active {
-                    if pz(&d_k[k]) { continue; }
+                    if pz(&d_k[k]) {
+                        continue;
+                    }
                     for &kp in &active {
-                        if kp >= k { continue; }
-                        if pz(&d_k[kp]) { continue; }
+                        if kp >= k {
+                            continue;
+                        }
+                        if pz(&d_k[kp]) {
+                            continue;
+                        }
                         c_dd_rev[0] += 1;
                         if !interlaces(&d_k[k], &d_k[kp]) {
                             c_dd_rev[1] += 1;
                             if dd_fails.len() < 5 {
                                 dd_fails.push(FailInfo {
-                                    board: board.clone(), mu: mu.clone(),
-                                    k1: k, k2: kp,
-                                    f: d_k[k].clone(), g: d_k[kp].clone(),
+                                    board: board.clone(),
+                                    mu: mu.clone(),
+                                    k1: k,
+                                    k2: kp,
+                                    f: d_k[k].clone(),
+                                    g: d_k[kp].clone(),
                                 });
                             }
                         }
@@ -296,15 +358,20 @@ fn main() {
                 // Reversed AA: A_k ≪ A_{k'} for k > k'
                 for &k in &active {
                     for &kp in &active {
-                        if kp >= k { continue; }
+                        if kp >= k {
+                            continue;
+                        }
                         c_aa_rev[0] += 1;
                         if !interlaces(&a_k[k], &a_k[kp]) {
                             c_aa_rev[1] += 1;
                             if aa_fails.len() < 5 {
                                 aa_fails.push(FailInfo {
-                                    board: board.clone(), mu: mu.clone(),
-                                    k1: k, k2: kp,
-                                    f: a_k[k].clone(), g: a_k[kp].clone(),
+                                    board: board.clone(),
+                                    mu: mu.clone(),
+                                    k1: k,
+                                    k2: kp,
+                                    f: a_k[k].clone(),
+                                    g: a_k[kp].clone(),
                                 });
                             }
                         }
@@ -314,8 +381,12 @@ fn main() {
                 // AW forward: A_j ≪ W_{j'} for j ≤ j'
                 for &j in &active {
                     for &jp in &active {
-                        if j > jp { continue; }
-                        if pz(&w_k[jp]) { continue; }
+                        if j > jp {
+                            continue;
+                        }
+                        if pz(&w_k[jp]) {
+                            continue;
+                        }
                         c_aw_fwd[0] += 1;
                         if !interlaces(&a_k[j], &w_k[jp]) {
                             c_aw_fwd[1] += 1;
@@ -326,15 +397,20 @@ fn main() {
                 // AW all: A_j ≪ W_{j'} for all j, j'
                 for &j in &active {
                     for &jp in &active {
-                        if pz(&w_k[jp]) { continue; }
+                        if pz(&w_k[jp]) {
+                            continue;
+                        }
                         c_aw_all[0] += 1;
                         if !interlaces(&a_k[j], &w_k[jp]) {
                             c_aw_all[1] += 1;
                             if aw_all_fails.len() < 5 {
                                 aw_all_fails.push(FailInfo {
-                                    board: board.clone(), mu: mu.clone(),
-                                    k1: j, k2: jp,
-                                    f: a_k[j].clone(), g: w_k[jp].clone(),
+                                    board: board.clone(),
+                                    mu: mu.clone(),
+                                    k1: j,
+                                    k2: jp,
+                                    f: a_k[j].clone(),
+                                    g: w_k[jp].clone(),
                                 });
                             }
                         }
@@ -343,17 +419,24 @@ fn main() {
 
                 // DW: D_k ≪ W_j for all k, j
                 for &k in &active {
-                    if pz(&d_k[k]) { continue; }
+                    if pz(&d_k[k]) {
+                        continue;
+                    }
                     for &j in &active {
-                        if pz(&w_k[j]) { continue; }
+                        if pz(&w_k[j]) {
+                            continue;
+                        }
                         c_dw[0] += 1;
                         if !interlaces(&d_k[k], &w_k[j]) {
                             c_dw[1] += 1;
                             if dw_fails.len() < 5 {
                                 dw_fails.push(FailInfo {
-                                    board: board.clone(), mu: mu.clone(),
-                                    k1: k, k2: j,
-                                    f: d_k[k].clone(), g: w_k[j].clone(),
+                                    board: board.clone(),
+                                    mu: mu.clone(),
+                                    k1: k,
+                                    k2: j,
+                                    f: d_k[k].clone(),
+                                    g: w_k[j].clone(),
                                 });
                             }
                         }
@@ -362,19 +445,30 @@ fn main() {
 
                 // Forward UU: U_j ≪ U_{j'} for j ≤ j'
                 for &j in &active {
-                    if pz(&u_k[j]) { continue; }
+                    if pz(&u_k[j]) {
+                        continue;
+                    }
                     for &jp in &active {
-                        if jp < j { continue; }
-                        if pz(&u_k[jp]) { continue; }
-                        if j == jp { continue; }
+                        if jp < j {
+                            continue;
+                        }
+                        if pz(&u_k[jp]) {
+                            continue;
+                        }
+                        if j == jp {
+                            continue;
+                        }
                         c_uu_fwd[0] += 1;
                         if !interlaces(&u_k[j], &u_k[jp]) {
                             c_uu_fwd[1] += 1;
                             if uu_fails.len() < 5 {
                                 uu_fails.push(FailInfo {
-                                    board: board.clone(), mu: mu.clone(),
-                                    k1: j, k2: jp,
-                                    f: u_k[j].clone(), g: u_k[jp].clone(),
+                                    board: board.clone(),
+                                    mu: mu.clone(),
+                                    k1: j,
+                                    k2: jp,
+                                    f: u_k[j].clone(),
+                                    g: u_k[jp].clone(),
                                 });
                             }
                         }
@@ -383,11 +477,19 @@ fn main() {
 
                 // Forward WW: W_j ≪ W_{j'} for j ≤ j'
                 for &j in &active {
-                    if pz(&w_k[j]) { continue; }
+                    if pz(&w_k[j]) {
+                        continue;
+                    }
                     for &jp in &active {
-                        if jp < j { continue; }
-                        if pz(&w_k[jp]) { continue; }
-                        if j == jp { continue; }
+                        if jp < j {
+                            continue;
+                        }
+                        if pz(&w_k[jp]) {
+                            continue;
+                        }
+                        if j == jp {
+                            continue;
+                        }
                         c_ww_fwd[0] += 1;
                         if !interlaces(&w_k[j], &w_k[jp]) {
                             c_ww_fwd[1] += 1;
@@ -400,7 +502,9 @@ fn main() {
                     // D_k^+
                     let mut dplus = vec![0i64];
                     for &j in &active {
-                        if j < k { dplus = pa(&dplus, &a_k[j]); }
+                        if j < k {
+                            dplus = pa(&dplus, &a_k[j]);
+                        }
                     }
                     if !pz(&dplus) {
                         c_dplus_rr[0] += 1;
@@ -412,7 +516,9 @@ fn main() {
                     // U_k^+
                     let mut uplus = vec![0i64];
                     for &j in &active {
-                        if j >= k { uplus = pa(&uplus, &w_k[j]); }
+                        if j >= k {
+                            uplus = pa(&uplus, &w_k[j]);
+                        }
                     }
                     if !pz(&uplus) {
                         c_uplus_rr[0] += 1;
@@ -446,7 +552,10 @@ fn main() {
     if !du_fails.is_empty() {
         println!("\n  DU failures (first {}):", du_fails.len());
         for f in &du_fails {
-            println!("    λ={:?} μ={:?}: D_{} ≪ U_{} FAILS", f.board, f.mu, f.k1, f.k2);
+            println!(
+                "    λ={:?} μ={:?}: D_{} ≪ U_{} FAILS",
+                f.board, f.mu, f.k1, f.k2
+            );
             println!("      D = {}", format_poly(&f.f));
             println!("      U = {}", format_poly(&f.g));
         }
@@ -454,7 +563,10 @@ fn main() {
     if !dd_fails.is_empty() {
         println!("\n  revDD failures (first {}):", dd_fails.len());
         for f in &dd_fails {
-            println!("    λ={:?} μ={:?}: D_{} ≪ D_{} FAILS", f.board, f.mu, f.k1, f.k2);
+            println!(
+                "    λ={:?} μ={:?}: D_{} ≪ D_{} FAILS",
+                f.board, f.mu, f.k1, f.k2
+            );
             println!("      f = {}", format_poly(&f.f));
             println!("      g = {}", format_poly(&f.g));
         }
@@ -462,7 +574,10 @@ fn main() {
     if !aa_fails.is_empty() {
         println!("\n  revAA failures (first {}):", aa_fails.len());
         for f in &aa_fails {
-            println!("    λ={:?} μ={:?}: A_{} ≪ A_{} FAILS", f.board, f.mu, f.k1, f.k2);
+            println!(
+                "    λ={:?} μ={:?}: A_{} ≪ A_{} FAILS",
+                f.board, f.mu, f.k1, f.k2
+            );
             println!("      f = {}", format_poly(&f.f));
             println!("      g = {}", format_poly(&f.g));
         }
@@ -470,7 +585,10 @@ fn main() {
     if !aw_all_fails.is_empty() {
         println!("\n  allAW failures (first {}):", aw_all_fails.len());
         for f in &aw_all_fails {
-            println!("    λ={:?} μ={:?}: A_{} ≪ W_{} FAILS", f.board, f.mu, f.k1, f.k2);
+            println!(
+                "    λ={:?} μ={:?}: A_{} ≪ W_{} FAILS",
+                f.board, f.mu, f.k1, f.k2
+            );
             println!("      A = {}", format_poly(&f.f));
             println!("      W = {}", format_poly(&f.g));
         }
@@ -478,7 +596,10 @@ fn main() {
     if !dw_fails.is_empty() {
         println!("\n  DW failures (first {}):", dw_fails.len());
         for f in &dw_fails {
-            println!("    λ={:?} μ={:?}: D_{} ≪ W_{} FAILS", f.board, f.mu, f.k1, f.k2);
+            println!(
+                "    λ={:?} μ={:?}: D_{} ≪ W_{} FAILS",
+                f.board, f.mu, f.k1, f.k2
+            );
             println!("      D = {}", format_poly(&f.f));
             println!("      W = {}", format_poly(&f.g));
         }
@@ -486,7 +607,10 @@ fn main() {
     if !uu_fails.is_empty() {
         println!("\n  fwdUU failures (first {}):", uu_fails.len());
         for f in &uu_fails {
-            println!("    λ={:?} μ={:?}: U_{} ≪ U_{} FAILS", f.board, f.mu, f.k1, f.k2);
+            println!(
+                "    λ={:?} μ={:?}: U_{} ≪ U_{} FAILS",
+                f.board, f.mu, f.k1, f.k2
+            );
             println!("      f = {}", format_poly(&f.f));
             println!("      g = {}", format_poly(&f.g));
         }

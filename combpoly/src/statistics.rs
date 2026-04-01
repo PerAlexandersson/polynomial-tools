@@ -361,7 +361,11 @@ fn excedances(w: &[u8]) -> usize {
     (0..w.len()).filter(|&i| w[i] as usize > i + 1).count()
 }
 
-fn peaks(w: &[u8]) -> usize {
+/// Number of peaks in a word or permutation.
+///
+/// A peak is an index `i` with `1 < i < n` such that
+/// `w[i - 1] < w[i] > w[i + 1]` (using 0-based indexing internally).
+pub fn peaks(w: &[u8]) -> usize {
     if w.len() < 3 {
         return 0;
     }

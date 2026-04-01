@@ -74,56 +74,28 @@
 ///   KEY QUESTION: Does Sa >=_{LR} B follow from the inductive hypothesis
 ///   (that the source coefficient matrices are TN_2)?
 ///
+use combpoly::fixed_descent::{
+    permutations_grouped_by_descent_set_bitmask,
+    q_refined_modified_source_distribution_from_grouped_source_permutations,
+    valid_insertion_positions_for_target_descent_set as valid_positions,
+};
 use combpoly::permutation::all_permutations;
 use combpoly::statistics::{compute, descent_set_bitmask, Stat};
 use std::collections::BTreeMap;
 
 fn build_poly(vals: &[usize]) -> Vec<i64> {
-    if vals.is_empty() { return vec![0]; }
+    if vals.is_empty() {
+        return vec![0];
+    }
     let max_s = *vals.iter().max().unwrap();
     let mut coeffs = vec![0i64; max_s + 1];
-    for &s in vals { coeffs[s] += 1; }
-    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 { coeffs.pop(); }
+    for &s in vals {
+        coeffs[s] += 1;
+    }
+    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 {
+        coeffs.pop();
+    }
     coeffs
-}
-
-fn valid_positions(s_mask: u64, n: u8) -> Vec<u8> {
-    let mut positions = Vec::new();
-    for p in 1..n {
-        if (s_mask >> (p - 1)) & 1 == 1 && (p < 2 || (s_mask >> (p - 2)) & 1 == 0) {
-            positions.push(p);
-        }
-    }
-    if n >= 2 && (s_mask >> (n - 2)) & 1 == 0 { positions.push(n); }
-    positions
-}
-
-fn source_asc(s_mask: u64, p: u8, n: u8) -> u64 {
-    if n <= 2 { return 0; }
-    if p == n { return s_mask; }
-    let mut sp = 0u64;
-    if p == 1 {
-        for j in 2..n { if (s_mask >> (j - 1)) & 1 == 1 { sp |= 1 << (j - 2); } }
-    } else {
-        for pos in 1..=(p.saturating_sub(2)) { if (s_mask >> (pos - 1)) & 1 == 1 { sp |= 1 << (pos - 1); } }
-        for j in (p + 1)..n { if (s_mask >> (j - 1)) & 1 == 1 { sp |= 1 << (j - 2); } }
-    }
-    sp
-}
-
-fn source_desc(s_mask: u64, p: u8, n: u8) -> Option<u64> {
-    if p <= 1 || p >= n { return None; }
-    Some(source_asc(s_mask, p, n) | (1 << (p - 2)))
-}
-
-fn epsilon1(pi: &[u8], p: u8) -> bool {
-    let n = pi.len() as u8 + 1;
-    if p <= 1 || p >= n { return false; }
-    pi[(p - 2) as usize] + 1 == pi[(p - 1) as usize]
-}
-
-fn eps2(p: u8, q: u8) -> usize {
-    if p >= 2 && q <= p - 2 { 1 } else { 0 }
 }
 
 fn descent_set_to_string(mask: u64, n: u8) -> String {
@@ -131,7 +103,9 @@ fn descent_set_to_string(mask: u64, n: u8) -> String {
     let mut first = true;
     for i in 1..n {
         if (mask >> (i - 1)) & 1 == 1 {
-            if !first { s.push(','); }
+            if !first {
+                s.push(',');
+            }
             s.push_str(&i.to_string());
             first = false;
         }
@@ -141,65 +115,58 @@ fn descent_set_to_string(mask: u64, n: u8) -> String {
 }
 
 fn coeff(poly: &[i64], k: usize) -> i64 {
-    if k < poly.len() { poly[k] } else { 0 }
+    if k < poly.len() {
+        poly[k]
+    } else {
+        0
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-enum Zone { L, M, R }
-
-fn classify_zone(q: u8, p_a: u8, p_b: u8) -> Zone {
-    if p_a >= 2 && q <= p_a - 2 { Zone::L }
-    else if p_b >= 2 && q <= p_b - 2 { Zone::M }
-    else { Zone::R }
+enum Zone {
+    L,
+    M,
+    R,
 }
 
-fn build_source_dist(
-    s_mask: u64, p: u8, n: u8,
-    by_descent_prev: &BTreeMap<u64, Vec<usize>>,
-    perm_prev_list: &[&Vec<u8>],
-) -> BTreeMap<(usize, u8), usize> {
-    let sp_asc = source_asc(s_mask, p, n);
-    let sp_desc = source_desc(s_mask, p, n);
-    let mut dist: BTreeMap<(usize, u8), usize> = BTreeMap::new();
-    if let Some(indices) = by_descent_prev.get(&sp_asc) {
-        for &idx in indices {
-            let pi = perm_prev_list[idx];
-            let q = pi.iter().position(|&v| v == n - 1).unwrap() as u8 + 1;
-            let sw = compute(pi, Stat::Swaps) + if epsilon1(pi, p) { 1 } else { 0 };
-            *dist.entry((sw, q)).or_default() += 1;
-        }
+fn classify_zone(q: u8, p_a: u8, p_b: u8) -> Zone {
+    if p_a >= 2 && q <= p_a - 2 {
+        Zone::L
+    } else if p_b >= 2 && q <= p_b - 2 {
+        Zone::M
+    } else {
+        Zone::R
     }
-    if let Some(sp) = sp_desc {
-        if let Some(indices) = by_descent_prev.get(&sp) {
-            for &idx in indices {
-                let pi = perm_prev_list[idx];
-                let q = pi.iter().position(|&v| v == n - 1).unwrap() as u8 + 1;
-                let sw = compute(pi, Stat::Swaps);
-                *dist.entry((sw, q)).or_default() += 1;
-            }
-        }
-    }
-    dist
 }
 
 fn build_zone_raw(dist: &BTreeMap<(usize, u8), usize>, p_a: u8, p_b: u8, zone: Zone) -> Vec<i64> {
     let mut poly = vec![0i64; 20];
     for (&(s, q), &c) in dist {
         if classify_zone(q, p_a, p_b) == zone {
-            if s >= poly.len() { poly.resize(s + 1, 0); }
+            if s >= poly.len() {
+                poly.resize(s + 1, 0);
+            }
             poly[s] += c as i64;
         }
     }
-    while poly.len() > 1 && *poly.last().unwrap() == 0 { poly.pop(); }
+    while poly.len() > 1 && *poly.last().unwrap() == 0 {
+        poly.pop();
+    }
     poly
 }
 
 fn poly_sum2(a: &[i64], b: &[i64]) -> Vec<i64> {
     let len = a.len().max(b.len());
     let mut r = vec![0i64; len];
-    for (i, &c) in a.iter().enumerate() { r[i] += c; }
-    for (i, &c) in b.iter().enumerate() { r[i] += c; }
-    while r.len() > 1 && *r.last().unwrap() == 0 { r.pop(); }
+    for (i, &c) in a.iter().enumerate() {
+        r[i] += c;
+    }
+    for (i, &c) in b.iter().enumerate() {
+        r[i] += c;
+    }
+    while r.len() > 1 && *r.last().unwrap() == 0 {
+        r.pop();
+    }
     r
 }
 
@@ -213,40 +180,51 @@ fn main() {
 
     // Print Sa and B for small cases
     for n in 4u8..=max_n.min(7) {
-        let perms_prev = all_permutations(n - 1);
-        let mut by_descent_prev: BTreeMap<u64, Vec<usize>> = BTreeMap::new();
-        let mut perm_prev_list: Vec<&Vec<u8>> = Vec::new();
-        for pi in &perms_prev {
-            let idx = perm_prev_list.len();
-            perm_prev_list.push(pi);
-            by_descent_prev.entry(descent_set_bitmask(pi)).or_default().push(idx);
-        }
+        let grouped_source_permutations = permutations_grouped_by_descent_set_bitmask(n - 1);
 
         let perms_n = all_permutations(n);
         let mut by_descent_n: BTreeMap<u64, Vec<&Vec<u8>>> = BTreeMap::new();
         for pi in &perms_n {
-            by_descent_n.entry(descent_set_bitmask(pi)).or_default().push(pi);
+            by_descent_n
+                .entry(descent_set_bitmask(pi))
+                .or_default()
+                .push(pi);
         }
 
         for s_mask in 0u64..(1 << (n - 1)) {
-            if s_mask & 1 != 0 { continue; }
+            if s_mask & 1 != 0 {
+                continue;
+            }
             let vp = valid_positions(s_mask, n);
-            if vp.len() < 2 { continue; }
+            if vp.len() < 2 {
+                continue;
+            }
 
             let mut source_dists: BTreeMap<u8, BTreeMap<(usize, u8), usize>> = BTreeMap::new();
             for &p in &vp {
-                source_dists.insert(p,
-                    build_source_dist(s_mask, p, n, &by_descent_prev, &perm_prev_list));
+                source_dists.insert(
+                    p,
+                    q_refined_modified_source_distribution_from_grouped_source_permutations(
+                        s_mask,
+                        p,
+                        n,
+                        &grouped_source_permutations,
+                    )
+                    .counts_by_modified_source_swaps_and_previous_maximum_position,
+                );
             }
 
             let mut lp_polys: BTreeMap<u8, Vec<i64>> = BTreeMap::new();
             if let Some(class) = by_descent_n.get(&s_mask) {
                 for &p in &vp {
-                    let vals: Vec<usize> = class.iter()
+                    let vals: Vec<usize> = class
+                        .iter()
                         .filter(|pi| pi.iter().position(|&v| v == n).unwrap() as u8 + 1 == p)
                         .map(|pi| compute(pi, Stat::Swaps))
                         .collect();
-                    if !vals.is_empty() { lp_polys.insert(p, build_poly(&vals)); }
+                    if !vals.is_empty() {
+                        lp_polys.insert(p, build_poly(&vals));
+                    }
                 }
             }
 
@@ -266,14 +244,22 @@ fn main() {
 
                 let a_poly_ref = lp_polys.get(&p_a);
                 let b_poly_ref = lp_polys.get(&p_b);
-                if a_poly_ref.is_none() || b_poly_ref.is_none() { continue; }
+                if a_poly_ref.is_none() || b_poly_ref.is_none() {
+                    continue;
+                }
                 let a_poly = a_poly_ref.unwrap();
                 let b_poly = b_poly_ref.unwrap();
 
                 let sa_raw = poly_sum2(&ma_raw, &ra_raw);
 
                 // Print comparison
-                println!("n={} S={} pa={} pb={}", n, descent_set_to_string(s_mask, n), p_a, p_b);
+                println!(
+                    "n={} S={} pa={} pb={}",
+                    n,
+                    descent_set_to_string(s_mask, n),
+                    p_a,
+                    p_b
+                );
                 println!("  A  = L^(pa) = {:?}", a_poly);
                 println!("  B  = L^(pb) = {:?}", b_poly);
                 println!("  Sa = Ma+Ra  = {:?}  (zone M+R raw for source A)", sa_raw);
@@ -283,7 +269,7 @@ fn main() {
                 // Check: A_k = La(k-1) + Sa(k)
                 let max_deg = a_poly.len().max(b_poly.len());
                 for k in 0..max_deg {
-                    let la_km1 = if k > 0 { coeff(&la_raw, k-1) } else { 0 };
+                    let la_km1 = if k > 0 { coeff(&la_raw, k - 1) } else { 0 };
                     let a_check = la_km1 + coeff(&sa_raw, k);
                     assert_eq!(a_check, coeff(a_poly, k), "A_k check failed");
                 }
@@ -305,15 +291,17 @@ fn main() {
 
                 // Check all minors
                 for k1 in 0..max_deg {
-                    for k2 in (k1+1)..max_deg {
+                    for k2 in (k1 + 1)..max_deg {
                         let sa_k1 = coeff(&sa_raw, k1);
                         let sa_k2 = coeff(&sa_raw, k2);
                         let b_k1 = coeff(b_poly, k1);
                         let b_k2 = coeff(b_poly, k2);
                         let minor = sa_k1 * b_k2 - sa_k2 * b_k1;
                         if minor < 0 {
-                            println!("  *** NEGATIVE: Sa({})B({}) - Sa({})B({}) = {} < 0!",
-                                k1, k2, k2, k1, minor);
+                            println!(
+                                "  *** NEGATIVE: Sa({})B({}) - Sa({})B({}) = {} < 0!",
+                                k1, k2, k2, k1, minor
+                            );
                             ratios_ok = false;
                         }
                     }
@@ -432,40 +420,51 @@ fn main() {
     let mut la_lr_lb_fail = 0u64;
 
     for n in 4..=max_n {
-        let perms_prev = all_permutations(n - 1);
-        let mut by_descent_prev: BTreeMap<u64, Vec<usize>> = BTreeMap::new();
-        let mut perm_prev_list: Vec<&Vec<u8>> = Vec::new();
-        for pi in &perms_prev {
-            let idx = perm_prev_list.len();
-            perm_prev_list.push(pi);
-            by_descent_prev.entry(descent_set_bitmask(pi)).or_default().push(idx);
-        }
+        let grouped_source_permutations = permutations_grouped_by_descent_set_bitmask(n - 1);
 
         let perms_n = all_permutations(n);
         let mut by_descent_n: BTreeMap<u64, Vec<&Vec<u8>>> = BTreeMap::new();
         for pi in &perms_n {
-            by_descent_n.entry(descent_set_bitmask(pi)).or_default().push(pi);
+            by_descent_n
+                .entry(descent_set_bitmask(pi))
+                .or_default()
+                .push(pi);
         }
 
         for s_mask in 0u64..(1 << (n - 1)) {
-            if s_mask & 1 != 0 { continue; }
+            if s_mask & 1 != 0 {
+                continue;
+            }
             let vp = valid_positions(s_mask, n);
-            if vp.len() < 2 { continue; }
+            if vp.len() < 2 {
+                continue;
+            }
 
             let mut source_dists: BTreeMap<u8, BTreeMap<(usize, u8), usize>> = BTreeMap::new();
             for &p in &vp {
-                source_dists.insert(p,
-                    build_source_dist(s_mask, p, n, &by_descent_prev, &perm_prev_list));
+                source_dists.insert(
+                    p,
+                    q_refined_modified_source_distribution_from_grouped_source_permutations(
+                        s_mask,
+                        p,
+                        n,
+                        &grouped_source_permutations,
+                    )
+                    .counts_by_modified_source_swaps_and_previous_maximum_position,
+                );
             }
 
             let mut lp_polys: BTreeMap<u8, Vec<i64>> = BTreeMap::new();
             if let Some(class) = by_descent_n.get(&s_mask) {
                 for &p in &vp {
-                    let vals: Vec<usize> = class.iter()
+                    let vals: Vec<usize> = class
+                        .iter()
                         .filter(|pi| pi.iter().position(|&v| v == n).unwrap() as u8 + 1 == p)
                         .map(|pi| compute(pi, Stat::Swaps))
                         .collect();
-                    if !vals.is_empty() { lp_polys.insert(p, build_poly(&vals)); }
+                    if !vals.is_empty() {
+                        lp_polys.insert(p, build_poly(&vals));
+                    }
                 }
             }
 
@@ -484,7 +483,9 @@ fn main() {
                 let rb_raw = build_zone_raw(dist_b, p_a, p_b, Zone::R);
 
                 let b_poly_ref = lp_polys.get(&p_b);
-                if b_poly_ref.is_none() { continue; }
+                if b_poly_ref.is_none() {
+                    continue;
+                }
                 let b_poly = b_poly_ref.unwrap();
 
                 let sa_raw = poly_sum2(&ma_raw, &ra_raw);
@@ -492,13 +493,18 @@ fn main() {
                 let total_a = poly_sum2(&la_raw, &sa_raw);
                 let total_b = poly_sum2(&lb_raw, &sb_raw);
 
-                let max_s = [&sa_raw, &total_b, b_poly, &total_a, &sb_raw, &la_raw, &lb_raw]
-                    .iter().map(|p| p.len()).max().unwrap_or(1);
+                let max_s = [
+                    &sa_raw, &total_b, b_poly, &total_a, &sb_raw, &la_raw, &lb_raw,
+                ]
+                .iter()
+                .map(|p| p.len())
+                .max()
+                .unwrap_or(1);
 
                 // Check total_b >=_LR B
                 let mut ok = true;
                 for k1 in 0..max_s {
-                    for k2 in (k1+1)..max_s {
+                    for k2 in (k1 + 1)..max_s {
                         let tb_k1 = coeff(&total_b, k1);
                         let tb_k2 = coeff(&total_b, k2);
                         let b_k1 = coeff(b_poly, k1);
@@ -508,12 +514,16 @@ fn main() {
                         }
                     }
                 }
-                if ok { tb_lr_b_pass += 1; } else { tb_lr_b_fail += 1; }
+                if ok {
+                    tb_lr_b_pass += 1;
+                } else {
+                    tb_lr_b_fail += 1;
+                }
 
                 // Check Sa >=_LR total_b
                 ok = true;
                 for k1 in 0..max_s {
-                    for k2 in (k1+1)..max_s {
+                    for k2 in (k1 + 1)..max_s {
                         let sa_k1 = coeff(&sa_raw, k1);
                         let sa_k2 = coeff(&sa_raw, k2);
                         let tb_k1 = coeff(&total_b, k1);
@@ -523,55 +533,118 @@ fn main() {
                         }
                     }
                 }
-                if ok { sa_lr_totalb_pass += 1; } else { sa_lr_totalb_fail += 1; }
+                if ok {
+                    sa_lr_totalb_pass += 1;
+                } else {
+                    sa_lr_totalb_fail += 1;
+                }
 
                 // Check total_a >=_LR total_b
                 ok = true;
                 for k1 in 0..max_s {
-                    for k2 in (k1+1)..max_s {
-                        if coeff(&total_a, k1) * coeff(&total_b, k2) < coeff(&total_a, k2) * coeff(&total_b, k1) {
+                    for k2 in (k1 + 1)..max_s {
+                        if coeff(&total_a, k1) * coeff(&total_b, k2)
+                            < coeff(&total_a, k2) * coeff(&total_b, k1)
+                        {
                             ok = false;
                         }
                     }
                 }
-                if ok { totala_lr_totalb_pass += 1; } else { totala_lr_totalb_fail += 1; }
+                if ok {
+                    totala_lr_totalb_pass += 1;
+                } else {
+                    totala_lr_totalb_fail += 1;
+                }
 
                 // Check Sa >=_LR Sb
                 ok = true;
                 for k1 in 0..max_s {
-                    for k2 in (k1+1)..max_s {
-                        if coeff(&sa_raw, k1) * coeff(&sb_raw, k2) < coeff(&sa_raw, k2) * coeff(&sb_raw, k1) {
+                    for k2 in (k1 + 1)..max_s {
+                        if coeff(&sa_raw, k1) * coeff(&sb_raw, k2)
+                            < coeff(&sa_raw, k2) * coeff(&sb_raw, k1)
+                        {
                             ok = false;
                         }
                     }
                 }
-                if ok { sa_lr_sb_pass += 1; } else { sa_lr_sb_fail += 1; }
+                if ok {
+                    sa_lr_sb_pass += 1;
+                } else {
+                    sa_lr_sb_fail += 1;
+                }
 
                 // Check La >=_LR Lb
                 ok = true;
                 for k1 in 0..max_s {
-                    for k2 in (k1+1)..max_s {
-                        if coeff(&la_raw, k1) * coeff(&lb_raw, k2) < coeff(&la_raw, k2) * coeff(&lb_raw, k1) {
+                    for k2 in (k1 + 1)..max_s {
+                        if coeff(&la_raw, k1) * coeff(&lb_raw, k2)
+                            < coeff(&la_raw, k2) * coeff(&lb_raw, k1)
+                        {
                             ok = false;
                         }
                     }
                 }
-                if ok { la_lr_lb_pass += 1; } else { la_lr_lb_fail += 1; }
+                if ok {
+                    la_lr_lb_pass += 1;
+                } else {
+                    la_lr_lb_fail += 1;
+                }
             }
         }
     }
 
     let total_pairs = tb_lr_b_pass + tb_lr_b_fail;
-    println!("{:<30} {:>6}/{:<6} {}", "total_b >=_LR B", tb_lr_b_pass, total_pairs,
-        if tb_lr_b_fail == 0 { "ALWAYS" } else { "FAILS" });
-    println!("{:<30} {:>6}/{:<6} {}", "Sa >=_LR total_b", sa_lr_totalb_pass, total_pairs,
-        if sa_lr_totalb_fail == 0 { "ALWAYS" } else { "FAILS" });
-    println!("{:<30} {:>6}/{:<6} {}", "total_a >=_LR total_b", totala_lr_totalb_pass, total_pairs,
-        if totala_lr_totalb_fail == 0 { "ALWAYS" } else { "FAILS" });
-    println!("{:<30} {:>6}/{:<6} {}", "Sa >=_LR Sb", sa_lr_sb_pass, total_pairs,
-        if sa_lr_sb_fail == 0 { "ALWAYS" } else { "FAILS" });
-    println!("{:<30} {:>6}/{:<6} {}", "La >=_LR Lb", la_lr_lb_pass, total_pairs,
-        if la_lr_lb_fail == 0 { "ALWAYS" } else { "FAILS" });
+    println!(
+        "{:<30} {:>6}/{:<6} {}",
+        "total_b >=_LR B",
+        tb_lr_b_pass,
+        total_pairs,
+        if tb_lr_b_fail == 0 { "ALWAYS" } else { "FAILS" }
+    );
+    println!(
+        "{:<30} {:>6}/{:<6} {}",
+        "Sa >=_LR total_b",
+        sa_lr_totalb_pass,
+        total_pairs,
+        if sa_lr_totalb_fail == 0 {
+            "ALWAYS"
+        } else {
+            "FAILS"
+        }
+    );
+    println!(
+        "{:<30} {:>6}/{:<6} {}",
+        "total_a >=_LR total_b",
+        totala_lr_totalb_pass,
+        total_pairs,
+        if totala_lr_totalb_fail == 0 {
+            "ALWAYS"
+        } else {
+            "FAILS"
+        }
+    );
+    println!(
+        "{:<30} {:>6}/{:<6} {}",
+        "Sa >=_LR Sb",
+        sa_lr_sb_pass,
+        total_pairs,
+        if sa_lr_sb_fail == 0 {
+            "ALWAYS"
+        } else {
+            "FAILS"
+        }
+    );
+    println!(
+        "{:<30} {:>6}/{:<6} {}",
+        "La >=_LR Lb",
+        la_lr_lb_pass,
+        total_pairs,
+        if la_lr_lb_fail == 0 {
+            "ALWAYS"
+        } else {
+            "FAILS"
+        }
+    );
 
     println!();
     if tb_lr_b_fail == 0 {
@@ -582,7 +655,10 @@ fn main() {
         println!("Sa >=_LR total_b: HOLDS! This is the key non-trivial claim.");
         println!("  Combined with total_b >=_LR B, this gives Sa >=_LR B by transitivity.");
     } else {
-        println!("Sa >=_LR total_b: FAILS in {} cases. Cannot use transitivity.", sa_lr_totalb_fail);
+        println!(
+            "Sa >=_LR total_b: FAILS in {} cases. Cannot use transitivity.",
+            sa_lr_totalb_fail
+        );
         if totala_lr_totalb_fail == 0 {
             println!("But total_a >=_LR total_b holds, which is a weaker statement.");
         }

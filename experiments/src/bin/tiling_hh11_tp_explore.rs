@@ -202,7 +202,11 @@ fn perm_sign(perm: &[usize]) -> i32 {
             }
         }
     }
-    if inversions % 2 == 0 { 1 } else { -1 }
+    if inversions % 2 == 0 {
+        1
+    } else {
+        -1
+    }
 }
 
 fn next_permutation(arr: &mut Vec<usize>) -> bool {
@@ -293,13 +297,28 @@ fn check_minor_terms(h: i128, n1: i128, n2: i128, j1: i128, j2: i128) {
         }
     }
 
-    let minor_val = m_entry(h, n1, j1) * m_entry(h, n2, j2)
-        - m_entry(h, n1, j2) * m_entry(h, n2, j1);
-    println!("  Summary: pos_terms={}, neg_terms={}, zero_terms={}", pos_count, neg_count, zero_count);
-    println!("  total_pos={}, total_neg={}, net={}", total_pos, total_neg, total_pos + total_neg);
+    let minor_val =
+        m_entry(h, n1, j1) * m_entry(h, n2, j2) - m_entry(h, n1, j2) * m_entry(h, n2, j1);
+    println!(
+        "  Summary: pos_terms={}, neg_terms={}, zero_terms={}",
+        pos_count, neg_count, zero_count
+    );
+    println!(
+        "  total_pos={}, total_neg={}, net={}",
+        total_pos,
+        total_neg,
+        total_pos + total_neg
+    );
     println!(
         "  M[{},{}]*M[{},{}] - M[{},{}]*M[{},{}] = {}*{} - {}*{} = {}",
-        n1, j1, n2, j2, n1, j2, n2, j1,
+        n1,
+        j1,
+        n2,
+        j2,
+        n1,
+        j2,
+        n2,
+        j1,
         m_entry(h, n1, j1),
         m_entry(h, n2, j2),
         m_entry(h, n1, j2),
@@ -370,7 +389,11 @@ fn main() {
         }
 
         let (tnn, info) = check_tnn(&mat, n.min(5));
-        println!("  TNN (natural ordering): {} {}", tnn, if tnn { "" } else { &info });
+        println!(
+            "  TNN (natural ordering): {} {}",
+            tnn,
+            if tnn { "" } else { &info }
+        );
 
         // Try ordering: empty last
         let mut ordering_empty_last: Vec<usize> = (1..n).collect();
@@ -454,8 +477,12 @@ fn main() {
 
         // For h=2, try ALL permutations of 7 states (7! = 5040, feasible)
         if h == 2 {
-            println!("\n  Brute-force search over all {}! = {} orderings for h={}...",
-                     n, (1..=n).product::<usize>(), h);
+            println!(
+                "\n  Brute-force search over all {}! = {} orderings for h={}...",
+                n,
+                (1..=n).product::<usize>(),
+                h
+            );
             let mut best_min_minor = f64::NEG_INFINITY;
             let mut best_ordering: Vec<usize> = Vec::new();
             let mut tnn_count = 0;
@@ -468,9 +495,14 @@ fn main() {
                 let (is_tnn, _) = check_tnn(&mat_p, n);
                 if is_tnn {
                     tnn_count += 1;
-                    println!("    TNN ordering found: {:?} = [{}]",
-                             perm,
-                             perm.iter().map(|&i| state_name(i, h)).collect::<Vec<_>>().join(", "));
+                    println!(
+                        "    TNN ordering found: {:?} = [{}]",
+                        perm,
+                        perm.iter()
+                            .map(|&i| state_name(i, h))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
                 }
 
                 // Track the ordering with best (least negative) min minor
@@ -487,10 +519,16 @@ fn main() {
             }
             println!("  Checked {} orderings. TNN count: {}", count, tnn_count);
             if tnn_count == 0 {
-                println!("  Best (closest to TNN) ordering: {:?} = [{}], min minor = {:.6}",
-                         best_ordering,
-                         best_ordering.iter().map(|&i| state_name(i, h)).collect::<Vec<_>>().join(", "),
-                         best_min_minor);
+                println!(
+                    "  Best (closest to TNN) ordering: {:?} = [{}], min minor = {:.6}",
+                    best_ordering,
+                    best_ordering
+                        .iter()
+                        .map(|&i| state_name(i, h))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    best_min_minor
+                );
             }
         }
 
@@ -499,7 +537,12 @@ fn main() {
         for &t_val in &[0.5, 1.0, 2.0, 0.1] {
             let mat_t = build_transfer_matrix(h, t_val, &natural);
             let (tnn_t, info_t) = check_tnn(&mat_t, n.min(5));
-            println!("    t={}: TNN={} {}", t_val, tnn_t, if tnn_t { "" } else { &info_t });
+            println!(
+                "    t={}: TNN={} {}",
+                t_val,
+                tnn_t,
+                if tnn_t { "" } else { &info_t }
+            );
         }
     }
 
@@ -619,12 +662,24 @@ fn main() {
                 let guess_f = binom(n - j + 1, j + 1);
 
                 let mut matches = Vec::new();
-                if val == guess_a { matches.push(format!("C({},{})", n - j, j)); }
-                if val == guess_b { matches.push(format!("C({},{})", n - j - 1, j)); }
-                if val == guess_c { matches.push(format!("C({},{})", n - j, 2 * j)); }
-                if val == guess_d { matches.push(format!("C({},{}) - C({},{})", n, j+1, n-2, j+1)); }
-                if val == guess_e { matches.push(format!("C({},{})", n - j, j + 1)); }
-                if val == guess_f { matches.push(format!("C({},{})", n - j + 1, j + 1)); }
+                if val == guess_a {
+                    matches.push(format!("C({},{})", n - j, j));
+                }
+                if val == guess_b {
+                    matches.push(format!("C({},{})", n - j - 1, j));
+                }
+                if val == guess_c {
+                    matches.push(format!("C({},{})", n - j, 2 * j));
+                }
+                if val == guess_d {
+                    matches.push(format!("C({},{}) - C({},{})", n, j + 1, n - 2, j + 1));
+                }
+                if val == guess_e {
+                    matches.push(format!("C({},{})", n - j, j + 1));
+                }
+                if val == guess_f {
+                    matches.push(format!("C({},{})", n - j + 1, j + 1));
+                }
 
                 if !matches.is_empty() {
                     println!("    n={}: M={}, matches: {}", n, val, matches.join(" or "));
@@ -640,17 +695,19 @@ fn main() {
     any_negative = false;
     let mut checked_3 = 0u64;
     'outer3: for n1 in 0..=14i128 {
-        for n2 in (n1+1)..=16 {
-            for n3 in (n2+1)..=18 {
+        for n2 in (n1 + 1)..=16 {
+            for n3 in (n2 + 1)..=18 {
                 for j1 in 0..=4i128 {
-                    for j2 in (j1+1)..=5 {
-                        for j3 in (j2+1)..=6 {
+                    for j2 in (j1 + 1)..=5 {
+                        for j3 in (j2 + 1)..=6 {
                             // 3x3 determinant
                             let det = det3x3(h2, n1, n2, n3, j1, j2, j3);
                             checked_3 += 1;
                             if det < 0 {
-                                println!("  NEGATIVE 3x3 minor! n=({},{},{}), j=({},{},{}): {}",
-                                         n1, n2, n3, j1, j2, j3, det);
+                                println!(
+                                    "  NEGATIVE 3x3 minor! n=({},{},{}), j=({},{},{}): {}",
+                                    n1, n2, n3, j1, j2, j3, det
+                                );
                                 any_negative = true;
                                 if checked_3 > 100000 {
                                     break 'outer3;
@@ -662,7 +719,10 @@ fn main() {
             }
         }
     }
-    println!("  Checked {} 3x3 minors for h=2. Any negative: {}", checked_3, any_negative);
+    println!(
+        "  Checked {} 3x3 minors for h=2. Any negative: {}",
+        checked_3, any_negative
+    );
 }
 
 fn det3x3(h: i128, n1: i128, n2: i128, n3: i128, j1: i128, j2: i128, j3: i128) -> i128 {

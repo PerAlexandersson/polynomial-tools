@@ -16,26 +16,38 @@ use polynomial_tools::real_rootedness::{
 /// row i allows columns 1..=λ[i].
 fn perms_on_board(lambda: &[u8]) -> Vec<Vec<u8>> {
     let n = lambda.len() as u8;
-    if n == 0 { return vec![vec![]]; }
+    if n == 0 {
+        return vec![vec![]];
+    }
     let all = all_permutations(n);
     all.into_iter()
-        .filter(|sigma| {
-            sigma.iter().enumerate().all(|(i, &v)| v <= lambda[i])
-        })
+        .filter(|sigma| sigma.iter().enumerate().all(|(i, &v)| v <= lambda[i]))
         .collect()
 }
 
 fn build_poly(perms: &[Vec<u8>]) -> Vec<i64> {
-    if perms.is_empty() { return vec![0]; }
-    let max_s = perms.iter().map(|s| compute(s, Stat::Swaps)).max().unwrap_or(0);
+    if perms.is_empty() {
+        return vec![0];
+    }
+    let max_s = perms
+        .iter()
+        .map(|s| compute(s, Stat::Swaps))
+        .max()
+        .unwrap_or(0);
     let mut coeffs = vec![0i64; max_s + 1];
-    for s in perms { coeffs[compute(s, Stat::Swaps)] += 1; }
-    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 { coeffs.pop(); }
+    for s in perms {
+        coeffs[compute(s, Stat::Swaps)] += 1;
+    }
+    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 {
+        coeffs.pop();
+    }
     coeffs
 }
 
 fn check_il(f: &[i64], g: &[i64]) -> &'static str {
-    if f.len() <= 1 || g.len() <= 1 { return "triv"; }
+    if f.len() <= 1 || g.len() <= 1 {
+        return "triv";
+    }
     let (small, large) = if f.len() <= g.len() { (f, g) } else { (g, f) };
     match check_interlacing_sturm(small, large) {
         Some(true) => "✓",
@@ -79,7 +91,11 @@ fn main() {
     for (name, lambda) in &boards {
         let perms = perms_on_board(lambda);
         let poly = build_poly(&perms);
-        let rr = if poly.len() <= 2 { true } else { is_real_rooted(&poly) };
+        let rr = if poly.len() <= 2 {
+            true
+        } else {
+            is_real_rooted(&poly)
+        };
         println!(
             "λ={:<15} |perms|={:<6} {:<55} {}",
             name,
@@ -108,17 +124,31 @@ fn main() {
 
         let mut polys: Vec<Vec<i64>> = Vec::new();
         for k in 1..=max_k {
-            let dilated: Vec<u8> = base.iter().map(|&v| {
-                let d = v as u32 * k as u32;
-                d.min(n as u32) as u8 // cap at n (can't exceed n columns)
-            }).collect();
+            let dilated: Vec<u8> = base
+                .iter()
+                .map(|&v| {
+                    let d = v as u32 * k as u32;
+                    d.min(n as u32) as u8 // cap at n (can't exceed n columns)
+                })
+                .collect();
             let perms = perms_on_board(&dilated);
             let poly = build_poly(&perms);
-            let rr = if poly.len() <= 2 { true } else { is_real_rooted(&poly) };
-            let dname: String = dilated.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(",");
+            let rr = if poly.len() <= 2 {
+                true
+            } else {
+                is_real_rooted(&poly)
+            };
+            let dname: String = dilated
+                .iter()
+                .map(|v| v.to_string())
+                .collect::<Vec<_>>()
+                .join(",");
             println!(
                 "  k={}: λ={:<12} |perms|={:<6} {:<50} {}",
-                k, dname, perms.len(), format_poly(&poly),
+                k,
+                dname,
+                perms.len(),
+                format_poly(&poly),
                 if rr { "✓" } else { "✗" }
             );
             polys.push(poly);
@@ -126,7 +156,12 @@ fn main() {
 
         // Check interlacing
         for i in 0..polys.len() - 1 {
-            println!("    k={} ≪ k={}: {}", i + 1, i + 2, check_il(&polys[i], &polys[i + 1]));
+            println!(
+                "    k={} ≪ k={}: {}",
+                i + 1,
+                i + 2,
+                check_il(&polys[i], &polys[i + 1])
+            );
         }
         println!();
     }
@@ -142,7 +177,9 @@ fn main() {
         let ap = build_poly(&av312);
         println!(
             "n={}: staircase={}, Av(312)={}, match={}",
-            n, board_perms.len(), av312.len(),
+            n,
+            board_perms.len(),
+            av312.len(),
             bp == ap
         );
     }

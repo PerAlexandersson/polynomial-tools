@@ -52,7 +52,7 @@ fn epsilon1(pi: &[u8], p: usize) -> usize {
 /// (π⁻¹(n-1) is 1-indexed position of value n-1 in π)
 fn epsilon2(pi: &[u8], p: usize) -> usize {
     let n_minus_1 = pi.len() as u8; // = n-1
-    // Find 1-indexed position of n-1 in π
+                                    // Find 1-indexed position of n-1 in π
     let pos_nm1 = pi.iter().position(|&v| v == n_minus_1).unwrap() + 1; // 1-indexed
     if pos_nm1 + 2 <= p {
         // pos_nm1 ≤ p - 2
@@ -80,7 +80,7 @@ fn predicted_descent_bitmask(pi: &[u8], p: usize) -> u64 {
     if p == 1 {
         // Position 1 is forced descent (σ(1)=n > σ(2)=π(1))
         des_sigma |= 1; // bit 0 = position 1 descent
-        // Positions > 1: j ∈ Des(σ) iff j-1 ∈ Des(π)
+                        // Positions > 1: j ∈ Des(σ) iff j-1 ∈ Des(π)
         for j in 1..pi.len() {
             if des_pi & (1 << (j - 1)) != 0 {
                 des_sigma |= 1 << j;
@@ -98,7 +98,7 @@ fn predicted_descent_bitmask(pi: &[u8], p: usize) -> u64 {
         // (bit p-2 is NOT set, regardless of π)
         // Position p: forced descent (σ(p) = n > σ(p+1) = π(p))
         des_sigma |= 1 << (p - 1); // bit p-1 = position p
-        // Positions > p: j ∈ Des(σ) iff j-1 ∈ Des(π), for j > p
+                                   // Positions > p: j ∈ Des(σ) iff j-1 ∈ Des(π), for j > p
         for j in p..pi.len() {
             if des_pi & (1 << (j - 1)) != 0 {
                 des_sigma |= 1 << j;
@@ -184,20 +184,14 @@ fn main() {
     }
 
     println!("\n=== Summary ===");
-    println!(
-        "Total: {} insertions checked",
-        total_checks,
-    );
-    println!(
-        "Swaps lemma: {} ok, {} failures",
-        swap_ok, swap_fail
-    );
-    println!(
-        "Descent set: {} ok, {} failures",
-        des_ok, des_fail
-    );
+    println!("Total: {} insertions checked", total_checks,);
+    println!("Swaps lemma: {} ok, {} failures", swap_ok, swap_fail);
+    println!("Descent set: {} ok, {} failures", des_ok, des_fail);
 
     if swap_fail == 0 && des_fail == 0 {
-        println!("\n✓ Both the insertion lemma and descent set prediction verified for all n ≤ {}.", max_n);
+        println!(
+            "\n✓ Both the insertion lemma and descent set prediction verified for all n ≤ {}.",
+            max_n
+        );
     }
 }

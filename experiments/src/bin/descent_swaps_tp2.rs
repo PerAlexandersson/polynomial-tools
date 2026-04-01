@@ -25,11 +25,17 @@ use polynomial_tools::real_rootedness::format_poly;
 use std::collections::BTreeMap;
 
 fn build_poly(vals: &[usize]) -> Vec<i64> {
-    if vals.is_empty() { return vec![0]; }
+    if vals.is_empty() {
+        return vec![0];
+    }
     let max_s = *vals.iter().max().unwrap();
     let mut coeffs = vec![0i64; max_s + 1];
-    for &s in vals { coeffs[s] += 1; }
-    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 { coeffs.pop(); }
+    for &s in vals {
+        coeffs[s] += 1;
+    }
+    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 {
+        coeffs.pop();
+    }
     coeffs
 }
 
@@ -40,19 +46,34 @@ fn valid_positions(s_mask: u64, n: u8) -> Vec<u8> {
             positions.push(p);
         }
     }
-    if n >= 2 && (s_mask >> (n - 2)) & 1 == 0 { positions.push(n); }
+    if n >= 2 && (s_mask >> (n - 2)) & 1 == 0 {
+        positions.push(n);
+    }
     positions
 }
 
 fn descent_set_to_string(mask: u64, n: u8) -> String {
     let mut s = String::from("{");
     let mut first = true;
-    for i in 1..n { if (mask >> (i - 1)) & 1 == 1 { if !first { s.push(','); } s.push_str(&i.to_string()); first = false; } }
-    s.push('}'); s
+    for i in 1..n {
+        if (mask >> (i - 1)) & 1 == 1 {
+            if !first {
+                s.push(',');
+            }
+            s.push_str(&i.to_string());
+            first = false;
+        }
+    }
+    s.push('}');
+    s
 }
 
 fn coeff(poly: &[i64], k: usize) -> i64 {
-    if k < poly.len() { poly[k] } else { 0 }
+    if k < poly.len() {
+        poly[k]
+    } else {
+        0
+    }
 }
 
 /// Check all 2x2 minors of matrix M are non-negative.
@@ -60,11 +81,11 @@ fn coeff(poly: &[i64], k: usize) -> i64 {
 fn check_tp2(rows: &[Vec<i64>]) -> (bool, Option<(usize, usize, usize, usize, i64)>) {
     let max_deg = rows.iter().map(|r| r.len()).max().unwrap_or(0);
     for i in 0..rows.len() {
-        for j in (i+1)..rows.len() {
+        for j in (i + 1)..rows.len() {
             for k1 in 0..max_deg {
-                for k2 in (k1+1)..max_deg {
+                for k2 in (k1 + 1)..max_deg {
                     let minor = coeff(&rows[i], k1) * coeff(&rows[j], k2)
-                              - coeff(&rows[i], k2) * coeff(&rows[j], k1);
+                        - coeff(&rows[i], k2) * coeff(&rows[j], k1);
                     if minor < 0 {
                         return (false, Some((i, j, k1, k2, minor)));
                     }
@@ -78,13 +99,15 @@ fn check_tp2(rows: &[Vec<i64>]) -> (bool, Option<(usize, usize, usize, usize, i6
 /// Check all 3x3 minors are non-negative.
 fn check_tp3(rows: &[Vec<i64>]) -> bool {
     let max_deg = rows.iter().map(|r| r.len()).max().unwrap_or(0);
-    if rows.len() < 3 || max_deg < 3 { return true; }
+    if rows.len() < 3 || max_deg < 3 {
+        return true;
+    }
     for i in 0..rows.len() {
-        for j in (i+1)..rows.len() {
-            for l in (j+1)..rows.len() {
+        for j in (i + 1)..rows.len() {
+            for l in (j + 1)..rows.len() {
                 for k1 in 0..max_deg {
-                    for k2 in (k1+1)..max_deg {
-                        for k3 in (k2+1)..max_deg {
+                    for k2 in (k1 + 1)..max_deg {
+                        for k3 in (k2 + 1)..max_deg {
                             let a = coeff(&rows[i], k1);
                             let b = coeff(&rows[i], k2);
                             let c = coeff(&rows[i], k3);
@@ -94,8 +117,11 @@ fn check_tp3(rows: &[Vec<i64>]) -> bool {
                             let g = coeff(&rows[l], k1);
                             let h = coeff(&rows[l], k2);
                             let k = coeff(&rows[l], k3);
-                            let det = a*(e*k - f*h) - b*(d*k - f*g) + c*(d*h - e*g);
-                            if det < 0 { return false; }
+                            let det =
+                                a * (e * k - f * h) - b * (d * k - f * g) + c * (d * h - e * g);
+                            if det < 0 {
+                                return false;
+                            }
                         }
                     }
                 }
@@ -106,7 +132,10 @@ fn check_tp3(rows: &[Vec<i64>]) -> bool {
 }
 
 fn main() {
-    let max_n: u8 = std::env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(9);
+    let max_n: u8 = std::env::args()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(9);
 
     println!("=== Approach 6: Total positivity of coefficient matrix ===\n");
 
@@ -126,7 +155,12 @@ fn main() {
     for n in 4..=max_n {
         let perms = all_permutations(n);
         let mut by_descent: BTreeMap<u64, Vec<&Vec<u8>>> = BTreeMap::new();
-        for pi in &perms { by_descent.entry(descent_set_bitmask(pi)).or_default().push(pi); }
+        for pi in &perms {
+            by_descent
+                .entry(descent_set_bitmask(pi))
+                .or_default()
+                .push(pi);
+        }
 
         let mut n_tp2_ok = 0u32;
         let mut n_tp2_total = 0u32;
@@ -138,14 +172,19 @@ fn main() {
         let mut n_tp2_rev_total = 0u32;
 
         for (&mask, class) in &by_descent {
-            if mask & 1 != 0 { continue; }
+            if mask & 1 != 0 {
+                continue;
+            }
             let vp = valid_positions(mask, n);
-            if vp.len() < 2 { continue; }
+            if vp.len() < 2 {
+                continue;
+            }
 
             // Build L^{(p)} for each p in P(S)
             let mut lp_polys: Vec<(u8, Vec<i64>)> = Vec::new();
             for &p in &vp {
-                let vals: Vec<usize> = class.iter()
+                let vals: Vec<usize> = class
+                    .iter()
                     .filter(|pi| pi.iter().position(|&v| v == n).unwrap() as u8 + 1 == p)
                     .map(|pi| compute(pi, Stat::Swaps))
                     .collect();
@@ -154,7 +193,9 @@ fn main() {
                 }
             }
 
-            if lp_polys.len() < 2 { continue; }
+            if lp_polys.len() < 2 {
+                continue;
+            }
 
             // Full coefficient matrix (all p, ordered by p)
             let rows: Vec<Vec<i64>> = lp_polys.iter().map(|(_, poly)| poly.clone()).collect();
@@ -168,8 +209,10 @@ fn main() {
                     let s_str = descent_set_to_string(mask, n);
                     let (p_i, _) = &lp_polys[ri];
                     let (p_j, _) = &lp_polys[rj];
-                    println!("  TP_2 FAIL: n={} S={} rows p={},p={} cols {},{} minor={}",
-                        n, s_str, p_i, p_j, k1, k2, val);
+                    println!(
+                        "  TP_2 FAIL: n={} S={} rows p={},p={} cols {},{} minor={}",
+                        n, s_str, p_i, p_j, k1, k2, val
+                    );
                     println!("    L^({}) = {}", p_i, format_poly(&lp_polys[ri].1));
                     println!("    L^({}) = {}", p_j, format_poly(&lp_polys[rj].1));
                 }
@@ -177,17 +220,22 @@ fn main() {
 
             // TP_3
             n_tp3_total += 1;
-            if check_tp3(&rows) { n_tp3_ok += 1; }
+            if check_tp3(&rows) {
+                n_tp3_ok += 1;
+            }
 
             // Just p >= 3
-            let rows_p3: Vec<Vec<i64>> = lp_polys.iter()
+            let rows_p3: Vec<Vec<i64>> = lp_polys
+                .iter()
                 .filter(|(p, _)| *p >= 3)
                 .map(|(_, poly)| poly.clone())
                 .collect();
             if rows_p3.len() >= 2 {
                 n_tp2_p3_total += 1;
                 let (is_tp2_p3, _) = check_tp2(&rows_p3);
-                if is_tp2_p3 { n_tp2_p3_ok += 1; }
+                if is_tp2_p3 {
+                    n_tp2_p3_ok += 1;
+                }
             }
 
             // Reversed order
@@ -195,7 +243,9 @@ fn main() {
             rows_rev.reverse();
             n_tp2_rev_total += 1;
             let (is_tp2_rev, _) = check_tp2(&rows_rev);
-            if is_tp2_rev { n_tp2_rev_ok += 1; }
+            if is_tp2_rev {
+                n_tp2_rev_ok += 1;
+            }
         }
 
         tp2_ok += n_tp2_ok as u64;
@@ -207,16 +257,31 @@ fn main() {
         tp2_rev_ok += n_tp2_rev_ok as u64;
         tp2_rev_total += n_tp2_rev_total as u64;
 
-        println!("n={}: TP_2 {}/{}, TP_3 {}/{}, TP_2(p>=3) {}/{}, TP_2(rev) {}/{}",
-            n, n_tp2_ok, n_tp2_total, n_tp3_ok, n_tp3_total,
-            n_tp2_p3_ok, n_tp2_p3_total, n_tp2_rev_ok, n_tp2_rev_total);
+        println!(
+            "n={}: TP_2 {}/{}, TP_3 {}/{}, TP_2(p>=3) {}/{}, TP_2(rev) {}/{}",
+            n,
+            n_tp2_ok,
+            n_tp2_total,
+            n_tp3_ok,
+            n_tp3_total,
+            n_tp2_p3_ok,
+            n_tp2_p3_total,
+            n_tp2_rev_ok,
+            n_tp2_rev_total
+        );
     }
 
     println!("\n=== SUMMARY ===");
     println!("TP_2 (all p, natural order):  {}/{}", tp2_ok, tp2_total);
     println!("TP_3 (all p):                 {}/{}", tp3_ok, tp3_total);
-    println!("TP_2 (p>=3 only):             {}/{}", tp2_p3_ok, tp2_p3_total);
-    println!("TP_2 (reversed order):        {}/{}", tp2_rev_ok, tp2_rev_total);
+    println!(
+        "TP_2 (p>=3 only):             {}/{}",
+        tp2_p3_ok, tp2_p3_total
+    );
+    println!(
+        "TP_2 (reversed order):        {}/{}",
+        tp2_rev_ok, tp2_rev_total
+    );
     println!();
     println!("If TP_2 passes for all, the L^{{(p)}} form an interlacing sequence,");
     println!("which is stronger than a compatible family.");

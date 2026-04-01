@@ -47,11 +47,19 @@ fn main() {
             println!("NOT real-rooted: lambda=({}) h*={:?}", lambda_str, coeffs);
             failures.push(lambda_str.to_string());
         } else {
-            println!("real-rooted:     lambda=({}) deg={}", lambda_str, coeffs.len() - 1);
+            println!(
+                "real-rooted:     lambda=({}) deg={}",
+                lambda_str,
+                coeffs.len() - 1
+            );
         }
     }
 
-    println!("\n--- Summary: {}/{} real-rooted ---", count - failures.len(), count);
+    println!(
+        "\n--- Summary: {}/{} real-rooted ---",
+        count - failures.len(),
+        count
+    );
     if !failures.is_empty() {
         println!("Failures: {:?}", failures);
     }

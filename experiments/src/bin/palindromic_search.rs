@@ -5,8 +5,8 @@
 /// known Eulerian and Narayana cases.
 use combpoly::permutation::{
     all_permutations, avoiding_permutations, backtrack_image, backtrack_stat_poly,
-    backtrack_stat_poly_subset, contains_pattern, is_alternating, is_derangement,
-    is_grassmann, is_involution, is_separable, is_simsun, is_vexillary, parse_sequence,
+    backtrack_stat_poly_subset, contains_pattern, is_alternating, is_derangement, is_grassmann,
+    is_involution, is_separable, is_simsun, is_vexillary, parse_sequence,
 };
 use combpoly::statistics::{compute, Stat};
 use std::env;
@@ -32,10 +32,7 @@ fn format_poly(p: &[i64]) -> String {
 }
 
 fn main() {
-    let max_n: u8 = env::args()
-        .nth(1)
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(8);
+    let max_n: u8 = env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(8);
 
     let patterns = ["123", "132", "213", "231", "312", "321"];
     let stats: &[(&str, Stat)] = &[
@@ -49,7 +46,10 @@ fn main() {
         ("cyc", Stat::Cyc),
     ];
 
-    println!("=== Palindromic search: pattern-avoiding S-sets (n=1..{}) ===\n", max_n);
+    println!(
+        "=== Palindromic search: pattern-avoiding S-sets (n=1..{}) ===\n",
+        max_n
+    );
 
     for &(stat_name, stat) in stats {
         for pat_str in &patterns {
@@ -71,7 +71,10 @@ fn main() {
                 // Check it's not trivially constant
                 let nontrivial = polys.iter().any(|p| p.len() > 2);
                 if nontrivial {
-                    println!("PALINDROMIC: Av_{} + {} (n=1..{})", pat_str, stat_name, max_n);
+                    println!(
+                        "PALINDROMIC: Av_{} + {} (n=1..{})",
+                        pat_str, stat_name, max_n
+                    );
                     for (i, p) in polys.iter().enumerate() {
                         println!("  n={}: [{}]", i + 1, format_poly(p));
                     }
@@ -82,7 +85,10 @@ fn main() {
     }
 
     // Named constraint sets
-    println!("\n=== Palindromic search: named S-sets (n=1..{}) ===\n", max_n);
+    println!(
+        "\n=== Palindromic search: named S-sets (n=1..{}) ===\n",
+        max_n
+    );
 
     let named_sets: Vec<(&str, Box<dyn Fn(&[u8]) -> bool>)> = vec![
         ("involutions", Box::new(|p: &[u8]| is_involution(p))),
@@ -128,7 +134,10 @@ fn main() {
     }
 
     // Restricted search orders (Catalan): Av_pi x Av_S + stat
-    println!("\n=== Palindromic search: Catalan search orders (n=1..{}) ===\n", max_n);
+    println!(
+        "\n=== Palindromic search: Catalan search orders (n=1..{}) ===\n",
+        max_n
+    );
 
     for &(stat_name, stat) in stats {
         for pi_pat_str in &patterns {
@@ -175,7 +184,10 @@ fn main() {
     }
 
     // Bonus: try two-pattern avoidance sets
-    println!("\n=== Palindromic search: two-pattern avoidance (n=1..{}) ===\n", max_n);
+    println!(
+        "\n=== Palindromic search: two-pattern avoidance (n=1..{}) ===\n",
+        max_n
+    );
 
     for &(stat_name, stat) in stats {
         for i in 0..patterns.len() {

@@ -1,9 +1,9 @@
 //! Check interlacing of consecutive des polynomials for all 6 run-sorted PF variants.
 
 use combpoly::parking::{for_each_runsorted_pf, RunBreak, RunSort};
-use polynomial_tools::{check_interlacing, format_poly};
 use combpoly::statistics;
 use combpoly::statistics::Stat;
+use polynomial_tools::{check_interlacing, format_poly};
 
 fn accumulate_poly(coeffs: &mut Vec<i64>, val: usize) {
     if val >= coeffs.len() {
@@ -17,11 +17,27 @@ fn main() {
     let stat = Stat::Des;
 
     let variants: &[(&str, RunBreak, RunSort)] = &[
-        ("strict-asc runs, strict mins", RunBreak::StrictAsc, RunSort::StrictMin),
-        ("strict-asc runs, weak mins", RunBreak::StrictAsc, RunSort::WeakMin),
+        (
+            "strict-asc runs, strict mins",
+            RunBreak::StrictAsc,
+            RunSort::StrictMin,
+        ),
+        (
+            "strict-asc runs, weak mins",
+            RunBreak::StrictAsc,
+            RunSort::WeakMin,
+        ),
         ("strict-asc runs, lex", RunBreak::StrictAsc, RunSort::Lex),
-        ("non-decr runs, strict mins", RunBreak::NonDecr, RunSort::StrictMin),
-        ("non-decr runs, weak mins", RunBreak::NonDecr, RunSort::WeakMin),
+        (
+            "non-decr runs, strict mins",
+            RunBreak::NonDecr,
+            RunSort::StrictMin,
+        ),
+        (
+            "non-decr runs, weak mins",
+            RunBreak::NonDecr,
+            RunSort::WeakMin,
+        ),
         ("non-decr runs, lex", RunBreak::NonDecr, RunSort::Lex),
     ];
 

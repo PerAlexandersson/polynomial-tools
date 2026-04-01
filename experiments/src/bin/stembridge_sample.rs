@@ -5,8 +5,8 @@
 /// or by random walks on the 4321-avoiding class.
 use combpoly::order;
 use combpoly::permutation::contains_pattern;
-use polynomial_tools::real_rootedness as polynomial;
 use combpoly::statistics::Stat;
+use polynomial_tools::real_rootedness as polynomial;
 use rayon::prelude::*;
 use std::env;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -150,10 +150,8 @@ fn main() {
     eprintln!("Scanning for real-rootedness failures...");
     let t0 = std::time::Instant::now();
 
-    let result: Option<(usize, Vec<u8>, Vec<i64>)> = samples
-        .par_iter()
-        .enumerate()
-        .find_map_any(|(i, w)| {
+    let result: Option<(usize, Vec<u8>, Vec<i64>)> =
+        samples.par_iter().enumerate().find_map_any(|(i, w)| {
             if found.load(Ordering::Relaxed) {
                 return None;
             }
@@ -185,11 +183,7 @@ fn main() {
                     .collect::<Vec<_>>()
                     .join(", ")
             );
-            println!(
-                "Weak ideal size: {}, deg: {}",
-                ideal_size,
-                coeffs.len() - 1
-            );
+            println!("Weak ideal size: {}, deg: {}", ideal_size, coeffs.len() - 1);
             println!("Coefficients: {:?}", coeffs);
             println!("Polynomial: {}", polynomial::format_poly(&coeffs));
             println!("Log-concave: {}", polynomial::is_log_concave(&coeffs));

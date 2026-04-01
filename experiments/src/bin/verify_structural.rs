@@ -7,7 +7,6 @@
 /// Conjecture 2 (Av_231): DesSet(σ) and RlminSet(σ) partition [n].
 ///
 /// Conjecture 3 (Av_321): ExcSet(σ) and RlminSet(σ) partition [n].
-
 use combpoly::permutation::avoiding_permutations;
 use combpoly::statistics::{compute_set, SetStat};
 use std::collections::BTreeSet;
@@ -15,7 +14,10 @@ use std::collections::BTreeSet;
 fn main() {
     let max_n: u8 = 8;
 
-    println!("=== Structural Conjecture Verification (n = 1..{}) ===\n", max_n);
+    println!(
+        "=== Structural Conjecture Verification (n = 1..{}) ===\n",
+        max_n
+    );
 
     let mut all_ok = true;
 
@@ -31,11 +33,8 @@ fn main() {
             let des = compute_set(sigma, SetStat::DesSet);
             let rlmax = compute_set(sigma, SetStat::RlmaxSet);
             // Restrict rlmax to positions < n (i.e., 1-indexed positions in [1..n-1])
-            let rlmax_restricted: BTreeSet<usize> = rlmax
-                .iter()
-                .copied()
-                .filter(|&i| i < n as usize)
-                .collect();
+            let rlmax_restricted: BTreeSet<usize> =
+                rlmax.iter().copied().filter(|&i| i < n as usize).collect();
             if des != rlmax_restricted {
                 println!(
                     "  FAIL n={}: σ={:?}, DesSet={:?}, RlmaxSet∩[n-1]={:?}",

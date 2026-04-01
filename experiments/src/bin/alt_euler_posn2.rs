@@ -10,16 +10,28 @@ use polynomial_tools::real_rootedness::{
 };
 
 fn build_poly(perms: &[&Vec<u8>]) -> Vec<i64> {
-    if perms.is_empty() { return vec![0]; }
-    let max_s = perms.iter().map(|s| compute(s, Stat::Swaps)).max().unwrap_or(0);
+    if perms.is_empty() {
+        return vec![0];
+    }
+    let max_s = perms
+        .iter()
+        .map(|s| compute(s, Stat::Swaps))
+        .max()
+        .unwrap_or(0);
     let mut coeffs = vec![0i64; max_s + 1];
-    for s in perms { coeffs[compute(s, Stat::Swaps)] += 1; }
-    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 { coeffs.pop(); }
+    for s in perms {
+        coeffs[compute(s, Stat::Swaps)] += 1;
+    }
+    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 {
+        coeffs.pop();
+    }
     coeffs
 }
 
 fn check_il(f: &[i64], g: &[i64]) -> &'static str {
-    if f.len() <= 1 || g.len() <= 1 { return "trivial"; }
+    if f.len() <= 1 || g.len() <= 1 {
+        return "trivial";
+    }
     // Try f << g (f smaller degree)
     let (small, large) = if f.len() <= g.len() { (f, g) } else { (g, f) };
     match check_interlacing_sturm(small, large) {
@@ -54,11 +66,18 @@ fn main() {
         // Collect active positions (even positions, 1-indexed = peaks)
         let mut active: Vec<(usize, Vec<i64>)> = Vec::new();
         for (pos, group) in by_pos.iter().enumerate() {
-            if group.is_empty() { continue; }
+            if group.is_empty() {
+                continue;
+            }
             active.push((pos + 1, build_poly(group)));
         }
 
-        println!("=== n={} ({} perms, {} positions) ===", n, alt.len(), active.len());
+        println!(
+            "=== n={} ({} perms, {} positions) ===",
+            n,
+            alt.len(),
+            active.len()
+        );
         for (pos, poly) in &active {
             let count: i64 = poly.iter().sum();
             println!("  pos={:>2}: count={:<6} {}", pos, count, format_poly(poly));
@@ -76,7 +95,9 @@ fn main() {
         while lo <= hi {
             if from_hi {
                 outside_in.push(hi);
-                if hi == 0 { break; }
+                if hi == 0 {
+                    break;
+                }
                 hi -= 1;
             } else {
                 outside_in.push(lo);
@@ -85,8 +106,14 @@ fn main() {
             from_hi = !from_hi;
         }
 
-        println!("  Outside-in order: {}", outside_in.iter()
-            .map(|&i| format!("pos {}", active[i].0)).collect::<Vec<_>>().join(" → "));
+        println!(
+            "  Outside-in order: {}",
+            outside_in
+                .iter()
+                .map(|&i| format!("pos {}", active[i].0))
+                .collect::<Vec<_>>()
+                .join(" → ")
+        );
         for w in outside_in.windows(2) {
             let (p1, ref f) = active[w[0]];
             let (p2, ref g) = active[w[1]];

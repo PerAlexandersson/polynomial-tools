@@ -169,11 +169,7 @@ impl<I: BasisIndex, C: Ring> Neg for FormalSum<I, C> {
     type Output = Self;
 
     fn neg(self) -> Self {
-        let terms = self
-            .terms
-            .into_iter()
-            .map(|(i, c)| (i, -c))
-            .collect();
+        let terms = self.terms.into_iter().map(|(i, c)| (i, -c)).collect();
         FormalSum { terms }
     }
 }

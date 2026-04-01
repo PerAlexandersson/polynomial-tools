@@ -2,9 +2,9 @@
 //! refined by last entry and by maximum value.
 
 use combpoly::cayley::all_cayley_permutations;
-use polynomial_tools::{check_interlacing, format_poly, is_real_rooted};
 use combpoly::statistics;
 use combpoly::statistics::Stat;
+use polynomial_tools::{check_interlacing, format_poly, is_real_rooted};
 
 fn accumulate_poly(coeffs: &mut Vec<i64>, val: usize) {
     if val >= coeffs.len() {
@@ -29,27 +29,46 @@ fn main() {
             accumulate_poly(&mut exc_coeffs, statistics::compute(w, Stat::Exc));
             accumulate_poly(&mut des_coeffs, statistics::compute(w, Stat::Des));
         }
-        if exc_coeffs.is_empty() { exc_coeffs.push(0); }
-        if des_coeffs.is_empty() { des_coeffs.push(0); }
+        if exc_coeffs.is_empty() {
+            exc_coeffs.push(0);
+        }
+        if des_coeffs.is_empty() {
+            des_coeffs.push(0);
+        }
 
         let exc_rr = is_real_rooted(&exc_coeffs);
         let des_rr = is_real_rooted(&des_coeffs);
-        let exc_il: String = if exc_polys.is_empty() { "".into() } else {
+        let exc_il: String = if exc_polys.is_empty() {
+            "".into()
+        } else {
             match check_interlacing(exc_polys.last().unwrap(), &exc_coeffs) {
                 Some(true) => ", il=Y".into(),
                 Some(false) => ", il=N".into(),
                 None => ", il=?".into(),
             }
         };
-        let des_il: String = if des_polys.is_empty() { "".into() } else {
+        let des_il: String = if des_polys.is_empty() {
+            "".into()
+        } else {
             match check_interlacing(des_polys.last().unwrap(), &des_coeffs) {
                 Some(true) => ", il=Y".into(),
                 Some(false) => ", il=N".into(),
                 None => ", il=?".into(),
             }
         };
-        println!("n={}: exc rr={}{}, poly = {}", n, exc_rr, exc_il, format_poly(&exc_coeffs));
-        println!("      des rr={}{}, poly = {}", des_rr, des_il, format_poly(&des_coeffs));
+        println!(
+            "n={}: exc rr={}{}, poly = {}",
+            n,
+            exc_rr,
+            exc_il,
+            format_poly(&exc_coeffs)
+        );
+        println!(
+            "      des rr={}{}, poly = {}",
+            des_rr,
+            des_il,
+            format_poly(&des_coeffs)
+        );
 
         exc_polys.push(exc_coeffs);
         des_polys.push(des_coeffs);
@@ -69,10 +88,18 @@ fn main() {
 
         println!("n = {}:", n);
         for mv in 1..=m {
-            if by_max[mv].is_empty() || by_max[mv].iter().all(|&c| c == 0) { continue; }
+            if by_max[mv].is_empty() || by_max[mv].iter().all(|&c| c == 0) {
+                continue;
+            }
             let count: i64 = by_max[mv].iter().sum();
             let rr = is_real_rooted(&by_max[mv]);
-            println!("  max={}: {:>8} perms, rr={:5}, poly = {}", mv, count, rr, format_poly(&by_max[mv]));
+            println!(
+                "  max={}: {:>8} perms, rr={:5}, poly = {}",
+                mv,
+                count,
+                rr,
+                format_poly(&by_max[mv])
+            );
         }
     }
 
@@ -90,10 +117,18 @@ fn main() {
 
         println!("n = {}:", n);
         for mv in 1..=m {
-            if by_max[mv].is_empty() || by_max[mv].iter().all(|&c| c == 0) { continue; }
+            if by_max[mv].is_empty() || by_max[mv].iter().all(|&c| c == 0) {
+                continue;
+            }
             let count: i64 = by_max[mv].iter().sum();
             let rr = is_real_rooted(&by_max[mv]);
-            println!("  max={}: {:>8} perms, rr={:5}, poly = {}", mv, count, rr, format_poly(&by_max[mv]));
+            println!(
+                "  max={}: {:>8} perms, rr={:5}, poly = {}",
+                mv,
+                count,
+                rr,
+                format_poly(&by_max[mv])
+            );
         }
     }
 
@@ -112,11 +147,21 @@ fn main() {
         println!("n = {}:", n);
         let mut all_rr = true;
         for k in 1..=m {
-            if by_last[k].is_empty() || by_last[k].iter().all(|&c| c == 0) { continue; }
+            if by_last[k].is_empty() || by_last[k].iter().all(|&c| c == 0) {
+                continue;
+            }
             let count: i64 = by_last[k].iter().sum();
             let rr = is_real_rooted(&by_last[k]);
-            if !rr { all_rr = false; }
-            println!("  last={}: {:>8} perms, rr={:5}, poly = {}", k, count, rr, format_poly(&by_last[k]));
+            if !rr {
+                all_rr = false;
+            }
+            println!(
+                "  last={}: {:>8} perms, rr={:5}, poly = {}",
+                k,
+                count,
+                rr,
+                format_poly(&by_last[k])
+            );
         }
         if all_rr {
             println!("  (all real-rooted)");
@@ -132,7 +177,9 @@ fn main() {
 
         for w in &all {
             // Check FPF
-            if w.iter().enumerate().any(|(i, &v)| v as usize == i + 1) { continue; }
+            if w.iter().enumerate().any(|(i, &v)| v as usize == i + 1) {
+                continue;
+            }
             let max_val = *w.iter().max().unwrap() as usize;
             accumulate_poly(&mut by_max[max_val], statistics::compute(w, Stat::Des));
         }
@@ -140,11 +187,21 @@ fn main() {
         println!("n = {}:", n);
         let mut all_rr = true;
         for mv in 1..=m {
-            if by_max[mv].is_empty() || by_max[mv].iter().all(|&c| c == 0) { continue; }
+            if by_max[mv].is_empty() || by_max[mv].iter().all(|&c| c == 0) {
+                continue;
+            }
             let count: i64 = by_max[mv].iter().sum();
             let rr = is_real_rooted(&by_max[mv]);
-            if !rr { all_rr = false; }
-            println!("  max={}: {:>8} perms, rr={:5}, poly = {}", mv, count, rr, format_poly(&by_max[mv]));
+            if !rr {
+                all_rr = false;
+            }
+            println!(
+                "  max={}: {:>8} perms, rr={:5}, poly = {}",
+                mv,
+                count,
+                rr,
+                format_poly(&by_max[mv])
+            );
         }
         if all_rr {
             println!("  (all real-rooted)");

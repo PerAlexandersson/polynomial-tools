@@ -25,16 +25,24 @@ fn delete_and_standardize(w: &[u8], pos: usize) -> Vec<u8> {
     let removed = w[pos];
     let mut result: Vec<u8> = Vec::with_capacity(w.len() - 1);
     for (i, &v) in w.iter().enumerate() {
-        if i == pos { continue; }
+        if i == pos {
+            continue;
+        }
         // Standardize: subtract 1 from values > removed
-        if v > removed { result.push(v - 1); } else { result.push(v); }
+        if v > removed {
+            result.push(v - 1);
+        } else {
+            result.push(v);
+        }
     }
     result
 }
 
 /// Generate all single deletions of w.
 fn all_deletions(w: &[u8]) -> Vec<Vec<u8>> {
-    (0..w.len()).map(|pos| delete_and_standardize(w, pos)).collect()
+    (0..w.len())
+        .map(|pos| delete_and_standardize(w, pos))
+        .collect()
 }
 
 fn longest_dec_subseq(w: &[u8]) -> usize {
@@ -44,7 +52,11 @@ fn longest_dec_subseq(w: &[u8]) -> usize {
         match tails.binary_search(&rx) {
             Ok(_) => {}
             Err(pos) => {
-                if pos == tails.len() { tails.push(rx); } else { tails[pos] = rx; }
+                if pos == tails.len() {
+                    tails.push(rx);
+                } else {
+                    tails[pos] = rx;
+                }
             }
         }
     }
@@ -54,42 +66,49 @@ fn longest_dec_subseq(w: &[u8]) -> usize {
 fn main() {
     // All 22 non-RR from Stembridge neighborhood (n=17) + the 321-containing one
     let seeds: Vec<Vec<u8>> = vec![
-        vec![2,4,6,8,10,1,12,3,15,5,17,7,9,11,13,14,16],
-        vec![2,5,6,8,10,1,12,3,15,4,17,7,9,11,13,14,16],
-        vec![2,4,5,8,10,1,12,3,15,6,17,7,9,11,13,14,16],
-        vec![2,4,7,8,10,1,12,3,15,5,17,6,9,11,13,14,16],
-        vec![2,4,6,8,9,1,12,3,15,5,17,7,10,11,13,14,16],
-        vec![2,4,6,8,11,1,12,3,15,5,17,7,9,10,13,14,16],
-        vec![2,5,7,8,10,1,12,3,15,4,17,6,9,11,13,14,16],
-        vec![2,5,6,8,11,1,12,3,15,4,17,7,9,10,13,14,16],
-        vec![2,4,5,9,10,1,12,3,15,6,17,7,8,11,13,14,16],
-        vec![2,4,5,8,9,1,12,3,15,6,17,7,10,11,13,14,16],
-        vec![2,4,5,8,11,1,12,3,15,6,17,7,9,10,13,14,16],
-        vec![2,4,5,8,10,1,12,3,15,6,17,7,9,11,13,14,16],  // dup but harmless
-        vec![2,4,6,8,10,1,12,3,15,5,17,7,9,11,13,14,16],  // Stembridge dup
-        vec![2,4,6,8,10,1,12,3,15,5,17,7,9,11,13,14,16],
-        vec![3,4,6,8,10,12,2,1,15,5,17,7,9,11,13,14,16],  // 321-containing
-        vec![2,6,7,8,10,1,12,3,15,4,17,5,9,11,13,14,16],
-        vec![2,5,7,8,11,1,12,3,15,4,17,6,9,10,13,14,16],
-        vec![2,4,5,7,9,1,12,3,15,6,17,8,10,11,13,14,16],
-        vec![2,4,5,9,11,1,12,3,15,6,17,7,8,10,13,14,16],
-        vec![2,4,5,8,10,1,12,3,15,6,17,7,9,11,13,14,16],
-        vec![2,4,6,8,10,1,12,3,15,5,17,7,9,11,13,14,16],
-        vec![2,4,6,8,10,1,12,3,15,5,17,7,9,11,13,14,16],
+        vec![2, 4, 6, 8, 10, 1, 12, 3, 15, 5, 17, 7, 9, 11, 13, 14, 16],
+        vec![2, 5, 6, 8, 10, 1, 12, 3, 15, 4, 17, 7, 9, 11, 13, 14, 16],
+        vec![2, 4, 5, 8, 10, 1, 12, 3, 15, 6, 17, 7, 9, 11, 13, 14, 16],
+        vec![2, 4, 7, 8, 10, 1, 12, 3, 15, 5, 17, 6, 9, 11, 13, 14, 16],
+        vec![2, 4, 6, 8, 9, 1, 12, 3, 15, 5, 17, 7, 10, 11, 13, 14, 16],
+        vec![2, 4, 6, 8, 11, 1, 12, 3, 15, 5, 17, 7, 9, 10, 13, 14, 16],
+        vec![2, 5, 7, 8, 10, 1, 12, 3, 15, 4, 17, 6, 9, 11, 13, 14, 16],
+        vec![2, 5, 6, 8, 11, 1, 12, 3, 15, 4, 17, 7, 9, 10, 13, 14, 16],
+        vec![2, 4, 5, 9, 10, 1, 12, 3, 15, 6, 17, 7, 8, 11, 13, 14, 16],
+        vec![2, 4, 5, 8, 9, 1, 12, 3, 15, 6, 17, 7, 10, 11, 13, 14, 16],
+        vec![2, 4, 5, 8, 11, 1, 12, 3, 15, 6, 17, 7, 9, 10, 13, 14, 16],
+        vec![2, 4, 5, 8, 10, 1, 12, 3, 15, 6, 17, 7, 9, 11, 13, 14, 16], // dup but harmless
+        vec![2, 4, 6, 8, 10, 1, 12, 3, 15, 5, 17, 7, 9, 11, 13, 14, 16], // Stembridge dup
+        vec![2, 4, 6, 8, 10, 1, 12, 3, 15, 5, 17, 7, 9, 11, 13, 14, 16],
+        vec![3, 4, 6, 8, 10, 12, 2, 1, 15, 5, 17, 7, 9, 11, 13, 14, 16], // 321-containing
+        vec![2, 6, 7, 8, 10, 1, 12, 3, 15, 4, 17, 5, 9, 11, 13, 14, 16],
+        vec![2, 5, 7, 8, 11, 1, 12, 3, 15, 4, 17, 6, 9, 10, 13, 14, 16],
+        vec![2, 4, 5, 7, 9, 1, 12, 3, 15, 6, 17, 8, 10, 11, 13, 14, 16],
+        vec![2, 4, 5, 9, 11, 1, 12, 3, 15, 6, 17, 7, 8, 10, 13, 14, 16],
+        vec![2, 4, 5, 8, 10, 1, 12, 3, 15, 6, 17, 7, 9, 11, 13, 14, 16],
+        vec![2, 4, 6, 8, 10, 1, 12, 3, 15, 5, 17, 7, 9, 11, 13, 14, 16],
+        vec![2, 4, 6, 8, 10, 1, 12, 3, 15, 5, 17, 7, 9, 11, 13, 14, 16],
         // Also the n=19 and n=21 winners
-        vec![2,4,5,8,10,1,12,3,15,6,17,7,19,9,11,13,14,16,18],
-        vec![2,4,5,8,10,1,12,3,15,6,17,7,19,9,21,11,13,14,16,18,20],
+        vec![
+            2, 4, 5, 8, 10, 1, 12, 3, 15, 6, 17, 7, 19, 9, 11, 13, 14, 16, 18,
+        ],
+        vec![
+            2, 4, 5, 8, 10, 1, 12, 3, 15, 6, 17, 7, 19, 9, 21, 11, 13, 14, 16, 18, 20,
+        ],
     ];
 
     let min_target = 12;
 
     // Track all non-RR perms found, by size
     let mut found: BTreeSet<Vec<u8>> = BTreeSet::new();
-    for w in &seeds { found.insert(w.clone()); }
+    for w in &seeds {
+        found.insert(w.clone());
+    }
 
     // Collect all seeds by size, process from largest down
     let max_n = seeds.iter().map(|w| w.len()).max().unwrap();
-    let mut current_level: Vec<Vec<u8>> = seeds.iter()
+    let mut current_level: Vec<Vec<u8>> = seeds
+        .iter()
         .filter(|w| w.len() == max_n)
         .cloned()
         .collect::<BTreeSet<_>>()
@@ -97,7 +116,8 @@ fn main() {
         .collect();
 
     // Also add smaller seeds directly
-    let mut extra_by_n: std::collections::BTreeMap<usize, Vec<Vec<u8>>> = std::collections::BTreeMap::new();
+    let mut extra_by_n: std::collections::BTreeMap<usize, Vec<Vec<u8>>> =
+        std::collections::BTreeMap::new();
     for w in &seeds {
         if w.len() < max_n {
             extra_by_n.entry(w.len()).or_default().push(w.clone());
@@ -105,7 +125,12 @@ fn main() {
     }
 
     println!("=== Searching downward by deletion + standardization ===\n");
-    println!("Seeds: {} unique permutations, n={} to {}\n", found.len(), min_target+1, max_n);
+    println!(
+        "Seeds: {} unique permutations, n={} to {}\n",
+        found.len(),
+        min_target + 1,
+        max_n
+    );
 
     let mut n = max_n;
     while n > min_target && !current_level.is_empty() {
@@ -146,7 +171,9 @@ fn main() {
                 let lds = longest_dec_subseq(w);
                 println!(
                     "  lds={} w={:?}  h*={}",
-                    lds, w, real_rootedness::format_poly(pe)
+                    lds,
+                    w,
+                    real_rootedness::format_poly(pe)
                 );
             }
             println!();

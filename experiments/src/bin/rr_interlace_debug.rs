@@ -11,7 +11,11 @@ fn build_poly(perms: &[&Vec<u8>]) -> Vec<i64> {
     if perms.is_empty() {
         return vec![0];
     }
-    let max_s = perms.iter().map(|s| compute(s, Stat::Swaps)).max().unwrap_or(0);
+    let max_s = perms
+        .iter()
+        .map(|s| compute(s, Stat::Swaps))
+        .max()
+        .unwrap_or(0);
     let mut coeffs = vec![0i64; max_s + 1];
     for s in perms {
         coeffs[compute(s, Stat::Swaps)] += 1;

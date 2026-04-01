@@ -3,13 +3,18 @@ use polynomial_tools::sequences::narayana_polynomials;
 
 fn main() {
     let np = narayana_polynomials(14);
-    let polys: Vec<Vec<i64>> = np.into_iter().map(|mut p| {
-        while p.len() > 1 && *p.last().unwrap() == 0 { p.pop(); }
-        p
-    }).collect();
+    let polys: Vec<Vec<i64>> = np
+        .into_iter()
+        .map(|mut p| {
+            while p.len() > 1 && *p.last().unwrap() == 0 {
+                p.pop();
+            }
+            p
+        })
+        .collect();
 
     for (i, p) in polys.iter().enumerate() {
-        eprintln!("N_{}: {:?}", i+1, p);
+        eprintln!("N_{}: {:?}", i + 1, p);
     }
 
     let search = AdaptiveSearchOptions {

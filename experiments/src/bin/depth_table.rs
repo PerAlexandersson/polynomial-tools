@@ -35,10 +35,7 @@ fn total_depth(pi_set: &[Vec<u8>], s_set: &[Vec<u8>]) -> u64 {
 }
 
 fn main() {
-    let max_n: u8 = env::args()
-        .nth(1)
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(8);
+    let max_n: u8 = env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(8);
 
     let pats3 = ["123", "132", "213", "231", "312", "321"];
 
@@ -47,7 +44,14 @@ fn main() {
     println!("Each row: sequence for n = 1, 2, ..., {}\n", max_n);
 
     // Header
-    println!("{:<28} {}", "Combination", (1..=max_n).map(|n| format!("{:>12}", n)).collect::<Vec<_>>().join(""));
+    println!(
+        "{:<28} {}",
+        "Combination",
+        (1..=max_n)
+            .map(|n| format!("{:>12}", n))
+            .collect::<Vec<_>>()
+            .join("")
+    );
     println!("{}", "-".repeat(28 + 12 * max_n as usize));
 
     // S_n rows (length-3 S-sets)
@@ -59,8 +63,14 @@ fn main() {
             let s_set = avoiding_permutations(n, &[s_p.clone()]);
             seq.push(total_depth(&all_pi, &s_set));
         }
-        println!("{:<28} {}", format!("S_n → Av_{}", s_pat),
-            seq.iter().map(|v| format!("{:>12}", v)).collect::<Vec<_>>().join(""));
+        println!(
+            "{:<28} {}",
+            format!("S_n → Av_{}", s_pat),
+            seq.iter()
+                .map(|v| format!("{:>12}", v))
+                .collect::<Vec<_>>()
+                .join("")
+        );
     }
 
     println!("{}", "-".repeat(28 + 12 * max_n as usize));
@@ -76,8 +86,14 @@ fn main() {
                 let s_set = avoiding_permutations(n, &[s_p.clone()]);
                 seq.push(total_depth(&pi_set, &s_set));
             }
-            println!("{:<28} {}", format!("Av_{} → Av_{}", pi_pat, s_pat),
-                seq.iter().map(|v| format!("{:>12}", v)).collect::<Vec<_>>().join(""));
+            println!(
+                "{:<28} {}",
+                format!("Av_{} → Av_{}", pi_pat, s_pat),
+                seq.iter()
+                    .map(|v| format!("{:>12}", v))
+                    .collect::<Vec<_>>()
+                    .join("")
+            );
         }
     }
 
@@ -93,18 +109,32 @@ fn main() {
             let s_set = avoiding_permutations(n, &[s_p.clone()]);
             seq.push(total_depth(&all_pi, &s_set));
         }
-        println!("{:<28} {}", format!("S_n → Av_{}", s_pat),
-            seq.iter().map(|v| format!("{:>12}", v)).collect::<Vec<_>>().join(""));
+        println!(
+            "{:<28} {}",
+            format!("S_n → Av_{}", s_pat),
+            seq.iter()
+                .map(|v| format!("{:>12}", v))
+                .collect::<Vec<_>>()
+                .join("")
+        );
     }
 
     println!("{}", "-".repeat(28 + 12 * max_n as usize));
 
     // Cross-length: Av_τ₄ → Av_τ₃
     let cross = [
-        ("1234", "123"), ("1234", "132"), ("1234", "213"),
-        ("1243", "123"), ("1243", "132"), ("1243", "213"),
-        ("2134", "123"), ("2134", "132"), ("2134", "213"),
-        ("1324", "123"), ("1324", "132"), ("1324", "213"),
+        ("1234", "123"),
+        ("1234", "132"),
+        ("1234", "213"),
+        ("1243", "123"),
+        ("1243", "132"),
+        ("1243", "213"),
+        ("2134", "123"),
+        ("2134", "132"),
+        ("2134", "213"),
+        ("1324", "123"),
+        ("1324", "132"),
+        ("1324", "213"),
     ];
     let max_n4 = max_n.min(7);
     for &(pi_pat, s_pat) in &cross {
@@ -116,7 +146,13 @@ fn main() {
             let s_set = avoiding_permutations(n, &[s_p.clone()]);
             seq.push(total_depth(&pi_set, &s_set));
         }
-        println!("{:<28} {}", format!("Av_{} → Av_{}", pi_pat, s_pat),
-            seq.iter().map(|v| format!("{:>12}", v)).collect::<Vec<_>>().join(""));
+        println!(
+            "{:<28} {}",
+            format!("Av_{} → Av_{}", pi_pat, s_pat),
+            seq.iter()
+                .map(|v| format!("{:>12}", v))
+                .collect::<Vec<_>>()
+                .join("")
+        );
     }
 }

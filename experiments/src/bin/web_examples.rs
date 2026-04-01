@@ -2,15 +2,23 @@
 use combpoly::permutation::all_permutations;
 use combpoly::polynomial_builder::build_generating_polynomial;
 use combpoly::statistics::Stat;
-use polynomial_tools::sequences::*;
 use polynomial_tools::real_rootedness::format_poly;
+use polynomial_tools::sequences::*;
 
 fn main() {
     println!("=== Eulerian polynomials A_n(t) ===");
     let ep = eulerian_polynomials(10);
     for (i, p) in ep.iter().enumerate() {
         println!("# A_{}(t)", i + 1);
-        let trimmed: Vec<i64> = p.iter().copied().rev().skip_while(|&c| c == 0).collect::<Vec<_>>().into_iter().rev().collect();
+        let trimmed: Vec<i64> = p
+            .iter()
+            .copied()
+            .rev()
+            .skip_while(|&c| c == 0)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
         println!("{}", format_poly(&trimmed));
     }
 
@@ -18,7 +26,15 @@ fn main() {
     let np = narayana_polynomials(10);
     for (i, p) in np.iter().enumerate() {
         println!("# N_{}(t)", i + 1);
-        let trimmed: Vec<i64> = p.iter().copied().rev().skip_while(|&c| c == 0).collect::<Vec<_>>().into_iter().rev().collect();
+        let trimmed: Vec<i64> = p
+            .iter()
+            .copied()
+            .rev()
+            .skip_while(|&c| c == 0)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
         println!("{}", format_poly(&trimmed));
     }
 
@@ -60,11 +76,11 @@ fn main() {
     // m(n) = total matchings of 2×n grid.
     // m(0) = 1, m(1) = 2, m(n) = 2*m(n-1) + m(n-2) - wait that's not right either.
     // Let me just enumerate.
-    
+
     // For the web examples, let me use a known result:
     // The matching polynomial of the ladder graph L_n (= P_2 × P_n) tracks matchings by size.
     // These are related to Fibonacci but I'll compute them via transfer matrix.
-    
+
     // States for column boundary: subset of {top, bottom} already matched.
     // 4 states: 0b00=neither, 0b01=bottom, 0b10=top, 0b11=both
     // For each column, we can:
@@ -73,45 +89,47 @@ fn main() {
     // - place horizontal bottom edge: need bottom free, next state has bottom matched, +1 edge
     // - place both horizontal edges: need both free, next state = 11, +2 edges
     // - place nothing: next state inherits
-    
+
     // This is getting complex. Let me use a simple DP.
     // dp[col][state] = polynomial (Vec<i64>) counting matchings
-    
+
     let max_grid = 10;
     let mut results: Vec<Vec<i64>> = Vec::new();
-    
+
     for n in 1..=max_grid {
         // Transfer matrix DP for matchings on 2×n grid
         // dp[mask] = polynomial where mask indicates which vertices in current column
         // are matched by horizontal edges FROM the previous column.
         // mask: bit 0 = top vertex pre-matched, bit 1 = bottom vertex pre-matched
-        
+
         let mut dp: Vec<Vec<i64>> = vec![vec![]; 4];
         dp[0] = vec![1]; // start: no vertices pre-matched
-        
+
         for _col in 0..n {
             let mut ndp: Vec<Vec<i64>> = vec![vec![]; 4];
-            
+
             for inmask in 0..4u8 {
-                if dp[inmask as usize].is_empty() { continue; }
+                if dp[inmask as usize].is_empty() {
+                    continue;
+                }
                 let p = &dp[inmask as usize];
                 let top_free = inmask & 1 == 0;
                 let bot_free = inmask & 2 == 0;
-                
+
                 // Enumerate what we do in this column:
                 // 1. Vertical edge (if both free): uses both, output mask depends on horizontal to right
                 // 2. Horizontal edges to the right
                 // 3. Nothing
-                
+
                 // Actually, let me think of it differently.
                 // For each column, the free vertices (not pre-matched from left) can be:
                 // - left unmatched
                 // - matched by a vertical edge within the column (need both free)
                 // - matched by a horizontal edge to the right (sets the corresponding bit in output mask)
-                
+
                 // Let's enumerate all valid local configurations:
                 // Case by case based on which vertices are free
-                
+
                 if top_free && bot_free {
                     // Both free. Options:
                     // a) do nothing: both pass through unmatched, out=00
@@ -147,12 +165,16 @@ fn main() {
                     poly_add_to(&mut ndp[0], p, 0);
                 }
             }
-            
+
             dp = ndp;
         }
-        
+
         // Final: only state 0 (no pending horizontal edges) is valid
-        let poly = if dp[0].is_empty() { vec![0] } else { dp[0].clone() };
+        let poly = if dp[0].is_empty() {
+            vec![0]
+        } else {
+            dp[0].clone()
+        };
         println!("# F_{}(t)  (matchings on 2×{} grid)", n, n);
         println!("{}", format_poly(&poly));
         results.push(poly);

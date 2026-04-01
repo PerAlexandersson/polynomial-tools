@@ -9,11 +9,21 @@ use combpoly::statistics::{compute, Stat};
 use polynomial_tools::real_rootedness::format_poly;
 
 fn build_swaps_poly(perms: &[Vec<u8>]) -> Vec<i64> {
-    if perms.is_empty() { return vec![0]; }
-    let max_s = perms.iter().map(|s| compute(s, Stat::Swaps)).max().unwrap_or(0);
+    if perms.is_empty() {
+        return vec![0];
+    }
+    let max_s = perms
+        .iter()
+        .map(|s| compute(s, Stat::Swaps))
+        .max()
+        .unwrap_or(0);
     let mut coeffs = vec![0i64; max_s + 1];
-    for s in perms { coeffs[compute(s, Stat::Swaps)] += 1; }
-    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 { coeffs.pop(); }
+    for s in perms {
+        coeffs[compute(s, Stat::Swaps)] += 1;
+    }
+    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 {
+        coeffs.pop();
+    }
     coeffs
 }
 
@@ -33,9 +43,13 @@ fn main() {
             // Verify linear extensions match
             let lin_ext = poset.num_linear_extensions();
             assert_eq!(
-                lin_ext, perms.len(),
+                lin_ext,
+                perms.len(),
                 "k={} n={}: linear extensions ({}) != k-alt perms ({})",
-                k, n, lin_ext, perms.len()
+                k,
+                n,
+                lin_ext,
+                perms.len()
             );
 
             // Compute P-Eulerian (descent poly on linear extensions)

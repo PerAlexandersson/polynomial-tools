@@ -6,11 +6,21 @@ use polynomial_tools::real_rootedness::{
 };
 
 fn build_poly(perms: &[Vec<u8>]) -> Vec<i64> {
-    if perms.is_empty() { return vec![0]; }
-    let max_s = perms.iter().map(|s| compute(s, Stat::Swaps)).max().unwrap_or(0);
+    if perms.is_empty() {
+        return vec![0];
+    }
+    let max_s = perms
+        .iter()
+        .map(|s| compute(s, Stat::Swaps))
+        .max()
+        .unwrap_or(0);
     let mut coeffs = vec![0i64; max_s + 1];
-    for s in perms { coeffs[compute(s, Stat::Swaps)] += 1; }
-    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 { coeffs.pop(); }
+    for s in perms {
+        coeffs[compute(s, Stat::Swaps)] += 1;
+    }
+    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 {
+        coeffs.pop();
+    }
     coeffs
 }
 
@@ -20,7 +30,10 @@ fn is_derangement(sigma: &[u8]) -> bool {
 
 fn is_involution(sigma: &[u8]) -> bool {
     // σ² = id: σ(σ(i)) = i for all i
-    sigma.iter().enumerate().all(|(i, &v)| sigma[(v - 1) as usize] == (i as u8 + 1))
+    sigma
+        .iter()
+        .enumerate()
+        .all(|(i, &v)| sigma[(v - 1) as usize] == (i as u8 + 1))
 }
 
 fn num_cycles(sigma: &[u8]) -> usize {
@@ -28,7 +41,9 @@ fn num_cycles(sigma: &[u8]) -> usize {
     let mut visited = vec![false; n];
     let mut cycles = 0;
     for i in 0..n {
-        if visited[i] { continue; }
+        if visited[i] {
+            continue;
+        }
         cycles += 1;
         let mut j = i;
         while !visited[j] {
@@ -40,7 +55,9 @@ fn num_cycles(sigma: &[u8]) -> usize {
 }
 
 fn check_il(f: &[i64], g: &[i64]) -> &'static str {
-    if f.len() <= 1 || g.len() <= 1 { return "triv"; }
+    if f.len() <= 1 || g.len() <= 1 {
+        return "triv";
+    }
     let (small, large) = if f.len() <= g.len() { (f, g) } else { (g, f) };
     match check_interlacing_sturm(small, large) {
         Some(true) => "✓",
@@ -58,7 +75,10 @@ fn is_palindromic(p: &[i64]) -> bool {
 }
 
 fn main() {
-    let max_n: u8 = std::env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(10);
+    let max_n: u8 = std::env::args()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(10);
 
     // === Derangements ===
     println!("=== Derangements ===\n");
@@ -67,11 +87,17 @@ fn main() {
         let all = all_permutations(n);
         let ders: Vec<Vec<u8>> = all.into_iter().filter(|s| is_derangement(s)).collect();
         let poly = build_poly(&ders);
-        let rr = if poly.len() <= 2 { true } else { is_real_rooted(&poly) };
+        let rr = if poly.len() <= 2 {
+            true
+        } else {
+            is_real_rooted(&poly)
+        };
         let pal = is_palindromic(&poly);
         println!(
             "n={:>2}: {:<7} {:<60} {} {}",
-            n, ders.len(), format_poly(&poly),
+            n,
+            ders.len(),
+            format_poly(&poly),
             if rr { "✓rr" } else { "✗rr" },
             if pal { "pal" } else { "   " },
         );
@@ -80,7 +106,9 @@ fn main() {
     println!("\nInterlacing:");
     for i in 0..der_polys.len() - 1 {
         let r = check_il(&der_polys[i], &der_polys[i + 1]);
-        if r != "triv" { println!("  n={} ≪ n={}: {}", i + 1, i + 2, r); }
+        if r != "triv" {
+            println!("  n={} ≪ n={}: {}", i + 1, i + 2, r);
+        }
     }
 
     // === Involutions ===
@@ -90,11 +118,17 @@ fn main() {
         let all = all_permutations(n);
         let invs: Vec<Vec<u8>> = all.into_iter().filter(|s| is_involution(s)).collect();
         let poly = build_poly(&invs);
-        let rr = if poly.len() <= 2 { true } else { is_real_rooted(&poly) };
+        let rr = if poly.len() <= 2 {
+            true
+        } else {
+            is_real_rooted(&poly)
+        };
         let pal = is_palindromic(&poly);
         println!(
             "n={:>2}: {:<7} {:<60} {} {}",
-            n, invs.len(), format_poly(&poly),
+            n,
+            invs.len(),
+            format_poly(&poly),
             if rr { "✓rr" } else { "✗rr" },
             if pal { "pal" } else { "   " },
         );
@@ -103,7 +137,9 @@ fn main() {
     println!("\nInterlacing:");
     for i in 0..inv_polys.len() - 1 {
         let r = check_il(&inv_polys[i], &inv_polys[i + 1]);
-        if r != "triv" { println!("  n={} ≪ n={}: {}", i + 1, i + 2, r); }
+        if r != "triv" {
+            println!("  n={} ≪ n={}: {}", i + 1, i + 2, r);
+        }
     }
 
     // === Permutations by cycle count ===
@@ -114,10 +150,16 @@ fn main() {
     for c in 1..=max_cyc {
         let subset: Vec<Vec<u8>> = all.iter().filter(|s| num_cycles(s) == c).cloned().collect();
         let poly = build_poly(&subset);
-        let rr = if poly.len() <= 2 { true } else { is_real_rooted(&poly) };
+        let rr = if poly.len() <= 2 {
+            true
+        } else {
+            is_real_rooted(&poly)
+        };
         println!(
             "  cyc={}: {:<6} {:<55} {}",
-            c, subset.len(), format_poly(&poly),
+            c,
+            subset.len(),
+            format_poly(&poly),
             if rr { "✓rr" } else { "✗rr" },
         );
     }
@@ -135,19 +177,29 @@ fn main() {
                 continue;
             }
             let poly = build_poly(&subset);
-            let rr = if poly.len() <= 2 { true } else { is_real_rooted(&poly) };
+            let rr = if poly.len() <= 2 {
+                true
+            } else {
+                is_real_rooted(&poly)
+            };
             println!(
                 "  n={:>2}: {:<6} {:<55} {}",
-                n, subset.len(), format_poly(&poly),
+                n,
+                subset.len(),
+                format_poly(&poly),
                 if rr { "✓rr" } else { "✗rr" },
             );
             cyc_polys.push(poly);
         }
         println!("  Interlacing:");
         for i in 0..cyc_polys.len() - 1 {
-            if cyc_polys[i] == vec![0] || cyc_polys[i + 1] == vec![0] { continue; }
+            if cyc_polys[i] == vec![0] || cyc_polys[i + 1] == vec![0] {
+                continue;
+            }
             let r = check_il(&cyc_polys[i], &cyc_polys[i + 1]);
-            if r != "triv" { println!("    n={} ≪ n={}: {}", i + 1, i + 2, r); }
+            if r != "triv" {
+                println!("    n={} ≪ n={}: {}", i + 1, i + 2, r);
+            }
         }
         println!();
     }

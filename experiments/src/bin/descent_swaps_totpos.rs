@@ -79,11 +79,7 @@ fn descent_set_to_string(mask: u64, n: u8) -> String {
 /// Build the coefficient matrix M for a given descent class.
 /// Row i corresponds to position p_i, column j to coefficient of t^j.
 /// Returns (positions, matrix).
-fn build_coeff_matrix(
-    class: &[&Vec<u8>],
-    positions: &[u8],
-    n: u8,
-) -> (Vec<u8>, Vec<Vec<i64>>) {
+fn build_coeff_matrix(class: &[&Vec<u8>], positions: &[u8], n: u8) -> (Vec<u8>, Vec<Vec<i64>>) {
     let mut pos_polys: Vec<(u8, Vec<i64>)> = Vec::new();
     for &p in positions {
         let vals: Vec<usize> = class
@@ -138,8 +134,7 @@ fn check_2x2_minors(matrix: &[Vec<i64>]) -> (bool, Vec<(usize, usize, usize, usi
         for i2 in (i1 + 1)..nrows {
             for j1 in 0..ncols {
                 for j2 in (j1 + 1)..ncols {
-                    let det = matrix[i1][j1] * matrix[i2][j2]
-                        - matrix[i1][j2] * matrix[i2][j1];
+                    let det = matrix[i1][j1] * matrix[i2][j2] - matrix[i1][j2] * matrix[i2][j1];
                     if det < 0 {
                         failures.push((i1, i2, j1, j2, det));
                     }
@@ -241,8 +236,13 @@ fn main() {
             n_tested += 1;
 
             // Print matrix
-            println!("  S={} positions={:?} matrix {}x{}:",
-                     s_str, pos_used, matrix.len(), matrix[0].len());
+            println!(
+                "  S={} positions={:?} matrix {}x{}:",
+                s_str,
+                pos_used,
+                matrix.len(),
+                matrix[0].len()
+            );
             for (i, row) in matrix.iter().enumerate() {
                 let poly_str = format_poly(row);
                 println!("    p={}: {} => {:?}", pos_used[i], poly_str, row);
@@ -295,7 +295,10 @@ fn main() {
     }
 
     println!("=== SUMMARY ===");
-    println!("Total descent sets tested (1 ∉ S, ≥2 positions): {}", total_tested);
+    println!(
+        "Total descent sets tested (1 ∉ S, ≥2 positions): {}",
+        total_tested
+    );
     println!(
         "Totally non-negative (2x2): {}/{}",
         total_tnn_2x2, total_tested

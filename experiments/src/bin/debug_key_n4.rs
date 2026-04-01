@@ -1,5 +1,5 @@
-use combinatoric_core::partition::Partition;
 use combinatoric_core::key_polynomial::*;
+use combinatoric_core::partition::Partition;
 
 fn main() {
     let lambda = Partition::new(vec![2, 1]);
@@ -13,7 +13,11 @@ fn main() {
     println!("w0_sigma = {:?}", w0_sigma);
 
     let faces = reduced_kogan_faces(n, &w0_sigma);
-    println!("\nReduced Kogan faces of type {:?}: {} faces", w0_sigma, faces.len());
+    println!(
+        "\nReduced Kogan faces of type {:?}: {} faces",
+        w0_sigma,
+        faces.len()
+    );
     for (idx, eqs) in faces.iter().enumerate() {
         let pats = gt_patterns_with_equalities_n(&lambda, n, eqs);
         println!("  Face {}: eqs={:?}, {} patterns", idx, eqs, pats.len());

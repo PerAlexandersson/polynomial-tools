@@ -4,7 +4,6 @@
 /// S^{all}_{L(G)}(t) = sum over all 2^m orientations of L(G) of t^{#sinks}
 ///
 /// Question: Is this polynomial always real-rooted when G is a line graph?
-
 use combinatoric_core::graph::Graph;
 use polynomial_tools::real_rootedness::is_real_rooted;
 
@@ -30,10 +29,7 @@ fn check(name: &str, g: &Graph) {
         coeffs,
         status,
     );
-    println!(
-        "{:<25} {:>10}          acyc={:?}",
-        "", "", acyclic,
-    );
+    println!("{:<25} {:>10}          acyc={:?}", "", "", acyclic,);
 }
 
 fn main() {

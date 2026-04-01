@@ -470,16 +470,37 @@ fn test_kostka_matrix_n4_mathematica() {
 #[test]
 fn test_kostka_matrix_n5_mathematica() {
     // Spot-check several entries from n=5 Mathematica output
-    assert_eq!(kostka::kostka_coefficient(&p(&[5]), &p(&[1, 1, 1, 1, 1])), 1);
-    assert_eq!(kostka::kostka_coefficient(&p(&[4, 1]), &p(&[1, 1, 1, 1, 1])), 4);
-    assert_eq!(kostka::kostka_coefficient(&p(&[3, 2]), &p(&[1, 1, 1, 1, 1])), 5);
-    assert_eq!(kostka::kostka_coefficient(&p(&[3, 1, 1]), &p(&[1, 1, 1, 1, 1])), 6);
-    assert_eq!(kostka::kostka_coefficient(&p(&[2, 2, 1]), &p(&[1, 1, 1, 1, 1])), 5);
-    assert_eq!(kostka::kostka_coefficient(&p(&[2, 1, 1, 1]), &p(&[1, 1, 1, 1, 1])), 4);
+    assert_eq!(
+        kostka::kostka_coefficient(&p(&[5]), &p(&[1, 1, 1, 1, 1])),
+        1
+    );
+    assert_eq!(
+        kostka::kostka_coefficient(&p(&[4, 1]), &p(&[1, 1, 1, 1, 1])),
+        4
+    );
+    assert_eq!(
+        kostka::kostka_coefficient(&p(&[3, 2]), &p(&[1, 1, 1, 1, 1])),
+        5
+    );
+    assert_eq!(
+        kostka::kostka_coefficient(&p(&[3, 1, 1]), &p(&[1, 1, 1, 1, 1])),
+        6
+    );
+    assert_eq!(
+        kostka::kostka_coefficient(&p(&[2, 2, 1]), &p(&[1, 1, 1, 1, 1])),
+        5
+    );
+    assert_eq!(
+        kostka::kostka_coefficient(&p(&[2, 1, 1, 1]), &p(&[1, 1, 1, 1, 1])),
+        4
+    );
     assert_eq!(kostka::kostka_coefficient(&p(&[4, 1]), &p(&[3, 1, 1])), 2);
     assert_eq!(kostka::kostka_coefficient(&p(&[3, 2]), &p(&[3, 1, 1])), 1);
     assert_eq!(kostka::kostka_coefficient(&p(&[3, 2]), &p(&[2, 2, 1])), 2);
-    assert_eq!(kostka::kostka_coefficient(&p(&[2, 2, 1]), &p(&[2, 1, 1, 1])), 2);
+    assert_eq!(
+        kostka::kostka_coefficient(&p(&[2, 2, 1]), &p(&[2, 1, 1, 1])),
+        2
+    );
 }
 
 #[test]
@@ -1154,8 +1175,7 @@ fn test_kostka_to_lr_reduction() {
 
         // Compute c^ρ_{λ, σ} via the LR reduction
         let (rho, _lam, sigma) = Partition::kostka_to_lr(&lambda, &Partition::empty(), &mu);
-        let skew: SymmetricFunction<i64> =
-            SymmetricFunction::skew_schur_function(&rho, &sigma);
+        let skew: SymmetricFunction<i64> = SymmetricFunction::skew_schur_function(&rho, &sigma);
         let in_schur = skew.to_schur_basis();
         let c_val = in_schur.coefficient(&lambda);
 

@@ -29,16 +29,29 @@ fn set_str(s: u32, n: u8) -> String {
 }
 
 fn build_poly(perms: &[&Vec<u8>]) -> Vec<i64> {
-    if perms.is_empty() { return vec![0]; }
-    let max_s = perms.iter().map(|s| compute(s, Stat::Swaps)).max().unwrap_or(0);
+    if perms.is_empty() {
+        return vec![0];
+    }
+    let max_s = perms
+        .iter()
+        .map(|s| compute(s, Stat::Swaps))
+        .max()
+        .unwrap_or(0);
     let mut coeffs = vec![0i64; max_s + 1];
-    for s in perms { coeffs[compute(s, Stat::Swaps)] += 1; }
-    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 { coeffs.pop(); }
+    for s in perms {
+        coeffs[compute(s, Stat::Swaps)] += 1;
+    }
+    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 {
+        coeffs.pop();
+    }
     coeffs
 }
 
 fn main() {
-    let max_n: u8 = std::env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(9);
+    let max_n: u8 = std::env::args()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(9);
 
     for n in 3..=max_n {
         let all = all_permutations(n);
@@ -56,7 +69,11 @@ fn main() {
 
         for (&es, perms) in &by_exc {
             let poly = build_poly(perms);
-            let rr = if poly.len() <= 2 { true } else { is_real_rooted(&poly) };
+            let rr = if poly.len() <= 2 {
+                true
+            } else {
+                is_real_rooted(&poly)
+            };
             if rr {
                 rr_count += 1;
             } else {
@@ -73,7 +90,9 @@ fn main() {
         for (es, count, poly) in failures.iter().take(8) {
             println!(
                 "  FAIL: Exc={} |E|={} {}",
-                set_str(*es, n), count, format_poly(poly)
+                set_str(*es, n),
+                count,
+                format_poly(poly)
             );
         }
         if fail_count > 8 {

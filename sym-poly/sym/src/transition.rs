@@ -18,7 +18,12 @@ use crate::symmetric_function::SymmetricFunction;
 
 static SYM_CACHE: TransitionCache<Basis> = TransitionCache::new();
 
-fn cached_transition_matrix(source: Basis, target: Basis, partitions: &[Partition], deg: u32) -> Vec<Vec<i64>> {
+fn cached_transition_matrix(
+    source: Basis,
+    target: Basis,
+    partitions: &[Partition],
+    deg: u32,
+) -> Vec<Vec<i64>> {
     SYM_CACHE.get_or_compute(source, target, deg, |s, t, _| {
         transition_matrix(s, t, partitions)
     })
@@ -48,11 +53,8 @@ pub fn convert<C: Ring>(sf: &SymmetricFunction<C>, target: Basis) -> SymmetricFu
 
     for (deg, terms) in by_degree {
         let partitions = Partition::all_of_size(deg);
-        let part_index: BTreeMap<&Partition, usize> = partitions
-            .iter()
-            .enumerate()
-            .map(|(i, p)| (p, i))
-            .collect();
+        let part_index: BTreeMap<&Partition, usize> =
+            partitions.iter().enumerate().map(|(i, p)| (p, i)).collect();
         let k = partitions.len();
 
         if to_power_sum {
@@ -147,7 +149,6 @@ fn transition_matrix(source: Basis, target: Basis, partitions: &[Partition]) -> 
         // -------------------------------------------------------------------
         // Direct Kostka-based conversions
         // -------------------------------------------------------------------
-
         (Schur, Monomial) => {
             let mut mat = vec![vec![0i64; k]; k];
             for i in 0..k {
@@ -230,7 +231,6 @@ fn transition_matrix(source: Basis, target: Basis, partitions: &[Partition]) -> 
         // -------------------------------------------------------------------
         // Power sum conversions via characters
         // -------------------------------------------------------------------
-
         (PowerSum, Schur) => {
             let mut mat = vec![vec![0i64; k]; k];
             for j in 0..k {
@@ -273,7 +273,6 @@ fn transition_matrix(source: Basis, target: Basis, partitions: &[Partition]) -> 
         // -------------------------------------------------------------------
         // Forgotten basis
         // -------------------------------------------------------------------
-
         (Forgotten, Monomial) => {
             let eh = transition_matrix(Elementary, CompleteH, partitions);
             transpose(&eh)
@@ -361,8 +360,18 @@ mod tests {
         ] {
             let converted = original.to_basis(basis);
             let back = converted.to_schur_basis();
-            assert_eq!(back.coefficient(&Partition::new(vec![2])), 1, "roundtrip through {:?}", basis);
-            assert_eq!(back.coefficient(&Partition::new(vec![1, 1])), 0, "roundtrip through {:?}", basis);
+            assert_eq!(
+                back.coefficient(&Partition::new(vec![2])),
+                1,
+                "roundtrip through {:?}",
+                basis
+            );
+            assert_eq!(
+                back.coefficient(&Partition::new(vec![1, 1])),
+                0,
+                "roundtrip through {:?}",
+                basis
+            );
         }
     }
 
@@ -371,23 +380,38 @@ mod tests {
         use num_rational::Ratio;
         type Q = Ratio<i64>;
 
-        let p21: SymmetricFunction<Q> = SymmetricFunction::power_sum_symmetric(
-            Partition::new(vec![2, 1]),
-        );
+        let p21: SymmetricFunction<Q> =
+            SymmetricFunction::power_sum_symmetric(Partition::new(vec![2, 1]));
         let in_schur = p21.to_schur_basis();
-        assert_eq!(in_schur.coefficient(&Partition::new(vec![3])), Q::from_integer(1));
-        assert_eq!(in_schur.coefficient(&Partition::new(vec![2, 1])), Q::from_integer(0));
-        assert_eq!(in_schur.coefficient(&Partition::new(vec![1, 1, 1])), Q::from_integer(-1));
-
-        let s2: SymmetricFunction<Q> = SymmetricFunction::schur_symmetric(
-            Partition::new(vec![2]),
+        assert_eq!(
+            in_schur.coefficient(&Partition::new(vec![3])),
+            Q::from_integer(1)
         );
+        assert_eq!(
+            in_schur.coefficient(&Partition::new(vec![2, 1])),
+            Q::from_integer(0)
+        );
+        assert_eq!(
+            in_schur.coefficient(&Partition::new(vec![1, 1, 1])),
+            Q::from_integer(-1)
+        );
+
+        let s2: SymmetricFunction<Q> = SymmetricFunction::schur_symmetric(Partition::new(vec![2]));
         let in_p = s2.to_power_sum_basis();
         assert_eq!(in_p.coefficient(&Partition::new(vec![2])), Ratio::new(1, 2));
-        assert_eq!(in_p.coefficient(&Partition::new(vec![1, 1])), Ratio::new(1, 2));
+        assert_eq!(
+            in_p.coefficient(&Partition::new(vec![1, 1])),
+            Ratio::new(1, 2)
+        );
 
         let back = in_p.to_schur_basis();
-        assert_eq!(back.coefficient(&Partition::new(vec![2])), Q::from_integer(1));
-        assert_eq!(back.coefficient(&Partition::new(vec![1, 1])), Q::from_integer(0));
+        assert_eq!(
+            back.coefficient(&Partition::new(vec![2])),
+            Q::from_integer(1)
+        );
+        assert_eq!(
+            back.coefficient(&Partition::new(vec![1, 1])),
+            Q::from_integer(0)
+        );
     }
 }

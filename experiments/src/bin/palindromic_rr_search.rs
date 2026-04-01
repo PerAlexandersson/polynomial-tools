@@ -58,16 +58,9 @@ fn check_sequence(
 }
 
 fn main() {
-    let max_n: u8 = env::args()
-        .nth(1)
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(8);
+    let max_n: u8 = env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(8);
 
-    let stats: &[(&str, Stat)] = &[
-        ("des", Stat::Des),
-        ("exc", Stat::Exc),
-        ("peak", Stat::Peak),
-    ];
+    let stats: &[(&str, Stat)] = &[("des", Stat::Des), ("exc", Stat::Exc), ("peak", Stat::Peak)];
 
     // ============================================================
     // Single length-3 patterns
@@ -139,7 +132,10 @@ fn main() {
     // ============================================================
     // Two-pattern avoidance (length 3)
     // ============================================================
-    println!("\n=== Two-pattern avoidance, length 3 (n=1..{}) ===\n", max_n);
+    println!(
+        "\n=== Two-pattern avoidance, length 3 (n=1..{}) ===\n",
+        max_n
+    );
 
     for &(stat_name, stat) in stats {
         for i in 0..patterns3.len() {
@@ -176,10 +172,7 @@ fn main() {
     // Length-4 single patterns (only check up to max_n-1 since n! grows fast)
     // ============================================================
     let max_n4 = max_n.min(7);
-    println!(
-        "\n=== Single length-4 patterns (n=1..{}) ===\n",
-        max_n4
-    );
+    println!("\n=== Single length-4 patterns (n=1..{}) ===\n", max_n4);
 
     // Generate all 24 length-4 patterns
     let mut patterns4: Vec<String> = Vec::new();
@@ -218,10 +211,7 @@ fn main() {
     // ============================================================
     // Catalan search orders with des, exc, peak
     // ============================================================
-    println!(
-        "\n=== Catalan search orders (n=1..{}) ===",
-        max_n
-    );
+    println!("\n=== Catalan search orders (n=1..{}) ===", max_n);
     println!("Only showing NON-Narayana palindromic results.\n");
 
     // Narayana for reference: C(n,k)^2/n = N(n,k)
@@ -247,10 +237,8 @@ fn main() {
                 });
                 if pal && polys.len() >= 4 && polys.iter().any(|p| p.len() > 2) {
                     // Check if it's Narayana or Eulerian (skip those)
-                    let is_narayana = polys.len() >= 5
-                        && polys[4] == vec![1, 10, 20, 10, 1];
-                    let is_eulerian = polys.len() >= 4
-                        && polys[3] == vec![1, 11, 11, 1];
+                    let is_narayana = polys.len() >= 5 && polys[4] == vec![1, 10, 20, 10, 1];
+                    let is_eulerian = polys.len() >= 4 && polys[3] == vec![1, 11, 11, 1];
                     if is_narayana || is_eulerian {
                         continue;
                     }

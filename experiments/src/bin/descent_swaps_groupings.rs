@@ -67,11 +67,17 @@ use combpoly::statistics::{compute, descent_set_bitmask, Stat};
 use std::collections::BTreeMap;
 
 fn build_poly(vals: &[usize]) -> Vec<i64> {
-    if vals.is_empty() { return vec![0]; }
+    if vals.is_empty() {
+        return vec![0];
+    }
     let max_s = *vals.iter().max().unwrap();
     let mut coeffs = vec![0i64; max_s + 1];
-    for &s in vals { coeffs[s] += 1; }
-    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 { coeffs.pop(); }
+    for &s in vals {
+        coeffs[s] += 1;
+    }
+    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 {
+        coeffs.pop();
+    }
     coeffs
 }
 
@@ -82,53 +88,93 @@ fn valid_positions(s_mask: u64, n: u8) -> Vec<u8> {
             positions.push(p);
         }
     }
-    if n >= 2 && (s_mask >> (n - 2)) & 1 == 0 { positions.push(n); }
+    if n >= 2 && (s_mask >> (n - 2)) & 1 == 0 {
+        positions.push(n);
+    }
     positions
 }
 
 fn source_asc(s_mask: u64, p: u8, n: u8) -> u64 {
-    if n <= 2 { return 0; }
-    if p == n { return s_mask; }
+    if n <= 2 {
+        return 0;
+    }
+    if p == n {
+        return s_mask;
+    }
     let mut sp = 0u64;
     if p == 1 {
-        for j in 2..n { if (s_mask >> (j - 1)) & 1 == 1 { sp |= 1 << (j - 2); } }
+        for j in 2..n {
+            if (s_mask >> (j - 1)) & 1 == 1 {
+                sp |= 1 << (j - 2);
+            }
+        }
     } else {
-        for pos in 1..=(p.saturating_sub(2)) { if (s_mask >> (pos - 1)) & 1 == 1 { sp |= 1 << (pos - 1); } }
-        for j in (p + 1)..n { if (s_mask >> (j - 1)) & 1 == 1 { sp |= 1 << (j - 2); } }
+        for pos in 1..=(p.saturating_sub(2)) {
+            if (s_mask >> (pos - 1)) & 1 == 1 {
+                sp |= 1 << (pos - 1);
+            }
+        }
+        for j in (p + 1)..n {
+            if (s_mask >> (j - 1)) & 1 == 1 {
+                sp |= 1 << (j - 2);
+            }
+        }
     }
     sp
 }
 
 fn source_desc(s_mask: u64, p: u8, n: u8) -> Option<u64> {
-    if p <= 1 || p >= n { return None; }
+    if p <= 1 || p >= n {
+        return None;
+    }
     Some(source_asc(s_mask, p, n) | (1 << (p - 2)))
 }
 
 fn epsilon1(pi: &[u8], p: u8) -> bool {
     let n = pi.len() as u8 + 1;
-    if p <= 1 || p >= n { return false; }
+    if p <= 1 || p >= n {
+        return false;
+    }
     pi[(p - 2) as usize] + 1 == pi[(p - 1) as usize]
 }
 
 fn eps2(p: u8, q: u8) -> usize {
-    if p >= 2 && q <= p - 2 { 1 } else { 0 }
+    if p >= 2 && q <= p - 2 {
+        1
+    } else {
+        0
+    }
 }
 
 fn coeff(poly: &[i64], k: usize) -> i64 {
-    if k < poly.len() { poly[k] } else { 0 }
+    if k < poly.len() {
+        poly[k]
+    } else {
+        0
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-enum Zone { L, M, R }
+enum Zone {
+    L,
+    M,
+    R,
+}
 
 fn classify_zone(q: u8, p_a: u8, p_b: u8) -> Zone {
-    if p_a >= 2 && q <= p_a - 2 { Zone::L }
-    else if p_b >= 2 && q <= p_b - 2 { Zone::M }
-    else { Zone::R }
+    if p_a >= 2 && q <= p_a - 2 {
+        Zone::L
+    } else if p_b >= 2 && q <= p_b - 2 {
+        Zone::M
+    } else {
+        Zone::R
+    }
 }
 
 fn build_source_dist(
-    s_mask: u64, p: u8, n: u8,
+    s_mask: u64,
+    p: u8,
+    n: u8,
     by_descent_prev: &BTreeMap<u64, Vec<usize>>,
     perm_prev_list: &[&Vec<u8>],
 ) -> BTreeMap<(usize, u8), usize> {
@@ -161,11 +207,15 @@ fn build_zone_raw(dist: &BTreeMap<(usize, u8), usize>, p_a: u8, p_b: u8, zone: Z
     let mut poly = vec![0i64; 20];
     for (&(s, q), &c) in dist {
         if classify_zone(q, p_a, p_b) == zone {
-            if s >= poly.len() { poly.resize(s + 1, 0); }
+            if s >= poly.len() {
+                poly.resize(s + 1, 0);
+            }
             poly[s] += c as i64;
         }
     }
-    while poly.len() > 1 && *poly.last().unwrap() == 0 { poly.pop(); }
+    while poly.len() > 1 && *poly.last().unwrap() == 0 {
+        poly.pop();
+    }
     poly
 }
 
@@ -225,34 +275,49 @@ fn main() {
         for pi in &perms_prev {
             let idx = perm_prev_list.len();
             perm_prev_list.push(pi);
-            by_descent_prev.entry(descent_set_bitmask(pi)).or_default().push(idx);
+            by_descent_prev
+                .entry(descent_set_bitmask(pi))
+                .or_default()
+                .push(idx);
         }
 
         let perms_n = all_permutations(n);
         let mut by_descent_n: BTreeMap<u64, Vec<&Vec<u8>>> = BTreeMap::new();
         for pi in &perms_n {
-            by_descent_n.entry(descent_set_bitmask(pi)).or_default().push(pi);
+            by_descent_n
+                .entry(descent_set_bitmask(pi))
+                .or_default()
+                .push(pi);
         }
 
         for s_mask in 0u64..(1 << (n - 1)) {
-            if s_mask & 1 != 0 { continue; }
+            if s_mask & 1 != 0 {
+                continue;
+            }
             let vp = valid_positions(s_mask, n);
-            if vp.len() < 2 { continue; }
+            if vp.len() < 2 {
+                continue;
+            }
 
             let mut source_dists: BTreeMap<u8, BTreeMap<(usize, u8), usize>> = BTreeMap::new();
             for &p in &vp {
-                source_dists.insert(p,
-                    build_source_dist(s_mask, p, n, &by_descent_prev, &perm_prev_list));
+                source_dists.insert(
+                    p,
+                    build_source_dist(s_mask, p, n, &by_descent_prev, &perm_prev_list),
+                );
             }
 
             let mut lp_polys: BTreeMap<u8, Vec<i64>> = BTreeMap::new();
             if let Some(class) = by_descent_n.get(&s_mask) {
                 for &p in &vp {
-                    let vals: Vec<usize> = class.iter()
+                    let vals: Vec<usize> = class
+                        .iter()
                         .filter(|pi| pi.iter().position(|&v| v == n).unwrap() as u8 + 1 == p)
                         .map(|pi| compute(pi, Stat::Swaps))
                         .collect();
-                    if !vals.is_empty() { lp_polys.insert(p, build_poly(&vals)); }
+                    if !vals.is_empty() {
+                        lp_polys.insert(p, build_poly(&vals));
+                    }
                 }
             }
 
@@ -270,7 +335,9 @@ fn main() {
                 // Get A and B polynomials
                 let a_poly_ref = lp_polys.get(&p_a);
                 let b_poly_ref = lp_polys.get(&p_b);
-                if a_poly_ref.is_none() || b_poly_ref.is_none() { continue; }
+                if a_poly_ref.is_none() || b_poly_ref.is_none() {
+                    continue;
+                }
                 let a_poly = a_poly_ref.unwrap();
                 let b_poly = b_poly_ref.unwrap();
 
@@ -283,9 +350,13 @@ fn main() {
                         let b_k1 = coeff(b_poly, k1);
                         let b_k2 = coeff(b_poly, k2);
 
-                        if (a_k1 == 0 && a_k2 == 0) || (b_k1 == 0 && b_k2 == 0) { continue; }
+                        if (a_k1 == 0 && a_k2 == 0) || (b_k1 == 0 && b_k2 == 0) {
+                            continue;
+                        }
                         let delta = a_k1 * b_k2 - a_k2 * b_k1;
-                        if delta == 0 && a_k1 * b_k2 == 0 { continue; }
+                        if delta == 0 && a_k1 * b_k2 == 0 {
+                            continue;
+                        }
 
                         total_minors += 1;
 
@@ -311,13 +382,21 @@ fn main() {
                         formula_pass += 1;
 
                         // Track signs
-                        if col_m_formula > 0 { col_m_pos += 1; }
-                        else if col_m_formula == 0 { col_m_zero += 1; }
-                        else { col_m_neg += 1; }
+                        if col_m_formula > 0 {
+                            col_m_pos += 1;
+                        } else if col_m_formula == 0 {
+                            col_m_zero += 1;
+                        } else {
+                            col_m_neg += 1;
+                        }
 
-                        if row_m_formula > 0 { row_m_pos += 1; }
-                        else if row_m_formula == 0 { row_m_zero += 1; }
-                        else { row_m_neg += 1; }
+                        if row_m_formula > 0 {
+                            row_m_pos += 1;
+                        } else if row_m_formula == 0 {
+                            row_m_zero += 1;
+                        } else {
+                            row_m_neg += 1;
+                        }
 
                         // Staircase (0,1) = (M,L) + (M,M) + (R,L) + (R,M)
                         // This is row-M - (M,R) + (R,L) + (R,M)
@@ -350,40 +429,66 @@ fn main() {
 
                         let sa_k1 = coeff(&ma_raw, k1) + coeff(&ra_raw, k1);
                         let sa_k2 = coeff(&ma_raw, k2) + coeff(&ra_raw, k2);
-                        let tb_k1m1 = if k1 > 0 { coeff(&lb_raw, k1 - 1) + coeff(&mb_raw, k1 - 1) } else { 0 };
-                        let tb_k2m1 = if k2 > 0 { coeff(&lb_raw, k2 - 1) + coeff(&mb_raw, k2 - 1) } else { 0 };
+                        let tb_k1m1 = if k1 > 0 {
+                            coeff(&lb_raw, k1 - 1) + coeff(&mb_raw, k1 - 1)
+                        } else {
+                            0
+                        };
+                        let tb_k2m1 = if k2 > 0 {
+                            coeff(&lb_raw, k2 - 1) + coeff(&mb_raw, k2 - 1)
+                        } else {
+                            0
+                        };
 
                         let stair_formula = sa_k1 * tb_k2m1 - sa_k2 * tb_k1m1;
 
-                        if stair_formula > 0 { stair_pos += 1; }
-                        else if stair_formula == 0 { stair_zero += 1; }
-                        else { stair_neg += 1; }
+                        if stair_formula > 0 {
+                            stair_pos += 1;
+                        } else if stair_formula == 0 {
+                            stair_zero += 1;
+                        } else {
+                            stair_neg += 1;
+                        }
 
                         // Three always-nonneg = column-M (which equals (L,M)+(M,M)+(R,M))
                         // Already tracked above as col_m_formula.
-                        if col_m_formula > 0 { three_nonneg_pos += 1; }
-                        else if col_m_formula == 0 { three_nonneg_zero += 1; }
-                        else { three_nonneg_neg += 1; }
+                        if col_m_formula > 0 {
+                            three_nonneg_pos += 1;
+                        } else if col_m_formula == 0 {
+                            three_nonneg_zero += 1;
+                        } else {
+                            three_nonneg_neg += 1;
+                        }
 
                         // Dominance checks
                         let rest = delta - col_m_formula;
-                        if col_m_formula >= rest.abs() { col_m_dominates += 1; }
+                        if col_m_formula >= rest.abs() {
+                            col_m_dominates += 1;
+                        }
 
                         let rest_r = delta - row_m_formula;
-                        if row_m_formula >= rest_r.abs() { row_m_dominates += 1; }
+                        if row_m_formula >= rest_r.abs() {
+                            row_m_dominates += 1;
+                        }
 
                         let rest_s = delta - stair_formula;
-                        if stair_formula >= rest_s.abs() { stair_dominates += 1; }
+                        if stair_formula >= rest_s.abs() {
+                            stair_dominates += 1;
+                        }
 
                         // LR ordering checks
                         // Column-M = A_{k1} * Mb(k2-1) - A_{k2} * Mb(k1-1) >= 0
                         // means staircase LR: A and t*Mb satisfy LR ordering
-                        if col_m_formula >= 0 { staircase_lr_pass += 1; }
+                        if col_m_formula >= 0 {
+                            staircase_lr_pass += 1;
+                        }
                         staircase_lr_checks += 1;
 
                         // Row-M = Ma(k1) * B_{k2} - Ma(k2) * B_{k1} >= 0
                         // means standard LR: Ma and B satisfy LR ordering
-                        if row_m_formula >= 0 { standard_lr_pass += 1; }
+                        if row_m_formula >= 0 {
+                            standard_lr_pass += 1;
+                        }
                         standard_lr_checks += 1;
                     }
                 }
@@ -396,29 +501,56 @@ fn main() {
     println!("{}", "=".repeat(80));
     println!("Total nontrivial minors: {}\n", total_minors);
 
-    println!("{:<30} {:>10} {:>10} {:>10}  {}", "Group", "Pos", "Zero", "Neg", "Always>=0?");
+    println!(
+        "{:<30} {:>10} {:>10} {:>10}  {}",
+        "Group", "Pos", "Zero", "Neg", "Always>=0?"
+    );
     println!("{}", "-".repeat(75));
-    println!("{:<30} {:>10} {:>10} {:>10}  {}",
+    println!(
+        "{:<30} {:>10} {:>10} {:>10}  {}",
         "column-M = A*Mb staircase",
-        col_m_pos, col_m_zero, col_m_neg,
-        if col_m_neg == 0 { "YES" } else { "NO" });
-    println!("{:<30} {:>10} {:>10} {:>10}  {}",
+        col_m_pos,
+        col_m_zero,
+        col_m_neg,
+        if col_m_neg == 0 { "YES" } else { "NO" }
+    );
+    println!(
+        "{:<30} {:>10} {:>10} {:>10}  {}",
         "row-M = Ma*B standard",
-        row_m_pos, row_m_zero, row_m_neg,
-        if row_m_neg == 0 { "YES" } else { "NO" });
-    println!("{:<30} {:>10} {:>10} {:>10}  {}",
+        row_m_pos,
+        row_m_zero,
+        row_m_neg,
+        if row_m_neg == 0 { "YES" } else { "NO" }
+    );
+    println!(
+        "{:<30} {:>10} {:>10} {:>10}  {}",
         "staircase (0,1) = Sa*Tb",
-        stair_pos, stair_zero, stair_neg,
-        if stair_neg == 0 { "YES" } else { "NO" });
+        stair_pos,
+        stair_zero,
+        stair_neg,
+        if stair_neg == 0 { "YES" } else { "NO" }
+    );
 
     println!();
     println!("Dominance (group >= |rest|):");
-    println!("  column-M: {}/{} ({:.1}%)", col_m_dominates, total_minors,
-        100.0 * col_m_dominates as f64 / total_minors.max(1) as f64);
-    println!("  row-M:    {}/{} ({:.1}%)", row_m_dominates, total_minors,
-        100.0 * row_m_dominates as f64 / total_minors.max(1) as f64);
-    println!("  staircase:{}/{} ({:.1}%)", stair_dominates, total_minors,
-        100.0 * stair_dominates as f64 / total_minors.max(1) as f64);
+    println!(
+        "  column-M: {}/{} ({:.1}%)",
+        col_m_dominates,
+        total_minors,
+        100.0 * col_m_dominates as f64 / total_minors.max(1) as f64
+    );
+    println!(
+        "  row-M:    {}/{} ({:.1}%)",
+        row_m_dominates,
+        total_minors,
+        100.0 * row_m_dominates as f64 / total_minors.max(1) as f64
+    );
+    println!(
+        "  staircase:{}/{} ({:.1}%)",
+        stair_dominates,
+        total_minors,
+        100.0 * stair_dominates as f64 / total_minors.max(1) as f64
+    );
 
     println!();
     println!("{}", "=".repeat(80));
@@ -452,12 +584,16 @@ fn main() {
     println!();
     println!("Using B_k = Tb(k-1) + Rb(k):");
     println!("Delta = A_{{k1}} [Tb(k2-1)+Rb(k2)] - A_{{k2}} [Tb(k1-1)+Rb(k1)]");
-    println!("      = [A_{{k1}} Tb(k2-1) - A_{{k2}} Tb(k1-1)] + [A_{{k1}} Rb(k2) - A_{{k2}} Rb(k1)]");
+    println!(
+        "      = [A_{{k1}} Tb(k2-1) - A_{{k2}} Tb(k1-1)] + [A_{{k1}} Rb(k2) - A_{{k2}} Rb(k1)]"
+    );
     println!("      = staircase(A, t*Tb) + standard(A, Rb)");
     println!();
     println!("Using A_k = La(k-1) + Sa(k):");
     println!("Delta = [La(k1-1)+Sa(k1)] B_{{k2}} - [La(k2-1)+Sa(k2)] B_{{k1}}");
-    println!("      = [Sa(k1) B_{{k2}} - Sa(k2) B_{{k1}}] + [La(k1-1) B_{{k2}} - La(k2-1) B_{{k1}}]");
+    println!(
+        "      = [Sa(k1) B_{{k2}} - Sa(k2) B_{{k1}}] + [La(k1-1) B_{{k2}} - La(k2-1) B_{{k1}}]"
+    );
     println!("      = standard(Sa, B) + staircase(t*La, B)");
     println!();
     println!("Combining: Delta = staircase(A, t*Tb) + standard(A, Rb)");
@@ -490,34 +626,49 @@ fn main() {
         for pi in &perms_prev {
             let idx = perm_prev_list.len();
             perm_prev_list.push(pi);
-            by_descent_prev.entry(descent_set_bitmask(pi)).or_default().push(idx);
+            by_descent_prev
+                .entry(descent_set_bitmask(pi))
+                .or_default()
+                .push(idx);
         }
 
         let perms_n = all_permutations(n);
         let mut by_descent_n: BTreeMap<u64, Vec<&Vec<u8>>> = BTreeMap::new();
         for pi in &perms_n {
-            by_descent_n.entry(descent_set_bitmask(pi)).or_default().push(pi);
+            by_descent_n
+                .entry(descent_set_bitmask(pi))
+                .or_default()
+                .push(pi);
         }
 
         for s_mask in 0u64..(1 << (n - 1)) {
-            if s_mask & 1 != 0 { continue; }
+            if s_mask & 1 != 0 {
+                continue;
+            }
             let vp = valid_positions(s_mask, n);
-            if vp.len() < 2 { continue; }
+            if vp.len() < 2 {
+                continue;
+            }
 
             let mut source_dists: BTreeMap<u8, BTreeMap<(usize, u8), usize>> = BTreeMap::new();
             for &p in &vp {
-                source_dists.insert(p,
-                    build_source_dist(s_mask, p, n, &by_descent_prev, &perm_prev_list));
+                source_dists.insert(
+                    p,
+                    build_source_dist(s_mask, p, n, &by_descent_prev, &perm_prev_list),
+                );
             }
 
             let mut lp_polys: BTreeMap<u8, Vec<i64>> = BTreeMap::new();
             if let Some(class) = by_descent_n.get(&s_mask) {
                 for &p in &vp {
-                    let vals: Vec<usize> = class.iter()
+                    let vals: Vec<usize> = class
+                        .iter()
                         .filter(|pi| pi.iter().position(|&v| v == n).unwrap() as u8 + 1 == p)
                         .map(|pi| compute(pi, Stat::Swaps))
                         .collect();
-                    if !vals.is_empty() { lp_polys.insert(p, build_poly(&vals)); }
+                    if !vals.is_empty() {
+                        lp_polys.insert(p, build_poly(&vals));
+                    }
                 }
             }
 
@@ -537,7 +688,9 @@ fn main() {
 
                 let a_poly_ref = lp_polys.get(&p_a);
                 let b_poly_ref = lp_polys.get(&p_b);
-                if a_poly_ref.is_none() || b_poly_ref.is_none() { continue; }
+                if a_poly_ref.is_none() || b_poly_ref.is_none() {
+                    continue;
+                }
                 let a_poly = a_poly_ref.unwrap();
                 let b_poly = b_poly_ref.unwrap();
 
@@ -550,43 +703,71 @@ fn main() {
                         let b_k1 = coeff(b_poly, k1);
                         let b_k2 = coeff(b_poly, k2);
 
-                        if (a_k1 == 0 && a_k2 == 0) || (b_k1 == 0 && b_k2 == 0) { continue; }
+                        if (a_k1 == 0 && a_k2 == 0) || (b_k1 == 0 && b_k2 == 0) {
+                            continue;
+                        }
                         let delta = a_k1 * b_k2 - a_k2 * b_k1;
-                        if delta == 0 && a_k1 * b_k2 == 0 { continue; }
+                        if delta == 0 && a_k1 * b_k2 == 0 {
+                            continue;
+                        }
 
                         // Decomposition 1: Delta = staircase(A, t*Tb) + standard(A, Rb)
-                        let tb_k1m1 = if k1 > 0 { coeff(&lb_raw, k1-1) + coeff(&mb_raw, k1-1) } else { 0 };
-                        let tb_k2m1 = if k2 > 0 { coeff(&lb_raw, k2-1) + coeff(&mb_raw, k2-1) } else { 0 };
+                        let tb_k1m1 = if k1 > 0 {
+                            coeff(&lb_raw, k1 - 1) + coeff(&mb_raw, k1 - 1)
+                        } else {
+                            0
+                        };
+                        let tb_k2m1 = if k2 > 0 {
+                            coeff(&lb_raw, k2 - 1) + coeff(&mb_raw, k2 - 1)
+                        } else {
+                            0
+                        };
                         let term1 = a_k1 * tb_k2m1 - a_k2 * tb_k1m1; // staircase(A, t*Tb)
                         let term2 = a_k1 * coeff(&rb_raw, k2) - a_k2 * coeff(&rb_raw, k1); // standard(A, Rb)
 
                         assert_eq!(term1 + term2, delta, "Decomp 1 fail");
 
-                        if term1 > 0 { at_tb_pos += 1; }
-                        else if term1 == 0 { at_tb_zero += 1; }
-                        else { at_tb_neg += 1; }
+                        if term1 > 0 {
+                            at_tb_pos += 1;
+                        } else if term1 == 0 {
+                            at_tb_zero += 1;
+                        } else {
+                            at_tb_neg += 1;
+                        }
 
-                        if term2 > 0 { a_rb_pos += 1; }
-                        else if term2 == 0 { a_rb_zero += 1; }
-                        else { a_rb_neg += 1; }
+                        if term2 > 0 {
+                            a_rb_pos += 1;
+                        } else if term2 == 0 {
+                            a_rb_zero += 1;
+                        } else {
+                            a_rb_neg += 1;
+                        }
 
                         // Decomposition 2: Delta = standard(Sa, B) + staircase(t*La, B)
                         let sa_k1 = coeff(&ma_raw, k1) + coeff(&ra_raw, k1);
                         let sa_k2 = coeff(&ma_raw, k2) + coeff(&ra_raw, k2);
-                        let la_k1m1 = if k1 > 0 { coeff(&la_raw, k1-1) } else { 0 };
-                        let la_k2m1 = if k2 > 0 { coeff(&la_raw, k2-1) } else { 0 };
+                        let la_k1m1 = if k1 > 0 { coeff(&la_raw, k1 - 1) } else { 0 };
+                        let la_k2m1 = if k2 > 0 { coeff(&la_raw, k2 - 1) } else { 0 };
                         let term3 = sa_k1 * b_k2 - sa_k2 * b_k1; // standard(Sa, B)
                         let term4 = la_k1m1 * b_k2 - la_k2m1 * b_k1; // staircase(t*La, B)
 
                         assert_eq!(term3 + term4, delta, "Decomp 2 fail");
 
-                        if term3 > 0 { sa_b_pos += 1; }
-                        else if term3 == 0 { sa_b_zero += 1; }
-                        else { sa_b_neg += 1; }
+                        if term3 > 0 {
+                            sa_b_pos += 1;
+                        } else if term3 == 0 {
+                            sa_b_zero += 1;
+                        } else {
+                            sa_b_neg += 1;
+                        }
 
-                        if term4 > 0 { tla_b_pos += 1; }
-                        else if term4 == 0 { tla_b_zero += 1; }
-                        else { tla_b_neg += 1; }
+                        if term4 > 0 {
+                            tla_b_pos += 1;
+                        } else if term4 == 0 {
+                            tla_b_zero += 1;
+                        } else {
+                            tla_b_neg += 1;
+                        }
                     }
                 }
             }
@@ -596,30 +777,52 @@ fn main() {
     println!();
     println!("Decomposition 1: Delta = staircase(A, t*Tb) + standard(A, Rb)");
     println!("  where Tb = Lb + Mb (zone L+M of source B), Rb = zone R of source B");
-    println!("{:<30} {:>10} {:>10} {:>10}  {}", "Term", "Pos", "Zero", "Neg", "Always>=0?");
+    println!(
+        "{:<30} {:>10} {:>10} {:>10}  {}",
+        "Term", "Pos", "Zero", "Neg", "Always>=0?"
+    );
     println!("{}", "-".repeat(75));
-    println!("{:<30} {:>10} {:>10} {:>10}  {}",
+    println!(
+        "{:<30} {:>10} {:>10} {:>10}  {}",
         "staircase(A, t*Tb)",
-        at_tb_pos, at_tb_zero, at_tb_neg,
-        if at_tb_neg == 0 { "YES" } else { "NO" });
-    println!("{:<30} {:>10} {:>10} {:>10}  {}",
+        at_tb_pos,
+        at_tb_zero,
+        at_tb_neg,
+        if at_tb_neg == 0 { "YES" } else { "NO" }
+    );
+    println!(
+        "{:<30} {:>10} {:>10} {:>10}  {}",
         "standard(A, Rb)",
-        a_rb_pos, a_rb_zero, a_rb_neg,
-        if a_rb_neg == 0 { "YES" } else { "NO" });
+        a_rb_pos,
+        a_rb_zero,
+        a_rb_neg,
+        if a_rb_neg == 0 { "YES" } else { "NO" }
+    );
 
     println!();
     println!("Decomposition 2: Delta = standard(Sa, B) + staircase(t*La, B)");
     println!("  where Sa = Ma + Ra (zone M+R of source A), La = zone L of source A");
-    println!("{:<30} {:>10} {:>10} {:>10}  {}", "Term", "Pos", "Zero", "Neg", "Always>=0?");
+    println!(
+        "{:<30} {:>10} {:>10} {:>10}  {}",
+        "Term", "Pos", "Zero", "Neg", "Always>=0?"
+    );
     println!("{}", "-".repeat(75));
-    println!("{:<30} {:>10} {:>10} {:>10}  {}",
+    println!(
+        "{:<30} {:>10} {:>10} {:>10}  {}",
         "standard(Sa, B)",
-        sa_b_pos, sa_b_zero, sa_b_neg,
-        if sa_b_neg == 0 { "YES" } else { "NO" });
-    println!("{:<30} {:>10} {:>10} {:>10}  {}",
+        sa_b_pos,
+        sa_b_zero,
+        sa_b_neg,
+        if sa_b_neg == 0 { "YES" } else { "NO" }
+    );
+    println!(
+        "{:<30} {:>10} {:>10} {:>10}  {}",
         "staircase(t*La, B)",
-        tla_b_pos, tla_b_zero, tla_b_neg,
-        if tla_b_neg == 0 { "YES" } else { "NO" });
+        tla_b_pos,
+        tla_b_zero,
+        tla_b_neg,
+        if tla_b_neg == 0 { "YES" } else { "NO" }
+    );
 
     println!();
     println!("{}", "=".repeat(80));

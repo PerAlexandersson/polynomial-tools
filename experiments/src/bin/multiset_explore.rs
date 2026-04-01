@@ -16,20 +16,47 @@ fn exact_interlaces(fc: &[i64], gc: &[i64]) -> bool {
     polynomial_tools::check_weak_interlacing(fc, gc).unwrap_or(false)
 }
 
-fn pt(p:&[i64])->Vec<i64>{let mut v=p.to_vec();while v.len()>1&&*v.last().unwrap()==0{v.pop();}v}
-fn pz(p:&[i64])->bool{p.iter().all(|&c|c==0)}
-fn pa(a:&[i64],b:&[i64])->Vec<i64>{
-    let l=a.len().max(b.len());let mut r=vec![0i64;l];
-    for(i,&v)in a.iter().enumerate(){r[i]+=v;}
-    for(i,&v)in b.iter().enumerate(){r[i]+=v;}pt(&r)
+fn pt(p: &[i64]) -> Vec<i64> {
+    let mut v = p.to_vec();
+    while v.len() > 1 && *v.last().unwrap() == 0 {
+        v.pop();
+    }
+    v
 }
-fn pf(p:&[i64])->String{
-    let p=pt(p);if pz(&p){"0".into()}else{
-    let mut t=vec![];for(i,&c)in p.iter().enumerate(){if c==0{continue;}match(c,i){
-        (c,0)=>t.push(format!("{}",c)),(1,1)=>t.push("t".into()),
-        (c,1)=>t.push(format!("{}t",c)),(1,e)=>t.push(format!("t^{}",e)),
-        (c,e)=>t.push(format!("{}t^{}",c,e)),
-    }}t.join(" + ")}
+fn pz(p: &[i64]) -> bool {
+    p.iter().all(|&c| c == 0)
+}
+fn pa(a: &[i64], b: &[i64]) -> Vec<i64> {
+    let l = a.len().max(b.len());
+    let mut r = vec![0i64; l];
+    for (i, &v) in a.iter().enumerate() {
+        r[i] += v;
+    }
+    for (i, &v) in b.iter().enumerate() {
+        r[i] += v;
+    }
+    pt(&r)
+}
+fn pf(p: &[i64]) -> String {
+    let p = pt(p);
+    if pz(&p) {
+        "0".into()
+    } else {
+        let mut t = vec![];
+        for (i, &c) in p.iter().enumerate() {
+            if c == 0 {
+                continue;
+            }
+            match (c, i) {
+                (c, 0) => t.push(format!("{}", c)),
+                (1, 1) => t.push("t".into()),
+                (c, 1) => t.push(format!("{}t", c)),
+                (1, e) => t.push(format!("t^{}", e)),
+                (c, e) => t.push(format!("{}t^{}", c, e)),
+            }
+        }
+        t.join(" + ")
+    }
 }
 
 /// Generate all words with given content on a board.
@@ -37,7 +64,9 @@ fn words_on_board(content: &[usize], board: &[u8]) -> Vec<Vec<u8>> {
     let n = board.len();
     let k = content.len();
     let total: usize = content.iter().sum();
-    if total != n { return vec![]; }
+    if total != n {
+        return vec![];
+    }
     let mut result = Vec::new();
     let mut current = Vec::with_capacity(n);
     let mut remaining = content.to_vec();
@@ -45,16 +74,26 @@ fn words_on_board(content: &[usize], board: &[u8]) -> Vec<Vec<u8>> {
     result
 }
 
-fn gen_words(pos: usize, n: usize, k: usize, board: &[u8],
-    remaining: &mut Vec<usize>, current: &mut Vec<u8>, result: &mut Vec<Vec<u8>>) {
-    if pos == n { result.push(current.clone()); return; }
+fn gen_words(
+    pos: usize,
+    n: usize,
+    k: usize,
+    board: &[u8],
+    remaining: &mut Vec<usize>,
+    current: &mut Vec<u8>,
+    result: &mut Vec<Vec<u8>>,
+) {
+    if pos == n {
+        result.push(current.clone());
+        return;
+    }
     let hi = (board[pos] as usize).min(k);
     for letter in 1..=hi {
         let j = letter - 1;
         if remaining[j] > 0 {
             remaining[j] -= 1;
             current.push(letter as u8);
-            gen_words(pos+1, n, k, board, remaining, current, result);
+            gen_words(pos + 1, n, k, board, remaining, current, result);
             current.pop();
             remaining[j] += 1;
         }
@@ -62,7 +101,7 @@ fn gen_words(pos: usize, n: usize, k: usize, board: &[u8],
 }
 
 fn ascents(w: &[u8]) -> usize {
-    (1..w.len()).filter(|&i| w[i-1] < w[i]).count()
+    (1..w.len()).filter(|&i| w[i - 1] < w[i]).count()
 }
 
 fn main() {
@@ -84,13 +123,15 @@ fn main() {
         let boards = gen_ferrers_boards(n);
         for board in &boards {
             let m = board[0] as usize; // λ_1 = max letter
-            // Generate some contents
+                                       // Generate some contents
             let contents = gen_contents(n, m);
             for content in &contents {
                 total_boards += 1;
 
                 let words = words_on_board(content, board);
-                if words.is_empty() { continue; }
+                if words.is_empty() {
+                    continue;
+                }
 
                 // Compute R_j for each first entry j
                 let mut r_j: Vec<Vec<i64>> = vec![vec![0]; m + 1]; // 1-indexed
@@ -98,19 +139,30 @@ fn main() {
                     let j = w[0] as usize;
                     let asc = ascents(w);
                     if j <= m {
-                        while r_j[j].len() <= asc { r_j[j].push(0); }
+                        while r_j[j].len() <= asc {
+                            r_j[j].push(0);
+                        }
                         r_j[j][asc] += 1;
                     }
                 }
-                for j in 1..=m { r_j[j] = pt(&r_j[j]); }
+                for j in 1..=m {
+                    r_j[j] = pt(&r_j[j]);
+                }
 
                 // Check total is real-rooted
                 let mut total_poly = vec![0i64];
-                for j in 1..=m { total_poly = pa(&total_poly, &r_j[j]); }
+                for j in 1..=m {
+                    total_poly = pa(&total_poly, &r_j[j]);
+                }
                 if !pz(&total_poly) {
                     if !polynomial_tools::is_real_rooted(&total_poly) {
                         rr_fails += 1;
-                        println!("FAIL RR: board={:?}, content={:?}, poly={}", board, content, pf(&total_poly));
+                        println!(
+                            "FAIL RR: board={:?}, content={:?}, poly={}",
+                            board,
+                            content,
+                            pf(&total_poly)
+                        );
                     }
                 }
 
@@ -118,12 +170,17 @@ fn main() {
                 for j in (2..=m).rev() {
                     let l = j;
                     let j2 = j - 1;
-                    if pz(&r_j[l]) || pz(&r_j[j2]) { continue; }
+                    if pz(&r_j[l]) || pz(&r_j[j2]) {
+                        continue;
+                    }
                     total_pairs += 1;
                     if !exact_interlaces(&r_j[l], &r_j[j2]) {
                         interl_fails += 1;
                         if interl_fails <= 5 {
-                            println!("FAIL: R_{} ≼ R_{} for board={:?}, content={:?}", l, j2, board, content);
+                            println!(
+                                "FAIL: R_{} ≼ R_{} for board={:?}, content={:?}",
+                                l, j2, board, content
+                            );
                             println!("  R_{} = {}", l, pf(&r_j[l]));
                             println!("  R_{} = {}", j2, pf(&r_j[j2]));
                         }
@@ -131,8 +188,10 @@ fn main() {
                 }
             }
         }
-        println!("n={}: boards={}, pairs={}, RR_fails={}, interl_fails={}",
-            n, total_boards, total_pairs, rr_fails, interl_fails);
+        println!(
+            "n={}: boards={}, pairs={}, RR_fails={}, interl_fails={}",
+            n, total_boards, total_pairs, rr_fails, interl_fails
+        );
     }
 
     println!("\n=== SUMMARY ===");
@@ -146,20 +205,27 @@ fn main() {
 
     // Print the paper's example
     println!("\n=== Paper example: board=22233, content=(2,2,1) ===");
-    let board = vec![2u8,2,2,3,3];
-    let content = vec![2usize,2,1];
+    let board = vec![2u8, 2, 2, 3, 3];
+    let content = vec![2usize, 2, 1];
     let words = words_on_board(&content, &board);
     let m = 3;
-    let mut r_j: Vec<Vec<i64>> = vec![vec![0]; m+1];
+    let mut r_j: Vec<Vec<i64>> = vec![vec![0]; m + 1];
     for w in &words {
         let j = w[0] as usize;
         let asc = ascents(w);
-        while r_j[j].len() <= asc { r_j[j].push(0); }
+        while r_j[j].len() <= asc {
+            r_j[j].push(0);
+        }
         r_j[j][asc] += 1;
     }
-    for j in 1..=m { r_j[j] = pt(&r_j[j]); println!("R_{} = {}", j, pf(&r_j[j])); }
+    for j in 1..=m {
+        r_j[j] = pt(&r_j[j]);
+        println!("R_{} = {}", j, pf(&r_j[j]));
+    }
     let mut total_poly = vec![0i64];
-    for j in 1..=m { total_poly = pa(&total_poly, &r_j[j]); }
+    for j in 1..=m {
+        total_poly = pa(&total_poly, &r_j[j]);
+    }
     println!("R = {}", pf(&total_poly));
 }
 
@@ -173,8 +239,15 @@ fn gen_ferrers_boards(n: usize) -> Vec<Vec<u8>> {
 }
 
 fn gfb(n: usize, max_val: usize, depth: usize, current: &mut Vec<u8>, results: &mut Vec<Vec<u8>>) {
-    if depth == n { results.push(current.clone()); return; }
-    let min_val = 1.max(if depth > 0 { current[depth-1] as usize } else { 1 });
+    if depth == n {
+        results.push(current.clone());
+        return;
+    }
+    let min_val = 1.max(if depth > 0 {
+        current[depth - 1] as usize
+    } else {
+        1
+    });
     for v in min_val..=max_val.min(n + 2) {
         current.push(v as u8);
         gfb(n, max_val, depth + 1, current, results);
@@ -190,9 +263,16 @@ fn gen_contents(n: usize, max_k: usize) -> Vec<Vec<usize>> {
     results
 }
 
-fn gen_comp(remaining: usize, parts_left: usize, current: &mut Vec<usize>, results: &mut Vec<Vec<usize>>) {
+fn gen_comp(
+    remaining: usize,
+    parts_left: usize,
+    current: &mut Vec<usize>,
+    results: &mut Vec<Vec<usize>>,
+) {
     if parts_left == 0 {
-        if remaining == 0 { results.push(current.clone()); }
+        if remaining == 0 {
+            results.push(current.clone());
+        }
         return;
     }
     if parts_left == 1 {

@@ -13,25 +13,39 @@
 ///   Look for polynomial recurrences in n for these families.
 use combpoly::permutation::all_permutations;
 use combpoly::statistics::{compute, descent_set_bitmask, Stat};
-use polynomial_tools::real_rootedness::{format_poly, is_real_rooted, check_weak_interlacing};
+use polynomial_tools::real_rootedness::{check_weak_interlacing, format_poly, is_real_rooted};
 use polynomial_tools::recurrence::{find_recurrence_adaptive, AdaptiveSearchOptions};
 use std::collections::BTreeMap;
 use std::time::Instant;
 
 fn build_poly_from_perms(perms: &[&Vec<u8>]) -> Vec<i64> {
-    if perms.is_empty() { return vec![0]; }
-    let max_s = perms.iter().map(|s| compute(s, Stat::Swaps)).max().unwrap_or(0);
+    if perms.is_empty() {
+        return vec![0];
+    }
+    let max_s = perms
+        .iter()
+        .map(|s| compute(s, Stat::Swaps))
+        .max()
+        .unwrap_or(0);
     let mut coeffs = vec![0i64; max_s + 1];
-    for s in perms { coeffs[compute(s, Stat::Swaps)] += 1; }
-    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 { coeffs.pop(); }
+    for s in perms {
+        coeffs[compute(s, Stat::Swaps)] += 1;
+    }
+    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 {
+        coeffs.pop();
+    }
     coeffs
 }
 
 fn poly_add(a: &[i64], b: &[i64]) -> Vec<i64> {
     let len = a.len().max(b.len());
     let mut c = vec![0i64; len];
-    for (i, &v) in a.iter().enumerate() { c[i] += v; }
-    for (i, &v) in b.iter().enumerate() { c[i] += v; }
+    for (i, &v) in a.iter().enumerate() {
+        c[i] += v;
+    }
+    for (i, &v) in b.iter().enumerate() {
+        c[i] += v;
+    }
     c
 }
 
@@ -40,8 +54,11 @@ fn descent_set_str(s: u64, n: u8) -> String {
         .filter(|&i| s & (1 << i) != 0)
         .map(|i| (i + 1).to_string())
         .collect();
-    if positions.is_empty() { "∅".to_string() }
-    else { format!("{{{}}}", positions.join(",")) }
+    if positions.is_empty() {
+        "∅".to_string()
+    } else {
+        format!("{{{}}}", positions.join(","))
+    }
 }
 
 /// DP-based recursive computation of L_{n,S}(t) using the insertion lemma.
@@ -107,14 +124,20 @@ fn insert_step(table: &StateTable, old_n: u8) -> StateTable {
     let mut new_table: StateTable = BTreeMap::new();
 
     for (&(des, sw, pos_max, adj), &count) in table {
-        if count == 0 { continue; }
+        if count == 0 {
+            continue;
+        }
 
         // Try each insertion position p = 1..=new_n
         for p in 1..=new_n as usize {
             // Compute ε₁
             let e1 = if p > 1 && p < new_n as usize {
                 // Check adjacency at position p-1 in old perm (0-indexed: p-2)
-                if p >= 2 && (adj & (1 << (p - 2))) != 0 { 1 } else { 0 }
+                if p >= 2 && (adj & (1 << (p - 2))) != 0 {
+                    1
+                } else {
+                    0
+                }
             } else {
                 0
             };
@@ -130,7 +153,7 @@ fn insert_step(table: &StateTable, old_n: u8) -> StateTable {
             if p == 1 {
                 // Position 1: forced descent (n+1 > σ(2))
                 new_des |= 1; // bit 0
-                // Positions > 1: shifted from old
+                              // Positions > 1: shifted from old
                 for j in 1..old_n as u64 {
                     if des & (1 << (j - 1)) != 0 {
                         new_des |= 1 << j;
@@ -182,7 +205,9 @@ fn insert_step(table: &StateTable, old_n: u8) -> StateTable {
                 }
             }
 
-            *new_table.entry((new_des, new_sw, new_pos_max, new_adj)).or_insert(0) += count;
+            *new_table
+                .entry((new_des, new_sw, new_pos_max, new_adj))
+                .or_insert(0) += count;
         }
     }
 
@@ -191,7 +216,8 @@ fn insert_step(table: &StateTable, old_n: u8) -> StateTable {
 
 /// Extract L_{n,S}(t) from the state table for a given descent set S.
 fn extract_poly(table: &StateTable, target_des: u64) -> Vec<i64> {
-    let max_sw = table.keys()
+    let max_sw = table
+        .keys()
         .filter(|&&(des, _, _, _)| des == target_des)
         .map(|&(_, sw, _, _)| sw)
         .max()
@@ -202,7 +228,9 @@ fn extract_poly(table: &StateTable, target_des: u64) -> Vec<i64> {
             coeffs[sw] += count;
         }
     }
-    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 { coeffs.pop(); }
+    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 {
+        coeffs.pop();
+    }
     coeffs
 }
 
@@ -238,7 +266,11 @@ fn main() {
             for i in (2..=n as u64 - 1).step_by(2) {
                 d |= 1 << (i - 1);
             }
-            if n >= 2 { d } else { 0 }
+            if n >= 2 {
+                d
+            } else {
+                0
+            }
         };
 
         let poly = extract_poly(&table, alt_des);
@@ -247,7 +279,10 @@ fn main() {
 
         println!(
             "H_{:<2}(t) = {:<70} {:>8.2?} states={:<8} {}",
-            n, format_poly(&poly), elapsed, states,
+            n,
+            format_poly(&poly),
+            elapsed,
+            states,
             if rr { "✓ rr" } else { "✗" }
         );
         h_polys.push(poly);
@@ -307,10 +342,17 @@ fn main() {
         let poly = extract_poly(&table3, k3_des);
         if poly.iter().sum::<i64>() > 0 || n <= 3 {
             let rr = poly.len() <= 2 || is_real_rooted(&poly);
-            println!("H_{}^(3)(t) = {:<50} {}", n, format_poly(&poly), if rr { "✓" } else { "✗" });
+            println!(
+                "H_{}^(3)(t) = {:<50} {}",
+                n,
+                format_poly(&poly),
+                if rr { "✓" } else { "✗" }
+            );
             k3_polys.push(poly);
         }
-        if table3.len() > 5_000_000 { break; }
+        if table3.len() > 5_000_000 {
+            break;
+        }
     }
 
     if k3_polys.len() >= 6 {
@@ -338,7 +380,9 @@ fn main() {
             println!("L_{{n,{{n-1}}}}(t), n={}: {}", n, format_poly(&poly));
             last_des_polys.push(poly);
         }
-        if table_c.len() > 5_000_000 { break; }
+        if table_c.len() > 5_000_000 {
+            break;
+        }
     }
     if last_des_polys.len() >= 6 {
         println!("\nRecurrence search for L_{{n,{{n-1}}}}(t):");
@@ -364,11 +408,18 @@ fn main() {
             let poly = extract_poly(&table_d, des);
             if poly.iter().sum::<i64>() > 0 {
                 let rr = poly.len() <= 2 || is_real_rooted(&poly);
-                println!("L_{{n,{{2,n-1}}}}(t), n={}: {:<50} {}", n, format_poly(&poly), if rr { "✓" } else { "✗" });
+                println!(
+                    "L_{{n,{{2,n-1}}}}(t), n={}: {:<50} {}",
+                    n,
+                    format_poly(&poly),
+                    if rr { "✓" } else { "✗" }
+                );
                 base_ext_polys.push(poly);
             }
         }
-        if table_d.len() > 5_000_000 { break; }
+        if table_d.len() > 5_000_000 {
+            break;
+        }
     }
     if base_ext_polys.len() >= 6 {
         println!("\nRecurrence search:");
@@ -394,11 +445,19 @@ fn main() {
             let poly = extract_poly(&table_e, des);
             if poly.iter().sum::<i64>() > 0 {
                 let rr = poly.len() <= 2 || is_real_rooted(&poly);
-                println!("L(n={}, Des={{1..{}}}): {:<50} {}", n, k, format_poly(&poly), if rr { "✓" } else { "✗" });
+                println!(
+                    "L(n={}, Des={{1..{}}}): {:<50} {}",
+                    n,
+                    k,
+                    format_poly(&poly),
+                    if rr { "✓" } else { "✗" }
+                );
                 stair_polys.push(poly);
             }
         }
-        if table_e.len() > 5_000_000 { break; }
+        if table_e.len() > 5_000_000 {
+            break;
+        }
     }
     if stair_polys.len() >= 6 {
         println!("\nRecurrence search:");

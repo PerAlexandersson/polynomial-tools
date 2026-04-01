@@ -1,5 +1,5 @@
-use sym_poly_core::Partition;
 use std::collections::BTreeMap;
+use sym_poly_core::Partition;
 
 /// Compute the Kostka coefficient K(λ, μ) = number of SSYT of shape λ and weight μ.
 ///
@@ -70,7 +70,11 @@ fn add_hstrip_helper(
     } else {
         current[current.len() - 1]
     };
-    let hstrip_upper = if row == 0 { u32::MAX } else { inner.part(row - 1) };
+    let hstrip_upper = if row == 0 {
+        u32::MAX
+    } else {
+        inner.part(row - 1)
+    };
 
     let lower = inner_r;
     let upper = outer_r.min(prev_new).min(hstrip_upper);
@@ -92,7 +96,15 @@ fn add_hstrip_helper(
             continue;
         }
         current.push(new_r);
-        add_hstrip_helper(inner, outer, remaining - add, row + 1, max_rows, current, results);
+        add_hstrip_helper(
+            inner,
+            outer,
+            remaining - add,
+            row + 1,
+            max_rows,
+            current,
+            results,
+        );
         current.pop();
     }
 }
@@ -192,14 +204,17 @@ fn remove_border_strip(lambda: &Partition, k: u32) -> Vec<(Partition, u32)> {
 
     for top in 0..ell {
         for bot in top..ell {
-            let mu_bot_signed =
-                lambda.part(top) as i64 + (bot as i64 - top as i64) - k as i64;
+            let mu_bot_signed = lambda.part(top) as i64 + (bot as i64 - top as i64) - k as i64;
             if mu_bot_signed < 0 {
                 continue;
             }
             let mu_bot = mu_bot_signed as u32;
 
-            let lambda_bot_next = if bot + 1 < ell { lambda.part(bot + 1) } else { 0 };
+            let lambda_bot_next = if bot + 1 < ell {
+                lambda.part(bot + 1)
+            } else {
+                0
+            };
             if mu_bot < lambda_bot_next {
                 continue;
             }
@@ -247,9 +262,18 @@ mod tests {
 
     #[test]
     fn test_kostka_basic() {
-        assert_eq!(kostka_coefficient(&Partition::new(vec![2, 1]), &Partition::new(vec![2, 1])), 1);
-        assert_eq!(kostka_coefficient(&Partition::new(vec![3]), &Partition::new(vec![1, 1, 1])), 1);
-        assert_eq!(kostka_coefficient(&Partition::new(vec![1, 1, 1]), &Partition::new(vec![3])), 0);
+        assert_eq!(
+            kostka_coefficient(&Partition::new(vec![2, 1]), &Partition::new(vec![2, 1])),
+            1
+        );
+        assert_eq!(
+            kostka_coefficient(&Partition::new(vec![3]), &Partition::new(vec![1, 1, 1])),
+            1
+        );
+        assert_eq!(
+            kostka_coefficient(&Partition::new(vec![1, 1, 1]), &Partition::new(vec![3])),
+            0
+        );
     }
 
     #[test]
@@ -263,9 +287,18 @@ mod tests {
 
     #[test]
     fn test_sn_character() {
-        assert_eq!(sn_character(&Partition::new(vec![2, 1]), &Partition::new(vec![3])), -1);
-        assert_eq!(sn_character(&Partition::new(vec![2, 1]), &Partition::new(vec![2, 1])), 0);
-        assert_eq!(sn_character(&Partition::new(vec![2, 1]), &Partition::new(vec![1, 1, 1])), 2);
+        assert_eq!(
+            sn_character(&Partition::new(vec![2, 1]), &Partition::new(vec![3])),
+            -1
+        );
+        assert_eq!(
+            sn_character(&Partition::new(vec![2, 1]), &Partition::new(vec![2, 1])),
+            0
+        );
+        assert_eq!(
+            sn_character(&Partition::new(vec![2, 1]), &Partition::new(vec![1, 1, 1])),
+            2
+        );
     }
 
     #[test]

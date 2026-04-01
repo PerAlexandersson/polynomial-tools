@@ -22,33 +22,51 @@ use std::collections::BTreeSet;
 
 fn pt(p: &[i64]) -> Vec<i64> {
     let mut v = p.to_vec();
-    while v.len() > 1 && *v.last().unwrap() == 0 { v.pop(); }
+    while v.len() > 1 && *v.last().unwrap() == 0 {
+        v.pop();
+    }
     v
 }
-fn pz(p: &[i64]) -> bool { p.iter().all(|&c| c == 0) }
+fn pz(p: &[i64]) -> bool {
+    p.iter().all(|&c| c == 0)
+}
 fn pa(a: &[i64], b: &[i64]) -> Vec<i64> {
     let l = a.len().max(b.len());
     let mut r = vec![0i64; l];
-    for (i, &v) in a.iter().enumerate() { r[i] += v; }
-    for (i, &v) in b.iter().enumerate() { r[i] += v; }
+    for (i, &v) in a.iter().enumerate() {
+        r[i] += v;
+    }
+    for (i, &v) in b.iter().enumerate() {
+        r[i] += v;
+    }
     pt(&r)
 }
 fn pmt(p: &[i64]) -> Vec<i64> {
     let mut r = vec![0i64; p.len() + 1];
-    for (i, &v) in p.iter().enumerate() { r[i + 1] = v; }
+    for (i, &v) in p.iter().enumerate() {
+        r[i + 1] = v;
+    }
     pt(&r)
 }
 fn pdeg(p: &[i64]) -> Option<usize> {
     let v = pt(p);
-    if pz(&v) { None } else { Some(v.len() - 1) }
+    if pz(&v) {
+        None
+    } else {
+        Some(v.len() - 1)
+    }
 }
 
 /// Check f << g (weak interlacing).
 fn interlaces(f: &[i64], g: &[i64]) -> bool {
     let f = pt(f);
     let g = pt(g);
-    if pz(&f) { return true; }
-    if pz(&g) { return false; }
+    if pz(&f) {
+        return true;
+    }
+    if pz(&g) {
+        return false;
+    }
     match check_weak_interlacing(&f, &g) {
         Some(true) => true,
         Some(false) => false,
@@ -62,7 +80,7 @@ fn interlaces(f: &[i64], g: &[i64]) -> bool {
                         Some(b) => b,
                         None => false,
                     }
-                },
+                }
                 _ => false,
             }
         }
@@ -73,7 +91,10 @@ fn show(name: &str, c: [u64; 2]) {
     if c[0] == 0 {
         println!("  {}: (no data)", name);
     } else if c[1] == 0 {
-        println!("  {}: {}/{} ALL PASS  *** POTENTIAL PROOF PATH ***", name, c[0], c[0]);
+        println!(
+            "  {}: {}/{} ALL PASS  *** POTENTIAL PROOF PATH ***",
+            name, c[0], c[0]
+        );
     } else {
         println!("  {}: {}/{} pass ({} FAIL)", name, c[0] - c[1], c[0], c[1]);
     }
@@ -98,12 +119,22 @@ fn record_fail(fails: &mut Vec<FailDetail>, board: &[u8], desc: String, f: &[i64
 }
 
 fn print_fails(label: &str, fails: &[FailDetail]) {
-    if fails.is_empty() { return; }
+    if fails.is_empty() {
+        return;
+    }
     println!("\n  --- First {} {} failures ---", fails.len(), label);
     for (i, f) in fails.iter().enumerate() {
-        println!("    #{}: board={:?}, {}", i+1, f.board, f.desc);
-        println!("       f = {} (deg {:?})", format_poly(&f.f_poly), pdeg(&f.f_poly));
-        println!("       g = {} (deg {:?})", format_poly(&f.g_poly), pdeg(&f.g_poly));
+        println!("    #{}: board={:?}, {}", i + 1, f.board, f.desc);
+        println!(
+            "       f = {} (deg {:?})",
+            format_poly(&f.f_poly),
+            pdeg(&f.f_poly)
+        );
+        println!(
+            "       g = {} (deg {:?})",
+            format_poly(&f.g_poly),
+            pdeg(&f.g_poly)
+        );
     }
 }
 
@@ -120,7 +151,9 @@ fn bruhat_lower_ideal(perm: &[u8]) -> Vec<Vec<u8>> {
                 if cur[i] > cur[j] {
                     let mut c = cur.clone();
                     c.swap(i, j);
-                    if !vis.contains(&c) { q.insert(c); }
+                    if !vis.contains(&c) {
+                        q.insert(c);
+                    }
                 }
             }
         }
@@ -135,7 +168,11 @@ fn board_to_perm(b: &[u8]) -> Vec<u8> {
     let mut u = vec![false; n + 1];
     for i in 0..n {
         for c in (1..=(b[i] as usize).min(n)).rev() {
-            if !u[c] { p[i] = c as u8; u[c] = true; break; }
+            if !u[c] {
+                p[i] = c as u8;
+                u[c] = true;
+                break;
+            }
         }
     }
     p
@@ -146,7 +183,9 @@ fn is_312_avoiding(perm: &[u8]) -> bool {
     for i in 0..n {
         for j in i + 1..n {
             for k in j + 1..n {
-                if perm[k] < perm[i] && perm[i] < perm[j] { return false; }
+                if perm[k] < perm[i] && perm[i] < perm[j] {
+                    return false;
+                }
             }
         }
     }
@@ -154,8 +193,12 @@ fn is_312_avoiding(perm: &[u8]) -> bool {
 }
 
 fn peaks(w: &[u8]) -> usize {
-    if w.len() < 3 { return 0; }
-    (1..w.len() - 1).filter(|&i| w[i - 1] < w[i] && w[i] > w[i + 1]).count()
+    if w.len() < 3 {
+        return 0;
+    }
+    (1..w.len() - 1)
+        .filter(|&i| w[i - 1] < w[i] && w[i] > w[i + 1])
+        .count()
 }
 
 fn gen_boards(n: usize) -> Vec<Vec<u8>> {
@@ -166,7 +209,10 @@ fn gen_boards(n: usize) -> Vec<Vec<u8>> {
 }
 
 fn gb(n: usize, mx: usize, d: usize, c: &mut Vec<u8>, r: &mut Vec<Vec<u8>>) {
-    if d == n { r.push(c.clone()); return; }
+    if d == n {
+        r.push(c.clone());
+        return;
+    }
     for v in (d + 1).max(if d > 0 { c[d - 1] as usize } else { 1 })..=mx {
         c.push(v as u8);
         gb(n, mx, d + 1, c, r);
@@ -175,7 +221,10 @@ fn gb(n: usize, mx: usize, d: usize, c: &mut Vec<u8>, r: &mut Vec<Vec<u8>>) {
 }
 
 fn main() {
-    let max_n: usize = std::env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(8);
+    let max_n: usize = std::env::args()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(8);
     println!("================================================================");
     println!("  Cross-column interlacing for cross-group proof (Conjecture 13)");
     println!("  312-avoiding Ferrers boards, n <= {}", max_n);
@@ -227,12 +276,16 @@ fn main() {
         let mut board_count = 0u64;
         for board in &boards {
             let perm = board_to_perm(board);
-            if !is_312_avoiding(&perm) { continue; }
+            if !is_312_avoiding(&perm) {
+                continue;
+            }
             valid_boards += 1;
             board_count += 1;
 
             let m = board[0] as usize;
-            if n <= 1 { continue; }
+            if n <= 1 {
+                continue;
+            }
 
             let ideal = bruhat_lower_ideal(&perm);
 
@@ -242,16 +295,22 @@ fn main() {
 
             for pi in &ideal {
                 let j = pi[0] as usize;
-                if j > m { continue; }
+                if j > m {
+                    continue;
+                }
                 let l = *pi.last().unwrap() as usize;
-                if l > m { continue; }
+                if l > m {
+                    continue;
+                }
                 let pk = peaks(pi);
                 let poly = if pi.len() >= 2 && pi[0] > pi[1] {
                     &mut d_jl[j][l]
                 } else {
                     &mut u_jl[j][l]
                 };
-                while poly.len() <= pk { poly.push(0); }
+                while poly.len() <= pk {
+                    poly.push(0);
+                }
                 poly[pk] += 1;
             }
 
@@ -272,8 +331,8 @@ fn main() {
             // PA_{k,col} = Σ_{i=k}^{m} A_{i,col}  (suffix sum of A)
             // PU_{k,col} = Σ_{i=k}^{m} U_{i,col}  (suffix sum of U)
             let sz = m + 2;
-            let mut s_col: Vec<Vec<Vec<i64>>> = vec![vec![vec![0i64]; sz]; m + 1];  // S[col][k]
-            let mut t_col: Vec<Vec<Vec<i64>>> = vec![vec![vec![0i64]; sz]; m + 1];  // T[col][k]
+            let mut s_col: Vec<Vec<Vec<i64>>> = vec![vec![vec![0i64]; sz]; m + 1]; // S[col][k]
+            let mut t_col: Vec<Vec<Vec<i64>>> = vec![vec![vec![0i64]; sz]; m + 1]; // T[col][k]
             let mut pd_col: Vec<Vec<Vec<i64>>> = vec![vec![vec![0i64]; sz]; m + 1]; // PD[col][k]
             let mut pa_col: Vec<Vec<Vec<i64>>> = vec![vec![vec![0i64]; sz]; m + 1]; // PA[col][k] (suffix of A)
             let mut pu_col: Vec<Vec<Vec<i64>>> = vec![vec![vec![0i64]; sz]; m + 1]; // PU[col][k] (suffix of U)
@@ -300,41 +359,75 @@ fn main() {
 
             // Helper: get S (prefix sum of A, Σ_{i<k} A_{i,col})
             let get_s = |col: usize, k: usize| -> Vec<i64> {
-                if col < 1 || col > m { return vec![0i64]; }
-                if k >= sz { s_col[col][m + 1].clone() } else { s_col[col][k].clone() }
+                if col < 1 || col > m {
+                    return vec![0i64];
+                }
+                if k >= sz {
+                    s_col[col][m + 1].clone()
+                } else {
+                    s_col[col][k].clone()
+                }
             };
             // Helper: get T (suffix sum of W, Σ_{i>=k} W_{i,col})
             let get_t = |col: usize, k: usize| -> Vec<i64> {
-                if col < 1 || col > m { return vec![0i64]; }
-                if k >= sz { vec![0i64] } else { t_col[col][k].clone() }
+                if col < 1 || col > m {
+                    return vec![0i64];
+                }
+                if k >= sz {
+                    vec![0i64]
+                } else {
+                    t_col[col][k].clone()
+                }
             };
             // Helper: get PD (suffix sum of D, Σ_{i>=k} D_{i,col})
             let get_pd = |col: usize, k: usize| -> Vec<i64> {
-                if col < 1 || col > m { return vec![0i64]; }
-                if k >= sz { vec![0i64] } else { pd_col[col][k].clone() }
+                if col < 1 || col > m {
+                    return vec![0i64];
+                }
+                if k >= sz {
+                    vec![0i64]
+                } else {
+                    pd_col[col][k].clone()
+                }
             };
             // Helper: get PA (suffix sum of A, Σ_{i>=k} A_{i,col})
             let get_pa = |col: usize, k: usize| -> Vec<i64> {
-                if col < 1 || col > m { return vec![0i64]; }
-                if k >= sz { vec![0i64] } else { pa_col[col][k].clone() }
+                if col < 1 || col > m {
+                    return vec![0i64];
+                }
+                if k >= sz {
+                    vec![0i64]
+                } else {
+                    pa_col[col][k].clone()
+                }
             };
             // Helper: get PU (suffix sum of U, Σ_{i>=k} U_{i,col})
             let get_pu = |col: usize, k: usize| -> Vec<i64> {
-                if col < 1 || col > m { return vec![0i64]; }
-                if k >= sz { vec![0i64] } else { pu_col[col][k].clone() }
+                if col < 1 || col > m {
+                    return vec![0i64];
+                }
+                if k >= sz {
+                    vec![0i64]
+                } else {
+                    pu_col[col][k].clone()
+                }
             };
 
             // ── Test 2: Cross-column DU at lambda level ──
             for l in 2..=m {
                 for j in 1..=m {
                     for jp in 1..=m {
-                        if !pz(&d_jl[j][l]) && !pz(&u_jl[jp][l-1]) {
+                        if !pz(&d_jl[j][l]) && !pz(&u_jl[jp][l - 1]) {
                             x_du[0] += 1;
-                            if !interlaces(&d_jl[j][l], &u_jl[jp][l-1]) {
+                            if !interlaces(&d_jl[j][l], &u_jl[jp][l - 1]) {
                                 x_du[1] += 1;
-                                record_fail(&mut x_du_fails, board,
+                                record_fail(
+                                    &mut x_du_fails,
+                                    board,
                                     format!("l={}, j={}, j'={}", l, j, jp),
-                                    &d_jl[j][l], &u_jl[jp][l-1]);
+                                    &d_jl[j][l],
+                                    &u_jl[jp][l - 1],
+                                );
                             }
                         }
                     }
@@ -345,13 +438,17 @@ fn main() {
             for l in 2..=m {
                 for j in 1..=m {
                     for jp in 1..=m {
-                        if !pz(&d_jl[j][l]) && !pz(&w_jl[jp][l-1]) {
+                        if !pz(&d_jl[j][l]) && !pz(&w_jl[jp][l - 1]) {
                             x_dw[0] += 1;
-                            if !interlaces(&d_jl[j][l], &w_jl[jp][l-1]) {
+                            if !interlaces(&d_jl[j][l], &w_jl[jp][l - 1]) {
                                 x_dw[1] += 1;
-                                record_fail(&mut x_dw_fails, board,
+                                record_fail(
+                                    &mut x_dw_fails,
+                                    board,
                                     format!("l={}, j={}, j'={}", l, j, jp),
-                                    &d_jl[j][l], &w_jl[jp][l-1]);
+                                    &d_jl[j][l],
+                                    &w_jl[jp][l - 1],
+                                );
                             }
                         }
                     }
@@ -362,22 +459,30 @@ fn main() {
             for l in 2..=m {
                 for j in 1..=m {
                     for jp in 1..=m {
-                        if !pz(&a_jl[j][l]) && !pz(&w_jl[jp][l-1]) {
+                        if !pz(&a_jl[j][l]) && !pz(&w_jl[jp][l - 1]) {
                             x_aw_all[0] += 1;
-                            if !interlaces(&a_jl[j][l], &w_jl[jp][l-1]) {
+                            if !interlaces(&a_jl[j][l], &w_jl[jp][l - 1]) {
                                 x_aw_all[1] += 1;
-                                record_fail(&mut x_aw_all_fails, board,
+                                record_fail(
+                                    &mut x_aw_all_fails,
+                                    board,
                                     format!("l={}, j={}, j'={}", l, j, jp),
-                                    &a_jl[j][l], &w_jl[jp][l-1]);
+                                    &a_jl[j][l],
+                                    &w_jl[jp][l - 1],
+                                );
                             }
                             // Forward only: j <= j'
                             if j <= jp {
                                 x_aw_fwd[0] += 1;
-                                if !interlaces(&a_jl[j][l], &w_jl[jp][l-1]) {
+                                if !interlaces(&a_jl[j][l], &w_jl[jp][l - 1]) {
                                     x_aw_fwd[1] += 1;
-                                    record_fail(&mut x_aw_fwd_fails, board,
+                                    record_fail(
+                                        &mut x_aw_fwd_fails,
+                                        board,
                                         format!("l={}, j={}, j'={} (fwd)", l, j, jp),
-                                        &a_jl[j][l], &w_jl[jp][l-1]);
+                                        &a_jl[j][l],
+                                        &w_jl[jp][l - 1],
+                                    );
                                 }
                             }
                         }
@@ -396,7 +501,9 @@ fn main() {
                 for kp in (lp + 1)..=mp {
                     // k' > l' => upper group, col_upper = l'
                     let col_upper = lp;
-                    if col_upper < 1 || col_upper > m { continue; }
+                    if col_upper < 1 || col_upper > m {
+                        continue;
+                    }
 
                     // D_{k'}^+ = Σ_{i<k'} A_{i,col_upper} = S[col_upper][k']
                     let d_plus_upper = get_s(col_upper, kp);
@@ -404,7 +511,9 @@ fn main() {
                     for jp in 1..lp {
                         // j' < l' => lower group, col_lower = l'-1
                         let col_lower = lp - 1;
-                        if col_lower < 1 || col_lower > m { continue; }
+                        if col_lower < 1 || col_lower > m {
+                            continue;
+                        }
 
                         // U_{j'}^+ = Σ_{i>=j'} W_{i,col_lower} = T[col_lower][j']
                         let u_plus_lower = get_t(col_lower, jp);
@@ -414,10 +523,16 @@ fn main() {
                             gt_xg_du[0] += 1;
                             if !interlaces(&d_plus_upper, &u_plus_lower) {
                                 gt_xg_du[1] += 1;
-                                record_fail(&mut gt_xg_du_fails, board,
-                                    format!("l'={}, k'={} (upper,col{}), j'={} (lower,col{})",
-                                            lp, kp, col_upper, jp, col_lower),
-                                    &d_plus_upper, &u_plus_lower);
+                                record_fail(
+                                    &mut gt_xg_du_fails,
+                                    board,
+                                    format!(
+                                        "l'={}, k'={} (upper,col{}), j'={} (lower,col{})",
+                                        lp, kp, col_upper, jp, col_lower
+                                    ),
+                                    &d_plus_upper,
+                                    &u_plus_lower,
+                                );
                             }
                         }
 
@@ -430,9 +545,13 @@ fn main() {
                             t5_h_f[0] += 1;
                             if !interlaces(&h_cross, &f_cross) {
                                 t5_h_f[1] += 1;
-                                record_fail(&mut t5_h_f_fails, board,
+                                record_fail(
+                                    &mut t5_h_f_fails,
+                                    board,
                                     format!("l'={}, k'={}, j'={}", lp, kp, jp),
-                                    &h_cross, &f_cross);
+                                    &h_cross,
+                                    &f_cross,
+                                );
                             }
                         }
 
@@ -446,9 +565,13 @@ fn main() {
                             t6_h_f1[0] += 1;
                             if !interlaces(&h6, &f6) {
                                 t6_h_f1[1] += 1;
-                                record_fail(&mut t6_h_f1_fails, board,
+                                record_fail(
+                                    &mut t6_h_f1_fails,
+                                    board,
                                     format!("l'={}, k'={}, j'={}", lp, kp, jp),
-                                    &h6, &f6);
+                                    &h6,
+                                    &f6,
+                                );
                             }
                         }
 
@@ -459,9 +582,13 @@ fn main() {
                             t7a[0] += 1;
                             if !interlaces(&h7, &g7a) {
                                 t7a[1] += 1;
-                                record_fail(&mut t7a_fails, board,
+                                record_fail(
+                                    &mut t7a_fails,
+                                    board,
                                     format!("l'={}, k'={}, j'={}", lp, kp, jp),
-                                    &h7, &g7a);
+                                    &h7,
+                                    &g7a,
+                                );
                             }
                         }
 
@@ -471,9 +598,13 @@ fn main() {
                             t7b[0] += 1;
                             if !interlaces(&h7, &g7b) {
                                 t7b[1] += 1;
-                                record_fail(&mut t7b_fails, board,
+                                record_fail(
+                                    &mut t7b_fails,
+                                    board,
                                     format!("l'={}, k'={}, j'={}", lp, kp, jp),
-                                    &h7, &g7b);
+                                    &h7,
+                                    &g7b,
+                                );
                             }
                         }
 
@@ -483,16 +614,23 @@ fn main() {
                             t7c[0] += 1;
                             if !interlaces(&h7, &g7c) {
                                 t7c[1] += 1;
-                                record_fail(&mut t7c_fails, board,
+                                record_fail(
+                                    &mut t7c_fails,
+                                    board,
                                     format!("l'={}, k'={}, j'={}", lp, kp, jp),
-                                    &h7, &g7c);
+                                    &h7,
+                                    &g7c,
+                                );
                             }
                         }
                     }
                 }
             }
         }
-        println!("n={}: {} valid boards (cumulative: {})", n, board_count, valid_boards);
+        println!(
+            "n={}: {} valid boards (cumulative: {})",
+            n, board_count, valid_boards
+        );
     }
 
     println!("\n================================================================");
@@ -551,7 +689,10 @@ fn main() {
     print_fails("7a: h << A-prefix(cross)", &t7a_fails);
     show("7b: h << sum_{{i>=j'}} A_{{i,l'-1}} [same col]", t7b);
     print_fails("7b: h << A-suffix(same)", &t7b_fails);
-    show("7c: h << sum_{{i>=j'}} U_{{i,l'-1}} [same col, Lemma h<<U]", t7c);
+    show(
+        "7c: h << sum_{{i>=j'}} U_{{i,l'-1}} [same col, Lemma h<<U]",
+        t7c,
+    );
     print_fails("7c: h << U-suffix(same)", &t7c_fails);
 
     println!("\n================================================================");
@@ -579,8 +720,19 @@ fn main() {
         if c[0] == 0 {
             println!("  {:42} | {:>7} | {:>7} | {:>6} | NO DATA", name, 0, 0, 0);
         } else {
-            let status = if c[1] == 0 { "ALL PASS ***" } else { "HAS FAILURES" };
-            println!("  {:42} | {:>7} | {:>7} | {:>6} | {}", name, c[0], c[0] - c[1], c[1], status);
+            let status = if c[1] == 0 {
+                "ALL PASS ***"
+            } else {
+                "HAS FAILURES"
+            };
+            println!(
+                "  {:42} | {:>7} | {:>7} | {:>6} | {}",
+                name,
+                c[0],
+                c[0] - c[1],
+                c[1],
+                status
+            );
         }
     }
 

@@ -37,10 +37,7 @@ fn set_comp_flip(s: &Set, n: usize) -> Set {
 }
 
 fn main() {
-    let max_n: u8 = env::args()
-        .nth(1)
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(7);
+    let max_n: u8 = env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(7);
 
     let patterns = ["123", "132", "213", "231", "312", "321"];
     let set_stats: &[(&str, SetStat)] = &[
@@ -257,10 +254,7 @@ fn main() {
                 }
 
                 if holds {
-                    println!(
-                        "  ({}, {}) = on inv(π)  ✓ (n≤{})",
-                        name_a, name_b, max_n
-                    );
+                    println!("  ({}, {}) = on inv(π)  ✓ (n≤{})", name_a, name_b, max_n);
                 } else if fail_n > 3 {
                     println!(
                         "  ({}, {}) = on inv(π)  fails at n={}",
@@ -429,7 +423,9 @@ fn main() {
 
     // Part 8: Twisted identities using set operations
     println!("\n\n=== PART 8: Twisted identities via set operations ===");
-    println!("Testing: SetStat(bt) = op(SetStat(target))  where op ∈ {{complement, flip, comp∘flip}}");
+    println!(
+        "Testing: SetStat(bt) = op(SetStat(target))  where op ∈ {{complement, flip, comp∘flip}}"
+    );
     println!("         target ∈ {{π, inv(π)}}\n");
 
     let transforms: &[(&str, fn(&Set, usize) -> Set)] = &[

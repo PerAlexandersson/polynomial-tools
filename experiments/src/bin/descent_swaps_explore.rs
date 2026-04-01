@@ -13,9 +13,7 @@
 ///
 use combpoly::permutation::all_permutations;
 use combpoly::statistics::{compute, descent_set_bitmask, Stat};
-use polynomial_tools::real_rootedness::{
-    check_weak_interlacing, format_poly, is_real_rooted,
-};
+use polynomial_tools::real_rootedness::{check_weak_interlacing, format_poly, is_real_rooted};
 
 /// Build polynomial from iterator of swaps values
 fn build_poly_from_vals(vals: impl Iterator<Item = usize>) -> Vec<i64> {
@@ -78,11 +76,11 @@ fn check_pairwise_compatible(f: &[i64], g: &[i64]) -> bool {
     // If f and g have a common interlacing, ALL convex combinations are rr.
     // We sample enough points to be confident.
     let test_weights: Vec<(i64, i64)> = vec![
-        (1, 1),   // f + g
-        (1, 2),   // f + 2g
-        (2, 1),   // 2f + g
-        (1, 3),   // f + 3g
-        (3, 1),   // 3f + g
+        (1, 1), // f + g
+        (1, 2), // f + 2g
+        (2, 1), // 2f + g
+        (1, 3), // f + 3g
+        (3, 1), // 3f + g
         (1, 5),
         (5, 1),
         (2, 3),
@@ -277,8 +275,7 @@ fn main() {
 
             // Check compatible family
             if pos_polys.len() >= 2 {
-                let polys_only: Vec<Vec<i64>> =
-                    pos_polys.iter().map(|(_, p)| p.clone()).collect();
+                let polys_only: Vec<Vec<i64>> = pos_polys.iter().map(|(_, p)| p.clone()).collect();
                 let (compat, failures) = check_compatible_family(&polys_only);
                 n_compat_tested += 1;
                 if compat {
@@ -328,8 +325,7 @@ fn main() {
                         let source_at_q: Vec<&Vec<u8>> = source_class
                             .iter()
                             .filter(|pi| {
-                                let pos_of_max =
-                                    pi.iter().position(|&v| v == n - 1).unwrap();
+                                let pos_of_max = pi.iter().position(|&v| v == n - 1).unwrap();
                                 (pos_of_max + 1) as u8 == q
                             })
                             .copied()
@@ -349,8 +345,7 @@ fn main() {
                             continue; // C_{p,q} = 0, trivially OK
                         }
 
-                        let c_poly =
-                            build_poly_from_vals(correction_vals.into_iter());
+                        let c_poly = build_poly_from_vals(correction_vals.into_iter());
                         let l_poly = build_poly_from_vals(
                             source_at_q.iter().map(|pi| compute(pi, Stat::Swaps)),
                         );

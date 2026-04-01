@@ -9,37 +9,25 @@
 //!
 //! Usage: cargo run --release --bin peak_bridge -- 6
 
-use polynomial_tools::real_rootedness::{check_weak_interlacing, is_real_rooted, format_poly};
-use std::collections::BTreeSet;
+use combpoly::order::bruhat_lower_ideal;
+use experiments::peak_utils::{
+    board_to_perm, gen_boards, is_312_avoiding, pa, peak_count, pmt, pt, pz,
+};
+use polynomial_tools::real_rootedness::{check_weak_interlacing, format_poly, is_real_rooted};
 
-// ── Polynomial helpers (i64 coefficient vectors, ascending degree) ──
-
-fn pt(p: &[i64]) -> Vec<i64> {
-    let mut v = p.to_vec();
-    while v.len() > 1 && *v.last().unwrap() == 0 { v.pop(); }
-    v
-}
-fn pz(p: &[i64]) -> bool { p.iter().all(|&c| c == 0) }
-fn pa(a: &[i64], b: &[i64]) -> Vec<i64> {
-    let l = a.len().max(b.len());
-    let mut r = vec![0i64; l];
-    for (i, &v) in a.iter().enumerate() { r[i] += v; }
-    for (i, &v) in b.iter().enumerate() { r[i] += v; }
-    pt(&r)
-}
-fn pmt(p: &[i64]) -> Vec<i64> {
-    // multiply by t (shift coefficients up by 1)
-    let mut r = vec![0i64; p.len() + 1];
-    for (i, &v) in p.iter().enumerate() { r[i + 1] = v; }
-    pt(&r)
-}
 fn pdeg(p: &[i64]) -> Option<usize> {
     let v = pt(p);
-    if pz(&v) { None } else { Some(v.len() - 1) }
+    if pz(&v) {
+        None
+    } else {
+        Some(v.len() - 1)
+    }
 }
 fn pf(p: &[i64]) -> String {
     let p = pt(p);
-    if pz(&p) { return "0".into(); }
+    if pz(&p) {
+        return "0".into();
+    }
     format_poly(&p)
 }
 
@@ -49,8 +37,12 @@ fn pf(p: &[i64]) -> String {
 fn interlaces(f: &[i64], g: &[i64]) -> bool {
     let f = pt(f);
     let g = pt(g);
-    if pz(&f) { return true; }
-    if pz(&g) { return false; }
+    if pz(&f) {
+        return true;
+    }
+    if pz(&g) {
+        return false;
+    }
     match check_weak_interlacing(&f, &g) {
         Some(true) => true,
         Some(false) => false,
@@ -65,7 +57,7 @@ fn interlaces(f: &[i64], g: &[i64]) -> bool {
                         Some(b) => b,
                         None => false,
                     }
-                },
+                }
                 _ => false,
             }
         }
@@ -82,84 +74,26 @@ fn show(name: &str, c: [u64; 2]) {
     }
 }
 
-// ── Combinatorial infrastructure ──
-
-fn bruhat_lower_ideal(perm: &[u8]) -> Vec<Vec<u8>> {
-    let n = perm.len();
-    let mut vis: BTreeSet<Vec<u8>> = BTreeSet::new();
-    let mut q: BTreeSet<Vec<u8>> = BTreeSet::new();
-    q.insert(perm.to_vec());
-    while let Some(cur) = q.pop_last() {
-        for i in 0..n {
-            for j in i + 1..n {
-                if cur[i] > cur[j] {
-                    let mut c = cur.clone();
-                    c.swap(i, j);
-                    if !vis.contains(&c) { q.insert(c); }
-                }
-            }
-        }
-        vis.insert(cur);
-    }
-    vis.into_iter().collect()
-}
-
-fn board_to_perm(b: &[u8]) -> Vec<u8> {
-    let n = b.len();
-    let mut p = vec![0u8; n];
-    let mut u = vec![false; n + 1];
-    for i in 0..n {
-        for c in (1..=(b[i] as usize).min(n)).rev() {
-            if !u[c] { p[i] = c as u8; u[c] = true; break; }
-        }
-    }
-    p
-}
-
-fn is_312_avoiding(perm: &[u8]) -> bool {
-    let n = perm.len();
-    for i in 0..n {
-        for j in i + 1..n {
-            for k in j + 1..n {
-                if perm[k] < perm[i] && perm[i] < perm[j] { return false; }
-            }
-        }
-    }
-    true
-}
-
-fn peaks(w: &[u8]) -> usize {
-    if w.len() < 3 { return 0; }
-    (1..w.len() - 1).filter(|&i| w[i - 1] < w[i] && w[i] > w[i + 1]).count()
-}
-
-fn gen_boards(n: usize) -> Vec<Vec<u8>> {
-    let mut r = vec![];
-    let mut c = vec![];
-    gb(n, n, 0, &mut c, &mut r);
-    r
-}
-
-fn gb(n: usize, mx: usize, d: usize, c: &mut Vec<u8>, r: &mut Vec<Vec<u8>>) {
-    if d == n { r.push(c.clone()); return; }
-    for v in (d + 1).max(if d > 0 { c[d - 1] as usize } else { 1 })..=mx {
-        c.push(v as u8);
-        gb(n, mx, d + 1, c, r);
-        c.pop();
-    }
-}
-
 /// Classify the "start type" of a permutation:
 /// - 'd' (down/descent) if pi_1 > pi_2
 /// - 'u' (up/ascent) if pi_1 < pi_2 or n <= 1
 fn start_type(pi: &[u8]) -> char {
     let n = pi.len();
-    if n <= 1 { return 'u'; }
-    if pi[0] > pi[1] { 'd' } else { 'u' }
+    if n <= 1 {
+        return 'u';
+    }
+    if pi[0] > pi[1] {
+        'd'
+    } else {
+        'u'
+    }
 }
 
 fn main() {
-    let max_n: usize = std::env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(6);
+    let max_n: usize = std::env::args()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(6);
     println!("================================================================");
     println!("  BRIDGE AT k'=l': P_{{k,l}} refinement of peak polynomials");
     println!("  312-avoiding Ferrers boards, n <= {}", max_n);
@@ -195,9 +129,9 @@ fn main() {
     let mut full_col_seq = [0u64; 2];
 
     // Part 6: Cross-column conditions
-    let mut cross_a_a = [0u64; 2];   // A_{j,l} << A_{j,l-1}
-    let mut cross_w_w = [0u64; 2];   // W_{j,l} << W_{j,l-1}
-    let mut cross_a_w = [0u64; 2];   // A_{j,l} << W_{j',l-1}
+    let mut cross_a_a = [0u64; 2]; // A_{j,l} << A_{j,l-1}
+    let mut cross_w_w = [0u64; 2]; // W_{j,l} << W_{j,l-1}
+    let mut cross_a_w = [0u64; 2]; // A_{j,l} << W_{j',l-1}
     let mut cross_a_a_rev = [0u64; 2]; // A_{j,l-1} << A_{j,l} (reverse)
     let mut cross_w_w_rev = [0u64; 2]; // W_{j,l-1} << W_{j,l} (reverse)
 
@@ -209,7 +143,9 @@ fn main() {
 
         for board in &boards {
             let perm = board_to_perm(board);
-            if !is_312_avoiding(&perm) { continue; }
+            if !is_312_avoiding(&perm) {
+                continue;
+            }
             valid_boards += 1;
             n_valid += 1;
 
@@ -228,14 +164,24 @@ fn main() {
 
             for pi in &ideal {
                 let j = pi[0] as usize;
-                if j > m { continue; }
+                if j > m {
+                    continue;
+                }
                 let l = *pi.last().unwrap() as usize;
-                if l > m { continue; }
-                let pk = peaks(pi);
+                if l > m {
+                    continue;
+                }
+                let pk = peak_count(pi);
                 let st = start_type(pi);
 
-                let poly = if st == 'd' { &mut d_jl[j][l] } else { &mut u_jl[j][l] };
-                while poly.len() <= pk { poly.push(0); }
+                let poly = if st == 'd' {
+                    &mut d_jl[j][l]
+                } else {
+                    &mut u_jl[j][l]
+                };
+                while poly.len() <= pk {
+                    poly.push(0);
+                }
                 poly[pk] += 1;
             }
 
@@ -256,19 +202,27 @@ fn main() {
                 for l in 1..=m {
                     if !pz(&d_jl[j][l]) {
                         djl_rr[0] += 1;
-                        if !is_real_rooted(&d_jl[j][l]) { djl_rr[1] += 1; }
+                        if !is_real_rooted(&d_jl[j][l]) {
+                            djl_rr[1] += 1;
+                        }
                     }
                     if !pz(&u_jl[j][l]) {
                         ujl_rr[0] += 1;
-                        if !is_real_rooted(&u_jl[j][l]) { ujl_rr[1] += 1; }
+                        if !is_real_rooted(&u_jl[j][l]) {
+                            ujl_rr[1] += 1;
+                        }
                     }
                     if !pz(&a_jl[j][l]) {
                         ajl_rr[0] += 1;
-                        if !is_real_rooted(&a_jl[j][l]) { ajl_rr[1] += 1; }
+                        if !is_real_rooted(&a_jl[j][l]) {
+                            ajl_rr[1] += 1;
+                        }
                     }
                     if !pz(&w_jl[j][l]) {
                         wjl_rr[0] += 1;
-                        if !is_real_rooted(&w_jl[j][l]) { wjl_rr[1] += 1; }
+                        if !is_real_rooted(&w_jl[j][l]) {
+                            wjl_rr[1] += 1;
+                        }
                     }
                 }
             }
@@ -305,11 +259,15 @@ fn main() {
                 // Build prefix sums: S_1^{(col)} = 0, S_{k+1}^{(col)} = S_k + A_{k,col}
                 for k in 1..=m {
                     s_col[col].push(vec![0i64]); // extend if needed
-                    while s_col[col].len() <= k + 1 { s_col[col].push(vec![0i64]); }
+                    while s_col[col].len() <= k + 1 {
+                        s_col[col].push(vec![0i64]);
+                    }
                     s_col[col][k + 1] = pa(&s_col[col][k], &a_jl[k][col]);
                 }
                 // Build suffix sums: T_{m+1}^{(col)} = 0, T_k^{(col)} = T_{k+1} + W_{k,col}
-                while t_col[col].len() <= mp { t_col[col].push(vec![0i64]); }
+                while t_col[col].len() <= mp {
+                    t_col[col].push(vec![0i64]);
+                }
                 for k in (1..=m).rev() {
                     t_col[col][k] = pa(&t_col[col][k + 1], &w_jl[k][col]);
                 }
@@ -324,7 +282,9 @@ fn main() {
 
             for kp in 1..=mp {
                 for lp in 1..=mp {
-                    if kp == lp { continue; }
+                    if kp == lp {
+                        continue;
+                    }
                     if kp > lp {
                         // Use input column l' (if l' <= m)
                         let col = lp;
@@ -377,7 +337,7 @@ fn main() {
                 let upper: Vec<usize> = (lp + 1..=mp).rev().collect();
                 for i in 0..upper.len() {
                     if i + 1 < upper.len() {
-                        let k1 = upper[i];     // larger k'
+                        let k1 = upper[i]; // larger k'
                         let k2 = upper[i + 1]; // smaller k'
                         if !pz(&p_plus[k1][lp]) && !pz(&p_plus[k2][lp]) {
                             upper_group_pair[0] += 1;
@@ -395,7 +355,9 @@ fn main() {
                 }
                 // Full upper group interlacing
                 if upper.len() >= 2 {
-                    let non_zero: Vec<usize> = upper.iter().copied()
+                    let non_zero: Vec<usize> = upper
+                        .iter()
+                        .copied()
                         .filter(|&k| !pz(&p_plus[k][lp]))
                         .collect();
                     if non_zero.len() >= 2 {
@@ -407,7 +369,9 @@ fn main() {
                                 break;
                             }
                         }
-                        if !ok { upper_group_full[1] += 1; }
+                        if !ok {
+                            upper_group_full[1] += 1;
+                        }
                     }
                 }
 
@@ -416,7 +380,7 @@ fn main() {
                 let lower: Vec<usize> = (1..lp).rev().collect();
                 for i in 0..lower.len() {
                     if i + 1 < lower.len() {
-                        let k1 = lower[i];     // larger k' (still < l')
+                        let k1 = lower[i]; // larger k' (still < l')
                         let k2 = lower[i + 1]; // smaller k'
                         if !pz(&p_plus[k1][lp]) && !pz(&p_plus[k2][lp]) {
                             lower_group_pair[0] += 1;
@@ -434,7 +398,9 @@ fn main() {
                 }
                 // Full lower group interlacing
                 if lower.len() >= 2 {
-                    let non_zero: Vec<usize> = lower.iter().copied()
+                    let non_zero: Vec<usize> = lower
+                        .iter()
+                        .copied()
                         .filter(|&k| !pz(&p_plus[k][lp]))
                         .collect();
                     if non_zero.len() >= 2 {
@@ -446,27 +412,61 @@ fn main() {
                                 break;
                             }
                         }
-                        if !ok { lower_group_full[1] += 1; }
+                        if !ok {
+                            lower_group_full[1] += 1;
+                        }
                     }
                 }
 
                 // (c) BRIDGE: P_{l'+1,l'}^+ << P_{l'-1,l'}^+
                 if lp >= 2 && lp + 1 <= mp {
-                    let kp_upper = lp + 1;  // bottom of upper group
-                    let kp_lower = lp - 1;  // top of lower group
+                    let kp_upper = lp + 1; // bottom of upper group
+                    let kp_lower = lp - 1; // top of lower group
                     if !pz(&p_plus[kp_upper][lp]) && !pz(&p_plus[kp_lower][lp]) {
                         bridge_cond[0] += 1;
                         if !interlaces(&p_plus[kp_upper][lp], &p_plus[kp_lower][lp]) {
                             bridge_cond[1] += 1;
                             if bridge_cond[1] <= 5 {
-                                println!("FAIL BRIDGE: board={:?} l'={} P_{{{},{}}}^+ << P_{{{},{}}}^+",
-                                         board, lp, kp_upper, lp, kp_lower, lp);
-                                println!("  P_{{{},{}}}^+ = {}", kp_upper, lp, pf(&p_plus[kp_upper][lp]));
-                                println!("  P_{{{},{}}}^+ = {}", kp_lower, lp, pf(&p_plus[kp_lower][lp]));
-                                println!("  S_{{{},{}}}^+ = {}", kp_upper, lp, pf(&s_part[kp_upper][lp]));
-                                println!("  T_{{{},{}}}^+ = {}", kp_upper, lp, pf(&t_part[kp_upper][lp]));
-                                println!("  S_{{{},{}}}^+ = {}", kp_lower, lp, pf(&s_part[kp_lower][lp]));
-                                println!("  T_{{{},{}}}^+ = {}", kp_lower, lp, pf(&t_part[kp_lower][lp]));
+                                println!(
+                                    "FAIL BRIDGE: board={:?} l'={} P_{{{},{}}}^+ << P_{{{},{}}}^+",
+                                    board, lp, kp_upper, lp, kp_lower, lp
+                                );
+                                println!(
+                                    "  P_{{{},{}}}^+ = {}",
+                                    kp_upper,
+                                    lp,
+                                    pf(&p_plus[kp_upper][lp])
+                                );
+                                println!(
+                                    "  P_{{{},{}}}^+ = {}",
+                                    kp_lower,
+                                    lp,
+                                    pf(&p_plus[kp_lower][lp])
+                                );
+                                println!(
+                                    "  S_{{{},{}}}^+ = {}",
+                                    kp_upper,
+                                    lp,
+                                    pf(&s_part[kp_upper][lp])
+                                );
+                                println!(
+                                    "  T_{{{},{}}}^+ = {}",
+                                    kp_upper,
+                                    lp,
+                                    pf(&t_part[kp_upper][lp])
+                                );
+                                println!(
+                                    "  S_{{{},{}}}^+ = {}",
+                                    kp_lower,
+                                    lp,
+                                    pf(&s_part[kp_lower][lp])
+                                );
+                                println!(
+                                    "  T_{{{},{}}}^+ = {}",
+                                    kp_lower,
+                                    lp,
+                                    pf(&t_part[kp_lower][lp])
+                                );
                             }
                         }
                     }
@@ -538,10 +538,16 @@ fn main() {
                 // ────────────────────────────────────────────────
                 // Full sequence: P_{mp,l'}^+, ..., P_{l'+1,l'}^+, P_{l'-1,l'}^+, ..., P_{1,l'}^+
                 let mut full_seq: Vec<usize> = Vec::new();
-                for kp in (lp + 1..=mp).rev() { full_seq.push(kp); }
-                for kp in (1..lp).rev() { full_seq.push(kp); }
+                for kp in (lp + 1..=mp).rev() {
+                    full_seq.push(kp);
+                }
+                for kp in (1..lp).rev() {
+                    full_seq.push(kp);
+                }
 
-                let non_zero_full: Vec<usize> = full_seq.iter().copied()
+                let non_zero_full: Vec<usize> = full_seq
+                    .iter()
+                    .copied()
                     .filter(|&k| !pz(&p_plus[k][lp]))
                     .collect();
 
@@ -568,12 +574,17 @@ fn main() {
                     full_col_seq[0] += 1;
                     let mut ok = true;
                     for i in 0..non_zero_full.len() - 1 {
-                        if !interlaces(&p_plus[non_zero_full[i]][lp], &p_plus[non_zero_full[i + 1]][lp]) {
+                        if !interlaces(
+                            &p_plus[non_zero_full[i]][lp],
+                            &p_plus[non_zero_full[i + 1]][lp],
+                        ) {
                             ok = false;
                             break;
                         }
                     }
-                    if !ok { full_col_seq[1] += 1; }
+                    if !ok {
+                        full_col_seq[1] += 1;
+                    }
                 }
             }
 
@@ -588,8 +599,14 @@ fn main() {
                         if !interlaces(&a_jl[j][l], &a_jl[j][l - 1]) {
                             cross_a_a[1] += 1;
                             if cross_a_a[1] <= 3 {
-                                println!("FAIL cross A_{{{},{}}} << A_{{{},{}}}: board={:?}",
-                                         j, l, j, l - 1, board);
+                                println!(
+                                    "FAIL cross A_{{{},{}}} << A_{{{},{}}}: board={:?}",
+                                    j,
+                                    l,
+                                    j,
+                                    l - 1,
+                                    board
+                                );
                                 println!("  A_{{{},{}}} = {}", j, l, pf(&a_jl[j][l]));
                                 println!("  A_{{{},{}}} = {}", j, l - 1, pf(&a_jl[j][l - 1]));
                             }
@@ -608,8 +625,14 @@ fn main() {
                         if !interlaces(&w_jl[j][l], &w_jl[j][l - 1]) {
                             cross_w_w[1] += 1;
                             if cross_w_w[1] <= 3 {
-                                println!("FAIL cross W_{{{},{}}} << W_{{{},{}}}: board={:?}",
-                                         j, l, j, l - 1, board);
+                                println!(
+                                    "FAIL cross W_{{{},{}}} << W_{{{},{}}}: board={:?}",
+                                    j,
+                                    l,
+                                    j,
+                                    l - 1,
+                                    board
+                                );
                                 println!("  W_{{{},{}}} = {}", j, l, pf(&w_jl[j][l]));
                                 println!("  W_{{{},{}}} = {}", j, l - 1, pf(&w_jl[j][l - 1]));
                             }
@@ -634,8 +657,14 @@ fn main() {
                             if !interlaces(&a_jl[j][l], &w_jl[jp][l - 1]) {
                                 cross_a_w[1] += 1;
                                 if cross_a_w[1] <= 3 {
-                                    println!("FAIL cross A_{{{},{}}} << W_{{{},{}}}: board={:?}",
-                                             j, l, jp, l - 1, board);
+                                    println!(
+                                        "FAIL cross A_{{{},{}}} << W_{{{},{}}}: board={:?}",
+                                        j,
+                                        l,
+                                        jp,
+                                        l - 1,
+                                        board
+                                    );
                                     println!("  A_{{{},{}}} = {}", j, l, pf(&a_jl[j][l]));
                                     println!("  W_{{{},{}}} = {}", jp, l - 1, pf(&w_jl[jp][l - 1]));
                                 }
@@ -646,7 +675,10 @@ fn main() {
             }
         }
 
-        println!("n={}: {} valid 312-avoiding boards (cumulative: {})", n, n_valid, valid_boards);
+        println!(
+            "n={}: {} valid 312-avoiding boards (cumulative: {})",
+            n, n_valid, valid_boards
+        );
     }
 
     // ────────────────────────────────────────────────
@@ -661,9 +693,13 @@ fn main() {
         let boards = gen_boards(n);
         for board in &boards {
             let perm = board_to_perm(board);
-            if !is_312_avoiding(&perm) { continue; }
+            if !is_312_avoiding(&perm) {
+                continue;
+            }
             let m = (board[0] as usize).min(n);
-            if n < 3 { continue; } // skip trivial cases
+            if n < 3 {
+                continue;
+            } // skip trivial cases
 
             let ideal = bruhat_lower_ideal(&perm);
             let mut d_jl: Vec<Vec<Vec<i64>>> = vec![vec![vec![0i64]; m + 1]; m + 1];
@@ -671,30 +707,46 @@ fn main() {
 
             for pi in &ideal {
                 let j = pi[0] as usize;
-                if j > m { continue; }
+                if j > m {
+                    continue;
+                }
                 let l = *pi.last().unwrap() as usize;
-                if l > m { continue; }
-                let pk = peaks(pi);
+                if l > m {
+                    continue;
+                }
+                let pk = peak_count(pi);
                 let st = start_type(pi);
-                let poly = if st == 'd' { &mut d_jl[j][l] } else { &mut u_jl[j][l] };
-                while poly.len() <= pk { poly.push(0); }
+                let poly = if st == 'd' {
+                    &mut d_jl[j][l]
+                } else {
+                    &mut u_jl[j][l]
+                };
+                while poly.len() <= pk {
+                    poly.push(0);
+                }
                 poly[pk] += 1;
             }
 
-            let has_data = (1..=m).any(|j| (1..=m).any(|l|
-                !pz(&d_jl[j][l]) || !pz(&u_jl[j][l])
-            ));
-            if !has_data { continue; }
+            let has_data = (1..=m).any(|j| (1..=m).any(|l| !pz(&d_jl[j][l]) || !pz(&u_jl[j][l])));
+            if !has_data {
+                continue;
+            }
 
             println!("Board {:?} (n={}, m={}, perm={:?}):", board, n, m, perm);
             for j in 1..=m {
                 for l in 1..=m {
                     let a = pa(&d_jl[j][l], &u_jl[j][l]);
                     let w = pa(&pmt(&d_jl[j][l]), &u_jl[j][l]);
-                    if pz(&a) { continue; }
+                    if pz(&a) {
+                        continue;
+                    }
                     print!("  (j={},l={}): ", j, l);
-                    if !pz(&d_jl[j][l]) { print!("D={} ", pf(&d_jl[j][l])); }
-                    if !pz(&u_jl[j][l]) { print!("U={} ", pf(&u_jl[j][l])); }
+                    if !pz(&d_jl[j][l]) {
+                        print!("D={} ", pf(&d_jl[j][l]));
+                    }
+                    if !pz(&u_jl[j][l]) {
+                        print!("U={} ", pf(&u_jl[j][l]));
+                    }
                     print!("A={} ", pf(&a));
                     print!("W={}", pf(&w));
                     println!();
@@ -716,9 +768,13 @@ fn main() {
         let boards = gen_boards(n);
         for board in &boards {
             let perm = board_to_perm(board);
-            if !is_312_avoiding(&perm) { continue; }
+            if !is_312_avoiding(&perm) {
+                continue;
+            }
             let m = (board[0] as usize).min(n);
-            if n < 2 { continue; }
+            if n < 2 {
+                continue;
+            }
 
             let ideal = bruhat_lower_ideal(&perm);
             let mut d_jl: Vec<Vec<Vec<i64>>> = vec![vec![vec![0i64]; m + 1]; m + 1];
@@ -726,13 +782,23 @@ fn main() {
 
             for pi in &ideal {
                 let j = pi[0] as usize;
-                if j > m { continue; }
+                if j > m {
+                    continue;
+                }
                 let l = *pi.last().unwrap() as usize;
-                if l > m { continue; }
-                let pk = peaks(pi);
+                if l > m {
+                    continue;
+                }
+                let pk = peak_count(pi);
                 let st = start_type(pi);
-                let poly = if st == 'd' { &mut d_jl[j][l] } else { &mut u_jl[j][l] };
-                while poly.len() <= pk { poly.push(0); }
+                let poly = if st == 'd' {
+                    &mut d_jl[j][l]
+                } else {
+                    &mut u_jl[j][l]
+                };
+                while poly.len() <= pk {
+                    poly.push(0);
+                }
                 poly[pk] += 1;
             }
 
@@ -751,10 +817,14 @@ fn main() {
 
             for col in 1..=m {
                 for k in 1..=m {
-                    while s_col[col].len() <= k + 1 { s_col[col].push(vec![0i64]); }
+                    while s_col[col].len() <= k + 1 {
+                        s_col[col].push(vec![0i64]);
+                    }
                     s_col[col][k + 1] = pa(&s_col[col][k], &a_jl[k][col]);
                 }
-                while t_col[col].len() <= mp { t_col[col].push(vec![0i64]); }
+                while t_col[col].len() <= mp {
+                    t_col[col].push(vec![0i64]);
+                }
                 for k in (1..=m).rev() {
                     t_col[col][k] = pa(&t_col[col][k + 1], &w_jl[k][col]);
                 }
@@ -766,25 +836,55 @@ fn main() {
             for lp in 1..=mp {
                 let mut any = false;
                 for kp in 1..=mp {
-                    if kp == lp { continue; }
-                    let (col, label) = if kp > lp { (lp, "upper") } else { (lp - 1, "lower") };
-                    if col < 1 || col > m { continue; }
-
-                    let s = if kp < s_col[col].len() { s_col[col][kp].clone() } else {
-                        if m + 1 < s_col[col].len() { s_col[col][m + 1].clone() } else { vec![0i64] }
+                    if kp == lp {
+                        continue;
+                    }
+                    let (col, label) = if kp > lp {
+                        (lp, "upper")
+                    } else {
+                        (lp - 1, "lower")
                     };
-                    let t = if kp <= m && kp < t_col[col].len() { t_col[col][kp].clone() } else { vec![0i64] };
+                    if col < 1 || col > m {
+                        continue;
+                    }
+
+                    let s = if kp < s_col[col].len() {
+                        s_col[col][kp].clone()
+                    } else {
+                        if m + 1 < s_col[col].len() {
+                            s_col[col][m + 1].clone()
+                        } else {
+                            vec![0i64]
+                        }
+                    };
+                    let t = if kp <= m && kp < t_col[col].len() {
+                        t_col[col][kp].clone()
+                    } else {
+                        vec![0i64]
+                    };
                     let p = pa(&s, &t);
-                    if pz(&p) { continue; }
+                    if pz(&p) {
+                        continue;
+                    }
 
                     if !any {
                         println!("  l' = {}:", lp);
                         any = true;
                     }
-                    println!("    P_{{{},{}}}^+ = {} [{}; col={}; S={}, T={}]",
-                             kp, lp, pf(&p), label, col, pf(&s), pf(&t));
+                    println!(
+                        "    P_{{{},{}}}^+ = {} [{}; col={}; S={}, T={}]",
+                        kp,
+                        lp,
+                        pf(&p),
+                        label,
+                        col,
+                        pf(&s),
+                        pf(&t)
+                    );
                 }
-                if any { println!(); }
+                if any {
+                    println!();
+                }
             }
         }
     }
@@ -808,11 +908,17 @@ fn main() {
 
     println!("=== PART 3: Group interlacing at lambda+ level ===\n");
     println!("--- (a) UPPER GROUP (k' > l', fixed l') ---");
-    show("  Consecutive pairs P_{{k',l'}}^+ << P_{{k'-1,l'}}^+", upper_group_pair);
+    show(
+        "  Consecutive pairs P_{{k',l'}}^+ << P_{{k'-1,l'}}^+",
+        upper_group_pair,
+    );
     show("  Full upper group interlacing sequence", upper_group_full);
     println!();
     println!("--- (b) LOWER GROUP (k' < l', fixed l') ---");
-    show("  Consecutive pairs P_{{k',l'}}^+ << P_{{k'-1,l'}}^+", lower_group_pair);
+    show(
+        "  Consecutive pairs P_{{k',l'}}^+ << P_{{k'-1,l'}}^+",
+        lower_group_pair,
+    );
     show("  Full lower group interlacing sequence", lower_group_full);
     println!();
     println!("--- (c) BRIDGE CONDITION ---");
@@ -820,10 +926,22 @@ fn main() {
     println!();
 
     println!("=== PART 4: Bridge decomposition (cross-column S/T checks) ===\n");
-    show("  S_upper << T_lower (S_{{l'+1}}^{{(l')}} << T_{{l'-1}}^{{(l'-1)}})", bridge_s_upper_t_lower);
-    show("  T_upper << T_lower (T_{{l'+1}}^{{(l')}} << T_{{l'-1}}^{{(l'-1)}})", bridge_t_upper_t_lower);
-    show("  S_upper << S_lower (S_{{l'+1}}^{{(l')}} << S_{{l'-1}}^{{(l'-1)}})", bridge_s_upper_s_lower);
-    show("  T_upper << S_lower (T_{{l'+1}}^{{(l')}} << S_{{l'-1}}^{{(l'-1)}})", bridge_t_upper_s_lower);
+    show(
+        "  S_upper << T_lower (S_{{l'+1}}^{{(l')}} << T_{{l'-1}}^{{(l'-1)}})",
+        bridge_s_upper_t_lower,
+    );
+    show(
+        "  T_upper << T_lower (T_{{l'+1}}^{{(l')}} << T_{{l'-1}}^{{(l'-1)}})",
+        bridge_t_upper_t_lower,
+    );
+    show(
+        "  S_upper << S_lower (S_{{l'+1}}^{{(l')}} << S_{{l'-1}}^{{(l'-1)}})",
+        bridge_s_upper_s_lower,
+    );
+    show(
+        "  T_upper << S_lower (T_{{l'+1}}^{{(l')}} << S_{{l'-1}}^{{(l'-1)}})",
+        bridge_t_upper_s_lower,
+    );
     println!();
 
     println!("=== PART 5: Full column interlacing (upper + bridge + lower) ===\n");

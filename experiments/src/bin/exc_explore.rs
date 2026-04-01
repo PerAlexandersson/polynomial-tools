@@ -22,61 +22,120 @@ fn bruhat_lower_ideal(perm: &[u8]) -> Vec<Vec<u8>> {
     let mut q: BTreeSet<Vec<u8>> = BTreeSet::new();
     q.insert(perm.to_vec());
     while let Some(cur) = q.pop_last() {
-        for i in 0..n { for j in i+1..n { if cur[i]>cur[j] {
-            let mut c=cur.clone(); c.swap(i,j);
-            if !vis.contains(&c) { q.insert(c); }
-        }}}
+        for i in 0..n {
+            for j in i + 1..n {
+                if cur[i] > cur[j] {
+                    let mut c = cur.clone();
+                    c.swap(i, j);
+                    if !vis.contains(&c) {
+                        q.insert(c);
+                    }
+                }
+            }
+        }
         vis.insert(cur);
     }
     vis.into_iter().collect()
 }
 
 fn board_to_perm(b: &[u8]) -> Vec<u8> {
-    let n=b.len(); let mut p=vec![0u8;n]; let mut u=vec![false;n+1];
-    for i in 0..n { for c in (1..=(b[i] as usize).min(n)).rev() {
-        if !u[c] { p[i]=c as u8; u[c]=true; break; }
-    }} p
+    let n = b.len();
+    let mut p = vec![0u8; n];
+    let mut u = vec![false; n + 1];
+    for i in 0..n {
+        for c in (1..=(b[i] as usize).min(n)).rev() {
+            if !u[c] {
+                p[i] = c as u8;
+                u[c] = true;
+                break;
+            }
+        }
+    }
+    p
 }
 
 fn excedances(w: &[u8]) -> usize {
     (0..w.len()).filter(|&i| w[i] as usize > i + 1).count()
 }
 
-fn pt(p:&[i64])->Vec<i64>{ let mut v=p.to_vec(); while v.len()>1&&*v.last().unwrap()==0{v.pop();} v }
-fn pz(p:&[i64])->bool{ p.iter().all(|&c|c==0) }
-fn pa(a:&[i64],b:&[i64])->Vec<i64>{
-    let l=a.len().max(b.len()); let mut r=vec![0i64;l];
-    for(i,&v)in a.iter().enumerate(){r[i]+=v;}
-    for(i,&v)in b.iter().enumerate(){r[i]+=v;} pt(&r)
+fn pt(p: &[i64]) -> Vec<i64> {
+    let mut v = p.to_vec();
+    while v.len() > 1 && *v.last().unwrap() == 0 {
+        v.pop();
+    }
+    v
 }
-fn pmt(p:&[i64])->Vec<i64>{
-    let mut r=vec![0i64;p.len()+1];
-    for(i,&v)in p.iter().enumerate(){r[i+1]=v;} pt(&r)
+fn pz(p: &[i64]) -> bool {
+    p.iter().all(|&c| c == 0)
 }
-fn pf(p:&[i64])->String{
-    let p=pt(p); if pz(&p){"0".into()} else {
-    let mut t=vec![]; for(i,&c)in p.iter().enumerate(){ if c==0{continue;} match(c,i){
-        (c,0)=>t.push(format!("{}",c)),(1,1)=>t.push("t".into()),
-        (c,1)=>t.push(format!("{}t",c)),(1,e)=>t.push(format!("t^{}",e)),
-        (c,e)=>t.push(format!("{}t^{}",c,e)),
-    }} t.join(" + ")}
+fn pa(a: &[i64], b: &[i64]) -> Vec<i64> {
+    let l = a.len().max(b.len());
+    let mut r = vec![0i64; l];
+    for (i, &v) in a.iter().enumerate() {
+        r[i] += v;
+    }
+    for (i, &v) in b.iter().enumerate() {
+        r[i] += v;
+    }
+    pt(&r)
+}
+fn pmt(p: &[i64]) -> Vec<i64> {
+    let mut r = vec![0i64; p.len() + 1];
+    for (i, &v) in p.iter().enumerate() {
+        r[i + 1] = v;
+    }
+    pt(&r)
+}
+fn pf(p: &[i64]) -> String {
+    let p = pt(p);
+    if pz(&p) {
+        "0".into()
+    } else {
+        let mut t = vec![];
+        for (i, &c) in p.iter().enumerate() {
+            if c == 0 {
+                continue;
+            }
+            match (c, i) {
+                (c, 0) => t.push(format!("{}", c)),
+                (1, 1) => t.push("t".into()),
+                (c, 1) => t.push(format!("{}t", c)),
+                (1, e) => t.push(format!("t^{}", e)),
+                (c, e) => t.push(format!("{}t^{}", c, e)),
+            }
+        }
+        t.join(" + ")
+    }
 }
 
-fn gen_boards(n:usize)->Vec<Vec<u8>>{
-    let mut r=vec![]; let mut c=vec![];
-    gb(n,n,0,&mut c,&mut r); r
+fn gen_boards(n: usize) -> Vec<Vec<u8>> {
+    let mut r = vec![];
+    let mut c = vec![];
+    gb(n, n, 0, &mut c, &mut r);
+    r
 }
-fn gb(n:usize,mx:usize,d:usize,c:&mut Vec<u8>,r:&mut Vec<Vec<u8>>){
-    if d==n{r.push(c.clone());return;}
-    for v in (d+1).max(if d>0{c[d-1]as usize}else{1})..=mx {
-        c.push(v as u8); gb(n,mx,d+1,c,r); c.pop();
+fn gb(n: usize, mx: usize, d: usize, c: &mut Vec<u8>, r: &mut Vec<Vec<u8>>) {
+    if d == n {
+        r.push(c.clone());
+        return;
+    }
+    for v in (d + 1).max(if d > 0 { c[d - 1] as usize } else { 1 })..=mx {
+        c.push(v as u8);
+        gb(n, mx, d + 1, c, r);
+        c.pop();
     }
 }
 
 fn main() {
-    let max_n: usize = std::env::args().nth(1).and_then(|s|s.parse().ok()).unwrap_or(7);
+    let max_n: usize = std::env::args()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(7);
 
-    println!("=== Excedance refinement: testing IH on all boards n ≤ {} ===\n", max_n);
+    println!(
+        "=== Excedance refinement: testing IH on all boards n ≤ {} ===\n",
+        max_n
+    );
 
     // First check: does the SAME recursion hold for exc?
     // The recursion D_k^+ = Σ_{j<k} A_j, U_k^+ = Σ_{j≥k} W_j
@@ -108,31 +167,42 @@ fn main() {
             let ideal = bruhat_lower_ideal(&perm);
 
             // Compute D_k, U_k using EXCEDANCE stat
-            let mut d = vec![vec![0i64]; m+1];
-            let mut u = vec![vec![0i64]; m+1];
+            let mut d = vec![vec![0i64]; m + 1];
+            let mut u = vec![vec![0i64]; m + 1];
             let mut p_poly = vec![0i64];
 
             for pi in &ideal {
                 let exc = excedances(pi);
-                while p_poly.len() <= exc { p_poly.push(0); }
+                while p_poly.len() <= exc {
+                    p_poly.push(0);
+                }
                 p_poly[exc] += 1;
 
                 if pi.len() < 2 {
                     let k = pi[0] as usize;
-                    if k <= m { while u[k].len() < 1 { u[k].push(0); } u[k][0] += 1; }
+                    if k <= m {
+                        while u[k].len() < 1 {
+                            u[k].push(0);
+                        }
+                        u[k][0] += 1;
+                    }
                     continue;
                 }
                 let k = pi[0] as usize;
-                if k > m { continue; }
+                if k > m {
+                    continue;
+                }
                 let is_descent = pi[0] > pi[1];
                 let poly = if is_descent { &mut d[k] } else { &mut u[k] };
-                while poly.len() <= exc { poly.push(0); }
+                while poly.len() <= exc {
+                    poly.push(0);
+                }
                 poly[exc] += 1;
             }
             p_poly = pt(&p_poly);
 
-            let mut a = vec![vec![0i64]; m+1];
-            let mut w = vec![vec![0i64]; m+1];
+            let mut a = vec![vec![0i64]; m + 1];
+            let mut w = vec![vec![0i64]; m + 1];
             for k in 1..=m {
                 a[k] = pa(&d[k], &u[k]);
                 w[k] = pa(&pmt(&d[k]), &u[k]);
@@ -146,33 +216,59 @@ fn main() {
             total += 1;
 
             // Build S_k, T_k
-            let mut s = vec![vec![0i64]; m+2];
-            let mut t_a = vec![vec![0i64]; m+2];
-            for k in 2..=m+1 { s[k] = pa(&s[k-1], &a[k-1]); }
-            for k in (1..=m).rev() { t_a[k] = pa(&t_a[k+1], &w[k]); }
+            let mut s = vec![vec![0i64]; m + 2];
+            let mut t_a = vec![vec![0i64]; m + 2];
+            for k in 2..=m + 1 {
+                s[k] = pa(&s[k - 1], &a[k - 1]);
+            }
+            for k in (1..=m).rev() {
+                t_a[k] = pa(&t_a[k + 1], &w[k]);
+            }
 
             // Test (a) A_j ≼ W_l for j ≤ l
-            for j in 1..=m { for l in j..=m {
-                if pz(&a[j]) || pz(&w[l]) { continue; }
-                if !exact_interlaces(&a[j], &w[l]) { aw_fails += 1; }
-            }}
+            for j in 1..=m {
+                for l in j..=m {
+                    if pz(&a[j]) || pz(&w[l]) {
+                        continue;
+                    }
+                    if !exact_interlaces(&a[j], &w[l]) {
+                        aw_fails += 1;
+                    }
+                }
+            }
 
             // Test (b) W_j ≼ W_l for j < l
-            for j in 1..m { for l in j+1..=m {
-                if pz(&w[j]) || pz(&w[l]) { continue; }
-                if !exact_interlaces(&w[j], &w[l]) { ww_fails += 1; }
-            }}
+            for j in 1..m {
+                for l in j + 1..=m {
+                    if pz(&w[j]) || pz(&w[l]) {
+                        continue;
+                    }
+                    if !exact_interlaces(&w[j], &w[l]) {
+                        ww_fails += 1;
+                    }
+                }
+            }
 
             // Test (c) D_j ≼ U_l for all j,l
-            for j in 1..=m { for l in 1..=m {
-                if pz(&d[j]) || pz(&u[l]) { continue; }
-                if !exact_interlaces(&d[j], &u[l]) { du_fails += 1; }
-            }}
+            for j in 1..=m {
+                for l in 1..=m {
+                    if pz(&d[j]) || pz(&u[l]) {
+                        continue;
+                    }
+                    if !exact_interlaces(&d[j], &u[l]) {
+                        du_fails += 1;
+                    }
+                }
+            }
 
             // Test S_k ≼ T_k
             for k in 1..=m {
-                if pz(&s[k]) || pz(&t_a[k]) { continue; }
-                if !exact_interlaces(&s[k], &t_a[k]) { st_fails += 1; }
+                if pz(&s[k]) || pz(&t_a[k]) {
+                    continue;
+                }
+                if !exact_interlaces(&s[k], &t_a[k]) {
+                    st_fails += 1;
+                }
             }
 
             // Check if the RECURSION itself holds for exc
@@ -184,8 +280,10 @@ fn main() {
                 // but this requires computing on lambda+ directly. Skip for now.
             }
         }
-        println!("n={}: boards={}, RR={}, A≼W={}, W≼W={}, D≼U={}, S≼T={}",
-            n, total, rr_fails, aw_fails, ww_fails, du_fails, st_fails);
+        println!(
+            "n={}: boards={}, RR={}, A≼W={}, W≼W={}, D≼U={}, S≼T={}",
+            n, total, rr_fails, aw_fails, ww_fails, du_fails, st_fails
+        );
     }
 
     println!("\n=== SUMMARY ===");
@@ -205,24 +303,37 @@ fn main() {
 
     // Print detailed example
     println!("\n=== Detailed: S_4 = [4,4,4,4], exc stat ===");
-    let board = vec![4u8,4,4,4];
+    let board = vec![4u8, 4, 4, 4];
     let perm = board_to_perm(&board);
     let ideal = bruhat_lower_ideal(&perm);
     let m = 4;
-    let mut d = vec![vec![0i64]; m+1];
-    let mut u = vec![vec![0i64]; m+1];
+    let mut d = vec![vec![0i64]; m + 1];
+    let mut u = vec![vec![0i64]; m + 1];
     for pi in &ideal {
-        if pi.len() < 2 { continue; }
+        if pi.len() < 2 {
+            continue;
+        }
         let k = pi[0] as usize;
-        if k > m { continue; }
+        if k > m {
+            continue;
+        }
         let exc = excedances(pi);
         let poly = if pi[0] > pi[1] { &mut d[k] } else { &mut u[k] };
-        while poly.len() <= exc { poly.push(0); }
+        while poly.len() <= exc {
+            poly.push(0);
+        }
         poly[exc] += 1;
     }
     for k in 1..=m {
         let ak = pa(&d[k], &u[k]);
         let wk = pa(&pmt(&d[k]), &u[k]);
-        println!("k={}: D={}, U={}, A={}, W={}", k, pf(&d[k]), pf(&u[k]), pf(&ak), pf(&wk));
+        println!(
+            "k={}: D={}, U={}, A={}, W={}",
+            k,
+            pf(&d[k]),
+            pf(&u[k]),
+            pf(&ak),
+            pf(&wk)
+        );
     }
 }

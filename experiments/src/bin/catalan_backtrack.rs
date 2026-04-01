@@ -3,17 +3,14 @@
 /// Computes P_n(t) = Σ_{π ∈ Av_231(n)} t^{stat(backtrack_π(S_n))}
 /// for various statistics, checks real-rootedness, searches for recurrences.
 use combpoly::permutation::{all_permutations, backtrack_image, contains_pattern};
+use combpoly::statistics::{self, Stat};
 use polynomial_tools::real_rootedness as polynomial;
 use polynomial_tools::recurrence::{find_recurrence_adaptive, AdaptiveSearchOptions};
-use combpoly::statistics::{self, Stat};
 use std::env;
 use std::io::{self, Write};
 
 fn main() {
-    let max_n: u8 = env::args()
-        .nth(1)
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(9);
+    let max_n: u8 = env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(9);
 
     let pattern_231: Vec<u8> = vec![2, 3, 1];
 
@@ -163,11 +160,8 @@ fn main() {
         ("321", vec![3, 2, 1]),
     ];
 
-    let core_stats: Vec<(&str, Stat)> = vec![
-        ("des", Stat::Des),
-        ("exc", Stat::Exc),
-        ("peak", Stat::Peak),
-    ];
+    let core_stats: Vec<(&str, Stat)> =
+        vec![("des", Stat::Des), ("exc", Stat::Exc), ("peak", Stat::Peak)];
 
     println!("\n{}", "#".repeat(60));
     println!("  Comparison: π ∈ Av_τ(n), S = S_n, for other τ");

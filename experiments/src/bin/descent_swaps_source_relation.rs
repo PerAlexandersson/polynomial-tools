@@ -12,66 +12,15 @@
 ///
 /// Also compute the source permutations for each and look for bijection structure.
 ///
+use combpoly::fixed_descent::{
+    augmented_source_descent_set_for_target_descent_set_and_insertion_position as source_desc,
+    base_source_descent_set_for_target_descent_set_and_insertion_position as source_asc,
+    insertion_breaks_consecutive_ascending_pair_at_boundary as epsilon1,
+    valid_insertion_positions_for_target_descent_set as valid_positions,
+};
 use combpoly::permutation::all_permutations;
 use combpoly::statistics::{compute, descent_set_bitmask, Stat};
 use std::collections::{BTreeMap, BTreeSet};
-
-fn valid_positions(s_mask: u64, n: u8) -> Vec<u8> {
-    let mut positions = Vec::new();
-    for p in 1..n {
-        if (s_mask >> (p - 1)) & 1 == 1 && (p < 2 || (s_mask >> (p - 2)) & 1 == 0) {
-            positions.push(p);
-        }
-    }
-    if n >= 2 && (s_mask >> (n - 2)) & 1 == 0 {
-        positions.push(n);
-    }
-    positions
-}
-
-fn source_asc(s_mask: u64, p: u8, n: u8) -> u64 {
-    if n <= 2 {
-        return 0;
-    }
-    if p == n {
-        return s_mask;
-    }
-    let mut sp = 0u64;
-    if p == 1 {
-        for j in 2..n {
-            if (s_mask >> (j - 1)) & 1 == 1 {
-                sp |= 1 << (j - 2);
-            }
-        }
-    } else {
-        for pos in 1..=(p.saturating_sub(2)) {
-            if (s_mask >> (pos - 1)) & 1 == 1 {
-                sp |= 1 << (pos - 1);
-            }
-        }
-        for j in (p + 1)..n {
-            if (s_mask >> (j - 1)) & 1 == 1 {
-                sp |= 1 << (j - 2);
-            }
-        }
-    }
-    sp
-}
-
-fn source_desc(s_mask: u64, p: u8, n: u8) -> Option<u64> {
-    if p <= 1 || p >= n {
-        return None;
-    }
-    Some(source_asc(s_mask, p, n) | (1 << (p - 2)))
-}
-
-fn epsilon1(pi: &[u8], p: u8) -> bool {
-    let n = pi.len() as u8 + 1;
-    if p <= 1 || p >= n {
-        return false;
-    }
-    pi[(p - 2) as usize] + 1 == pi[(p - 1) as usize]
-}
 
 fn mask_to_set(mask: u64, n: u8) -> BTreeSet<u8> {
     let mut s = BTreeSet::new();
@@ -164,7 +113,6 @@ fn main() {
     println!("=== Source descent set relationship for consecutive valid positions ===\n");
 
     // Collect statistics about the symmetric differences
-    let mut diff_patterns: BTreeMap<String, usize> = BTreeMap::new();
     // Map: (size_of_sym_diff) -> count
     let mut diff_size_counts: BTreeMap<usize, usize> = BTreeMap::new();
     // Map: pattern description -> count
@@ -229,10 +177,16 @@ fn main() {
                 let s_between_set = s_between(s_mask, p_a + 1, p_b);
 
                 // Positions in diff that are in S'_{p_a} but not S'_{p_b}
-                let only_in_a: BTreeSet<u8> =
-                    diff_prime.iter().filter(|j| set_sp_a.contains(j)).copied().collect();
-                let only_in_b: BTreeSet<u8> =
-                    diff_prime.iter().filter(|j| set_sp_b.contains(j)).copied().collect();
+                let only_in_a: BTreeSet<u8> = diff_prime
+                    .iter()
+                    .filter(|j| set_sp_a.contains(j))
+                    .copied()
+                    .collect();
+                let only_in_b: BTreeSet<u8> = diff_prime
+                    .iter()
+                    .filter(|j| set_sp_b.contains(j))
+                    .copied()
+                    .collect();
 
                 // Describe the pattern
                 let pattern_desc = if diff_size == 0 {
@@ -242,16 +196,10 @@ fn main() {
                     // correspond to positions p_a through p_b-2 where S has a descent
                     let mut desc_parts = Vec::new();
                     if !only_in_a.is_empty() {
-                        desc_parts.push(format!(
-                            "only_in_S'_pa={}",
-                            set_to_string(&only_in_a)
-                        ));
+                        desc_parts.push(format!("only_in_S'_pa={}", set_to_string(&only_in_a)));
                     }
                     if !only_in_b.is_empty() {
-                        desc_parts.push(format!(
-                            "only_in_S'_pb={}",
-                            set_to_string(&only_in_b)
-                        ));
+                        desc_parts.push(format!("only_in_S'_pb={}", set_to_string(&only_in_b)));
                     }
                     desc_parts.join("; ")
                 };
@@ -278,12 +226,7 @@ fn main() {
                         set_to_string(&only_in_a),
                         set_to_string(&only_in_b)
                     );
-                    println!(
-                        "    all_in_window [{},{}]: {}",
-                        p_a,
-                        p_b - 1,
-                        all_in_window
-                    );
+                    println!("    all_in_window [{},{}]: {}", p_a, p_b - 1, all_in_window);
                     println!(
                         "    S between (p_a, p_b) = {} (elements of S in [{},{}])",
                         set_to_string(&s_between_set),
@@ -310,11 +253,7 @@ fn main() {
                         let in_a = set_sp_a.contains(&j);
                         let in_b = set_sp_b.contains(&j);
                         if in_a != in_b {
-                            let marker = if in_a && !in_b {
-                                "A"
-                            } else {
-                                "B"
-                            };
+                            let marker = if in_a && !in_b { "A" } else { "B" };
                             print!(" {}:only_{}", j, marker);
                         }
                     }
@@ -356,7 +295,11 @@ fn main() {
                     // The diff at position j (in [p_a, p_b-2]) is:
                     //   j in S XOR j+1 in S
                     // i.e., exactly the positions where S "changes" between j and j+1
-                    print!("    S-change positions in [{},{}]:", p_a, p_b.saturating_sub(2));
+                    print!(
+                        "    S-change positions in [{},{}]:",
+                        p_a,
+                        p_b.saturating_sub(2)
+                    );
                     for j in p_a..=(p_b.saturating_sub(2)) {
                         let j_in_s = (s_mask >> (j - 1)) & 1 == 1;
                         let j1_in_s = if j < n - 1 {
@@ -365,11 +308,7 @@ fn main() {
                             false
                         };
                         if j_in_s != j1_in_s {
-                            let dir = if j_in_s && !j1_in_s {
-                                "off"
-                            } else {
-                                "on"
-                            };
+                            let dir = if j_in_s && !j1_in_s { "off" } else { "on" };
                             print!(" {} (S turns {})", j, dir);
                         }
                     }
@@ -550,14 +489,19 @@ fn main() {
         }
 
         if all_match {
-            println!("  n={}: ALL {} cases match the shift-XOR prediction", n, total);
+            println!(
+                "  n={}: ALL {} cases match the shift-XOR prediction",
+                n, total
+            );
         }
     }
 
     // Additional analysis: what happens to the S''_p difference?
     println!("\n=== S'' SYMMETRIC DIFFERENCE ANALYSIS ===");
     println!("S''_pa = S'_pa union {{p_a-1}}, S''_pb = S'_pb union {{p_b-1}}");
-    println!("So sym_diff(S''_pa, S''_pb) = sym_diff(S'_pa, S'_pb) XOR {{p_a-1, p_b-1}} adjustments\n");
+    println!(
+        "So sym_diff(S''_pa, S''_pb) = sym_diff(S'_pa, S'_pb) XOR {{p_a-1, p_b-1}} adjustments\n"
+    );
 
     for n in 5..=max_n {
         let mut total = 0;
@@ -605,10 +549,7 @@ fn main() {
                 let pb_m1_in_sp_a = set_sp_a.contains(&(p_b - 1));
 
                 // Build predicted diff for S''
-                let mut predicted = sym_diff(&set_sp_a, &set_sp_b);
-                // Add p_a-1 to S''_pa: if p_a-1 was in diff(S'_pa, S'_pb) AND was only-in-A,
-                //   now it's in both -> remove from diff. Etc.
-                // Simpler: compute directly
+                // Add p_a-1 to S''_pa and p_b-1 to S''_pb, then compare directly.
                 let mut set_spp_a_pred = set_sp_a.clone();
                 set_spp_a_pred.insert(p_a - 1);
                 let mut set_spp_b_pred = set_sp_b.clone();
@@ -684,21 +625,27 @@ fn main() {
     println!("For consecutive valid positions p_a < p_b in P(S):");
     println!();
     println!("  S' ANALYSIS:");
-    println!("  Positions j < p_a: AGREE (both = S intersect [p_a-2] restricted to relevant positions).");
+    println!(
+        "  Positions j < p_a: AGREE (both = S intersect [p_a-2] restricted to relevant positions)."
+    );
     println!("  Position p_a-1: AGREE (both exclude, since p_a-1 not in S by validity).");
     println!("  Positions j in [p_a, p_b-2] (interior window):");
     println!("    S'_pa has j iff (j+1) in S   (shifted-by-1 view of S above p_a)");
     println!("    S'_pb has j iff j in S        (direct view of S below p_b)");
     println!("    DIFFER at j iff j in S XOR (j+1) in S (descent-run boundaries of S).");
     println!("  Position p_b-1:");
-    println!("    S'_pa has p_b-1 iff p_b in S (i.e., p_b < n, since p_b is left boundary of a run).");
+    println!(
+        "    S'_pa has p_b-1 iff p_b in S (i.e., p_b < n, since p_b is left boundary of a run)."
+    );
     println!("    S'_pb NEVER has p_b-1 (it's the gap for insertion at p_b).");
     println!("    DIFFER iff p_b in S, equivalently p_b < n.");
     println!("  Positions j >= p_b: AGREE (both shift S above their respective p).");
     println!();
     println!("  KEY STRUCTURAL RESULT:");
     println!("    When p_b < n: sym_diff has exactly TWO components:");
-    println!("      (a) Interior run boundaries in [p_a, p_b-2]: j where S changes between j and j+1");
+    println!(
+        "      (a) Interior run boundaries in [p_a, p_b-2]: j where S changes between j and j+1"
+    );
     println!("      (b) The right boundary: position p_b-1 (only in S'_pa)");
     println!("    When p_b = n: only interior run boundaries (component a).");
     println!();
@@ -714,7 +661,9 @@ fn main() {
     println!("    So there is AT MOST ONE interior diff position.");
     println!();
     println!("    Combined with the boundary at p_b-1:");
-    println!("      Case 1 (p_b = n): sym_diff(S',S') has at most 1 element (at j=r if r < p_b-1).");
+    println!(
+        "      Case 1 (p_b = n): sym_diff(S',S') has at most 1 element (at j=r if r < p_b-1)."
+    );
     println!("      Case 2 (p_b < n): sym_diff(S',S') has at most 2 elements:");
     println!("        {{r}} from interior (if r < p_b-1) plus {{p_b-1}} from boundary.");
     println!("    But: if the run p_a,...,r extends all the way to p_b-1 (r=p_b-1),");

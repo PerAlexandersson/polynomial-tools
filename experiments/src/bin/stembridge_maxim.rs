@@ -22,11 +22,17 @@ fn avoids_4321(w: &[u8]) -> bool {
     let n = w.len();
     for a in 0..n {
         for b in (a + 1)..n {
-            if w[a] <= w[b] { continue; }
+            if w[a] <= w[b] {
+                continue;
+            }
             for c in (b + 1)..n {
-                if w[b] <= w[c] { continue; }
+                if w[b] <= w[c] {
+                    continue;
+                }
                 for d in (c + 1)..n {
-                    if w[c] > w[d] { return false; }
+                    if w[c] > w[d] {
+                        return false;
+                    }
                 }
             }
         }
@@ -38,9 +44,13 @@ fn contains_321(w: &[u8]) -> bool {
     let n = w.len();
     for a in 0..n {
         for b in (a + 1)..n {
-            if w[a] <= w[b] { continue; }
+            if w[a] <= w[b] {
+                continue;
+            }
             for c in (b + 1)..n {
-                if w[b] > w[c] { return true; }
+                if w[b] > w[c] {
+                    return true;
+                }
             }
         }
     }
@@ -113,8 +123,10 @@ fn insert_round(perms: &[(Vec<u8>, String)]) -> Vec<(Vec<u8>, String)> {
 fn main() {
     // Round 3: n=21 winner from previous round.
     // Origin: ins_20_at_19 + ins_21_at_14 from n=19 base.
-    let mut w0: Vec<u8> = vec![2, 4, 5, 8, 10, 1, 12, 3, 15, 6, 17, 7, 19, 9, 11, 13, 14, 16, 18];
-    w0.push(20);       // ins_20_at_19 (append at end)
+    let mut w0: Vec<u8> = vec![
+        2, 4, 5, 8, 10, 1, 12, 3, 15, 6, 17, 7, 19, 9, 11, 13, 14, 16, 18,
+    ];
+    w0.push(20); // ins_20_at_19 (append at end)
     w0.insert(14, 21); // ins_21_at_14
     assert!(avoids_4321(&w0));
     let n = w0.len();
@@ -136,7 +148,11 @@ fn main() {
     eprintln!("Phase 2: Insertions of {} into w0...", n + 1);
     let base_for_ins = vec![(w0.clone(), "base".into())];
     let ins = insert_round(&base_for_ins);
-    eprintln!("  4321-avoiding from insertions (n={}): {}", n + 1, ins.len());
+    eprintln!(
+        "  4321-avoiding from insertions (n={}): {}",
+        n + 1,
+        ins.len()
+    );
 
     // Phase 3: skip for now — n+2 is too slow at this size
     let ins2: Vec<(Vec<u8>, String)> = Vec::new();
@@ -147,7 +163,10 @@ fn main() {
         all.entry(p).or_insert(l);
     }
     let all_perms: Vec<(Vec<u8>, String)> = all.into_iter().collect();
-    eprintln!("Total unique 4321-avoiding permutations: {}", all_perms.len());
+    eprintln!(
+        "Total unique 4321-avoiding permutations: {}",
+        all_perms.len()
+    );
 
     // Test real-rootedness (parallel)
     eprintln!("Testing real-rootedness...");
@@ -185,7 +204,11 @@ fn main() {
     for (n, (tested, failed)) in &by_n {
         println!("n={}: {}/{} not real-rooted", n, failed, tested);
     }
-    println!("\nTotal: {}/{} not real-rooted\n", not_rr.len(), all_perms.len());
+    println!(
+        "\nTotal: {}/{} not real-rooted\n",
+        not_rr.len(),
+        all_perms.len()
+    );
 
     // Full table, sorted by n then polynomial
     println!("=== Non-real-rooted examples ===\n");

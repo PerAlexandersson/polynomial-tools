@@ -38,14 +38,15 @@ fn inverse(perm: &[u8]) -> Vec<u8> {
 }
 
 fn gcd(a: u64, b: u64) -> u64 {
-    if b == 0 { a } else { gcd(b, a % b) }
+    if b == 0 {
+        a
+    } else {
+        gcd(b, a % b)
+    }
 }
 
 fn main() {
-    let max_n: u8 = env::args()
-        .nth(1)
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(8);
+    let max_n: u8 = env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(8);
 
     let patterns = ["123", "132", "213", "231", "312", "321"];
 
@@ -74,7 +75,9 @@ fn main() {
         let mut groups: Vec<Vec<&str>> = Vec::new();
         let mut used: Vec<bool> = vec![false; patterns.len()];
         for i in 0..patterns.len() {
-            if used[i] { continue; }
+            if used[i] {
+                continue;
+            }
             let mut group = vec![patterns[i]];
             used[i] = true;
             for j in i + 1..patterns.len() {
@@ -180,7 +183,10 @@ fn main() {
     // ============================================================
     // 2. EGF coefficients and ratio analysis
     // ============================================================
-    println!("\n=== EGF coefficients and ratio analysis (n=1..{}) ===\n", max_n);
+    println!(
+        "\n=== EGF coefficients and ratio analysis (n=1..{}) ===\n",
+        max_n
+    );
 
     for pat_str in &["213", "123"] {
         let pat = parse_sequence(pat_str);
@@ -223,10 +229,11 @@ fn main() {
         println!("\nRatio avg(n) / ((n-1)! / C_{{n-1}}):");
         let catalan: Vec<u64> = (0..=max_n)
             .map(|n| {
-                if n == 0 { 1 }
-                else {
+                if n == 0 {
+                    1
+                } else {
                     let n = n as u64;
-                    (1..=n).fold(1u64, |acc, k| acc * (n + k) / k)  / (n + 1)
+                    (1..=n).fold(1u64, |acc, k| acc * (n + k) / k) / (n + 1)
                 }
             })
             .collect();
@@ -235,7 +242,12 @@ fn main() {
             let n_minus_1_fact = (1..=i as u64).product::<u64>() as f64;
             let c_n_minus_1 = catalan[i] as f64;
             let ratio = avgs[i] / (n_minus_1_fact / c_n_minus_1);
-            println!("  n={}: {:.6}   ((n-1)!/C_{{n-1}} = {:.2})", n, ratio, n_minus_1_fact / c_n_minus_1);
+            println!(
+                "  n={}: {:.6}   ((n-1)!/C_{{n-1}} = {:.2})",
+                n,
+                ratio,
+                n_minus_1_fact / c_n_minus_1
+            );
         }
 
         // avg(n) * C_n / n!  (= expected fraction if depth were uniform)

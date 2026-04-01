@@ -31,7 +31,11 @@ fn compose(a: &[u8], b: &[u8]) -> Vec<u8> {
 }
 
 fn gcd(a: u64, b: u64) -> u64 {
-    if b == 0 { a } else { gcd(b, a % b) }
+    if b == 0 {
+        a
+    } else {
+        gcd(b, a % b)
+    }
 }
 
 fn avg_str(total: u64, count: u64) -> String {
@@ -49,10 +53,7 @@ fn avg_str(total: u64, count: u64) -> String {
 }
 
 fn main() {
-    let max_n: u8 = env::args()
-        .nth(1)
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(7);
+    let max_n: u8 = env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(7);
 
     let patterns = ["123", "132", "213", "231", "312", "321"];
 
@@ -92,7 +93,14 @@ fn main() {
         println!();
 
         for (pi_name, pi_set) in &pi_sets {
-            print!("{:>10}", if *pi_name == "S_n" { "S_n".to_string() } else { format!("Av_{}", pi_name) });
+            print!(
+                "{:>10}",
+                if *pi_name == "S_n" {
+                    "S_n".to_string()
+                } else {
+                    format!("Av_{}", pi_name)
+                }
+            );
 
             for (s_idx, _) in patterns.iter().enumerate() {
                 let s_set = &s_sets[s_idx];
@@ -143,7 +151,11 @@ fn main() {
     ];
 
     for &(pi_pat, s_pat) in &interesting {
-        let pi_p = if pi_pat == "S_n" { None } else { Some(parse_sequence(pi_pat)) };
+        let pi_p = if pi_pat == "S_n" {
+            None
+        } else {
+            Some(parse_sequence(pi_pat))
+        };
         let s_p = parse_sequence(s_pat);
 
         let mut avgs: Vec<String> = Vec::new();
@@ -170,15 +182,16 @@ fn main() {
             avgs.push(avg_str(total, count));
         }
 
-        let pi_label = if pi_pat == "S_n" { "S_n".to_string() } else { format!("Av_{}", pi_pat) };
+        let pi_label = if pi_pat == "S_n" {
+            "S_n".to_string()
+        } else {
+            format!("Av_{}", pi_pat)
+        };
         println!(
             "π ∈ {:>6}, S = Av_{}: totals = {:?}",
             pi_label, s_pat, totals
         );
-        println!(
-            "{:>24}  avgs   = {:?}",
-            "", avgs
-        );
+        println!("{:>24}  avgs   = {:?}", "", avgs);
         println!();
     }
 }

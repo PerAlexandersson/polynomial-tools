@@ -1,6 +1,5 @@
 /// Cross-check: sink_polynomial_tree() vs sink_polynomial_fast() on trees.
 /// Also benchmarks the tree method on large caterpillars.
-
 use combinatoric_core::graph::Graph;
 use polynomial_tools::real_rootedness::is_real_rooted;
 use std::time::Instant;

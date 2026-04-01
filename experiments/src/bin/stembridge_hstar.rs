@@ -60,11 +60,17 @@ fn avoids_4321(w: &[u8]) -> bool {
     let n = w.len();
     for a in 0..n {
         for b in (a + 1)..n {
-            if w[a] <= w[b] { continue; }
+            if w[a] <= w[b] {
+                continue;
+            }
             for c in (b + 1)..n {
-                if w[b] <= w[c] { continue; }
+                if w[b] <= w[c] {
+                    continue;
+                }
                 for d in (c + 1)..n {
-                    if w[c] > w[d] { return false; }
+                    if w[c] > w[d] {
+                        return false;
+                    }
                 }
             }
         }
@@ -73,8 +79,7 @@ fn avoids_4321(w: &[u8]) -> bool {
 }
 
 fn main() {
-    let stembridge: Vec<u8> =
-        vec![2, 4, 6, 8, 10, 1, 12, 3, 15, 5, 17, 7, 9, 11, 13, 14, 16];
+    let stembridge: Vec<u8> = vec![2, 4, 6, 8, 10, 1, 12, 3, 15, 5, 17, 7, 9, 11, 13, 14, 16];
     let max_dist: usize = std::env::args()
         .nth(1)
         .and_then(|s| s.parse().ok())
@@ -100,7 +105,10 @@ fn main() {
     println!("\nTotal 4321-avoiding to test: {}\n", total_av);
 
     // Test real-rootedness via Ehrhart h* (frontier DP + reciprocity, parallel)
-    eprintln!("Testing real-rootedness of {} permutation posets (via Ehrhart DP, parallel)...", total_av);
+    eprintln!(
+        "Testing real-rootedness of {} permutation posets (via Ehrhart DP, parallel)...",
+        total_av
+    );
     let t0 = std::time::Instant::now();
 
     // Use p_eulerian_polynomial (streaming linext + des counting) — faster than
@@ -133,20 +141,20 @@ fn main() {
             d, fail_by_dist[d], av_by_dist[d]
         );
     }
-    println!(
-        "\nTotal: {}/{} not real-rooted\n",
-        not_rr.len(),
-        total_av
-    );
+    println!("\nTotal: {}/{} not real-rooted\n", not_rr.len(), total_av);
 
     // Full table of all non-real-rooted examples
     fn contains_321(w: &[u8]) -> bool {
         let n = w.len();
         for a in 0..n {
             for b in (a + 1)..n {
-                if w[a] <= w[b] { continue; }
+                if w[a] <= w[b] {
+                    continue;
+                }
                 for c in (b + 1)..n {
-                    if w[b] > w[c] { return true; }
+                    if w[b] > w[c] {
+                        return true;
+                    }
                 }
             }
         }
@@ -162,15 +170,21 @@ fn main() {
             match tails.binary_search(&rx) {
                 Ok(_) => {}
                 Err(pos) => {
-                    if pos == tails.len() { tails.push(rx); }
-                    else { tails[pos] = rx; }
+                    if pos == tails.len() {
+                        tails.push(rx);
+                    } else {
+                        tails[pos] = rx;
+                    }
                 }
             }
         }
         tails.len()
     }
 
-    println!("\n=== Full table of all {} non-real-rooted examples ===\n", not_rr.len());
+    println!(
+        "\n=== Full table of all {} non-real-rooted examples ===\n",
+        not_rr.len()
+    );
     println!(
         "{:<4} {:<4} {:<5} {:<5} {:<60} {}",
         "dist", "321?", "lds", "deg", "h* polynomial", "log-c"
@@ -180,7 +194,9 @@ fn main() {
     let mut count_321 = 0;
     for (perm, dist, pe) in &not_rr {
         let has_321 = contains_321(perm);
-        if has_321 { count_321 += 1; }
+        if has_321 {
+            count_321 += 1;
+        }
         let lds = longest_dec_subseq(perm);
         let lc = real_rootedness::is_log_concave(pe);
         println!(
@@ -212,7 +228,11 @@ fn main() {
         poly_set.insert(pe.clone());
     }
     println!("=== Analysis ===\n");
-    println!("Distinct h* polynomials: {} (out of {} non-RR examples)", poly_set.len(), not_rr.len());
+    println!(
+        "Distinct h* polynomials: {} (out of {} non-RR examples)",
+        poly_set.len(),
+        not_rr.len()
+    );
 
     // Group by degree
     let mut by_deg: std::collections::BTreeMap<usize, Vec<&(Vec<u8>, usize, Vec<i64>)>> =
@@ -223,8 +243,14 @@ fn main() {
     for (deg, entries) in &by_deg {
         println!("\nDegree {}: {} examples", deg, entries.len());
         // Leading coefficient
-        let leading: Vec<i64> = entries.iter().map(|(_, _, pe)| *pe.last().unwrap()).collect();
-        let sums: Vec<i64> = entries.iter().map(|(_, _, pe)| pe.iter().sum::<i64>()).collect();
+        let leading: Vec<i64> = entries
+            .iter()
+            .map(|(_, _, pe)| *pe.last().unwrap())
+            .collect();
+        let sums: Vec<i64> = entries
+            .iter()
+            .map(|(_, _, pe)| pe.iter().sum::<i64>())
+            .collect();
         println!("  Leading coefficients: {:?}", leading);
         println!("  Sum of coeffs (= #linext): {:?}", sums);
         // Coefficient ranges per position
@@ -247,11 +273,13 @@ fn main() {
     println!("\n--- Diff from Stembridge ---");
     let stem = &not_rr[0].2;
     for (perm, dist, pe) in &not_rr[1..] {
-        let diffs: Vec<(usize, i64, i64)> = pe.iter().enumerate()
+        let diffs: Vec<(usize, i64, i64)> = pe
+            .iter()
+            .enumerate()
             .zip(stem.iter().chain(std::iter::repeat(&0)))
             .filter(|((_, a), b)| a != b)
             .map(|((i, a), b)| (i, *b, *a))
             .collect();
-        println!("  dist={} deg={} Δcoeffs={:?}", dist, pe.len()-1, diffs);
+        println!("  dist={} deg={} Δcoeffs={:?}", dist, pe.len() - 1, diffs);
     }
 }

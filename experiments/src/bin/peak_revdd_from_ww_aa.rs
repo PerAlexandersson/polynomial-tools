@@ -1,5 +1,5 @@
 //! Test: does reversed DD at λ+ follow from forward WW + reversed AA at λ+?
-//! 
+//!
 //! We have: W_{k-1}^+ ≪ W_k^+ (forward WW, proved)
 //!          A_k^+ ≪ A_{k-1}^+ (reversed AA, proved)
 //! Need:    S_k ≪ S_{k-1} (reversed DD)
@@ -25,7 +25,7 @@
 //! So S_{k-1} ≪ tS_k becomes:
 //! (A_{k-1}^+ - T_k - W_{k-1}) ≪ (W_k^+ - T_k)
 //! i.e. (A_{k-1}^+ - W_{k-1}) ≪ W_k^+
-//! 
+//!
 //! Now A_{k-1}^+ - W_{k-1} = (S_{k-1} + T_{k-1}) - W_{k-1}
 //!   = S_{k-1} + T_{k-1} - W_{k-1} = S_{k-1} + T_k  (since T_{k-1} = T_k + W_{k-1})
 //! Wait: T_{k-1} - W_{k-1} = T_k. So A_{k-1}^+ - W_{k-1} = S_{k-1} + T_k = A_k^+!
@@ -62,7 +62,7 @@ fn main() {
     println!();
     println!("And A_k^+ = S_k + T_k = S_{{k-1}} + A_{{k-1}} + T_k");
     println!("So A_{{k-1}}^+ - W_{{k-1}} = A_k^+ - A_{{k-1}}");
-    println!();  
+    println!();
     println!("The condition becomes:");
     println!("  (A_k^+ - A_{{k-1}}) ≪ W_k^+");
     println!("  i.e., (A_k^+ - A_{{k-1}}) ≪ A_k^+ + (t-1)S_k");

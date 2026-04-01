@@ -1,5 +1,5 @@
-use combinatoric_core::partition::Partition;
 use combinatoric_core::key_polynomial::*;
+use combinatoric_core::partition::Partition;
 
 fn main() {
     let lambda = Partition::new(vec![2, 1]);

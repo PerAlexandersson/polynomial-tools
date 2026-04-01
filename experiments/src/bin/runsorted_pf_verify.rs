@@ -2,10 +2,10 @@
 //! Uses fused backtracking that generates only run-sorted PFs (no memory blowup).
 
 use combpoly::parking::{for_each_runsorted_pf, RunBreak, RunSort};
-use polynomial_tools::format_poly;
-use polynomial_tools::recurrence::{find_recurrence_adaptive, AdaptiveSearchOptions};
 use combpoly::statistics;
 use combpoly::statistics::Stat;
+use polynomial_tools::format_poly;
+use polynomial_tools::recurrence::{find_recurrence_adaptive, AdaptiveSearchOptions};
 
 fn accumulate_poly(coeffs: &mut Vec<i64>, val: usize) {
     if val >= coeffs.len() {
@@ -16,7 +16,11 @@ fn accumulate_poly(coeffs: &mut Vec<i64>, val: usize) {
 
 fn main() {
     let variants: &[(&str, RunBreak, RunSort)] = &[
-        ("strict-asc, strict", RunBreak::StrictAsc, RunSort::StrictMin),
+        (
+            "strict-asc, strict",
+            RunBreak::StrictAsc,
+            RunSort::StrictMin,
+        ),
         ("strict-asc, weak", RunBreak::StrictAsc, RunSort::WeakMin),
         ("strict-asc, lex", RunBreak::StrictAsc, RunSort::Lex),
         ("non-decr, strict", RunBreak::NonDecr, RunSort::StrictMin),
@@ -56,7 +60,9 @@ fn main() {
             }
             println!(
                 "n={:2}: {:>12} objects, poly = {}",
-                n, count, format_poly(&coeffs)
+                n,
+                count,
+                format_poly(&coeffs)
             );
             polys.push(coeffs);
         }

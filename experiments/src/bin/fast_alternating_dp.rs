@@ -3,7 +3,9 @@
 /// Only track descent sets that can eventually lead to the alternating
 /// descent set at the final step. This dramatically reduces the state space.
 use combpoly::statistics::descent_set_bitmask;
-use polynomial_tools::real_rootedness::{format_poly, is_real_rooted, gamma_coefficients, is_gamma_positive};
+use polynomial_tools::real_rootedness::{
+    format_poly, gamma_coefficients, is_gamma_positive, is_real_rooted,
+};
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
@@ -158,7 +160,9 @@ fn insert_step_pruned(
     let mut new_table: HashMap<State, i64> = HashMap::new();
 
     for (&(des, sw, pos_max, adj), &count) in table {
-        if count == 0 { continue; }
+        if count == 0 {
+            continue;
+        }
         let pos_max = pos_max as usize;
 
         for p in 1..=new_n as usize {
@@ -176,22 +180,34 @@ fn insert_step_pruned(
             } else {
                 let mut d = 0u64;
                 for j in 0..p.saturating_sub(2) {
-                    if des & (1 << j) != 0 { d |= 1 << j; }
+                    if des & (1 << j) != 0 {
+                        d |= 1 << j;
+                    }
                 }
                 d |= 1 << (p - 1); // forced descent at p
                 for j in (p - 1)..old_n as usize - 1 {
-                    if des & (1 << j) != 0 { d |= 1 << (j + 1); }
+                    if des & (1 << j) != 0 {
+                        d |= 1 << (j + 1);
+                    }
                 }
                 d
             };
 
             // Prune: only keep if new_des is relevant
-            if !relevant_new.contains(&new_des) { continue; }
+            if !relevant_new.contains(&new_des) {
+                continue;
+            }
 
             // ε₁
             let e1: u16 = if p > 1 && p < new_n as usize {
-                if p >= 2 && (adj & (1 << (p - 2))) != 0 { 1 } else { 0 }
-            } else { 0 };
+                if p >= 2 && (adj & (1 << (p - 2))) != 0 {
+                    1
+                } else {
+                    0
+                }
+            } else {
+                0
+            };
 
             // ε₂
             let e2: u16 = if pos_max + 2 <= p { 1 } else { 0 };
@@ -213,10 +229,14 @@ fn insert_step_pruned(
                 } else {
                     false
                 };
-                if is_adj { new_adj |= 1 << j; }
+                if is_adj {
+                    new_adj |= 1 << j;
+                }
             }
 
-            *new_table.entry((new_des, new_sw, new_pos_max, new_adj)).or_insert(0) += count;
+            *new_table
+                .entry((new_des, new_sw, new_pos_max, new_adj))
+                .or_insert(0) += count;
         }
     }
 
@@ -225,7 +245,8 @@ fn insert_step_pruned(
 
 fn extract_alternating_poly(table: &HashMap<State, i64>, n: u8) -> Vec<i64> {
     let target = alt_des(n);
-    let max_sw = table.keys()
+    let max_sw = table
+        .keys()
         .filter(|&&(des, _, _, _)| des == target)
         .map(|&(_, sw, _, _)| sw as usize)
         .max()
@@ -236,7 +257,9 @@ fn extract_alternating_poly(table: &HashMap<State, i64>, n: u8) -> Vec<i64> {
             coeffs[sw as usize] += count;
         }
     }
-    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 { coeffs.pop(); }
+    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 {
+        coeffs.pop();
+    }
     coeffs
 }
 
@@ -252,7 +275,12 @@ fn main() {
     println!("Done in {:?}\n", t0.elapsed());
 
     for n in 1..=max_n {
-        println!("  n={:>2}: {} relevant descent sets (of {} total)", n, relevant[n as usize].len(), 1u64 << (n.saturating_sub(1)));
+        println!(
+            "  n={:>2}: {} relevant descent sets (of {} total)",
+            n,
+            relevant[n as usize].len(),
+            1u64 << (n.saturating_sub(1))
+        );
     }
 
     println!("\n═══ H_n(t) via pruned DP ═══\n");

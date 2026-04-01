@@ -4,9 +4,9 @@
 //! 3. FPF Cayley by last entry + exc, n=9
 
 use combpoly::cayley::{all_cayley_permutations, for_each_fpf_cayley};
-use polynomial_tools::{format_poly, is_real_rooted};
 use combpoly::statistics;
 use combpoly::statistics::Stat;
+use polynomial_tools::{format_poly, is_real_rooted};
 
 fn accumulate_poly(coeffs: &mut Vec<i64>, val: usize) {
     if val >= coeffs.len() {
@@ -27,9 +27,21 @@ fn main() {
             accumulate_poly(&mut coeffs, statistics::compute(w, stat));
             count += 1;
         });
-        if coeffs.is_empty() { coeffs.push(0); }
-        let rr = if coeffs.iter().all(|&c| c == 0) { true } else { is_real_rooted(&coeffs) };
-        println!("n={:2}: {:>12} fpf, rr={}, poly = {}", n, count, rr, format_poly(&coeffs));
+        if coeffs.is_empty() {
+            coeffs.push(0);
+        }
+        let rr = if coeffs.iter().all(|&c| c == 0) {
+            true
+        } else {
+            is_real_rooted(&coeffs)
+        };
+        println!(
+            "n={:2}: {:>12} fpf, rr={}, poly = {}",
+            n,
+            count,
+            rr,
+            format_poly(&coeffs)
+        );
     }
 
     // === Table 2: All Cayley, exc by max value, n=9 ===
@@ -44,10 +56,18 @@ fn main() {
             accumulate_poly(&mut by_max[max_val], statistics::compute(w, stat));
         }
         for mv in 1..=m {
-            if by_max[mv].is_empty() || by_max[mv].iter().all(|&c| c == 0) { continue; }
+            if by_max[mv].is_empty() || by_max[mv].iter().all(|&c| c == 0) {
+                continue;
+            }
             let count: i64 = by_max[mv].iter().sum();
             let rr = is_real_rooted(&by_max[mv]);
-            println!("m={}: {:>8} perms, rr={}, poly = {}", mv, count, rr, format_poly(&by_max[mv]));
+            println!(
+                "m={}: {:>8} perms, rr={}, poly = {}",
+                mv,
+                count,
+                rr,
+                format_poly(&by_max[mv])
+            );
         }
     }
 
@@ -64,10 +84,18 @@ fn main() {
             }
         });
         for k in 1..=m {
-            if by_last[k].is_empty() || by_last[k].iter().all(|&c| c == 0) { continue; }
+            if by_last[k].is_empty() || by_last[k].iter().all(|&c| c == 0) {
+                continue;
+            }
             let count: i64 = by_last[k].iter().sum();
             let rr = is_real_rooted(&by_last[k]);
-            println!("last={}: {:>8} perms, rr={}, poly = {}", k, count, rr, format_poly(&by_last[k]));
+            println!(
+                "last={}: {:>8} perms, rr={}, poly = {}",
+                k,
+                count,
+                rr,
+                format_poly(&by_last[k])
+            );
         }
     }
 }

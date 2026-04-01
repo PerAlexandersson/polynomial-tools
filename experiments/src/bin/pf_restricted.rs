@@ -5,7 +5,9 @@ use polynomial_tools::recurrence::{find_recurrence_adaptive, AdaptiveSearchOptio
 fn des_word(w: &[u8]) -> usize {
     let mut d = 0;
     for i in 0..w.len().saturating_sub(1) {
-        if w[i] > w[i + 1] { d += 1; }
+        if w[i] > w[i + 1] {
+            d += 1;
+        }
     }
     d
 }
@@ -42,12 +44,21 @@ fn run_for_max_entry(k: u8, max_n: u8) {
         let mut coeffs = vec![0i64; max_des + 1];
         for pf in &pfs {
             let d = des_word(pf);
-            if d < coeffs.len() { coeffs[d] += 1; }
+            if d < coeffs.len() {
+                coeffs[d] += 1;
+            }
         }
-        while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 { coeffs.pop(); }
+        while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 {
+            coeffs.pop();
+        }
         let rr = polynomial::is_real_rooted(&coeffs);
         print!("n={}: [", n);
-        for (i, &c) in coeffs.iter().enumerate() { if i > 0 { print!(", "); } print!("{}", c); }
+        for (i, &c) in coeffs.iter().enumerate() {
+            if i > 0 {
+                print!(", ");
+            }
+            print!("{}", c);
+        }
         print!("]  sum={}", coeffs.iter().sum::<i64>());
         println!("  RR={}", if rr { "yes" } else { "NO" });
         polys.push(coeffs);
@@ -56,10 +67,50 @@ fn run_for_max_entry(k: u8, max_n: u8) {
     // Recurrence search
     println!("\nRecurrence search:");
     for (label, opts) in &[
-        ("rec1,d0", AdaptiveSearchOptions { max_rec_len: 1, max_var_deg: 2, max_idx_deg: 2, max_diff_deg: 0, verbose: false, ..Default::default() }),
-        ("rec1,d1", AdaptiveSearchOptions { max_rec_len: 1, max_var_deg: 2, max_idx_deg: 2, max_diff_deg: 1, verbose: false, ..Default::default() }),
-        ("rec2,d0", AdaptiveSearchOptions { max_rec_len: 2, max_var_deg: 2, max_idx_deg: 2, max_diff_deg: 0, verbose: false, ..Default::default() }),
-        ("rec2,d1", AdaptiveSearchOptions { max_rec_len: 2, max_var_deg: 2, max_idx_deg: 2, max_diff_deg: 1, verbose: false, ..Default::default() }),
+        (
+            "rec1,d0",
+            AdaptiveSearchOptions {
+                max_rec_len: 1,
+                max_var_deg: 2,
+                max_idx_deg: 2,
+                max_diff_deg: 0,
+                verbose: false,
+                ..Default::default()
+            },
+        ),
+        (
+            "rec1,d1",
+            AdaptiveSearchOptions {
+                max_rec_len: 1,
+                max_var_deg: 2,
+                max_idx_deg: 2,
+                max_diff_deg: 1,
+                verbose: false,
+                ..Default::default()
+            },
+        ),
+        (
+            "rec2,d0",
+            AdaptiveSearchOptions {
+                max_rec_len: 2,
+                max_var_deg: 2,
+                max_idx_deg: 2,
+                max_diff_deg: 0,
+                verbose: false,
+                ..Default::default()
+            },
+        ),
+        (
+            "rec2,d1",
+            AdaptiveSearchOptions {
+                max_rec_len: 2,
+                max_var_deg: 2,
+                max_idx_deg: 2,
+                max_diff_deg: 1,
+                verbose: false,
+                ..Default::default()
+            },
+        ),
     ] {
         match find_recurrence_adaptive(&polys, opts) {
             Some(r) => println!("  {}: {}", label, r.recurrence),
@@ -69,8 +120,14 @@ fn run_for_max_entry(k: u8, max_n: u8) {
 }
 
 fn main() {
-    let max_n_k2: u8 = std::env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(14);
-    let max_n_k3: u8 = std::env::args().nth(2).and_then(|s| s.parse().ok()).unwrap_or(10);
+    let max_n_k2: u8 = std::env::args()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(14);
+    let max_n_k3: u8 = std::env::args()
+        .nth(2)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(10);
 
     run_for_max_entry(2, max_n_k2);
     run_for_max_entry(3, max_n_k3);

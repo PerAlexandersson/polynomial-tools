@@ -222,10 +222,7 @@ fn main() {
                 continue; // Skip non-alternating for n > 5 except in summary
             }
 
-            println!(
-                "{}",
-                "=".repeat(80)
-            );
+            println!("{}", "=".repeat(80));
             println!(
                 "n={}, S={}, P(S)={:?}{}",
                 n,
@@ -262,7 +259,11 @@ fn main() {
                         .map(|m| mask_to_string(m, n - 1))
                         .unwrap_or_else(|| "N/A".to_string())
                 );
-                println!("  Window: [{}, {}]", p_a.saturating_sub(1), p_b.saturating_sub(1));
+                println!(
+                    "  Window: [{}, {}]",
+                    p_a.saturating_sub(1),
+                    p_b.saturating_sub(1)
+                );
 
                 // Collect all permutations for p_a
                 let mut perms_a: Vec<PermInfo> = Vec::new();
@@ -414,7 +415,7 @@ fn main() {
                         // Window analysis: compare permutations outside the window
                         let window_lo = p_a.saturating_sub(1) as usize; // 0-indexed position p_a-1
                         let window_hi = (p_b.saturating_sub(1)) as usize; // 0-indexed position p_b-1
-                        // Positions OUTSIDE the window (0-indexed)
+                                                                          // Positions OUTSIDE the window (0-indexed)
                         println!(
                             "    Window analysis (0-indexed positions [{}, {}]):",
                             window_lo, window_hi
@@ -434,8 +435,8 @@ fn main() {
                                         break;
                                     }
                                 }
-                                let delta = info_b.modified_swaps as i64
-                                    - info_a.modified_swaps as i64;
+                                let delta =
+                                    info_b.modified_swaps as i64 - info_a.modified_swaps as i64;
                                 if agree_outside {
                                     bijection_candidates.push((ia, ib, delta));
                                     println!(
@@ -450,7 +451,10 @@ fn main() {
                             }
                         }
 
-                        if bijection_candidates.is_empty() && !group_a.is_empty() && !group_b.is_empty() {
+                        if bijection_candidates.is_empty()
+                            && !group_a.is_empty()
+                            && !group_b.is_empty()
+                        {
                             println!("      No permutations agree outside the window!");
                             // Try a relaxed version: agree outside a LARGER window
                             // Maybe some values get rearranged further?
@@ -461,8 +465,8 @@ fn main() {
                                     let diffs: Vec<usize> = (0..info_a.pi.len())
                                         .filter(|&pos| info_a.pi[pos] != info_b.pi[pos])
                                         .collect();
-                                    let delta = info_b.modified_swaps as i64
-                                        - info_a.modified_swaps as i64;
+                                    let delta =
+                                        info_b.modified_swaps as i64 - info_a.modified_swaps as i64;
                                     if diffs.len() <= 4 {
                                         println!(
                                             "        {} <-> {}  diff_positions={:?}  delta_mod_swaps={}",
@@ -492,7 +496,10 @@ fn main() {
                 }
 
                 // Test 5: Look for a bijection with controlled delta
-                println!("\n  --- Bijection analysis for (p_a={}, p_b={}) ---", p_a, p_b);
+                println!(
+                    "\n  --- Bijection analysis for (p_a={}, p_b={}) ---",
+                    p_a, p_b
+                );
                 for &q in &all_qs {
                     let group_a = by_q_a.get(&q).cloned().unwrap_or_default();
                     let group_b = by_q_b.get(&q).cloned().unwrap_or_default();
@@ -517,10 +524,8 @@ fn main() {
                     );
 
                     // Sorted mod_swaps values
-                    let mut ms_a: Vec<usize> =
-                        group_a.iter().map(|p| p.modified_swaps).collect();
-                    let mut ms_b: Vec<usize> =
-                        group_b.iter().map(|p| p.modified_swaps).collect();
+                    let mut ms_a: Vec<usize> = group_a.iter().map(|p| p.modified_swaps).collect();
+                    let mut ms_b: Vec<usize> = group_b.iter().map(|p| p.modified_swaps).collect();
                     ms_a.sort();
                     ms_b.sort();
                     println!("    mod_swaps_a (sorted): {:?}", ms_a);
@@ -595,10 +600,7 @@ fn main() {
                     }
                 }
                 if all_compatible {
-                    println!(
-                        "  All q-values: COMPATIBLE for p_a={}, p_b={}",
-                        p_a, p_b
-                    );
+                    println!("  All q-values: COMPATIBLE for p_a={}, p_b={}", p_a, p_b);
                 }
             }
         }
@@ -650,8 +652,7 @@ fn main() {
                     if let Some(indices) = by_descent_prev.get(&sp) {
                         for &i in indices {
                             let pi = perm_prev_list[i];
-                            let q =
-                                pi.iter().position(|&v| v == n - 1).unwrap() as u8 + 1;
+                            let q = pi.iter().position(|&v| v == n - 1).unwrap() as u8 + 1;
                             let sw = compute(pi, Stat::Swaps);
                             by_q_a.entry(q).or_default().push(sw);
                         }
@@ -673,16 +674,14 @@ fn main() {
                     if let Some(indices) = by_descent_prev.get(&sp) {
                         for &i in indices {
                             let pi = perm_prev_list[i];
-                            let q =
-                                pi.iter().position(|&v| v == n - 1).unwrap() as u8 + 1;
+                            let q = pi.iter().position(|&v| v == n - 1).unwrap() as u8 + 1;
                             let sw = compute(pi, Stat::Swaps);
                             by_q_b.entry(q).or_default().push(sw);
                         }
                     }
                 }
 
-                let mut all_qs: Vec<u8> =
-                    by_q_a.keys().chain(by_q_b.keys()).copied().collect();
+                let mut all_qs: Vec<u8> = by_q_a.keys().chain(by_q_b.keys()).copied().collect();
                 all_qs.sort();
                 all_qs.dedup();
 

@@ -208,7 +208,9 @@ fn main() {
             }
 
             let ref_poly = &t_polys[0].1;
-            let all_same = t_polys[1..].iter().all(|(_, poly)| poly_equal(ref_poly, poly));
+            let all_same = t_polys[1..]
+                .iter()
+                .all(|(_, poly)| poly_equal(ref_poly, poly));
 
             let s_str = descent_set_to_string(mask, n);
 
@@ -223,10 +225,7 @@ fn main() {
                 );
             } else {
                 n_diff += 1;
-                println!(
-                    "  n={} S={} P(S)={:?}: DIFFERENT!",
-                    n, s_str, vp
-                );
+                println!("  n={} S={} P(S)={:?}: DIFFERENT!", n, s_str, vp);
                 for (p, poly) in &t_polys {
                     println!("    T_{} = {}", p, format_poly(poly));
                 }

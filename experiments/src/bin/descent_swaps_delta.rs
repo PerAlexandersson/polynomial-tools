@@ -316,8 +316,7 @@ fn main() {
                 {
                     if let Some(cls) = prev_by_des.get(&sp) {
                         for pi in cls {
-                            let q =
-                                pi.iter().position(|&v| v == n - 1).unwrap() as u8 + 1;
+                            let q = pi.iter().position(|&v| v == n - 1).unwrap() as u8 + 1;
                             let e1 = if epsilon1(pi, p) { 1 } else { 0 };
                             by_q.entry(q)
                                 .or_default()
@@ -363,9 +362,7 @@ fn main() {
             let a_qs: Vec<u8> = all_qs.clone(); // rows indexed by q
             let a_rows: Vec<Vec<i64>> = a_qs
                 .iter()
-                .map(|q| {
-                    qmap.get(q).cloned().unwrap_or_else(|| vec![0])
-                })
+                .map(|q| qmap.get(q).cloned().unwrap_or_else(|| vec![0]))
                 .collect();
 
             // Check TN_2 of source matrix A
@@ -401,17 +398,14 @@ fn main() {
                     for k1 in 0..max_b_deg {
                         for k2 in (k1 + 1)..max_b_deg {
                             // Direct minor computation
-                            let delta_direct = coeff(&b_rows[i1], k1)
-                                * coeff(&b_rows[i2], k2)
-                                - coeff(&b_rows[i1], k2)
-                                    * coeff(&b_rows[i2], k1);
+                            let delta_direct = coeff(&b_rows[i1], k1) * coeff(&b_rows[i2], k2)
+                                - coeff(&b_rows[i1], k2) * coeff(&b_rows[i2], k1);
 
                             // Via identity
                             let d_k1 = compute_d(&a_rows, i1, i2, k1);
                             let d_k2 = compute_d(&a_rows, i1, i2, k2);
                             let delta_identity =
-                                coeff(&b_rows[i1], k2) * d_k1
-                                    - coeff(&b_rows[i1], k1) * d_k2;
+                                coeff(&b_rows[i1], k2) * d_k1 - coeff(&b_rows[i1], k1) * d_k2;
 
                             local_id_checks += 1;
                             if delta_direct == delta_identity {
@@ -450,8 +444,7 @@ fn main() {
                     // Check if D changes sign
                     let pos_count = d_values.iter().filter(|(_, v)| *v > 0).count();
                     let neg_count = d_values.iter().filter(|(_, v)| *v < 0).count();
-                    let is_monotone_sign =
-                        pos_count == 0 || neg_count == 0; // single sign
+                    let is_monotone_sign = pos_count == 0 || neg_count == 0; // single sign
 
                     if is_monotone_sign {
                         d_monotone_cases += 1;
@@ -468,9 +461,7 @@ fn main() {
             for &p in &vp {
                 let vals: Vec<usize> = class
                     .iter()
-                    .filter(|pi| {
-                        pi.iter().position(|&v| v == n).unwrap() as u8 + 1 == p
-                    })
+                    .filter(|pi| pi.iter().position(|&v| v == n).unwrap() as u8 + 1 == p)
                     .map(|pi| compute(pi, Stat::Swaps))
                     .collect();
                 if !vals.is_empty() {
@@ -513,20 +504,16 @@ fn main() {
                 // Show D(k) for each (i1, i2)
                 for i1 in 0..m {
                     for i2 in (i1 + 1)..m {
-                        let d_vals: Vec<i64> =
-                            (0..max_b_deg).map(|k| compute_d(&a_rows, i1, i2, k)).collect();
-                        println!(
-                            "  D(k) for i1={},i2={}: {:?}",
-                            i1, i2, d_vals
-                        );
+                        let d_vals: Vec<i64> = (0..max_b_deg)
+                            .map(|k| compute_d(&a_rows, i1, i2, k))
+                            .collect();
+                        println!("  D(k) for i1={},i2={}: {:?}", i1, i2, d_vals);
 
                         // Show 2x2 minors and identity check
                         for k1 in 0..max_b_deg {
                             for k2 in (k1 + 1)..max_b_deg {
-                                let delta = coeff(&b_rows[i1], k1)
-                                    * coeff(&b_rows[i2], k2)
-                                    - coeff(&b_rows[i1], k2)
-                                        * coeff(&b_rows[i2], k1);
+                                let delta = coeff(&b_rows[i1], k1) * coeff(&b_rows[i2], k2)
+                                    - coeff(&b_rows[i1], k2) * coeff(&b_rows[i2], k1);
                                 let d_k1 = compute_d(&a_rows, i1, i2, k1);
                                 let d_k2 = compute_d(&a_rows, i1, i2, k2);
                                 let b_i1_k1 = coeff(&b_rows[i1], k1);
@@ -566,16 +553,35 @@ fn main() {
 
         println!(
             "\nn={}: identity {}/{} | source_TN2 {}/{} | staircase_TN2 {}/{} | actual_TN2 {}/{}",
-            n, n_id_pass, n_id_check, n_source_pass, n_source_total,
-            n_staircase_pass, n_staircase_total, n_actual_pass, n_actual_total
+            n,
+            n_id_pass,
+            n_id_check,
+            n_source_pass,
+            n_source_total,
+            n_staircase_pass,
+            n_staircase_total,
+            n_actual_pass,
+            n_actual_total
         );
     }
 
     println!("\n=== OVERALL SUMMARY (n=4..{}) ===", max_n);
-    println!("Identity checks:        {}/{}", identity_pass, identity_checks);
-    println!("Source matrix A TN_2:   {}/{}", source_tn2_pass, source_tn2_total);
-    println!("Staircase matrix B TN_2:{}/{}", staircase_tn2_pass, staircase_tn2_total);
-    println!("Actual L^(p) TN_2:      {}/{}", actual_tn2_pass, actual_tn2_total);
+    println!(
+        "Identity checks:        {}/{}",
+        identity_pass, identity_checks
+    );
+    println!(
+        "Source matrix A TN_2:   {}/{}",
+        source_tn2_pass, source_tn2_total
+    );
+    println!(
+        "Staircase matrix B TN_2:{}/{}",
+        staircase_tn2_pass, staircase_tn2_total
+    );
+    println!(
+        "Actual L^(p) TN_2:      {}/{}",
+        actual_tn2_pass, actual_tn2_total
+    );
     println!(
         "D(k) single-sign:       {}/{} ({:.1}%)",
         d_monotone_cases,
@@ -670,8 +676,8 @@ fn main() {
                             - coeff(&b_rows[i1], k2) * coeff(&b_rows[i2], k1);
                         let d_k1 = compute_d(a_rows, i1, i2, k1);
                         let d_k2 = compute_d(a_rows, i1, i2, k2);
-                        let identity = coeff(&b_rows[i1], k2) * d_k1
-                            - coeff(&b_rows[i1], k1) * d_k2;
+                        let identity =
+                            coeff(&b_rows[i1], k2) * d_k1 - coeff(&b_rows[i1], k1) * d_k2;
                         if delta != identity {
                             id_ok = false;
                             println!(
@@ -690,8 +696,7 @@ fn main() {
         // Show D(k) sign pattern
         for i1 in 0..m {
             for i2 in (i1 + 1)..m {
-                let d_vals: Vec<i64> =
-                    (0..max_deg).map(|k| compute_d(a_rows, i1, i2, k)).collect();
+                let d_vals: Vec<i64> = (0..max_deg).map(|k| compute_d(a_rows, i1, i2, k)).collect();
                 let has_pos = d_vals.iter().any(|&v| v > 0);
                 let has_neg = d_vals.iter().any(|&v| v < 0);
                 let sign_str = if has_pos && has_neg {
@@ -768,8 +773,7 @@ fn main() {
             {
                 if let Some(cls) = prev_by_des.get(&sp) {
                     for pi in cls {
-                        let q =
-                            pi.iter().position(|&v| v == n - 1).unwrap() as u8 + 1;
+                        let q = pi.iter().position(|&v| v == n - 1).unwrap() as u8 + 1;
                         let e1 = if epsilon1(pi, p_max) { 1 } else { 0 };
                         by_q.entry(q)
                             .or_default()
@@ -782,8 +786,7 @@ fn main() {
             if a_qs.len() < 2 {
                 continue;
             }
-            let a_rows: Vec<Vec<i64>> =
-                a_qs.iter().map(|q| build_poly(&by_q[q])).collect();
+            let a_rows: Vec<Vec<i64>> = a_qs.iter().map(|q| build_poly(&by_q[q])).collect();
 
             let b_rows = staircase_transform(&a_rows);
             let m = b_rows.len();
@@ -835,7 +838,9 @@ fn main() {
 
     println!("\n=== CONCLUSION ===");
     if identity_pass == identity_checks {
-        println!("The algebraic identity Delta = B_{{i1,k2}}*D(k1) - B_{{i1,k1}}*D(k2) is VERIFIED.");
+        println!(
+            "The algebraic identity Delta = B_{{i1,k2}}*D(k1) - B_{{i1,k1}}*D(k2) is VERIFIED."
+        );
     } else {
         println!(
             "The algebraic identity FAILED in {} cases!",
@@ -851,7 +856,9 @@ fn main() {
         );
     }
     if ratio_pass == ratio_total {
-        println!("The ratio D(k)/B_{{i1,k}} is non-increasing in ALL cases => proof strategy viable!");
+        println!(
+            "The ratio D(k)/B_{{i1,k}} is non-increasing in ALL cases => proof strategy viable!"
+        );
     } else {
         println!(
             "The ratio condition fails in {} cases => need additional analysis.",

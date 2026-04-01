@@ -1,5 +1,5 @@
 //! Test whether R_{m'} ≪ P^λ propagates through the induction.
-//! 
+//!
 //! At level λ: assume R_{m'}^λ ≪ P^λ.
 //! At level λ+: need R_{m''}^{λ+} ≪ P^{λ+}.
 //!
@@ -13,14 +13,20 @@
 use polynomial_tools::real_rootedness::{check_weak_interlacing, is_real_rooted};
 
 fn peaks(w: &[u8]) -> usize {
-    if w.len() < 3 { return 0; }
-    (1..w.len()-1).filter(|&i| w[i-1] < w[i] && w[i] > w[i+1]).count()
+    if w.len() < 3 {
+        return 0;
+    }
+    (1..w.len() - 1)
+        .filter(|&i| w[i - 1] < w[i] && w[i] > w[i + 1])
+        .count()
 }
 
 fn all_perms(n: u8) -> Vec<Vec<u8>> {
-    if n <= 1 { return vec![(1..=n).collect()]; }
+    if n <= 1 {
+        return vec![(1..=n).collect()];
+    }
     let mut r = Vec::new();
-    for p in all_perms(n-1) {
+    for p in all_perms(n - 1) {
         for i in 0..=p.len() {
             let mut q = p.clone();
             q.insert(i, n);
@@ -32,7 +38,8 @@ fn all_perms(n: u8) -> Vec<Vec<u8>> {
 
 fn ferrers_perms(board: &[usize]) -> Vec<Vec<u8>> {
     let n = board.len();
-    all_perms(n as u8).into_iter()
+    all_perms(n as u8)
+        .into_iter()
         .filter(|p| (0..n).all(|i| (p[i] as usize) <= board[i]))
         .collect()
 }
@@ -41,14 +48,18 @@ fn compute_du(board: &[usize]) -> (Vec<Vec<i64>>, Vec<Vec<i64>>) {
     let perms = ferrers_perms(board);
     let n = board.len();
     let m = *board.last().unwrap();
-    let mut d = vec![vec![]; m+1];
-    let mut u = vec![vec![]; m+1];
+    let mut d = vec![vec![]; m + 1];
+    let mut u = vec![vec![]; m + 1];
     for p in &perms {
-        if n < 2 { continue; }
+        if n < 2 {
+            continue;
+        }
         let k = p[0] as usize;
         let pk = peaks(p);
         let poly = if p[0] > p[1] { &mut d[k] } else { &mut u[k] };
-        while poly.len() <= pk { poly.push(0); }
+        while poly.len() <= pk {
+            poly.push(0);
+        }
         poly[pk] += 1;
     }
     (d, u)
@@ -57,8 +68,12 @@ fn compute_du(board: &[usize]) -> (Vec<Vec<i64>>, Vec<Vec<i64>>) {
 fn poly_add(a: &[i64], b: &[i64]) -> Vec<i64> {
     let n = a.len().max(b.len());
     let mut r = vec![0i64; n];
-    for i in 0..a.len() { r[i] += a[i]; }
-    for i in 0..b.len() { r[i] += b[i]; }
+    for i in 0..a.len() {
+        r[i] += a[i];
+    }
+    for i in 0..b.len() {
+        r[i] += b[i];
+    }
     r
 }
 
@@ -68,7 +83,9 @@ fn poly_scale(a: &[i64], c: i64) -> Vec<i64> {
 
 fn poly_tmul(a: &[i64]) -> Vec<i64> {
     let mut r = vec![0i64; a.len() + 1];
-    for i in 0..a.len() { r[i+1] = a[i]; }
+    for i in 0..a.len() {
+        r[i + 1] = a[i];
+    }
     r
 }
 
@@ -76,28 +93,42 @@ fn poly_tmul(a: &[i64]) -> Vec<i64> {
 fn poly_t_minus_1_mul(p: &[i64]) -> Vec<i64> {
     let tp = poly_tmul(p);
     let mut r = vec![0i64; tp.len()];
-    for i in 0..tp.len() { r[i] += tp[i]; }
-    for i in 0..p.len() { r[i] -= p[i]; }
+    for i in 0..tp.len() {
+        r[i] += tp[i];
+    }
+    for i in 0..p.len() {
+        r[i] -= p[i];
+    }
     r
 }
 
 fn trim(p: &[i64]) -> Vec<i64> {
     let mut v = p.to_vec();
-    while v.last() == Some(&0) { v.pop(); }
+    while v.last() == Some(&0) {
+        v.pop();
+    }
     v
 }
 
 fn deg(p: &[i64]) -> usize {
     let t = trim(p);
-    if t.is_empty() { 0 } else { t.len() - 1 }
+    if t.is_empty() {
+        0
+    } else {
+        t.len() - 1
+    }
 }
 
 /// Check f ≪ g (weakly) using Wagner for same-degree reduction.
 fn interlaces_weak(f: &[i64], g: &[i64]) -> bool {
     let f = trim(f);
     let g = trim(g);
-    if f.is_empty() { return is_real_rooted(&g); }
-    if g.is_empty() { return false; }
+    if f.is_empty() {
+        return is_real_rooted(&g);
+    }
+    if g.is_empty() {
+        return false;
+    }
 
     let df = deg(&f);
     let dg = deg(&g);
@@ -115,10 +146,17 @@ fn interlaces_weak(f: &[i64], g: &[i64]) -> bool {
 
 fn boards_312(n: usize) -> Vec<Vec<usize>> {
     fn gen(n: usize, b: &mut Vec<usize>, r: &mut Vec<Vec<usize>>) {
-        if b.len() == n { r.push(b.clone()); return; }
+        if b.len() == n {
+            r.push(b.clone());
+            return;
+        }
         let i = b.len();
-        let prev = b.last().copied().unwrap_or(i+1).max(i+1);
-        for v in prev..=n { b.push(v); gen(n, b, r); b.pop(); }
+        let prev = b.last().copied().unwrap_or(i + 1).max(i + 1);
+        for v in prev..=n {
+            b.push(v);
+            gen(n, b, r);
+            b.pop();
+        }
     }
     let mut r = Vec::new();
     let mut b = Vec::new();
@@ -140,16 +178,20 @@ fn main() {
             let (dp, up) = compute_du(board);
 
             // A_j = D_j + U_j
-            let mut a_polys = vec![vec![]; m+1];
+            let mut a_polys = vec![vec![]; m + 1];
             for j in 1..=m {
                 a_polys[j] = poly_add(&dp[j], &up[j]);
             }
 
             // P^λ = Σ_j A_j
             let mut p_lam = vec![];
-            for j in 1..=m { p_lam = poly_add(&p_lam, &a_polys[j]); }
+            for j in 1..=m {
+                p_lam = poly_add(&p_lam, &a_polys[j]);
+            }
             let p_lam = trim(&p_lam);
-            if p_lam.is_empty() { continue; }
+            if p_lam.is_empty() {
+                continue;
+            }
 
             // Test for m' = m+1 (staircase extension)
             let m_prime = m + 1;
@@ -175,7 +217,9 @@ fn main() {
             for k in 1..=m_prime {
                 let mut sk = vec![];
                 for j in 1..k {
-                    if j <= m { sk = poly_add(&sk, &a_polys[j]); }
+                    if j <= m {
+                        sk = poly_add(&sk, &a_polys[j]);
+                    }
                 }
                 s[k] = sk;
             }
@@ -187,21 +231,28 @@ fn main() {
                 r_pp = poly_add(&r_pp, &poly_scale(&s[k], c));
             }
             let r_pp = trim(&r_pp);
-            if r_pp.is_empty() { continue; }
+            if r_pp.is_empty() {
+                continue;
+            }
 
             nt += 1;
             if interlaces_weak(&r_pp, &p_plus) {
                 np += 1;
             } else {
-                println!("  FAIL: board={:?}, m'={}, m''={}",
-                         board, m_prime, m_pp);
+                println!("  FAIL: board={:?}, m'={}, m''={}", board, m_prime, m_pp);
                 println!("    R''={:?}", &r_pp);
                 println!("    P+ ={:?}", &p_plus);
             }
         }
         total += nt;
         pass += np;
-        println!("n={}: propagation {}/{} ({} boards)", n, np, nt, boards.len());
+        println!(
+            "n={}: propagation {}/{} ({} boards)",
+            n,
+            np,
+            nt,
+            boards.len()
+        );
     }
     println!("\nTotal: {}/{}", pass, total);
 }

@@ -9,11 +9,21 @@ use polynomial_tools::real_rootedness::{check_interlacing_sturm, format_poly, is
 use polynomial_tools::recurrence::{find_recurrence_adaptive, AdaptiveSearchOptions};
 
 fn build_poly(perms: &[&Vec<u8>]) -> Vec<i64> {
-    if perms.is_empty() { return vec![0]; }
-    let max_s = perms.iter().map(|s| compute(s, Stat::Swaps)).max().unwrap_or(0);
+    if perms.is_empty() {
+        return vec![0];
+    }
+    let max_s = perms
+        .iter()
+        .map(|s| compute(s, Stat::Swaps))
+        .max()
+        .unwrap_or(0);
     let mut coeffs = vec![0i64; max_s + 1];
-    for s in perms { coeffs[compute(s, Stat::Swaps)] += 1; }
-    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 { coeffs.pop(); }
+    for s in perms {
+        coeffs[compute(s, Stat::Swaps)] += 1;
+    }
+    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 {
+        coeffs.pop();
+    }
     coeffs
 }
 
@@ -41,10 +51,16 @@ fn main() {
 
         let mut active_polys: Vec<(usize, Vec<i64>)> = Vec::new();
         for (pos, group) in by_pos.iter().enumerate() {
-            if group.is_empty() { continue; }
+            if group.is_empty() {
+                continue;
+            }
             let poly = build_poly(group);
             let count: i64 = poly.iter().sum();
-            let rr = if poly.len() <= 2 { true } else { is_real_rooted(&poly) };
+            let rr = if poly.len() <= 2 {
+                true
+            } else {
+                is_real_rooted(&poly)
+            };
             let pos1 = pos + 1; // 1-indexed
             println!(
                 "  pos={:>2} ({}): count={:<6} {:<50} {}",
@@ -63,7 +79,9 @@ fn main() {
             for i in 0..active_polys.len() - 1 {
                 let (p1, ref f) = active_polys[i];
                 let (p2, ref g) = active_polys[i + 1];
-                if f.len() <= 1 || g.len() <= 1 { continue; }
+                if f.len() <= 1 || g.len() <= 1 {
+                    continue;
+                }
                 let (small, large) = if f.len() <= g.len() { (f, g) } else { (g, f) };
                 match check_interlacing_sturm(small, large) {
                     Some(true) => println!("    pos {} ≪ pos {}: ✓", p1, p2),
@@ -102,7 +120,9 @@ fn main() {
     };
 
     for (j, seq) in polys_by_pos.iter().enumerate() {
-        if seq.len() < 4 { continue; }
+        if seq.len() < 4 {
+            continue;
+        }
         let pos1 = j + 1;
         print!("  pos={}: {} terms, ", pos1, seq.len());
         match find_recurrence_adaptive(seq, &opts) {

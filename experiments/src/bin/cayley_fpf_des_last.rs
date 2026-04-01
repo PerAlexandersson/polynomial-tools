@@ -2,10 +2,10 @@
 //! All (n, last) pairs appear real-rooted — check interlacing patterns.
 
 use combpoly::cayley::for_each_fpf_cayley;
-use polynomial_tools::{check_interlacing, format_poly, is_real_rooted};
-use polynomial_tools::recurrence::{find_recurrence_adaptive, AdaptiveSearchOptions};
 use combpoly::statistics;
 use combpoly::statistics::Stat;
+use polynomial_tools::recurrence::{find_recurrence_adaptive, AdaptiveSearchOptions};
+use polynomial_tools::{check_interlacing, format_poly, is_real_rooted};
 
 fn accumulate_poly(coeffs: &mut Vec<i64>, val: usize) {
     if val >= coeffs.len() {
@@ -53,7 +53,12 @@ fn main() {
             }
             let rr = is_real_rooted(&polys[n][k]);
             if !rr {
-                println!("NOT real-rooted: n={}, last={}, poly = {}", n, k, format_poly(&polys[n][k]));
+                println!(
+                    "NOT real-rooted: n={}, last={}, poly = {}",
+                    n,
+                    k,
+                    format_poly(&polys[n][k])
+                );
                 all_rr = false;
             }
         }
@@ -67,12 +72,18 @@ fn main() {
     for k in 1..=max_n as usize {
         let mut entries: Vec<(usize, &Vec<i64>)> = Vec::new();
         for n in k..=max_n as usize {
-            if k >= polys[n].len() { continue; }
+            if k >= polys[n].len() {
+                continue;
+            }
             let p = &polys[n][k];
-            if p.is_empty() || p.iter().all(|&c| c == 0) { continue; }
+            if p.is_empty() || p.iter().all(|&c| c == 0) {
+                continue;
+            }
             entries.push((n, p));
         }
-        if entries.len() < 2 { continue; }
+        if entries.len() < 2 {
+            continue;
+        }
 
         print!("last = {}:", k);
         let mut all_interlace = true;
@@ -103,10 +114,14 @@ fn main() {
         let mut entries: Vec<(usize, &Vec<i64>)> = Vec::new();
         for k in 1..polys[n].len() {
             let p = &polys[n][k];
-            if p.is_empty() || p.iter().all(|&c| c == 0) { continue; }
+            if p.is_empty() || p.iter().all(|&c| c == 0) {
+                continue;
+            }
             entries.push((k, p));
         }
-        if entries.len() < 2 { continue; }
+        if entries.len() < 2 {
+            continue;
+        }
 
         print!("n = {:2}:", n);
         let mut all_interlace = true;
@@ -138,7 +153,9 @@ fn main() {
     for n in 2..max_n as usize {
         for k in 1..polys[n].len() {
             let p = &polys[n][k];
-            if p.is_empty() || p.iter().all(|&c| c == 0) { continue; }
+            if p.is_empty() || p.iter().all(|&c| c == 0) {
+                continue;
+            }
 
             // Check vs (n, k+1)
             if k + 1 < polys[n].len() {
@@ -180,7 +197,13 @@ fn main() {
         let k = n - 1;
         let p = &polys[n][k];
         let count: i64 = p.iter().sum();
-        println!("n={:2}, last={}: {:>10} perms, poly = {}", n, k, count, format_poly(p));
+        println!(
+            "n={:2}, last={}: {:>10} perms, poly = {}",
+            n,
+            k,
+            count,
+            format_poly(p)
+        );
         last_nm1.push(p.clone());
     }
 
@@ -237,8 +260,12 @@ fn main() {
     // 8. Check if overall des poly = sum is real-rooted and interlaces
     println!("\n=== Overall des poly interlacing ===\n");
     for i in 1..overall.len() {
-        if overall[i].is_empty() || overall[i].iter().all(|&c| c == 0) { continue; }
-        if overall[i - 1].is_empty() || overall[i - 1].iter().all(|&c| c == 0) { continue; }
+        if overall[i].is_empty() || overall[i].iter().all(|&c| c == 0) {
+            continue;
+        }
+        if overall[i - 1].is_empty() || overall[i - 1].iter().all(|&c| c == 0) {
+            continue;
+        }
         let il = check_interlacing(&overall[i - 1], &overall[i]);
         println!("n={} -> n={}: interlace = {:?}", i - 1, i, il);
     }

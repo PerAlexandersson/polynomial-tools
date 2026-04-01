@@ -137,17 +137,14 @@ fn is_zero_poly(f: &[i64]) -> bool {
 // Part 1: Interlacing between L_{n,S} and L_{n,S\{i}}
 // ============================================================
 
-fn part1_interlacing(
-    n: u8,
-    polys: &BTreeMap<u64, Vec<i64>>,
-) {
+fn part1_interlacing(n: u8, polys: &BTreeMap<u64, Vec<i64>>) {
     println!("--- n = {} ---", n);
 
     let mut total_pairs = 0u32;
-    let mut sp_leq_s = 0u32;     // L_{n,S'} ≪ L_{n,S}
-    let mut s_leq_sp = 0u32;     // L_{n,S} ≪ L_{n,S'}
-    let mut both_dir = 0u32;     // interlacing in both directions
-    let mut neither = 0u32;      // no interlacing
+    let mut sp_leq_s = 0u32; // L_{n,S'} ≪ L_{n,S}
+    let mut s_leq_sp = 0u32; // L_{n,S} ≪ L_{n,S'}
+    let mut both_dir = 0u32; // interlacing in both directions
+    let mut neither = 0u32; // no interlacing
 
     // Track which removal position tends to give interlacing
     let mut by_removal_pos: BTreeMap<String, (u32, u32)> = BTreeMap::new(); // "min"/"max"/"mid" -> (total, success)
@@ -178,10 +175,18 @@ fn part1_interlacing(
             let (fwd, bwd) = check_both_interlacings(sp_poly, s_poly);
             total_pairs += 1;
 
-            if fwd { sp_leq_s += 1; }
-            if bwd { s_leq_sp += 1; }
-            if fwd && bwd { both_dir += 1; }
-            if !fwd && !bwd { neither += 1; }
+            if fwd {
+                sp_leq_s += 1;
+            }
+            if bwd {
+                s_leq_sp += 1;
+            }
+            if fwd && bwd {
+                both_dir += 1;
+            }
+            if !fwd && !bwd {
+                neither += 1;
+            }
 
             // Classify removal position
             let pos_label = if i == *elems.first().unwrap() && elems.len() > 1 {
@@ -193,7 +198,9 @@ fn part1_interlacing(
             } else {
                 "mid"
             };
-            let entry = by_removal_pos.entry(pos_label.to_string()).or_insert((0, 0));
+            let entry = by_removal_pos
+                .entry(pos_label.to_string())
+                .or_insert((0, 0));
             entry.0 += 1;
             if fwd || bwd {
                 entry.1 += 1;
@@ -233,11 +240,7 @@ fn part1_interlacing(
 //         S' = S\{max(S)} or S' = S\{min(S)}
 // ============================================================
 
-fn part2_transfer(
-    n: u8,
-    polys: &BTreeMap<u64, Vec<i64>>,
-    _swap_vals: &BTreeMap<u64, Vec<usize>>,
-) {
+fn part2_transfer(n: u8, polys: &BTreeMap<u64, Vec<i64>>, _swap_vals: &BTreeMap<u64, Vec<usize>>) {
     println!("--- n = {} ---", n);
 
     // For each S with |S| >= 1, 1 ∉ S, try to express
@@ -346,11 +349,7 @@ fn part2_transfer(
 /// For a given S and S' = S ∪ {i}, refine L_{n,S} and L_{n,S'} by position
 /// of some value (e.g., position of n, or position of i, etc.) and look
 /// for a polynomial matrix connecting the refined vectors.
-fn part3_matrix_recurrence(
-    n: u8,
-    all_perms: &[Vec<u8>],
-    polys: &BTreeMap<u64, Vec<i64>>,
-) {
+fn part3_matrix_recurrence(n: u8, all_perms: &[Vec<u8>], polys: &BTreeMap<u64, Vec<i64>>) {
     println!("--- n = {} ---", n);
 
     // For each S with |S|>=1 and 1 ∉ S, and each i ∈ S,
@@ -405,7 +404,11 @@ fn part3_matrix_recurrence(
             let mut diff_descriptions: Vec<String> = Vec::new();
 
             let all_positions: Vec<usize> = {
-                let mut ps: Vec<usize> = s_pos_polys.keys().chain(sp_pos_polys.keys()).cloned().collect();
+                let mut ps: Vec<usize> = s_pos_polys
+                    .keys()
+                    .chain(sp_pos_polys.keys())
+                    .cloned()
+                    .collect();
                 ps.sort();
                 ps.dedup();
                 ps
@@ -467,10 +470,7 @@ fn part3_matrix_recurrence(
 // Part 4: Pairwise compatibility of {L_{n,S'} : i ∈ S}
 // ============================================================
 
-fn part4_pairwise_compatibility(
-    n: u8,
-    polys: &BTreeMap<u64, Vec<i64>>,
-) {
+fn part4_pairwise_compatibility(n: u8, polys: &BTreeMap<u64, Vec<i64>>) {
     println!("--- n = {} ---", n);
 
     let mut total_sets = 0u32;
@@ -543,10 +543,7 @@ fn part4_pairwise_compatibility(
 // Part 5: Degree and coefficient comparison
 // ============================================================
 
-fn part5_degree_comparison(
-    n: u8,
-    polys: &BTreeMap<u64, Vec<i64>>,
-) {
+fn part5_degree_comparison(n: u8, polys: &BTreeMap<u64, Vec<i64>>) {
     println!("--- n = {} ---", n);
 
     // For S -> S\{i}, compare degrees and leading coefficients.
@@ -571,8 +568,12 @@ fn part5_degree_comparison(
 
                 match (s_deg, sp_deg) {
                     (Some(d1), Some(d2)) => {
-                        if d1 < d2 { always_geq_deg = false; }
-                        if d1 > d2 { always_leq_deg = false; }
+                        if d1 < d2 {
+                            always_geq_deg = false;
+                        }
+                        if d1 > d2 {
+                            always_leq_deg = false;
+                        }
                     }
                     _ => {}
                 }
@@ -608,10 +609,7 @@ fn part5_degree_comparison(
 // Part 6: Detailed view of small cases
 // ============================================================
 
-fn part6_small_cases(
-    n: u8,
-    polys: &BTreeMap<u64, Vec<i64>>,
-) {
+fn part6_small_cases(n: u8, polys: &BTreeMap<u64, Vec<i64>>) {
     println!("--- n = {} (detailed interlacing table) ---", n);
 
     for (&s_mask, s_poly) in polys {
@@ -678,8 +676,14 @@ fn main() {
     println!("================================================================\n");
 
     // Precompute all data
-    let mut all_data: BTreeMap<u8, (Vec<Vec<u8>>, BTreeMap<u64, Vec<i64>>, BTreeMap<u64, Vec<usize>>)> =
-        BTreeMap::new();
+    let mut all_data: BTreeMap<
+        u8,
+        (
+            Vec<Vec<u8>>,
+            BTreeMap<u64, Vec<i64>>,
+            BTreeMap<u64, Vec<usize>>,
+        ),
+    > = BTreeMap::new();
 
     for n in min_n..=max_n {
         let all = all_permutations(n);
@@ -709,7 +713,9 @@ fn main() {
         let mut rr = 0u32;
         let mut not_rr_list: Vec<String> = Vec::new();
         for (&ds, poly) in polys {
-            if ds & 1 != 0 { continue; }
+            if ds & 1 != 0 {
+                continue;
+            }
             total += 1;
             if poly.len() <= 2 || is_real_rooted(poly) {
                 rr += 1;

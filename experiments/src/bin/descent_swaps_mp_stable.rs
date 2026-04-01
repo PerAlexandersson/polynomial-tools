@@ -26,7 +26,9 @@ fn cadd(a: (f64, f64), b: (f64, f64)) -> (f64, f64) {
 }
 fn cpow(base: (f64, f64), exp: u32) -> (f64, f64) {
     let mut r = (1.0_f64, 0.0_f64);
-    for _ in 0..exp { r = cmul(r, base); }
+    for _ in 0..exp {
+        r = cmul(r, base);
+    }
     r
 }
 fn cabs(a: (f64, f64)) -> f64 {
@@ -36,10 +38,14 @@ fn cabs(a: (f64, f64)) -> f64 {
 // ── Simple PRNG ───────────────────────────────────────────────────────────────
 struct Rng(u64);
 impl Rng {
-    fn new(seed: u64) -> Self { Rng(seed.wrapping_add(1)) }
+    fn new(seed: u64) -> Self {
+        Rng(seed.wrapping_add(1))
+    }
     fn next_u64(&mut self) -> u64 {
-        self.0 = self.0.wrapping_mul(6364136223846793005)
-                       .wrapping_add(1442695040888963407);
+        self.0 = self
+            .0
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         self.0
     }
     fn next_f64(&mut self) -> f64 {
@@ -53,21 +59,35 @@ impl Rng {
 // ── Bivariate polynomial: coeffs[q][k] = [z^q t^k] P, 0-indexed ──────────────
 type BivPoly = Vec<Vec<f64>>;
 
-fn biv_zero() -> BivPoly { vec![] }
+fn biv_zero() -> BivPoly {
+    vec![]
+}
 
 fn biv_get(p: &BivPoly, q: usize, k: usize) -> f64 {
-    if q < p.len() && k < p[q].len() { p[q][k] } else { 0.0 }
+    if q < p.len() && k < p[q].len() {
+        p[q][k]
+    } else {
+        0.0
+    }
 }
 
 fn biv_set(p: &mut BivPoly, q: usize, k: usize, v: f64) {
-    if q >= p.len() { p.resize(q + 1, vec![]); }
-    if k >= p[q].len() { p[q].resize(k + 1, 0.0); }
+    if q >= p.len() {
+        p.resize(q + 1, vec![]);
+    }
+    if k >= p[q].len() {
+        p[q].resize(k + 1, 0.0);
+    }
     p[q][k] = v;
 }
 
 fn biv_add_to(p: &mut BivPoly, q: usize, k: usize, v: f64) {
-    if q >= p.len() { p.resize(q + 1, vec![]); }
-    if k >= p[q].len() { p[q].resize(k + 1, 0.0); }
+    if q >= p.len() {
+        p.resize(q + 1, vec![]);
+    }
+    if k >= p[q].len() {
+        p[q].resize(k + 1, 0.0);
+    }
     p[q][k] += v;
 }
 
@@ -79,7 +99,9 @@ fn biv_mul_linear(p: &BivPoly, a: f64, b: f64, c: f64) -> BivPoly {
         let kmax = if q < p.len() { p[q].len() } else { 0 };
         for k in 0..kmax {
             let v = biv_get(p, q, k);
-            if v == 0.0 { continue; }
+            if v == 0.0 {
+                continue;
+            }
             // ·c term
             biv_add_to(&mut out, q, k, c * v);
             // ·a·z term (q → q+1)
@@ -110,7 +132,9 @@ fn apply_mp_float(q_poly: &BivPoly, p: usize) -> BivPoly {
     let mut out = biv_zero();
     for (q, t_coeffs) in q_poly.iter().enumerate() {
         for (k, &c) in t_coeffs.iter().enumerate() {
-            if c == 0.0 { continue; }
+            if c == 0.0 {
+                continue;
+            }
             if p >= 2 && q <= p - 2 {
                 // Zone L: multiply by t → k → k+1, same q
                 biv_add_to(&mut out, q, k + 1, c);
@@ -130,10 +154,14 @@ fn apply_mp_float(q_poly: &BivPoly, p: usize) -> BivPoly {
 fn eval_biv_complex(p: &BivPoly, z: (f64, f64), t: (f64, f64)) -> (f64, f64) {
     let mut result = (0.0_f64, 0.0_f64);
     for (q, t_coeffs) in p.iter().enumerate() {
-        if t_coeffs.is_empty() { continue; }
+        if t_coeffs.is_empty() {
+            continue;
+        }
         let zq = cpow(z, q as u32);
         for (k, &c) in t_coeffs.iter().enumerate() {
-            if c == 0.0 { continue; }
+            if c == 0.0 {
+                continue;
+            }
             let tk = cpow(t, k as u32);
             result = cadd(result, cmul((c, 0.0), cmul(zq, tk)));
         }
@@ -145,32 +173,41 @@ fn eval_biv_complex(p: &BivPoly, z: (f64, f64), t: (f64, f64)) -> (f64, f64) {
 
 fn main() {
     let num_polys: usize = std::env::args()
-        .nth(1).and_then(|s| s.parse().ok()).unwrap_or(2000);
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(2000);
     let num_eval: usize = std::env::args()
-        .nth(2).and_then(|s| s.parse().ok()).unwrap_or(50);
+        .nth(2)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(50);
     let max_deg: usize = std::env::args()
-        .nth(3).and_then(|s| s.parse().ok()).unwrap_or(6);
+        .nth(3)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(6);
 
     println!("=== M_p stability-preservation test ===");
     println!("Random stable polys: products of (az+bt+c) with a,b,c>0");
-    println!("{} polynomials × {} eval points, degree 1..{}\n", num_polys, num_eval, max_deg);
+    println!(
+        "{} polynomials × {} eval points, degree 1..{}\n",
+        num_polys, num_eval, max_deg
+    );
 
     let mut total_tests = 0u64;
-    let mut total_pass  = 0u64;
+    let mut total_pass = 0u64;
     let mut min_abs_seen = f64::MAX;
 
     // Test p = 1..max_p for polynomials of various degrees
     for p in 1..=8usize {
         let mut p_tests = 0u64;
-        let mut p_pass  = 0u64;
-        let mut p_min   = f64::MAX;
+        let mut p_pass = 0u64;
+        let mut p_min = f64::MAX;
 
         let mut rng = Rng::new(p as u64 * 1000003 + 42);
 
         for poly_idx in 0..num_polys {
-            let deg = 1 + poly_idx % max_deg;  // cycle through degrees 1..max_deg
+            let deg = 1 + poly_idx % max_deg; // cycle through degrees 1..max_deg
             let q_poly = random_stable_poly(&mut rng, deg);
-            let mp_q   = apply_mp_float(&q_poly, p);
+            let mp_q = apply_mp_float(&q_poly, p);
 
             let mut pass = true;
             let mut min_abs = f64::MAX;
@@ -178,8 +215,12 @@ fn main() {
             for eval_idx in 0..num_eval {
                 // Sample (z, t) with Im > 0
                 let (z, t) = if eval_idx < 4 {
-                    let cases = [(0.0_f64,1.0,0.0,1.0),(1.0,1.0,1.0,1.0),
-                                 (0.5,0.5,0.5,0.5),(-1.0,0.3,0.5,0.7)];
+                    let cases = [
+                        (0.0_f64, 1.0, 0.0, 1.0),
+                        (1.0, 1.0, 1.0, 1.0),
+                        (0.5, 0.5, 0.5, 0.5),
+                        (-1.0, 0.3, 0.5, 0.7),
+                    ];
                     let c = cases[eval_idx];
                     ((c.0, c.1), (c.2, c.3))
                 } else {
@@ -192,7 +233,9 @@ fn main() {
 
                 let val = eval_biv_complex(&mp_q, z, t);
                 let abs_val = cabs(val);
-                if abs_val < min_abs { min_abs = abs_val; }
+                if abs_val < min_abs {
+                    min_abs = abs_val;
+                }
                 if abs_val < 1e-10 {
                     pass = false;
                     println!("  FAIL p={} deg={} poly#{}: |M_p[Q]|={:.2e} at ({:.3}+{:.3}i, {:.3}+{:.3}i)",
@@ -201,7 +244,9 @@ fn main() {
                     print!("    Q =");
                     for (q, t_c) in q_poly.iter().enumerate() {
                         for (k, &c) in t_c.iter().enumerate() {
-                            if c.abs() > 1e-12 { print!(" + {:.3}·z^{}t^{}", c, q, k); }
+                            if c.abs() > 1e-12 {
+                                print!(" + {:.3}·z^{}t^{}", c, q, k);
+                            }
                         }
                     }
                     println!();
@@ -211,19 +256,29 @@ fn main() {
 
             if pass {
                 p_pass += 1;
-                if min_abs < p_min { p_min = min_abs; }
+                if min_abs < p_min {
+                    p_min = min_abs;
+                }
             }
             p_tests += 1;
         }
 
         total_tests += p_tests;
-        total_pass  += p_pass;
-        if p_min < min_abs_seen { min_abs_seen = p_min; }
+        total_pass += p_pass;
+        if p_min < min_abs_seen {
+            min_abs_seen = p_min;
+        }
 
-        println!("p={}: {}/{} passed  min|M_p[Q]|={:.3e}", p, p_pass, p_tests, p_min);
+        println!(
+            "p={}: {}/{} passed  min|M_p[Q]|={:.3e}",
+            p, p_pass, p_tests, p_min
+        );
     }
 
-    println!("\nTOTAL: {}/{} passed  (global min|M_p[Q]|={:.3e})", total_pass, total_tests, min_abs_seen);
+    println!(
+        "\nTOTAL: {}/{} passed  (global min|M_p[Q]|={:.3e})",
+        total_pass, total_tests, min_abs_seen
+    );
 
     if total_pass == total_tests {
         println!();
@@ -238,7 +293,7 @@ fn main() {
     println!("Check that composing two M_p operators preserves stability.");
 
     let mut comp_total = 0u64;
-    let mut comp_pass  = 0u64;
+    let mut comp_pass = 0u64;
 
     for p1 in 1..=6usize {
         for p2 in 1..=6usize {
@@ -257,14 +312,16 @@ fn main() {
                     let zi = rng.next_range(0.01, 5.0);
                     let tr = rng.next_range(-5.0, 5.0);
                     let ti = rng.next_range(0.01, 5.0);
-                    if cabs(eval_biv_complex(&after_p2, (zr,zi), (tr,ti))) < 1e-10 {
+                    if cabs(eval_biv_complex(&after_p2, (zr, zi), (tr, ti))) < 1e-10 {
                         ok = false;
                         println!("  FAIL M_{} ∘ M_{}: poly#{} deg={}", p2, p1, poly_idx, deg);
                         break;
                     }
                 }
 
-                if ok { pass_count += 1; }
+                if ok {
+                    pass_count += 1;
+                }
                 comp_total += 1;
             }
             comp_pass += pass_count as u64;

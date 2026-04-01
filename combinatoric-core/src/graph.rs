@@ -145,56 +145,86 @@ fn factorial(n: usize) -> u64 {
 // BigInt polynomial helpers (for tree sink polynomial)
 // ---------------------------------------------------------------------------
 
-fn big(n: i64) -> BigInt { BigInt::from(n) }
-fn big_zero() -> BigInt { BigInt::from(0) }
+fn big(n: i64) -> BigInt {
+    BigInt::from(n)
+}
+fn big_zero() -> BigInt {
+    BigInt::from(0)
+}
 
 fn bpoly_add(a: &[BigInt], b: &[BigInt]) -> Vec<BigInt> {
     let len = a.len().max(b.len());
     let mut r = vec![big_zero(); len];
-    for (i, c) in a.iter().enumerate() { r[i] += c; }
-    for (i, c) in b.iter().enumerate() { r[i] += c; }
-    while r.last() == Some(&big_zero()) { r.pop(); }
+    for (i, c) in a.iter().enumerate() {
+        r[i] += c;
+    }
+    for (i, c) in b.iter().enumerate() {
+        r[i] += c;
+    }
+    while r.last() == Some(&big_zero()) {
+        r.pop();
+    }
     r
 }
 
 fn bpoly_mul(a: &[BigInt], b: &[BigInt]) -> Vec<BigInt> {
-    if a.is_empty() || b.is_empty() { return vec![]; }
+    if a.is_empty() || b.is_empty() {
+        return vec![];
+    }
     let mut r = vec![big_zero(); a.len() + b.len() - 1];
     for (i, ca) in a.iter().enumerate() {
         for (j, cb) in b.iter().enumerate() {
             r[i + j] += ca * cb;
         }
     }
-    while r.last() == Some(&big_zero()) { r.pop(); }
+    while r.last() == Some(&big_zero()) {
+        r.pop();
+    }
     r
 }
 
 fn bpoly_mul_t(p: &[BigInt]) -> Vec<BigInt> {
-    if p.is_empty() { return vec![]; }
+    if p.is_empty() {
+        return vec![];
+    }
     let mut r = vec![big_zero(); p.len() + 1];
-    for (i, c) in p.iter().enumerate() { r[i + 1] = c.clone(); }
+    for (i, c) in p.iter().enumerate() {
+        r[i + 1] = c.clone();
+    }
     r
 }
 
 fn bpoly_scale(p: &[BigInt], s: &BigInt) -> Vec<BigInt> {
-    if *s == big_zero() { return vec![]; }
+    if *s == big_zero() {
+        return vec![];
+    }
     let mut r: Vec<BigInt> = p.iter().map(|c| c * s).collect();
-    while r.last() == Some(&big_zero()) { r.pop(); }
+    while r.last() == Some(&big_zero()) {
+        r.pop();
+    }
     r
 }
 
 fn bpoly_product(polys: &[Vec<BigInt>]) -> Vec<BigInt> {
     let mut result = vec![big(1)];
-    for p in polys { result = bpoly_mul(&result, p); }
+    for p in polys {
+        result = bpoly_mul(&result, p);
+    }
     result
 }
 
 fn bpoly_exact_div(a: &[BigInt], b: &[BigInt]) -> Vec<BigInt> {
-    if b.is_empty() { panic!("division by zero polynomial"); }
-    if a.is_empty() { return vec![]; }
+    if b.is_empty() {
+        panic!("division by zero polynomial");
+    }
+    if a.is_empty() {
+        return vec![];
+    }
     let da = a.len() - 1;
     let db = b.len() - 1;
-    if da < db { return vec![]; }
+    if da < db {
+        return vec![];
+    }
     let mut rem = a.to_vec();
     let mut quot = vec![big_zero(); da - db + 1];
     let lead_b = b.last().unwrap();
@@ -205,13 +235,17 @@ fn bpoly_exact_div(a: &[BigInt], b: &[BigInt]) -> Vec<BigInt> {
             rem[i + j] -= &q * bj;
         }
     }
-    while quot.last() == Some(&big_zero()) { quot.pop(); }
+    while quot.last() == Some(&big_zero()) {
+        quot.pop();
+    }
     quot
 }
 
 fn factorial_big(n: usize) -> BigInt {
     let mut r = big(1);
-    for i in 2..=n { r *= big(i as i64); }
+    for i in 2..=n {
+        r *= big(i as i64);
+    }
     r
 }
 
@@ -219,8 +253,8 @@ fn factorial_big(n: usize) -> BigInt {
 fn poly_mul_linear(p: &[i64], c: i64) -> Vec<i64> {
     let mut result = vec![0i64; p.len() + 1];
     for (i, &coeff) in p.iter().enumerate() {
-        result[i] += c * coeff;     // c · coeff · t^i
-        result[i + 1] += coeff;     // coeff · t^{i+1}
+        result[i] += c * coeff; // c · coeff · t^i
+        result[i + 1] += coeff; // coeff · t^{i+1}
     }
     while result.last() == Some(&0) {
         result.pop();
@@ -264,7 +298,11 @@ impl Graph {
             }
         }
 
-        Graph { n, edges: deduped, adj }
+        Graph {
+            n,
+            edges: deduped,
+            adj,
+        }
     }
 
     /// Parse a graph from a graph6 string.
@@ -485,7 +523,11 @@ impl Graph {
         let n = rows + cols;
         let mut edges = Vec::new();
         for i in 0..rows {
-            let start = if i < mu.num_parts() { mu.part(i) as usize } else { 0 };
+            let start = if i < mu.num_parts() {
+                mu.part(i) as usize
+            } else {
+                0
+            };
             for j in start..(lambda.part(i) as usize) {
                 edges.push((i, rows + j));
             }
@@ -572,7 +614,12 @@ impl Graph {
     /// Delete an edge.
     pub fn delete_edge(&self, u: usize, v: usize) -> Self {
         let (a, b) = if u < v { (u, v) } else { (v, u) };
-        let edges: Vec<_> = self.edges.iter().copied().filter(|&e| e != (a, b)).collect();
+        let edges: Vec<_> = self
+            .edges
+            .iter()
+            .copied()
+            .filter(|&e| e != (a, b))
+            .collect();
         Graph::new(self.n, &edges)
     }
 
@@ -663,7 +710,11 @@ impl Graph {
                         Some(_) => {}
                         None => {
                             color[u] = Some(!c);
-                            if !c { b.push(u); } else { a.push(u); }
+                            if !c {
+                                b.push(u);
+                            } else {
+                                a.push(u);
+                            }
                             stack.push(u);
                         }
                     }
@@ -871,12 +922,7 @@ impl Graph {
         result
     }
 
-    fn indep_rec(
-        &self,
-        start: usize,
-        current: &mut Vec<usize>,
-        result: &mut Vec<Vec<usize>>,
-    ) {
+    fn indep_rec(&self, start: usize, current: &mut Vec<usize>, result: &mut Vec<Vec<usize>>) {
         result.push(current.clone());
         for v in start..self.n {
             if current.iter().all(|&u| !self.has_edge(u, v)) {
@@ -1186,7 +1232,10 @@ impl Graph {
         use num_traits::ToPrimitive;
         self.sink_polynomial_tree_bigint()
             .iter()
-            .map(|c| c.to_i64().expect("coefficient overflow in sink_polynomial_tree"))
+            .map(|c| {
+                c.to_i64()
+                    .expect("coefficient overflow in sink_polynomial_tree")
+            })
             .collect()
     }
 
@@ -1196,7 +1245,9 @@ impl Graph {
     /// - order[i] is the vertex in BFS order (root = order[0])
     /// - parent[v] is the parent of v (usize::MAX for root)
     /// - a_polys[v] = A_v(t), b_polys[v] = B_v(t)
-    pub fn tree_ab_polynomials(&self) -> (Vec<usize>, Vec<usize>, Vec<Vec<BigInt>>, Vec<Vec<BigInt>>) {
+    pub fn tree_ab_polynomials(
+        &self,
+    ) -> (Vec<usize>, Vec<usize>, Vec<Vec<BigInt>>, Vec<Vec<BigInt>>) {
         assert!(
             self.edges.len() + 1 == self.n && self.n > 0,
             "tree_ab_polynomials requires a tree"
@@ -1231,11 +1282,7 @@ impl Graph {
         let mut b_poly: Vec<Vec<BigInt>> = vec![vec![]; self.n];
 
         for &v in order.iter().rev() {
-            let children: Vec<usize> = adj[v]
-                .iter()
-                .copied()
-                .filter(|&u| parent[u] == v)
-                .collect();
+            let children: Vec<usize> = adj[v].iter().copied().filter(|&u| parent[u] == v).collect();
             let k = children.len();
 
             if v == root {
@@ -1336,15 +1383,13 @@ impl Graph {
         let mut b_poly: Vec<Vec<BigInt>> = vec![vec![]; self.n];
 
         for &v in order.iter().rev() {
-            let children: Vec<usize> = adj[v]
-                .iter()
-                .copied()
-                .filter(|&u| parent[u] == v)
-                .collect();
+            let children: Vec<usize> = adj[v].iter().copied().filter(|&u| parent[u] == v).collect();
             let k = children.len();
 
             if v == root {
-                if k == 0 { continue; }
+                if k == 0 {
+                    continue;
+                }
                 let mut tps: Vec<Vec<BigInt>> = Vec::new();
                 for &c in &children {
                     tps.push(bpoly_add(&a_poly[c], &b_poly[c]));
@@ -1406,12 +1451,7 @@ impl Graph {
 
 impl std::fmt::Display for Graph {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Graph(n={}, |E|={})",
-            self.n,
-            self.edges.len()
-        )
+        write!(f, "Graph(n={}, |E|={})", self.n, self.edges.len())
     }
 }
 
@@ -1738,9 +1778,7 @@ mod tests {
     fn test_graph6_petersen() {
         // Petersen graph, graph6 = "IsP@DKAO?"  (well-known encoding)
         // Let's verify by round-tripping: parse graph5c.g6 and check counts
-        let path = std::path::Path::new(
-            "/home/paxinum/Dropbox/mathematica-packages/graph5c.g6"
-        );
+        let path = std::path::Path::new("/home/paxinum/Dropbox/mathematica-packages/graph5c.g6");
         if path.exists() {
             let graphs = Graph::all_from_graph6_file(path).unwrap();
             // Number of connected graphs on 5 vertices = 21
@@ -1758,13 +1796,16 @@ mod tests {
         let expected = [(3, 2), (4, 6), (5, 21), (6, 112), (7, 853)];
         for (n, count) in expected {
             let path = std::path::PathBuf::from(format!(
-                "/home/paxinum/Dropbox/mathematica-packages/graph{}c.g6", n
+                "/home/paxinum/Dropbox/mathematica-packages/graph{}c.g6",
+                n
             ));
             if path.exists() {
                 let graphs = Graph::all_from_graph6_file(&path).unwrap();
                 assert_eq!(
-                    graphs.len(), count,
-                    "wrong count for connected graphs on {} vertices", n
+                    graphs.len(),
+                    count,
+                    "wrong count for connected graphs on {} vertices",
+                    n
                 );
             }
         }
@@ -1776,13 +1817,16 @@ mod tests {
         let expected = [(5, 3), (6, 6), (7, 11), (8, 23), (9, 47), (10, 106)];
         for (n, count) in expected {
             let path = std::path::PathBuf::from(format!(
-                "/home/paxinum/Dropbox/mathematica-packages/trees{}.g6", n
+                "/home/paxinum/Dropbox/mathematica-packages/trees{}.g6",
+                n
             ));
             if path.exists() {
                 let trees = Graph::all_from_graph6_file(&path).unwrap();
                 assert_eq!(
-                    trees.len(), count,
-                    "wrong count for trees on {} vertices", n
+                    trees.len(),
+                    count,
+                    "wrong count for trees on {} vertices",
+                    n
                 );
                 // All trees are connected and bipartite
                 assert!(trees.iter().all(|g| g.is_connected()));

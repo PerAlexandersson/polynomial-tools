@@ -15,9 +15,7 @@ use crate::partition::Partition;
 /// Each basis element is labeled by an index of this type, and the
 /// algebra is graded by the `degree` function. The trait provides
 /// enough structure for transition matrix caching and formal sum operations.
-pub trait BasisIndex:
-    Clone + Eq + Ord + Hash + fmt::Debug + fmt::Display + Sized
-{
+pub trait BasisIndex: Clone + Eq + Ord + Hash + fmt::Debug + fmt::Display + Sized {
     /// The degree (grading value) of this index.
     fn degree(&self) -> u32;
 

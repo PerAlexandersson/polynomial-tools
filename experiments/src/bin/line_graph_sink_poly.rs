@@ -6,7 +6,6 @@
 /// For a tree T, the number of acyclic orientations of L(T)
 /// equals the product of the degrees of the vertices of T.
 /// We filter to keep this product below a threshold.
-
 use combinatoric_core::graph::Graph;
 use num_bigint::BigInt;
 use num_traits::{Signed, ToPrimitive, Zero};
@@ -34,7 +33,8 @@ fn is_real_rooted_bigint(coeffs: &[BigInt]) -> bool {
         .iter()
         .map(|c| {
             let r = c / &g;
-            r.to_i64().expect("coefficient too large even after GCD reduction")
+            r.to_i64()
+                .expect("coefficient too large even after GCD reduction")
         })
         .collect();
     is_real_rooted(&reduced)
@@ -208,7 +208,10 @@ fn main() {
     // --- Caterpillar graphs (tree method, no size limit on L(T)) ---
     let max_leaf = 6;
     for k in 2..=6 {
-        println!("=== Caterpillars with k={} spine vertices, a_i <= {} ===", k, max_leaf);
+        println!(
+            "=== Caterpillars with k={} spine vertices, a_i <= {} ===",
+            k, max_leaf
+        );
         let mut count = 0u64;
 
         let total_combos = (max_leaf + 1_usize).pow(k as u32);

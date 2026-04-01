@@ -9,9 +9,7 @@
 ///
 use combpoly::permutation::all_permutations;
 use combpoly::statistics::{compute, descent_set_bitmask, Stat};
-use polynomial_tools::real_rootedness::{
-    check_weak_interlacing, format_poly, is_real_rooted,
-};
+use polynomial_tools::real_rootedness::{check_weak_interlacing, format_poly, is_real_rooted};
 use std::collections::{BTreeMap, HashMap};
 
 fn build_poly_from_vals(vals: &[usize]) -> Vec<i64> {
@@ -33,7 +31,11 @@ fn valid_positions(s_mask: u64, n: u8) -> Vec<u8> {
     let mut positions = Vec::new();
     for p in 1..n {
         let p_in_s = (s_mask >> (p - 1)) & 1 == 1;
-        let pm1_in_s = if p >= 2 { (s_mask >> (p - 2)) & 1 == 1 } else { false };
+        let pm1_in_s = if p >= 2 {
+            (s_mask >> (p - 2)) & 1 == 1
+        } else {
+            false
+        };
         if p_in_s && !pm1_in_s {
             positions.push(p);
         }
@@ -45,19 +47,29 @@ fn valid_positions(s_mask: u64, n: u8) -> Vec<u8> {
 }
 
 fn source_descent_set(s_mask: u64, p: u8, n: u8) -> u64 {
-    if n <= 2 { return 0; }
-    if p == n { return s_mask; }
+    if n <= 2 {
+        return 0;
+    }
+    if p == n {
+        return s_mask;
+    }
     let mut sp = 0u64;
     if p == 1 {
         for j in 2..n {
-            if (s_mask >> (j - 1)) & 1 == 1 { sp |= 1 << (j - 2); }
+            if (s_mask >> (j - 1)) & 1 == 1 {
+                sp |= 1 << (j - 2);
+            }
         }
     } else {
         for pos in 1..=(p.saturating_sub(2)) {
-            if (s_mask >> (pos - 1)) & 1 == 1 { sp |= 1 << (pos - 1); }
+            if (s_mask >> (pos - 1)) & 1 == 1 {
+                sp |= 1 << (pos - 1);
+            }
         }
         for j in (p + 1)..n {
-            if (s_mask >> (j - 1)) & 1 == 1 { sp |= 1 << (j - 2); }
+            if (s_mask >> (j - 1)) & 1 == 1 {
+                sp |= 1 << (j - 2);
+            }
         }
     }
     sp
@@ -68,7 +80,9 @@ fn descent_set_to_string(mask: u64, n: u8) -> String {
     let mut first = true;
     for i in 1..n {
         if (mask >> (i - 1)) & 1 == 1 {
-            if !first { s.push(','); }
+            if !first {
+                s.push(',');
+            }
             s.push_str(&i.to_string());
             first = false;
         }
@@ -78,19 +92,42 @@ fn descent_set_to_string(mask: u64, n: u8) -> String {
 }
 
 fn check_pairwise_compatible(f: &[i64], g: &[i64]) -> bool {
-    if f.len() <= 1 || g.len() <= 1 { return true; }
-    if !is_real_rooted(f) || !is_real_rooted(g) { return false; }
+    if f.len() <= 1 || g.len() <= 1 {
+        return true;
+    }
+    if !is_real_rooted(f) || !is_real_rooted(g) {
+        return false;
+    }
     let test_weights: Vec<(i64, i64)> = vec![
-        (1, 1), (1, 2), (2, 1), (1, 3), (3, 1), (1, 5), (5, 1), (2, 3), (3, 2),
-        (1, 7), (7, 1), (3, 5), (5, 3),
+        (1, 1),
+        (1, 2),
+        (2, 1),
+        (1, 3),
+        (3, 1),
+        (1, 5),
+        (5, 1),
+        (2, 3),
+        (3, 2),
+        (1, 7),
+        (7, 1),
+        (3, 5),
+        (5, 3),
     ];
     let maxlen = f.len().max(g.len());
     for (a, b) in &test_weights {
         let mut combo = vec![0i64; maxlen];
-        for (i, &c) in f.iter().enumerate() { combo[i] += a * c; }
-        for (i, &c) in g.iter().enumerate() { combo[i] += b * c; }
-        while combo.len() > 1 && *combo.last().unwrap() == 0 { combo.pop(); }
-        if combo.len() > 1 && !is_real_rooted(&combo) { return false; }
+        for (i, &c) in f.iter().enumerate() {
+            combo[i] += a * c;
+        }
+        for (i, &c) in g.iter().enumerate() {
+            combo[i] += b * c;
+        }
+        while combo.len() > 1 && *combo.last().unwrap() == 0 {
+            combo.pop();
+        }
+        if combo.len() > 1 && !is_real_rooted(&combo) {
+            return false;
+        }
     }
     true
 }
@@ -121,18 +158,32 @@ fn compute_descent_data(n: u8) -> DescentData {
 
         // Position of max (value n)
         let pos_max = pi.iter().position(|&v| v == n).unwrap() as u8 + 1;
-        by_descent_pos.entry((mask, pos_max)).or_default().push(swaps);
+        by_descent_pos
+            .entry((mask, pos_max))
+            .or_default()
+            .push(swaps);
 
         // Position of value 1
         let pos_1 = pi.iter().position(|&v| v == 1).unwrap() as u8 + 1;
-        by_descent_pos1.entry((mask, pos_1)).or_default().push(swaps);
+        by_descent_pos1
+            .entry((mask, pos_1))
+            .or_default()
+            .push(swaps);
 
         // Position of min (value 1) — same as above, just clearer naming
         let pos_min = pos_1;
-        by_descent_posmin.entry((mask, pos_min)).or_default().push(swaps);
+        by_descent_posmin
+            .entry((mask, pos_min))
+            .or_default()
+            .push(swaps);
     }
 
-    DescentData { by_descent, by_descent_pos, by_descent_pos1, by_descent_posmin }
+    DescentData {
+        by_descent,
+        by_descent_pos,
+        by_descent_pos1,
+        by_descent_posmin,
+    }
 }
 
 fn main() {
@@ -189,7 +240,9 @@ fn main() {
                     (&target_poly, &source_poly)
                 };
                 match check_weak_interlacing(small, large) {
-                    Some(true) => { n_ok += 1; }
+                    Some(true) => {
+                        n_ok += 1;
+                    }
                     _ => {
                         // Also try: does source interlace target?
                         // Or: are they compatible?
@@ -199,7 +252,9 @@ fn main() {
                             let s_str = descent_set_to_string(mask, n);
                             println!(
                                 "  FAIL n={} S={} p={}: src={} tgt={}",
-                                n, s_str, p,
+                                n,
+                                s_str,
+                                p,
                                 format_poly(&source_poly),
                                 format_poly(&target_poly)
                             );
@@ -213,11 +268,7 @@ fn main() {
         src_interlace_total += n_total;
         println!("n={}: {}/{} source-target compatible", n, n_ok, n_total);
     }
-    println!(
-        "Total: {}/{}\n",
-        src_interlace_ok, src_interlace_total
-    );
-
+    println!("Total: {}/{}\n", src_interlace_ok, src_interlace_total);
 
     println!("=== EXPERIMENT 2: Alternative refinement by position of value 1 ===");
     println!("For S with 1 not in S, check if {{L_{{n,S}}^{{pos1=q}}}} is compatible.\n");
@@ -241,7 +292,9 @@ fn main() {
                 }
             }
 
-            if pos1_polys.len() < 2 { continue; }
+            if pos1_polys.len() < 2 {
+                continue;
+            }
             n_total += 1;
 
             // Check pairwise compatibility
@@ -267,11 +320,7 @@ fn main() {
         alt_compat_total += n_total;
         println!("n={}: {}/{} pos-of-1 compatible", n, n_ok, n_total);
     }
-    println!(
-        "Total: {}/{}\n",
-        alt_compat_ok, alt_compat_total
-    );
-
+    println!("Total: {}/{}\n", alt_compat_ok, alt_compat_total);
 
     println!("=== EXPERIMENT 3: Cross-n interlacing for fixed descent patterns ===");
     println!("For k-alternating: does H_n^{{(k)}} interlace H_{{n+1}}^{{(k)}}?\n");
@@ -291,7 +340,10 @@ fn main() {
             let d = data[n as usize].as_ref().unwrap();
             let vals = match d.by_descent.get(&mask) {
                 Some(v) => v,
-                None => { prev_poly = None; continue; }
+                None => {
+                    prev_poly = None;
+                    continue;
+                }
             };
             let poly = build_poly_from_vals(vals);
 
@@ -325,30 +377,41 @@ fn main() {
 
         for (&mask, _) in &d.by_descent {
             let one_not_in_s = (mask & 1) == 0;
-            if !one_not_in_s { continue; } // Only test 1 not in S
+            if !one_not_in_s {
+                continue;
+            } // Only test 1 not in S
 
             // Joint refinement: group by (pos_max, pos_min)
             let perms = all_permutations(n);
             let mut joint: HashMap<(u8, u8), Vec<usize>> = HashMap::new();
             for pi in &perms {
-                if descent_set_bitmask(pi) != mask { continue; }
+                if descent_set_bitmask(pi) != mask {
+                    continue;
+                }
                 let pos_max = pi.iter().position(|&v| v == n).unwrap() as u8 + 1;
                 let pos_min = pi.iter().position(|&v| v == 1).unwrap() as u8 + 1;
-                joint.entry((pos_max, pos_min)).or_default()
+                joint
+                    .entry((pos_max, pos_min))
+                    .or_default()
                     .push(compute(pi, Stat::Swaps));
             }
 
-            let polys: Vec<Vec<i64>> = joint.values()
+            let polys: Vec<Vec<i64>> = joint
+                .values()
                 .filter(|v| !v.is_empty())
                 .map(|v| build_poly_from_vals(v))
                 .collect();
 
-            if polys.len() < 2 { continue; }
+            if polys.len() < 2 {
+                continue;
+            }
             n_total += 1;
 
             let mut all_compat = true;
             for i in 0..polys.len() {
-                if !all_compat { break; }
+                if !all_compat {
+                    break;
+                }
                 for j in (i + 1)..polys.len() {
                     if !check_pairwise_compatible(&polys[i], &polys[j]) {
                         all_compat = false;
@@ -364,7 +427,10 @@ fn main() {
                 println!("  FAIL n={} S={}", n, s_str);
             }
         }
-        println!("n={}: {}/{} joint (pos_max, pos_min) compatible", n, n_ok, n_total);
+        println!(
+            "n={}: {}/{} joint (pos_max, pos_min) compatible",
+            n, n_ok, n_total
+        );
     }
 
     println!();
@@ -379,28 +445,39 @@ fn main() {
 
         for (&mask, _) in &d.by_descent {
             let one_not_in_s = (mask & 1) == 0;
-            if !one_not_in_s { continue; }
+            if !one_not_in_s {
+                continue;
+            }
 
             // Refine by position of value n-1
             let mut by_pos_nm1: HashMap<u8, Vec<usize>> = HashMap::new();
             for pi in &perms {
-                if descent_set_bitmask(pi) != mask { continue; }
+                if descent_set_bitmask(pi) != mask {
+                    continue;
+                }
                 let pos = pi.iter().position(|&v| v == n - 1).unwrap() as u8 + 1;
-                by_pos_nm1.entry(pos).or_default()
+                by_pos_nm1
+                    .entry(pos)
+                    .or_default()
                     .push(compute(pi, Stat::Swaps));
             }
 
-            let polys: Vec<Vec<i64>> = by_pos_nm1.values()
+            let polys: Vec<Vec<i64>> = by_pos_nm1
+                .values()
                 .filter(|v| !v.is_empty())
                 .map(|v| build_poly_from_vals(v))
                 .collect();
 
-            if polys.len() < 2 { continue; }
+            if polys.len() < 2 {
+                continue;
+            }
             n_total += 1;
 
             let mut all_compat = true;
             for i in 0..polys.len() {
-                if !all_compat { break; }
+                if !all_compat {
+                    break;
+                }
                 for j in (i + 1)..polys.len() {
                     if !check_pairwise_compatible(&polys[i], &polys[j]) {
                         all_compat = false;
@@ -416,6 +493,9 @@ fn main() {
                 println!("  FAIL n={} S={}", n, s_str);
             }
         }
-        println!("n={}: {}/{} pos(n-1) compatible (1 not in S)", n, n_ok, n_total);
+        println!(
+            "n={}: {}/{} pos(n-1) compatible (1 not in S)",
+            n, n_ok, n_total
+        );
     }
 }

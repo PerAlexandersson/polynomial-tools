@@ -235,12 +235,7 @@ fn build_source_dist(
 }
 
 /// Build the raw zone polynomial: sum of N(s,q) for q in the given zone, as polynomial in s.
-fn build_zone_raw(
-    dist: &BTreeMap<(usize, u8), usize>,
-    p_a: u8,
-    p_b: u8,
-    zone: Zone,
-) -> Vec<i64> {
+fn build_zone_raw(dist: &BTreeMap<(usize, u8), usize>, p_a: u8, p_b: u8, zone: Zone) -> Vec<i64> {
     let mut poly = vec![0i64; 1];
     for (&(s, q), &c) in dist {
         if classify_zone(q, p_a, p_b) == zone {
@@ -274,10 +269,7 @@ fn build_fq_poly(dist: &BTreeMap<(usize, u8), usize>, q_val: u8) -> Vec<i64> {
 }
 
 /// Compute L^{(p)} = sum_q t^{eps2(p,q)} f~_q(t) from source distribution
-fn build_output_from_source(
-    dist: &BTreeMap<(usize, u8), usize>,
-    p: u8,
-) -> Vec<i64> {
+fn build_output_from_source(dist: &BTreeMap<(usize, u8), usize>, p: u8) -> Vec<i64> {
     let mut result = vec![0i64; 1];
     for (&(s, q), &c) in dist {
         let e2 = eps2(p, q);
@@ -425,9 +417,7 @@ fn main() {
                 for &p in &vp {
                     let vals: Vec<usize> = class
                         .iter()
-                        .filter(|pi| {
-                            pi.iter().position(|&v| v == n).unwrap() as u8 + 1 == p
-                        })
+                        .filter(|pi| pi.iter().position(|&v| v == n).unwrap() as u8 + 1 == p)
                         .map(|pi| compute(pi, Stat::Swaps))
                         .collect();
                     if !vals.is_empty() {
@@ -762,14 +752,20 @@ fn main() {
     }
 
     if !sa_lpa_failures.is_empty() {
-        println!("\n--- Sa << L^(pa) FAILURES ({}) ---", sa_lpa_failures.len());
+        println!(
+            "\n--- Sa << L^(pa) FAILURES ({}) ---",
+            sa_lpa_failures.len()
+        );
         for f in sa_lpa_failures.iter().take(5) {
             println!("{}", f);
         }
     }
 
     if !sa_lpb_failures.is_empty() {
-        println!("\n--- Sa << L^(pb) FAILURES ({}) ---", sa_lpb_failures.len());
+        println!(
+            "\n--- Sa << L^(pb) FAILURES ({}) ---",
+            sa_lpb_failures.len()
+        );
         for f in sa_lpb_failures.iter().take(5) {
             println!("{}", f);
         }
@@ -828,9 +824,7 @@ fn main() {
                 for &p in &vp {
                     let vals: Vec<usize> = class
                         .iter()
-                        .filter(|pi| {
-                            pi.iter().position(|&v| v == n).unwrap() as u8 + 1 == p
-                        })
+                        .filter(|pi| pi.iter().position(|&v| v == n).unwrap() as u8 + 1 == p)
                         .map(|pi| compute(pi, Stat::Swaps))
                         .collect();
                     if !vals.is_empty() {
@@ -901,7 +895,8 @@ fn main() {
                 // Show roots
                 if !is_zero_poly(&sa) {
                     if let Some(roots) = real_roots(&sa) {
-                        let root_strs: Vec<String> = roots.iter().map(|r| format!("{}", r)).collect();
+                        let root_strs: Vec<String> =
+                            roots.iter().map(|r| format!("{}", r)).collect();
                         println!("    roots(Sa) = [{}]", root_strs.join(", "));
                     }
                 }

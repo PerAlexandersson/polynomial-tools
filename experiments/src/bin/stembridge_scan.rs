@@ -4,8 +4,8 @@
 /// Uses rayon for parallel scanning. Exits at the first counterexample found.
 use combpoly::order;
 use combpoly::permutation::avoiding_permutations;
-use polynomial_tools::real_rootedness as polynomial;
 use combpoly::statistics::Stat;
+use polynomial_tools::real_rootedness as polynomial;
 use rayon::prelude::*;
 use std::env;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -30,15 +30,11 @@ fn main() {
     );
 
     let total = perms.len();
-    eprintln!(
-        "Scanning for failure of real-rootedness (weak ideal + des, parallel)..."
-    );
+    eprintln!("Scanning for failure of real-rootedness (weak ideal + des, parallel)...");
     let t0 = std::time::Instant::now();
 
-    let result: Option<(usize, Vec<u8>, Vec<i64>)> = perms
-        .par_iter()
-        .enumerate()
-        .find_map_any(|(i, w)| {
+    let result: Option<(usize, Vec<u8>, Vec<i64>)> =
+        perms.par_iter().enumerate().find_map_any(|(i, w)| {
             if found.load(Ordering::Relaxed) {
                 return None;
             }

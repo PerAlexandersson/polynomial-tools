@@ -25,14 +25,24 @@ fn compose(a: &[u8], b: &[u8]) -> Vec<u8> {
 }
 
 fn gcd(a: u64, b: u64) -> u64 {
-    if b == 0 { a } else { gcd(b, a % b) }
+    if b == 0 {
+        a
+    } else {
+        gcd(b, a % b)
+    }
 }
 
 fn avg_frac(total: u64, count: u64) -> String {
-    if count == 0 { return "N/A".into(); }
+    if count == 0 {
+        return "N/A".into();
+    }
     let g = gcd(total, count);
     let (n, d) = (total / g, count / g);
-    if d == 1 { format!("{}", n) } else { format!("{}/{}", n, d) }
+    if d == 1 {
+        format!("{}", n)
+    } else {
+        format!("{}/{}", n, d)
+    }
 }
 
 fn compute_depths(pi_set: &[Vec<u8>], s_set: &[Vec<u8>]) -> (u64, u64, u64) {
@@ -49,10 +59,7 @@ fn compute_depths(pi_set: &[Vec<u8>], s_set: &[Vec<u8>]) -> (u64, u64, u64) {
 }
 
 fn main() {
-    let max_n: u8 = env::args()
-        .nth(1)
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(7);
+    let max_n: u8 = env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(7);
 
     let pats3 = ["123", "132", "213"];
     let pats4 = ["1234", "1243", "1324", "1342", "2134", "2143"];
@@ -142,8 +149,11 @@ fn main() {
     println!("\n=== π ∈ Av_τ₄, S = Av_σ₄ (cross, select pairs) ===\n");
 
     let cross4 = [
-        ("1234", "1243"), ("1234", "2134"), ("1243", "1234"),
-        ("1324", "1234"), ("1234", "1324"),
+        ("1234", "1243"),
+        ("1234", "2134"),
+        ("1243", "1234"),
+        ("1324", "1234"),
+        ("1234", "1324"),
     ];
     for &(pi_pat, s_pat) in &cross4 {
         let pi_p = parse_sequence(pi_pat);

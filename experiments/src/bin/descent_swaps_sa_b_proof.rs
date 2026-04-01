@@ -94,145 +94,94 @@
 /// Actually, let me check: are A and t*Mb interlacing? Or compatible?
 /// If they interlace or are compatible, the staircase LR follows.
 ///
+use combpoly::fixed_descent::{
+    permutations_grouped_by_descent_set_bitmask,
+    q_refined_modified_source_distribution_from_grouped_source_permutations,
+    valid_insertion_positions_for_target_descent_set as valid_positions,
+};
 use combpoly::permutation::all_permutations;
 use combpoly::statistics::{compute, descent_set_bitmask, Stat};
-use polynomial_tools::real_rootedness::{is_real_rooted, check_interlacing};
+use polynomial_tools::real_rootedness::is_real_rooted;
 use std::collections::BTreeMap;
 
 fn build_poly(vals: &[usize]) -> Vec<i64> {
-    if vals.is_empty() { return vec![0]; }
+    if vals.is_empty() {
+        return vec![0];
+    }
     let max_s = *vals.iter().max().unwrap();
     let mut coeffs = vec![0i64; max_s + 1];
-    for &s in vals { coeffs[s] += 1; }
-    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 { coeffs.pop(); }
+    for &s in vals {
+        coeffs[s] += 1;
+    }
+    while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 {
+        coeffs.pop();
+    }
     coeffs
 }
 
-fn valid_positions(s_mask: u64, n: u8) -> Vec<u8> {
-    let mut positions = Vec::new();
-    for p in 1..n {
-        if (s_mask >> (p - 1)) & 1 == 1 && (p < 2 || (s_mask >> (p - 2)) & 1 == 0) {
-            positions.push(p);
-        }
-    }
-    if n >= 2 && (s_mask >> (n - 2)) & 1 == 0 { positions.push(n); }
-    positions
-}
-
-fn source_asc(s_mask: u64, p: u8, n: u8) -> u64 {
-    if n <= 2 { return 0; }
-    if p == n { return s_mask; }
-    let mut sp = 0u64;
-    if p == 1 {
-        for j in 2..n { if (s_mask >> (j - 1)) & 1 == 1 { sp |= 1 << (j - 2); } }
-    } else {
-        for pos in 1..=(p.saturating_sub(2)) { if (s_mask >> (pos - 1)) & 1 == 1 { sp |= 1 << (pos - 1); } }
-        for j in (p + 1)..n { if (s_mask >> (j - 1)) & 1 == 1 { sp |= 1 << (j - 2); } }
-    }
-    sp
-}
-
-fn source_desc(s_mask: u64, p: u8, n: u8) -> Option<u64> {
-    if p <= 1 || p >= n { return None; }
-    Some(source_asc(s_mask, p, n) | (1 << (p - 2)))
-}
-
-fn epsilon1(pi: &[u8], p: u8) -> bool {
-    let n = pi.len() as u8 + 1;
-    if p <= 1 || p >= n { return false; }
-    pi[(p - 2) as usize] + 1 == pi[(p - 1) as usize]
-}
-
-fn eps2(p: u8, q: u8) -> usize {
-    if p >= 2 && q <= p - 2 { 1 } else { 0 }
-}
-
-fn descent_set_to_string(mask: u64, n: u8) -> String {
-    let mut s = String::from("{");
-    let mut first = true;
-    for i in 1..n {
-        if (mask >> (i - 1)) & 1 == 1 {
-            if !first { s.push(','); }
-            s.push_str(&i.to_string());
-            first = false;
-        }
-    }
-    s.push('}');
-    s
-}
-
 fn coeff(poly: &[i64], k: usize) -> i64 {
-    if k < poly.len() { poly[k] } else { 0 }
+    if k < poly.len() {
+        poly[k]
+    } else {
+        0
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-enum Zone { L, M, R }
-
-fn classify_zone(q: u8, p_a: u8, p_b: u8) -> Zone {
-    if p_a >= 2 && q <= p_a - 2 { Zone::L }
-    else if p_b >= 2 && q <= p_b - 2 { Zone::M }
-    else { Zone::R }
+enum Zone {
+    L,
+    M,
+    R,
 }
 
-fn build_source_dist(
-    s_mask: u64, p: u8, n: u8,
-    by_descent_prev: &BTreeMap<u64, Vec<usize>>,
-    perm_prev_list: &[&Vec<u8>],
-) -> BTreeMap<(usize, u8), usize> {
-    let sp_asc = source_asc(s_mask, p, n);
-    let sp_desc = source_desc(s_mask, p, n);
-    let mut dist: BTreeMap<(usize, u8), usize> = BTreeMap::new();
-    if let Some(indices) = by_descent_prev.get(&sp_asc) {
-        for &idx in indices {
-            let pi = perm_prev_list[idx];
-            let q = pi.iter().position(|&v| v == n - 1).unwrap() as u8 + 1;
-            let sw = compute(pi, Stat::Swaps) + if epsilon1(pi, p) { 1 } else { 0 };
-            *dist.entry((sw, q)).or_default() += 1;
-        }
+fn classify_zone(q: u8, p_a: u8, p_b: u8) -> Zone {
+    if p_a >= 2 && q <= p_a - 2 {
+        Zone::L
+    } else if p_b >= 2 && q <= p_b - 2 {
+        Zone::M
+    } else {
+        Zone::R
     }
-    if let Some(sp) = sp_desc {
-        if let Some(indices) = by_descent_prev.get(&sp) {
-            for &idx in indices {
-                let pi = perm_prev_list[idx];
-                let q = pi.iter().position(|&v| v == n - 1).unwrap() as u8 + 1;
-                let sw = compute(pi, Stat::Swaps);
-                *dist.entry((sw, q)).or_default() += 1;
-            }
-        }
-    }
-    dist
 }
 
 fn build_zone_raw(dist: &BTreeMap<(usize, u8), usize>, p_a: u8, p_b: u8, zone: Zone) -> Vec<i64> {
     let mut poly = vec![0i64; 20];
     for (&(s, q), &c) in dist {
         if classify_zone(q, p_a, p_b) == zone {
-            if s >= poly.len() { poly.resize(s + 1, 0); }
+            if s >= poly.len() {
+                poly.resize(s + 1, 0);
+            }
             poly[s] += c as i64;
         }
     }
-    while poly.len() > 1 && *poly.last().unwrap() == 0 { poly.pop(); }
+    while poly.len() > 1 && *poly.last().unwrap() == 0 {
+        poly.pop();
+    }
     poly
 }
 
 fn poly_sum2(a: &[i64], b: &[i64]) -> Vec<i64> {
     let len = a.len().max(b.len());
     let mut r = vec![0i64; len];
-    for (i, &c) in a.iter().enumerate() { r[i] += c; }
-    for (i, &c) in b.iter().enumerate() { r[i] += c; }
-    while r.len() > 1 && *r.last().unwrap() == 0 { r.pop(); }
+    for (i, &c) in a.iter().enumerate() {
+        r[i] += c;
+    }
+    for (i, &c) in b.iter().enumerate() {
+        r[i] += c;
+    }
+    while r.len() > 1 && *r.last().unwrap() == 0 {
+        r.pop();
+    }
     r
 }
 
 /// Multiply polynomial by t (shift coefficients right by 1)
 fn poly_mul_t(p: &[i64]) -> Vec<i64> {
     let mut r = vec![0i64; p.len() + 1];
-    for (i, &c) in p.iter().enumerate() { r[i + 1] = c; }
+    for (i, &c) in p.iter().enumerate() {
+        r[i + 1] = c;
+    }
     r
-}
-
-fn to_f64(p: &[i64]) -> Vec<f64> {
-    p.iter().map(|&c| c as f64).collect()
 }
 
 fn main() {
@@ -275,46 +224,57 @@ fn main() {
     let mut col_m_all_fail = 0u64;
 
     for n in 4..=max_n {
-        let perms_prev = all_permutations(n - 1);
-        let mut by_descent_prev: BTreeMap<u64, Vec<usize>> = BTreeMap::new();
-        let mut perm_prev_list: Vec<&Vec<u8>> = Vec::new();
-        for pi in &perms_prev {
-            let idx = perm_prev_list.len();
-            perm_prev_list.push(pi);
-            by_descent_prev.entry(descent_set_bitmask(pi)).or_default().push(idx);
-        }
+        let grouped_source_permutations = permutations_grouped_by_descent_set_bitmask(n - 1);
 
         let perms_n = all_permutations(n);
         let mut by_descent_n: BTreeMap<u64, Vec<&Vec<u8>>> = BTreeMap::new();
         for pi in &perms_n {
-            by_descent_n.entry(descent_set_bitmask(pi)).or_default().push(pi);
+            by_descent_n
+                .entry(descent_set_bitmask(pi))
+                .or_default()
+                .push(pi);
         }
 
         for s_mask in 0u64..(1 << (n - 1)) {
-            if s_mask & 1 != 0 { continue; }
+            if s_mask & 1 != 0 {
+                continue;
+            }
             let vp = valid_positions(s_mask, n);
-            if vp.len() < 2 { continue; }
+            if vp.len() < 2 {
+                continue;
+            }
 
             let mut source_dists: BTreeMap<u8, BTreeMap<(usize, u8), usize>> = BTreeMap::new();
             for &p in &vp {
-                source_dists.insert(p,
-                    build_source_dist(s_mask, p, n, &by_descent_prev, &perm_prev_list));
+                source_dists.insert(
+                    p,
+                    q_refined_modified_source_distribution_from_grouped_source_permutations(
+                        s_mask,
+                        p,
+                        n,
+                        &grouped_source_permutations,
+                    )
+                    .counts_by_modified_source_swaps_and_previous_maximum_position,
+                );
             }
 
             let mut lp_polys: BTreeMap<u8, Vec<i64>> = BTreeMap::new();
             if let Some(class) = by_descent_n.get(&s_mask) {
                 for &p in &vp {
-                    let vals: Vec<usize> = class.iter()
+                    let vals: Vec<usize> = class
+                        .iter()
                         .filter(|pi| pi.iter().position(|&v| v == n).unwrap() as u8 + 1 == p)
                         .map(|pi| compute(pi, Stat::Swaps))
                         .collect();
-                    if !vals.is_empty() { lp_polys.insert(p, build_poly(&vals)); }
+                    if !vals.is_empty() {
+                        lp_polys.insert(p, build_poly(&vals));
+                    }
                 }
             }
 
             // Check ALL pairs (pa, pb) with pa < pb (not just consecutive)
             for i in 0..vp.len() {
-                for j in (i+1)..vp.len() {
+                for j in (i + 1)..vp.len() {
                     let p_a = vp[i];
                     let p_b = vp[j];
 
@@ -327,7 +287,9 @@ fn main() {
 
                     let a_poly_ref = lp_polys.get(&p_a);
                     let b_poly_ref = lp_polys.get(&p_b);
-                    if a_poly_ref.is_none() || b_poly_ref.is_none() { continue; }
+                    if a_poly_ref.is_none() || b_poly_ref.is_none() {
+                        continue;
+                    }
                     let a_poly = a_poly_ref.unwrap();
                     let b_poly = b_poly_ref.unwrap();
 
@@ -338,7 +300,7 @@ fn main() {
                     let max_deg = a_poly.len().max(b_poly.len()).max(sa_raw.len());
                     let mut sa_lr_b = true;
                     for k1 in 0..max_deg {
-                        for k2 in (k1+1)..max_deg {
+                        for k2 in (k1 + 1)..max_deg {
                             let sa_k1 = coeff(&sa_raw, k1);
                             let sa_k2 = coeff(&sa_raw, k2);
                             let b_k1 = coeff(b_poly, k1);
@@ -348,22 +310,30 @@ fn main() {
                             }
                         }
                     }
-                    if sa_lr_b { sa_lr_b_all_pass += 1; } else { sa_lr_b_all_fail += 1; }
+                    if sa_lr_b {
+                        sa_lr_b_all_pass += 1;
+                    } else {
+                        sa_lr_b_all_fail += 1;
+                    }
 
                     // Check column-M: A(k1)*Mb(k2-1) >= A(k2)*Mb(k1-1) for all k1 < k2
                     let mut col_m_ok = true;
                     for k1 in 0..max_deg {
-                        for k2 in (k1+1)..max_deg {
+                        for k2 in (k1 + 1)..max_deg {
                             let a_k1 = coeff(a_poly, k1);
                             let a_k2 = coeff(a_poly, k2);
-                            let mb_k1m1 = if k1 > 0 { coeff(&mb_raw, k1-1) } else { 0 };
-                            let mb_k2m1 = if k2 > 0 { coeff(&mb_raw, k2-1) } else { 0 };
+                            let mb_k1m1 = if k1 > 0 { coeff(&mb_raw, k1 - 1) } else { 0 };
+                            let mb_k2m1 = if k2 > 0 { coeff(&mb_raw, k2 - 1) } else { 0 };
                             if a_k1 * mb_k2m1 < a_k2 * mb_k1m1 {
                                 col_m_ok = false;
                             }
                         }
                     }
-                    if col_m_ok { col_m_all_pass += 1; } else { col_m_all_fail += 1; }
+                    if col_m_ok {
+                        col_m_all_pass += 1;
+                    } else {
+                        col_m_all_fail += 1;
+                    }
 
                     // Only for consecutive pairs: check compatibility
                     if j == i + 1 {
@@ -375,15 +345,25 @@ fn main() {
                             for &alpha in &[1i64, 2, 5, 10, 100] {
                                 let max_len = a_poly.len().max(t_mb.len());
                                 let mut sum = vec![0i64; max_len];
-                                for (i, &c) in a_poly.iter().enumerate() { sum[i] += c; }
-                                for (i, &c) in t_mb.iter().enumerate() { sum[i] += alpha * c; }
-                                while sum.len() > 1 && *sum.last().unwrap() == 0 { sum.pop(); }
+                                for (i, &c) in a_poly.iter().enumerate() {
+                                    sum[i] += c;
+                                }
+                                for (i, &c) in t_mb.iter().enumerate() {
+                                    sum[i] += alpha * c;
+                                }
+                                while sum.len() > 1 && *sum.last().unwrap() == 0 {
+                                    sum.pop();
+                                }
                                 if sum.len() >= 2 && !is_real_rooted(&sum) {
                                     compat = false;
                                     break;
                                 }
                             }
-                            if compat { a_tmb_compat += 1; } else { a_tmb_not_compat += 1; }
+                            if compat {
+                                a_tmb_compat += 1;
+                            } else {
+                                a_tmb_not_compat += 1;
+                            }
                         }
 
                         if sa_raw.len() >= 2 && b_poly.len() >= 2 {
@@ -391,15 +371,25 @@ fn main() {
                             for &alpha in &[1i64, 2, 5, 10, 100] {
                                 let max_len = sa_raw.len().max(b_poly.len());
                                 let mut sum = vec![0i64; max_len];
-                                for (i, &c) in sa_raw.iter().enumerate() { sum[i] += c; }
-                                for (i, &c) in b_poly.iter().enumerate() { sum[i] += alpha * c; }
-                                while sum.len() > 1 && *sum.last().unwrap() == 0 { sum.pop(); }
+                                for (i, &c) in sa_raw.iter().enumerate() {
+                                    sum[i] += c;
+                                }
+                                for (i, &c) in b_poly.iter().enumerate() {
+                                    sum[i] += alpha * c;
+                                }
+                                while sum.len() > 1 && *sum.last().unwrap() == 0 {
+                                    sum.pop();
+                                }
                                 if sum.len() >= 2 && !is_real_rooted(&sum) {
                                     compat = false;
                                     break;
                                 }
                             }
-                            if compat { sa_b_compat += 1; } else { sa_b_not_compat += 1; }
+                            if compat {
+                                sa_b_compat += 1;
+                            } else {
+                                sa_b_not_compat += 1;
+                            }
                         }
 
                         // Check one-sided: A + alpha*t*Mb real-rooted for several alpha
@@ -407,14 +397,24 @@ fn main() {
                         for &alpha in &[1i64, 2, 5, 10, 100] {
                             let max_len = a_poly.len().max(t_mb.len());
                             let mut sum = vec![0i64; max_len];
-                            for (i, &c) in a_poly.iter().enumerate() { sum[i] += c; }
-                            for (i, &c) in t_mb.iter().enumerate() { sum[i] += alpha * c; }
-                            while sum.len() > 1 && *sum.last().unwrap() == 0 { sum.pop(); }
+                            for (i, &c) in a_poly.iter().enumerate() {
+                                sum[i] += c;
+                            }
+                            for (i, &c) in t_mb.iter().enumerate() {
+                                sum[i] += alpha * c;
+                            }
+                            while sum.len() > 1 && *sum.last().unwrap() == 0 {
+                                sum.pop();
+                            }
                             if sum.len() >= 2 && !is_real_rooted(&sum) {
                                 one_sided_ok = false;
                             }
                         }
-                        if one_sided_ok { a_tmb_one_sided += 1; } else { a_tmb_one_sided_fail += 1; }
+                        if one_sided_ok {
+                            a_tmb_one_sided += 1;
+                        } else {
+                            a_tmb_one_sided_fail += 1;
+                        }
                     }
                 }
             }
@@ -428,20 +428,44 @@ fn main() {
 
     let all_pairs = sa_lr_b_all_pass + sa_lr_b_all_fail;
     println!("\nSa >=_LR B (ALL position pairs, not just consecutive):");
-    println!("  Pass: {}/{} {}", sa_lr_b_all_pass, all_pairs,
-        if sa_lr_b_all_fail == 0 { "ALWAYS" } else { "FAILS" });
+    println!(
+        "  Pass: {}/{} {}",
+        sa_lr_b_all_pass,
+        all_pairs,
+        if sa_lr_b_all_fail == 0 {
+            "ALWAYS"
+        } else {
+            "FAILS"
+        }
+    );
 
     println!("\nColumn-M = A*Mb staircase (ALL position pairs):");
-    println!("  Pass: {}/{} {}", col_m_all_pass, all_pairs,
-        if col_m_all_fail == 0 { "ALWAYS" } else { "FAILS" });
+    println!(
+        "  Pass: {}/{} {}",
+        col_m_all_pass,
+        all_pairs,
+        if col_m_all_fail == 0 {
+            "ALWAYS"
+        } else {
+            "FAILS"
+        }
+    );
 
     let consec = a_tmb_compat + a_tmb_not_compat;
     println!("\nCompatibility checks (consecutive pairs only):");
     println!("  A and t*Mb compatible: {}/{}", a_tmb_compat, consec);
-    println!("  Sa and B compatible:   {}/{}", sa_b_compat, sa_b_compat + sa_b_not_compat);
+    println!(
+        "  Sa and B compatible:   {}/{}",
+        sa_b_compat,
+        sa_b_compat + sa_b_not_compat
+    );
 
     println!("\nOne-sided compatibility A + alpha*t*Mb:");
-    println!("  Pass: {}/{}", a_tmb_one_sided, a_tmb_one_sided + a_tmb_one_sided_fail);
+    println!(
+        "  Pass: {}/{}",
+        a_tmb_one_sided,
+        a_tmb_one_sided + a_tmb_one_sided_fail
+    );
 
     if sa_lr_b_all_fail == 0 {
         println!("\n*** Sa >=_LR B holds for ALL position pairs, not just consecutive! ***");

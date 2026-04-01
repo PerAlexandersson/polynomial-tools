@@ -156,12 +156,24 @@ impl<C: Ring> SymmetricFunction<C> {
         transition::convert(self, target)
     }
 
-    pub fn to_monomial_basis(&self) -> Self { self.to_basis(Basis::Monomial) }
-    pub fn to_elementary_basis(&self) -> Self { self.to_basis(Basis::Elementary) }
-    pub fn to_complete_h_basis(&self) -> Self { self.to_basis(Basis::CompleteH) }
-    pub fn to_power_sum_basis(&self) -> Self { self.to_basis(Basis::PowerSum) }
-    pub fn to_schur_basis(&self) -> Self { self.to_basis(Basis::Schur) }
-    pub fn to_forgotten_basis(&self) -> Self { self.to_basis(Basis::Forgotten) }
+    pub fn to_monomial_basis(&self) -> Self {
+        self.to_basis(Basis::Monomial)
+    }
+    pub fn to_elementary_basis(&self) -> Self {
+        self.to_basis(Basis::Elementary)
+    }
+    pub fn to_complete_h_basis(&self) -> Self {
+        self.to_basis(Basis::CompleteH)
+    }
+    pub fn to_power_sum_basis(&self) -> Self {
+        self.to_basis(Basis::PowerSum)
+    }
+    pub fn to_schur_basis(&self) -> Self {
+        self.to_basis(Basis::Schur)
+    }
+    pub fn to_forgotten_basis(&self) -> Self {
+        self.to_basis(Basis::Forgotten)
+    }
 
     // -----------------------------------------------------------------------
     // Omega involution
@@ -202,7 +214,11 @@ impl<C: Ring> SymmetricFunction<C> {
                     .iter()
                     .map(|(p, c)| {
                         let sign_exp = p.size() - p.num_parts() as u32;
-                        let sign = if sign_exp % 2 == 0 { C::one() } else { C::minus_one() };
+                        let sign = if sign_exp % 2 == 0 {
+                            C::one()
+                        } else {
+                            C::minus_one()
+                        };
                         (p.clone(), c.clone() * sign)
                     })
                     .collect();
@@ -219,7 +235,10 @@ impl<C: Ring> SymmetricFunction<C> {
     // -----------------------------------------------------------------------
 
     pub fn multiply(&self, other: &Self) -> Self {
-        assert_eq!(self.basis, other.basis, "multiply requires same basis; convert first");
+        assert_eq!(
+            self.basis, other.basis,
+            "multiply requires same basis; convert first"
+        );
 
         if self.is_zero() || other.is_zero() {
             return Self::zero(self.basis);
@@ -305,12 +324,19 @@ impl<C: Ring> SymmetricFunction<C> {
             let mut indices = Vec::with_capacity(n);
             let mut valid = true;
             for i in 0..n {
-                let val = lambda.part(i) as i32 - mu.part(sigma[i]) as i32
-                    - i as i32 + sigma[i] as i32;
-                if val < 0 { valid = false; break; }
-                if val > 0 { indices.push(val as u32); }
+                let val =
+                    lambda.part(i) as i32 - mu.part(sigma[i]) as i32 - i as i32 + sigma[i] as i32;
+                if val < 0 {
+                    valid = false;
+                    break;
+                }
+                if val > 0 {
+                    indices.push(val as u32);
+                }
             }
-            if !valid { continue; }
+            if !valid {
+                continue;
+            }
             indices.sort_unstable_by(|a, b| b.cmp(a));
             let partition = Partition::from_sorted(indices);
             let coeff = C::from_i64(*sign as i64);
@@ -344,12 +370,19 @@ impl<C: Ring> SymmetricFunction<C> {
             let mut indices = Vec::with_capacity(n);
             let mut valid = true;
             for i in 0..n {
-                let val = lam_conj.part(i) as i32 - mu_conj.part(sigma[i]) as i32
-                    - i as i32 + sigma[i] as i32;
-                if val < 0 { valid = false; break; }
-                if val > 0 { indices.push(val as u32); }
+                let val = lam_conj.part(i) as i32 - mu_conj.part(sigma[i]) as i32 - i as i32
+                    + sigma[i] as i32;
+                if val < 0 {
+                    valid = false;
+                    break;
+                }
+                if val > 0 {
+                    indices.push(val as u32);
+                }
             }
-            if !valid { continue; }
+            if !valid {
+                continue;
+            }
             indices.sort_unstable_by(|a, b| b.cmp(a));
             let partition = Partition::from_sorted(indices);
             let coeff = C::from_i64(*sign as i64);
@@ -417,9 +450,11 @@ impl<C: Ring> SymmetricFunction<C> {
             return (vec![], vec![C::one()]);
         }
 
-        let mut lcd_mults: std::collections::BTreeMap<u32, usize> = std::collections::BTreeMap::new();
+        let mut lcd_mults: std::collections::BTreeMap<u32, usize> =
+            std::collections::BTreeMap::new();
         for (partition, _) in in_schur.terms() {
-            let mut term_mults: std::collections::BTreeMap<u32, usize> = std::collections::BTreeMap::new();
+            let mut term_mults: std::collections::BTreeMap<u32, usize> =
+                std::collections::BTreeMap::new();
             for (r, c) in partition.diagram_boxes() {
                 let h = partition.hook_length(r, c).unwrap();
                 *term_mults.entry(h).or_insert(0) += 1;
@@ -461,8 +496,12 @@ impl<C: Ring> SymmetricFunction<C> {
             numer = poly_add::<C>(&numer, &contrib);
         }
 
-        while numer.last().map_or(false, |c| c.is_zero()) { numer.pop(); }
-        while denom.last().map_or(false, |c| c.is_zero()) { denom.pop(); }
+        while numer.last().map_or(false, |c| c.is_zero()) {
+            numer.pop();
+        }
+        while denom.last().map_or(false, |c| c.is_zero()) {
+            denom.pop();
+        }
         (numer, denom)
     }
 }
@@ -472,12 +511,20 @@ impl<C: Ring> SymmetricFunction<C> {
 // ---------------------------------------------------------------------------
 
 fn partition_b(p: &Partition) -> u32 {
-    p.parts().iter().enumerate().map(|(i, &part)| i as u32 * part).sum()
+    p.parts()
+        .iter()
+        .enumerate()
+        .map(|(i, &part)| i as u32 * part)
+        .sum()
 }
 
 fn schur_trivial_spec(partition: &Partition, n: u32) -> i64 {
-    if partition.is_empty() { return 1; }
-    if partition.num_parts() > n as usize { return 0; }
+    if partition.is_empty() {
+        return 1;
+    }
+    if partition.num_parts() > n as usize {
+        return 0;
+    }
     let mut numer: i64 = 1;
     let mut denom: i64 = 1;
     for (r, c) in partition.diagram_boxes() {
@@ -494,13 +541,21 @@ fn schur_trivial_spec(partition: &Partition, n: u32) -> i64 {
 }
 
 fn gcd_i64(mut a: i64, mut b: i64) -> i64 {
-    while b != 0 { let t = b; b = a % b; a = t; }
+    while b != 0 {
+        let t = b;
+        b = a % b;
+        a = t;
+    }
     a
 }
 
 fn schur_principal_spec<C: Ring>(partition: &Partition, n: u32) -> Vec<C> {
-    if partition.is_empty() { return vec![C::one()]; }
-    if partition.num_parts() > n as usize { return vec![]; }
+    if partition.is_empty() {
+        return vec![C::one()];
+    }
+    if partition.num_parts() > n as usize {
+        return vec![];
+    }
 
     let b = partition_b(partition);
     let mut numer = vec![C::one()];
@@ -510,7 +565,9 @@ fn schur_principal_spec<C: Ring>(partition: &Partition, n: u32) -> Vec<C> {
         let content = c as i32 - r as i32;
         let npc = n as i32 + content;
         let hook = partition.hook_length(r, c).unwrap() as i32;
-        if npc <= 0 { return vec![]; }
+        if npc <= 0 {
+            return vec![];
+        }
         numer = poly_mul::<C>(&numer, &q_analog::<C>(npc as u32));
         denom = poly_mul::<C>(&denom, &q_analog::<C>(hook as u32));
     }
@@ -535,19 +592,25 @@ fn q_analog<C: Ring>(k: u32) -> Vec<C> {
 
 fn poly_add<C: Ring>(a: &[C], b: &[C]) -> Vec<C> {
     let len = a.len().max(b.len());
-    (0..len).map(|i| {
-        let ai = if i < a.len() { a[i].clone() } else { C::zero() };
-        let bi = if i < b.len() { b[i].clone() } else { C::zero() };
-        ai + bi
-    }).collect()
+    (0..len)
+        .map(|i| {
+            let ai = if i < a.len() { a[i].clone() } else { C::zero() };
+            let bi = if i < b.len() { b[i].clone() } else { C::zero() };
+            ai + bi
+        })
+        .collect()
 }
 
 fn poly_mul<C: Ring>(a: &[C], b: &[C]) -> Vec<C> {
-    if a.is_empty() || b.is_empty() { return vec![]; }
+    if a.is_empty() || b.is_empty() {
+        return vec![];
+    }
     let n = a.len() + b.len() - 1;
     let mut result = vec![C::zero(); n];
     for (i, ai) in a.iter().enumerate() {
-        if ai.is_zero() { continue; }
+        if ai.is_zero() {
+            continue;
+        }
         for (j, bj) in b.iter().enumerate() {
             result[i + j] = result[i + j].clone() + ai.clone() * bj.clone();
         }
@@ -556,19 +619,41 @@ fn poly_mul<C: Ring>(a: &[C], b: &[C]) -> Vec<C> {
 }
 
 fn poly_exact_div<C: Ring>(numer: &[C], denom: &[C]) -> Vec<C> {
-    if denom.is_empty() { panic!("polynomial division by zero"); }
-    let dn = { let mut d = numer.len(); while d > 0 && numer[d - 1].is_zero() { d -= 1; } d };
-    let dd = { let mut d = denom.len(); while d > 0 && denom[d - 1].is_zero() { d -= 1; } d };
-    if dn == 0 { return vec![]; }
-    if dd == 0 { panic!("polynomial division by zero"); }
-    if dn < dd { return vec![]; }
+    if denom.is_empty() {
+        panic!("polynomial division by zero");
+    }
+    let dn = {
+        let mut d = numer.len();
+        while d > 0 && numer[d - 1].is_zero() {
+            d -= 1;
+        }
+        d
+    };
+    let dd = {
+        let mut d = denom.len();
+        while d > 0 && denom[d - 1].is_zero() {
+            d -= 1;
+        }
+        d
+    };
+    if dn == 0 {
+        return vec![];
+    }
+    if dd == 0 {
+        panic!("polynomial division by zero");
+    }
+    if dn < dd {
+        return vec![];
+    }
     let mut rem: Vec<C> = numer.to_vec();
     let dq = dn - dd;
     let mut quot = vec![C::zero(); dq + 1];
 
     for i in (0..=dq).rev() {
         let lc = rem[i + dd - 1].clone();
-        if lc.is_zero() { continue; }
+        if lc.is_zero() {
+            continue;
+        }
         let lc_denom = denom[dd - 1].clone();
         let q = if lc_denom == C::one() {
             lc
@@ -582,7 +667,9 @@ fn poly_exact_div<C: Ring>(numer: &[C], denom: &[C]) -> Vec<C> {
             rem[i + j] = rem[i + j].clone() - q.clone() * c.clone();
         }
     }
-    while quot.last().map_or(false, |c| c.is_zero()) { quot.pop(); }
+    while quot.last().map_or(false, |c| c.is_zero()) {
+        quot.pop();
+    }
     quot
 }
 
@@ -599,7 +686,11 @@ pub(crate) fn all_permutations(n: usize) -> Vec<(Vec<usize>, i8)> {
     let mut i = 0;
     while i < n {
         if c[i] < i {
-            if i % 2 == 0 { perm.swap(0, i); } else { perm.swap(c[i], i); }
+            if i % 2 == 0 {
+                perm.swap(0, i);
+            } else {
+                perm.swap(c[i], i);
+            }
             sign = -sign;
             result.push((perm.clone(), sign));
             c[i] += 1;
@@ -640,7 +731,10 @@ impl<C: Ring> Neg for SymmetricFunction<C> {
     type Output = Self;
     fn neg(self) -> Self {
         let terms = self.terms.into_iter().map(|(p, c)| (p, -c)).collect();
-        SymmetricFunction { basis: self.basis, terms }
+        SymmetricFunction {
+            basis: self.basis,
+            terms,
+        }
     }
 }
 
@@ -664,7 +758,9 @@ impl<C: Ring> fmt::Display for SymmetricFunction<C> {
         let sym = self.basis.symbol();
         let mut first = true;
         for (partition, coeff) in &self.terms {
-            if !first { write!(f, " + ")?; }
+            if !first {
+                write!(f, " + ")?;
+            }
             first = false;
             let one = C::one();
             let minus_one = C::minus_one();
@@ -728,11 +824,10 @@ mod tests {
 
     #[test]
     fn test_skew_schur_21_1() {
-        let skew: SymmetricFunction<i64> =
-            SymmetricFunction::skew_schur_function(
-                &Partition::new(vec![2, 1]),
-                &Partition::new(vec![1]),
-            );
+        let skew: SymmetricFunction<i64> = SymmetricFunction::skew_schur_function(
+            &Partition::new(vec![2, 1]),
+            &Partition::new(vec![1]),
+        );
         let in_schur = skew.to_schur_basis();
         assert_eq!(in_schur.coefficient(&Partition::new(vec![2])), 1);
         assert_eq!(in_schur.coefficient(&Partition::new(vec![1, 1])), 1);
@@ -767,8 +862,7 @@ mod tests {
     fn test_plethysm_p2_on_s2() {
         use num_rational::Ratio;
         type Q = Ratio<i64>;
-        let s2: SymmetricFunction<Q> =
-            SymmetricFunction::schur_symmetric(Partition::new(vec![2]));
+        let s2: SymmetricFunction<Q> = SymmetricFunction::schur_symmetric(Partition::new(vec![2]));
         let result = s2.plethysm_power_sum(2);
         let half = Q::new(1, 2);
         assert_eq!(result.coefficient(&Partition::new(vec![2, 2])), half);

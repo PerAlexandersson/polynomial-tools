@@ -19,40 +19,58 @@
 //!
 //! Usage: cargo run --release --bin peak_conj13_proof -- 7
 
-use polynomial_tools::real_rootedness::{check_weak_interlacing, is_real_rooted, format_poly};
+use polynomial_tools::real_rootedness::{check_weak_interlacing, format_poly, is_real_rooted};
 use std::collections::BTreeSet;
 
 // ── Polynomial helpers (i64 coefficient vectors, ascending degree) ──
 
 fn pt(p: &[i64]) -> Vec<i64> {
     let mut v = p.to_vec();
-    while v.len() > 1 && *v.last().unwrap() == 0 { v.pop(); }
+    while v.len() > 1 && *v.last().unwrap() == 0 {
+        v.pop();
+    }
     v
 }
-fn pz(p: &[i64]) -> bool { p.iter().all(|&c| c == 0) }
+fn pz(p: &[i64]) -> bool {
+    p.iter().all(|&c| c == 0)
+}
 fn pa(a: &[i64], b: &[i64]) -> Vec<i64> {
     let l = a.len().max(b.len());
     let mut r = vec![0i64; l];
-    for (i, &v) in a.iter().enumerate() { r[i] += v; }
-    for (i, &v) in b.iter().enumerate() { r[i] += v; }
+    for (i, &v) in a.iter().enumerate() {
+        r[i] += v;
+    }
+    for (i, &v) in b.iter().enumerate() {
+        r[i] += v;
+    }
     pt(&r)
 }
 fn pmt(p: &[i64]) -> Vec<i64> {
     let mut r = vec![0i64; p.len() + 1];
-    for (i, &v) in p.iter().enumerate() { r[i + 1] = v; }
+    for (i, &v) in p.iter().enumerate() {
+        r[i + 1] = v;
+    }
     pt(&r)
 }
 fn pdeg(p: &[i64]) -> Option<usize> {
     let v = pt(p);
-    if pz(&v) { None } else { Some(v.len() - 1) }
+    if pz(&v) {
+        None
+    } else {
+        Some(v.len() - 1)
+    }
 }
 
 /// Check f << g (weak interlacing).
 fn interlaces(f: &[i64], g: &[i64]) -> bool {
     let f = pt(f);
     let g = pt(g);
-    if pz(&f) { return true; }
-    if pz(&g) { return false; }
+    if pz(&f) {
+        return true;
+    }
+    if pz(&g) {
+        return false;
+    }
     match check_weak_interlacing(&f, &g) {
         Some(true) => true,
         Some(false) => false,
@@ -66,7 +84,7 @@ fn interlaces(f: &[i64], g: &[i64]) -> bool {
                         Some(b) => b,
                         None => false,
                     }
-                },
+                }
                 _ => false,
             }
         }
@@ -96,7 +114,9 @@ fn bruhat_lower_ideal(perm: &[u8]) -> Vec<Vec<u8>> {
                 if cur[i] > cur[j] {
                     let mut c = cur.clone();
                     c.swap(i, j);
-                    if !vis.contains(&c) { q.insert(c); }
+                    if !vis.contains(&c) {
+                        q.insert(c);
+                    }
                 }
             }
         }
@@ -111,7 +131,11 @@ fn board_to_perm(b: &[u8]) -> Vec<u8> {
     let mut u = vec![false; n + 1];
     for i in 0..n {
         for c in (1..=(b[i] as usize).min(n)).rev() {
-            if !u[c] { p[i] = c as u8; u[c] = true; break; }
+            if !u[c] {
+                p[i] = c as u8;
+                u[c] = true;
+                break;
+            }
         }
     }
     p
@@ -122,7 +146,9 @@ fn is_312_avoiding(perm: &[u8]) -> bool {
     for i in 0..n {
         for j in i + 1..n {
             for k in j + 1..n {
-                if perm[k] < perm[i] && perm[i] < perm[j] { return false; }
+                if perm[k] < perm[i] && perm[i] < perm[j] {
+                    return false;
+                }
             }
         }
     }
@@ -130,8 +156,12 @@ fn is_312_avoiding(perm: &[u8]) -> bool {
 }
 
 fn peaks(w: &[u8]) -> usize {
-    if w.len() < 3 { return 0; }
-    (1..w.len() - 1).filter(|&i| w[i - 1] < w[i] && w[i] > w[i + 1]).count()
+    if w.len() < 3 {
+        return 0;
+    }
+    (1..w.len() - 1)
+        .filter(|&i| w[i - 1] < w[i] && w[i] > w[i + 1])
+        .count()
 }
 
 fn gen_boards(n: usize) -> Vec<Vec<u8>> {
@@ -142,7 +172,10 @@ fn gen_boards(n: usize) -> Vec<Vec<u8>> {
 }
 
 fn gb(n: usize, mx: usize, d: usize, c: &mut Vec<u8>, r: &mut Vec<Vec<u8>>) {
-    if d == n { r.push(c.clone()); return; }
+    if d == n {
+        r.push(c.clone());
+        return;
+    }
     for v in (d + 1).max(if d > 0 { c[d - 1] as usize } else { 1 })..=mx {
         c.push(v as u8);
         gb(n, mx, d + 1, c, r);
@@ -151,23 +184,26 @@ fn gb(n: usize, mx: usize, d: usize, c: &mut Vec<u8>, r: &mut Vec<Vec<u8>>) {
 }
 
 fn main() {
-    let max_n: usize = std::env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(7);
+    let max_n: usize = std::env::args()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(7);
     println!("================================================================");
     println!("  Conjecture 13 proof verification");
     println!("  312-avoiding Ferrers boards, n <= {}", max_n);
     println!("================================================================\n");
 
     // Within-column counters
-    let mut aw = [0u64; 2];    // (a') A_{j,l} << W_{j',l}
-    let mut ww = [0u64; 2];    // (b') W_{j,l} << W_{j',l} for j <= j'
-    let mut du = [0u64; 2];    // (c') D_{j,l} << U_{j',l}
-    let mut uu = [0u64; 2];    // (d') U_{j,l} << U_{j',l} for j <= j'
+    let mut aw = [0u64; 2]; // (a') A_{j,l} << W_{j',l}
+    let mut ww = [0u64; 2]; // (b') W_{j,l} << W_{j',l} for j <= j'
+    let mut du = [0u64; 2]; // (c') D_{j,l} << U_{j',l}
+    let mut uu = [0u64; 2]; // (d') U_{j,l} << U_{j',l} for j <= j'
     let mut dd_rev = [0u64; 2]; // (e') D_{k,l} << D_{k',l} for k > k'
     let mut aa_rev = [0u64; 2]; // (f') A_{k,l} << A_{k',l} for k > k'
 
     // New conditions
-    let mut aw_rev = [0u64; 2];   // weaker AW: A_{j,l} << W_{j',l} for j >= j' only
-    let mut dw = [0u64; 2];       // DW: D_{j,l} << W_{j',l} for all j, j'
+    let mut aw_rev = [0u64; 2]; // weaker AW: A_{j,l} << W_{j',l} for j >= j' only
+    let mut dw = [0u64; 2]; // DW: D_{j,l} << W_{j',l} for all j, j'
 
     // Failure detail collectors (first 5 each)
     struct FailDetail {
@@ -185,24 +221,24 @@ fn main() {
     let mut uu_fails: Vec<FailDetail> = Vec::new();
 
     // Cross-column counters
-    let mut x_du = [0u64; 2];    // D_{j,l} << U_{j',l-1}
+    let mut x_du = [0u64; 2]; // D_{j,l} << U_{j',l-1}
     let mut x_du_rev = [0u64; 2]; // D_{j,l-1} << U_{j',l}
-    let mut x_aw = [0u64; 2];    // A_{j,l} << W_{j',l-1}
+    let mut x_aw = [0u64; 2]; // A_{j,l} << W_{j',l-1}
     let mut x_aw_rev = [0u64; 2]; // A_{j,l-1} << W_{j',l}
     let mut x_dd_fwd = [0u64; 2]; // D_{j,l-1} << D_{j',l} (forward across columns)
     let mut x_dd_rev2 = [0u64; 2]; // D_{j,l} << D_{j',l-1}
 
     // Inductive step counters (within-group at lambda+ level)
-    let mut ind_du = [0u64; 2];    // (c') at lambda+
-    let mut ind_dd = [0u64; 2];    // (e') at lambda+
-    let mut ind_aw = [0u64; 2];    // (a') at lambda+
-    let mut ind_ww = [0u64; 2];    // (b') at lambda+
-    let mut ind_uu = [0u64; 2];    // (d') at lambda+
-    let mut ind_aa = [0u64; 2];    // (f') at lambda+
+    let mut ind_du = [0u64; 2]; // (c') at lambda+
+    let mut ind_dd = [0u64; 2]; // (e') at lambda+
+    let mut ind_aw = [0u64; 2]; // (a') at lambda+
+    let mut ind_ww = [0u64; 2]; // (b') at lambda+
+    let mut ind_uu = [0u64; 2]; // (d') at lambda+
+    let mut ind_aa = [0u64; 2]; // (f') at lambda+
 
     // Cross-group at lambda+ level
-    let mut xg_du = [0u64; 2];    // cross-group DU at lambda+
-    let mut xg_dd = [0u64; 2];    // cross-group DD at lambda+
+    let mut xg_du = [0u64; 2]; // cross-group DU at lambda+
+    let mut xg_dd = [0u64; 2]; // cross-group DD at lambda+
 
     let mut valid_boards = 0u64;
 
@@ -210,13 +246,17 @@ fn main() {
         let boards = gen_boards(n);
         for board in &boards {
             let perm = board_to_perm(board);
-            if !is_312_avoiding(&perm) { continue; }
+            if !is_312_avoiding(&perm) {
+                continue;
+            }
             valid_boards += 1;
 
             let m = board[0] as usize;
 
             // Skip trivial cases
-            if n <= 1 { continue; }
+            if n <= 1 {
+                continue;
+            }
 
             let ideal = bruhat_lower_ideal(&perm);
 
@@ -226,16 +266,22 @@ fn main() {
 
             for pi in &ideal {
                 let j = pi[0] as usize;
-                if j > m { continue; }
+                if j > m {
+                    continue;
+                }
                 let l = *pi.last().unwrap() as usize;
-                if l > m { continue; }
+                if l > m {
+                    continue;
+                }
                 let pk = peaks(pi);
                 let poly = if pi.len() >= 2 && pi[0] > pi[1] {
                     &mut d_jl[j][l]
                 } else {
                     &mut u_jl[j][l]
                 };
-                while poly.len() <= pk { poly.push(0); }
+                while poly.len() <= pk {
+                    poly.push(0);
+                }
                 poly[pk] += 1;
             }
 
@@ -260,7 +306,10 @@ fn main() {
                                 aw[1] += 1;
                                 if aw_fails.len() < 5 {
                                     aw_fails.push(FailDetail {
-                                        board: board.clone(), l, j, jp,
+                                        board: board.clone(),
+                                        l,
+                                        j,
+                                        jp,
                                         f_poly: pt(&a_jl[j][l]),
                                         g_poly: pt(&w_jl[jp][l]),
                                         f_deg: pdeg(&a_jl[j][l]),
@@ -299,7 +348,10 @@ fn main() {
                                 ww[1] += 1;
                                 if ww_fails.len() < 5 {
                                     ww_fails.push(FailDetail {
-                                        board: board.clone(), l, j, jp,
+                                        board: board.clone(),
+                                        l,
+                                        j,
+                                        jp,
                                         f_poly: pt(&w_jl[j][l]),
                                         g_poly: pt(&w_jl[jp][l]),
                                         f_deg: pdeg(&w_jl[j][l]),
@@ -315,7 +367,10 @@ fn main() {
                                 uu[1] += 1;
                                 if uu_fails.len() < 5 {
                                     uu_fails.push(FailDetail {
-                                        board: board.clone(), l, j, jp,
+                                        board: board.clone(),
+                                        l,
+                                        j,
+                                        jp,
                                         f_poly: pt(&u_jl[j][l]),
                                         g_poly: pt(&u_jl[jp][l]),
                                         f_deg: pdeg(&u_jl[j][l]),
@@ -351,44 +406,44 @@ fn main() {
                 for j in 1..=m {
                     for jp in 1..=m {
                         // D_{j,l} << U_{j',l-1}
-                        if !pz(&d_jl[j][l]) && !pz(&u_jl[jp][l-1]) {
+                        if !pz(&d_jl[j][l]) && !pz(&u_jl[jp][l - 1]) {
                             x_du[0] += 1;
-                            if !interlaces(&d_jl[j][l], &u_jl[jp][l-1]) {
+                            if !interlaces(&d_jl[j][l], &u_jl[jp][l - 1]) {
                                 x_du[1] += 1;
                             }
                         }
                         // D_{j,l-1} << U_{j',l}
-                        if !pz(&d_jl[j][l-1]) && !pz(&u_jl[jp][l]) {
+                        if !pz(&d_jl[j][l - 1]) && !pz(&u_jl[jp][l]) {
                             x_du_rev[0] += 1;
-                            if !interlaces(&d_jl[j][l-1], &u_jl[jp][l]) {
+                            if !interlaces(&d_jl[j][l - 1], &u_jl[jp][l]) {
                                 x_du_rev[1] += 1;
                             }
                         }
                         // A_{j,l} << W_{j',l-1}
-                        if !pz(&a_jl[j][l]) && !pz(&w_jl[jp][l-1]) {
+                        if !pz(&a_jl[j][l]) && !pz(&w_jl[jp][l - 1]) {
                             x_aw[0] += 1;
-                            if !interlaces(&a_jl[j][l], &w_jl[jp][l-1]) {
+                            if !interlaces(&a_jl[j][l], &w_jl[jp][l - 1]) {
                                 x_aw[1] += 1;
                             }
                         }
                         // A_{j,l-1} << W_{j',l}
-                        if !pz(&a_jl[j][l-1]) && !pz(&w_jl[jp][l]) {
+                        if !pz(&a_jl[j][l - 1]) && !pz(&w_jl[jp][l]) {
                             x_aw_rev[0] += 1;
-                            if !interlaces(&a_jl[j][l-1], &w_jl[jp][l]) {
+                            if !interlaces(&a_jl[j][l - 1], &w_jl[jp][l]) {
                                 x_aw_rev[1] += 1;
                             }
                         }
                         // D_{j,l-1} << D_{j',l}
-                        if !pz(&d_jl[j][l-1]) && !pz(&d_jl[jp][l]) {
+                        if !pz(&d_jl[j][l - 1]) && !pz(&d_jl[jp][l]) {
                             x_dd_fwd[0] += 1;
-                            if !interlaces(&d_jl[j][l-1], &d_jl[jp][l]) {
+                            if !interlaces(&d_jl[j][l - 1], &d_jl[jp][l]) {
                                 x_dd_fwd[1] += 1;
                             }
                         }
                         // D_{j,l} << D_{j',l-1}
-                        if !pz(&d_jl[j][l]) && !pz(&d_jl[jp][l-1]) {
+                        if !pz(&d_jl[j][l]) && !pz(&d_jl[jp][l - 1]) {
                             x_dd_rev2[0] += 1;
-                            if !interlaces(&d_jl[j][l], &d_jl[jp][l-1]) {
+                            if !interlaces(&d_jl[j][l], &d_jl[jp][l - 1]) {
                                 x_dd_rev2[1] += 1;
                             }
                         }
@@ -407,10 +462,14 @@ fn main() {
 
             for col in 1..=m {
                 for k in 1..=m {
-                    while s_col[col].len() <= k + 1 { s_col[col].push(vec![0i64]); }
+                    while s_col[col].len() <= k + 1 {
+                        s_col[col].push(vec![0i64]);
+                    }
                     s_col[col][k + 1] = pa(&s_col[col][k], &a_jl[k][col]);
                 }
-                while t_col[col].len() <= mp + 1 { t_col[col].push(vec![0i64]); }
+                while t_col[col].len() <= mp + 1 {
+                    t_col[col].push(vec![0i64]);
+                }
                 for k in (1..=m).rev() {
                     t_col[col][k] = pa(&t_col[col][k + 1], &w_jl[k][col]);
                 }
@@ -423,16 +482,29 @@ fn main() {
 
             for lp in 1..=mp {
                 // Collect all (k', D^+, U^+, A^+, W^+, col) for this l'
-                let mut entries: Vec<(usize, Vec<i64>, Vec<i64>, Vec<i64>, Vec<i64>, usize)> = Vec::new();
+                let mut entries: Vec<(usize, Vec<i64>, Vec<i64>, Vec<i64>, Vec<i64>, usize)> =
+                    Vec::new();
 
                 for kp in 1..=mp {
-                    if kp == lp { continue; }
+                    if kp == lp {
+                        continue;
+                    }
                     let col = if kp > lp { lp } else { lp - 1 };
-                    if col < 1 || col > m { continue; }
-                    let sk = if kp < s_col[col].len() { s_col[col][kp].clone() } else { s_col[col][m + 1].clone() };
-                    let tk = if kp < t_col[col].len() { t_col[col][kp].clone() } else { vec![0i64] };
-                    let ak = pa(&sk, &tk);        // A^+ = S + T
-                    let wk = pa(&pmt(&sk), &tk);  // W^+ = tS + T
+                    if col < 1 || col > m {
+                        continue;
+                    }
+                    let sk = if kp < s_col[col].len() {
+                        s_col[col][kp].clone()
+                    } else {
+                        s_col[col][m + 1].clone()
+                    };
+                    let tk = if kp < t_col[col].len() {
+                        t_col[col][kp].clone()
+                    } else {
+                        vec![0i64]
+                    };
+                    let ak = pa(&sk, &tk); // A^+ = S + T
+                    let wk = pa(&pmt(&sk), &tk); // W^+ = tS + T
                     entries.push((kp, sk, tk, ak, wk, col));
                 }
 
@@ -448,10 +520,14 @@ fn main() {
                         if !pz(d_i) && !pz(u_j) {
                             if same_group {
                                 ind_du[0] += 1;
-                                if !interlaces(d_i, u_j) { ind_du[1] += 1; }
+                                if !interlaces(d_i, u_j) {
+                                    ind_du[1] += 1;
+                                }
                             } else {
                                 xg_du[0] += 1;
-                                if !interlaces(d_i, u_j) { xg_du[1] += 1; }
+                                if !interlaces(d_i, u_j) {
+                                    xg_du[1] += 1;
+                                }
                             }
                         }
 
@@ -459,10 +535,14 @@ fn main() {
                         if kp_i > kp_j && !pz(d_i) && !pz(d_j) {
                             if same_group {
                                 ind_dd[0] += 1;
-                                if !interlaces(d_i, d_j) { ind_dd[1] += 1; }
+                                if !interlaces(d_i, d_j) {
+                                    ind_dd[1] += 1;
+                                }
                             } else {
                                 xg_dd[0] += 1;
-                                if !interlaces(d_i, d_j) { xg_dd[1] += 1; }
+                                if !interlaces(d_i, d_j) {
+                                    xg_dd[1] += 1;
+                                }
                             }
                         }
 
@@ -470,29 +550,45 @@ fn main() {
                             // (a') A << W
                             if !pz(a_i) && !pz(w_j) {
                                 ind_aw[0] += 1;
-                                if !interlaces(a_i, w_j) { ind_aw[1] += 1; }
+                                if !interlaces(a_i, w_j) {
+                                    ind_aw[1] += 1;
+                                }
                             }
                             // (b') W_i << W_j for i <= j
                             if kp_i < kp_j && !pz(w_i) && !pz(w_j) {
                                 ind_ww[0] += 1;
-                                if !interlaces(w_i, w_j) { ind_ww[1] += 1; }
+                                if !interlaces(w_i, w_j) {
+                                    ind_ww[1] += 1;
+                                }
                             }
                             // (d') U_i << U_j for i <= j
                             if kp_i < kp_j && !pz(u_i) && !pz(u_j) {
                                 ind_uu[0] += 1;
-                                if !interlaces(u_i, u_j) { ind_uu[1] += 1; }
+                                if !interlaces(u_i, u_j) {
+                                    ind_uu[1] += 1;
+                                }
                             }
                             // (f') A_k << A_k' for k > k'
                             if kp_i > kp_j && !pz(a_i) && !pz(a_j) {
                                 ind_aa[0] += 1;
-                                if !interlaces(a_i, a_j) { ind_aa[1] += 1; }
+                                if !interlaces(a_i, a_j) {
+                                    ind_aa[1] += 1;
+                                }
                             }
                         }
                     }
                 }
             }
         }
-        println!("n={}: {} boards (cumulative: {})", n, boards.iter().filter(|b| is_312_avoiding(&board_to_perm(b))).count(), valid_boards);
+        println!(
+            "n={}: {} boards (cumulative: {})",
+            n,
+            boards
+                .iter()
+                .filter(|b| is_312_avoiding(&board_to_perm(b)))
+                .count(),
+            valid_boards
+        );
     }
 
     println!("\n================================================================");
@@ -511,28 +607,70 @@ fn main() {
     if !aw_fails.is_empty() {
         println!("\n  --- First {} AW failures ---", aw_fails.len());
         for (i, f) in aw_fails.iter().enumerate() {
-            println!("  AW fail #{}: board={:?}, l={}, j={}, j'={}",
-                     i+1, f.board, f.l, f.j, f.jp);
-            println!("    A_{{j,l}} = {} (deg {:?})", format_poly(&f.f_poly), f.f_deg);
-            println!("    W_{{j',l}} = {} (deg {:?})", format_poly(&f.g_poly), f.g_deg);
+            println!(
+                "  AW fail #{}: board={:?}, l={}, j={}, j'={}",
+                i + 1,
+                f.board,
+                f.l,
+                f.j,
+                f.jp
+            );
+            println!(
+                "    A_{{j,l}} = {} (deg {:?})",
+                format_poly(&f.f_poly),
+                f.f_deg
+            );
+            println!(
+                "    W_{{j',l}} = {} (deg {:?})",
+                format_poly(&f.g_poly),
+                f.g_deg
+            );
         }
     }
     if !ww_fails.is_empty() {
         println!("\n  --- First {} WW failures ---", ww_fails.len());
         for (i, f) in ww_fails.iter().enumerate() {
-            println!("  WW fail #{}: board={:?}, l={}, j={}, j'={}",
-                     i+1, f.board, f.l, f.j, f.jp);
-            println!("    W_{{j,l}} = {} (deg {:?})", format_poly(&f.f_poly), f.f_deg);
-            println!("    W_{{j',l}} = {} (deg {:?})", format_poly(&f.g_poly), f.g_deg);
+            println!(
+                "  WW fail #{}: board={:?}, l={}, j={}, j'={}",
+                i + 1,
+                f.board,
+                f.l,
+                f.j,
+                f.jp
+            );
+            println!(
+                "    W_{{j,l}} = {} (deg {:?})",
+                format_poly(&f.f_poly),
+                f.f_deg
+            );
+            println!(
+                "    W_{{j',l}} = {} (deg {:?})",
+                format_poly(&f.g_poly),
+                f.g_deg
+            );
         }
     }
     if !uu_fails.is_empty() {
         println!("\n  --- First {} UU failures ---", uu_fails.len());
         for (i, f) in uu_fails.iter().enumerate() {
-            println!("  UU fail #{}: board={:?}, l={}, j={}, j'={}",
-                     i+1, f.board, f.l, f.j, f.jp);
-            println!("    U_{{j,l}} = {} (deg {:?})", format_poly(&f.f_poly), f.f_deg);
-            println!("    U_{{j',l}} = {} (deg {:?})", format_poly(&f.g_poly), f.g_deg);
+            println!(
+                "  UU fail #{}: board={:?}, l={}, j={}, j'={}",
+                i + 1,
+                f.board,
+                f.l,
+                f.j,
+                f.jp
+            );
+            println!(
+                "    U_{{j,l}} = {} (deg {:?})",
+                format_poly(&f.f_poly),
+                f.f_deg
+            );
+            println!(
+                "    U_{{j',l}} = {} (deg {:?})",
+                format_poly(&f.g_poly),
+                f.g_deg
+            );
         }
     }
 

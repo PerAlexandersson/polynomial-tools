@@ -5,7 +5,6 @@
 /// 1. Computing S^{all}_{L(G)}(t) by brute force (all 2^m orientations of L(G))
 /// 2. Computing it via the independence-set / matching formula
 /// 3. Comparing
-
 use combinatoric_core::graph::Graph;
 use std::collections::BTreeSet;
 
@@ -147,7 +146,10 @@ fn main() {
     }
     for a in 1..=4 {
         for b in a..=4 {
-            check(&format!("K_{{{},{}}}", a, b), &Graph::complete_bipartite(a, b));
+            check(
+                &format!("K_{{{},{}}}", a, b),
+                &Graph::complete_bipartite(a, b),
+            );
         }
     }
     check("Petersen", &Graph::petersen());

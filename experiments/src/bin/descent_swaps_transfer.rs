@@ -36,7 +36,11 @@ fn valid_positions(s_mask: u64, n: u8) -> Vec<u8> {
     let mut positions = Vec::new();
     for p in 1..n {
         let p_in_s = (s_mask >> (p - 1)) & 1 == 1;
-        let pm1_in_s = if p >= 2 { (s_mask >> (p - 2)) & 1 == 1 } else { false };
+        let pm1_in_s = if p >= 2 {
+            (s_mask >> (p - 2)) & 1 == 1
+        } else {
+            false
+        };
         if p_in_s && !pm1_in_s {
             positions.push(p);
         }
@@ -48,19 +52,29 @@ fn valid_positions(s_mask: u64, n: u8) -> Vec<u8> {
 }
 
 fn source_descent_set(s_mask: u64, p: u8, n: u8) -> u64 {
-    if n <= 2 { return 0; }
-    if p == n { return s_mask; }
+    if n <= 2 {
+        return 0;
+    }
+    if p == n {
+        return s_mask;
+    }
     let mut sp = 0u64;
     if p == 1 {
         for j in 2..n {
-            if (s_mask >> (j - 1)) & 1 == 1 { sp |= 1 << (j - 2); }
+            if (s_mask >> (j - 1)) & 1 == 1 {
+                sp |= 1 << (j - 2);
+            }
         }
     } else {
         for pos in 1..=(p.saturating_sub(2)) {
-            if (s_mask >> (pos - 1)) & 1 == 1 { sp |= 1 << (pos - 1); }
+            if (s_mask >> (pos - 1)) & 1 == 1 {
+                sp |= 1 << (pos - 1);
+            }
         }
         for j in (p + 1)..n {
-            if (s_mask >> (j - 1)) & 1 == 1 { sp |= 1 << (j - 2); }
+            if (s_mask >> (j - 1)) & 1 == 1 {
+                sp |= 1 << (j - 2);
+            }
         }
     }
     sp
@@ -68,7 +82,9 @@ fn source_descent_set(s_mask: u64, p: u8, n: u8) -> u64 {
 
 fn epsilon1(pi: &[u8], p: u8) -> bool {
     let n = pi.len() as u8 + 1;
-    if p <= 1 || p >= n { return false; }
+    if p <= 1 || p >= n {
+        return false;
+    }
     let val_left = pi[(p - 2) as usize];
     let val_right = pi[(p - 1) as usize];
     val_left + 1 == val_right
@@ -79,7 +95,9 @@ fn descent_set_to_string(mask: u64, n: u8) -> String {
     let mut first = true;
     for i in 1..n {
         if (mask >> (i - 1)) & 1 == 1 {
-            if !first { s.push(','); }
+            if !first {
+                s.push(',');
+            }
             s.push_str(&i.to_string());
             first = false;
         }
@@ -92,9 +110,15 @@ fn descent_set_to_string(mask: u64, n: u8) -> String {
 fn poly_add(a: &[i64], b: &[i64]) -> Vec<i64> {
     let len = a.len().max(b.len());
     let mut result = vec![0i64; len];
-    for (i, &c) in a.iter().enumerate() { result[i] += c; }
-    for (i, &c) in b.iter().enumerate() { result[i] += c; }
-    while result.len() > 1 && *result.last().unwrap() == 0 { result.pop(); }
+    for (i, &c) in a.iter().enumerate() {
+        result[i] += c;
+    }
+    for (i, &c) in b.iter().enumerate() {
+        result[i] += c;
+    }
+    while result.len() > 1 && *result.last().unwrap() == 0 {
+        result.pop();
+    }
     result
 }
 
@@ -118,9 +142,15 @@ fn poly_mul_tm1(a: &[i64]) -> Vec<i64> {
     // (t-1)*a = t*a - a
     let ta = poly_mul_t(a);
     let mut result = vec![0i64; ta.len()];
-    for (i, &c) in ta.iter().enumerate() { result[i] += c; }
-    for (i, &c) in a.iter().enumerate() { result[i] -= c; }
-    while result.len() > 1 && *result.last().unwrap() == 0 { result.pop(); }
+    for (i, &c) in ta.iter().enumerate() {
+        result[i] += c;
+    }
+    for (i, &c) in a.iter().enumerate() {
+        result[i] -= c;
+    }
+    while result.len() > 1 && *result.last().unwrap() == 0 {
+        result.pop();
+    }
     result
 }
 
@@ -137,18 +167,25 @@ fn main() {
         // Group current perms by descent set
         let mut by_descent: BTreeMap<u64, Vec<&Vec<u8>>> = BTreeMap::new();
         for pi in &perms {
-            by_descent.entry(descent_set_bitmask(pi)).or_default().push(pi);
+            by_descent
+                .entry(descent_set_bitmask(pi))
+                .or_default()
+                .push(pi);
         }
 
         // Group previous perms by descent set
         let mut by_descent_prev: BTreeMap<u64, Vec<&Vec<u8>>> = BTreeMap::new();
         for pi in &perms_prev {
-            by_descent_prev.entry(descent_set_bitmask(pi)).or_default().push(pi);
+            by_descent_prev
+                .entry(descent_set_bitmask(pi))
+                .or_default()
+                .push(pi);
         }
 
         // Pick interesting descent sets to display
         // Focus on small examples and alternating
-        let interesting: Vec<u64> = by_descent.keys()
+        let interesting: Vec<u64> = by_descent
+            .keys()
             .filter(|&&mask| {
                 // 1 not in S
                 (mask & 1) == 0
@@ -160,11 +197,14 @@ fn main() {
             let s_str = descent_set_to_string(mask, n);
             let vp = valid_positions(mask, n);
 
-            if vp.len() < 2 { continue; }
+            if vp.len() < 2 {
+                continue;
+            }
 
             // For each valid p, compute source descent set and check
             // if all source sets are the same
-            let source_sets: Vec<(u8, u64)> = vp.iter()
+            let source_sets: Vec<(u8, u64)> = vp
+                .iter()
                 .map(|&p| (p, source_descent_set(mask, p, n)))
                 .collect();
 
@@ -174,9 +214,17 @@ fn main() {
             // We need: for each (p, q), the contribution to L_{n,S}^{(p)}
             // from source permutations with max at q
 
-            println!("=== n={}, S={} (|P(S)|={}{}) ===",
-                n, s_str, vp.len(),
-                if all_same_source { ", same source" } else { ", VARYING sources" });
+            println!(
+                "=== n={}, S={} (|P(S)|={}{}) ===",
+                n,
+                s_str,
+                vp.len(),
+                if all_same_source {
+                    ", same source"
+                } else {
+                    ", VARYING sources"
+                }
+            );
 
             for &(p, sp_mask) in &source_sets {
                 let sp_str = descent_set_to_string(sp_mask, n - 1);
@@ -184,7 +232,10 @@ fn main() {
 
                 let source_class = match by_descent_prev.get(&sp_mask) {
                     Some(c) => c,
-                    None => { println!("  p={}: empty source S'={}", p, sp_str); continue; }
+                    None => {
+                        println!("  p={}: empty source S'={}", p, sp_str);
+                        continue;
+                    }
                 };
 
                 println!("  p={}: S'_p={}, valid q={:?}", p, sp_str, vq);
@@ -199,7 +250,8 @@ fn main() {
                 let mut actual_row = String::new();
 
                 for &q in &vq {
-                    let source_at_q: Vec<&Vec<u8>> = source_class.iter()
+                    let source_at_q: Vec<&Vec<u8>> = source_class
+                        .iter()
                         .filter(|pi| {
                             let pos = pi.iter().position(|&v| v == n - 1).unwrap() as u8 + 1;
                             pos == q
@@ -207,14 +259,18 @@ fn main() {
                         .copied()
                         .collect();
 
-                    if source_at_q.is_empty() { continue; }
+                    if source_at_q.is_empty() {
+                        continue;
+                    }
 
-                    let l_vals: Vec<usize> = source_at_q.iter()
+                    let l_vals: Vec<usize> = source_at_q
+                        .iter()
                         .map(|pi| compute(pi, Stat::Swaps))
                         .collect();
                     let l_poly = build_poly_from_vals(&l_vals);
 
-                    let c_vals: Vec<usize> = source_at_q.iter()
+                    let c_vals: Vec<usize> = source_at_q
+                        .iter()
                         .filter(|pi| epsilon1(pi, p))
                         .map(|pi| compute(pi, Stat::Swaps))
                         .collect();
@@ -239,8 +295,10 @@ fn main() {
 
                     let has_correction = c_vals.iter().any(|_| true);
 
-                    println!("    q={}: eps2={}, L^(q)={}, C={}{}, contribution={}",
-                        q, eps2,
+                    println!(
+                        "    q={}: eps2={}, L^(q)={}, C={}{}, contribution={}",
+                        q,
+                        eps2,
                         format_poly(&l_poly),
                         format_poly(&c_poly),
                         if has_correction { "" } else { " (zero)" },
@@ -249,7 +307,8 @@ fn main() {
                 }
 
                 // Also show the total L_{n,S}^{(p)}
-                let target_vals: Vec<usize> = by_descent[&mask].iter()
+                let target_vals: Vec<usize> = by_descent[&mask]
+                    .iter()
                     .filter(|pi| {
                         let pos = pi.iter().position(|&v| v == n).unwrap() as u8 + 1;
                         pos == p
@@ -273,19 +332,20 @@ fn main() {
 
                 let mut row_entries: Vec<String> = Vec::new();
                 for &q in &vq {
-                    let source_at_q: Vec<&Vec<u8>> = source_class.iter()
+                    let source_at_q: Vec<&Vec<u8>> = source_class
+                        .iter()
                         .filter(|pi| {
                             let pos = pi.iter().position(|&v| v == n - 1).unwrap() as u8 + 1;
                             pos == q
                         })
                         .copied()
                         .collect();
-                    if source_at_q.is_empty() { continue; }
+                    if source_at_q.is_empty() {
+                        continue;
+                    }
 
                     let eps2 = if q <= p.saturating_sub(2) { 1 } else { 0 };
-                    let c_count: usize = source_at_q.iter()
-                        .filter(|pi| epsilon1(pi, p))
-                        .count();
+                    let c_count: usize = source_at_q.iter().filter(|pi| epsilon1(pi, p)).count();
                     let total = source_at_q.len();
 
                     if c_count == 0 {
@@ -300,10 +360,12 @@ fn main() {
                         // The multiplier is t^{eps2} * [1 + (t-1)*c/l]
                         // where c/l is the fraction with epsilon1=1
                         // But this isn't a scalar - it depends on the poly
-                        row_entries.push(format!("q={}: {}*(1+(t-1)*[{}/{}])",
+                        row_entries.push(format!(
+                            "q={}: {}*(1+(t-1)*[{}/{}])",
                             q,
                             if eps2 == 1 { "t" } else { "1" },
-                            c_count, total,
+                            c_count,
+                            total,
                         ));
                     }
                 }

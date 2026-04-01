@@ -59,7 +59,7 @@ fn eval_multivar(perms: &[&Vec<u8>], point: &[f64]) -> f64 {
 /// For a multilinear polynomial, this is a polynomial in t of degree ≤ m.
 fn build_univariate_slice(perms: &[&Vec<u8>], a: &[f64], b: &[f64]) -> Vec<f64> {
     let m = a.len(); // number of variables
-    // degree of g(t) is at most m, but practically at most max_swaps
+                     // degree of g(t) is at most m, but practically at most max_swaps
     let max_deg = m;
     let mut coeffs = vec![0.0f64; max_deg + 1];
 
@@ -185,7 +185,11 @@ fn main() {
                             let ds_str = format!("{:b}", ds);
                             unstable_examples.push(format!(
                                 "n={} Des={} var x_{} base={} g={:?}",
-                                n, ds_str, i + 1, base_val, g
+                                n,
+                                ds_str,
+                                i + 1,
+                                base_val,
+                                g
                             ));
                         }
                         break 'outer;
@@ -225,7 +229,14 @@ fn main() {
                             if unstable_examples.len() < 3 {
                                 unstable_examples.push(format!(
                                     "n={} Des={:b} 2-var x_{},x_{} ({},{},{},{}) FAIL",
-                                    n, ds, i + 1, j + 1, ai, bi, aj, bj
+                                    n,
+                                    ds,
+                                    i + 1,
+                                    j + 1,
+                                    ai,
+                                    bi,
+                                    aj,
+                                    bj
                                 ));
                             }
                             break 'outer2;
@@ -245,7 +256,9 @@ fn main() {
                 (0..m).map(|i| (0.0, (i + 1) as f64)).collect(),
                 (0..m).map(|i| ((m - i) as f64, (i + 1) as f64)).collect(),
                 (0..m).map(|_| (0.5, 1.5)).collect(),
-                (0..m).map(|i| (if i % 2 == 0 { 0.0 } else { 1.0 }, 1.0)).collect(),
+                (0..m)
+                    .map(|i| (if i % 2 == 0 { 0.0 } else { 1.0 }, 1.0))
+                    .collect(),
             ];
 
             let mut general_ok = true;
@@ -298,12 +311,7 @@ fn main() {
                 let g = build_univariate_slice(&refs, &a, &b);
                 if !is_approx_real_rooted(&g) {
                     all_ok = false;
-                    println!(
-                        "  n={}: FAIL at var x_{} base={}",
-                        n,
-                        i + 1,
-                        base_val,
-                    );
+                    println!("  n={}: FAIL at var x_{} base={}", n, i + 1, base_val,);
                 }
             }
         }

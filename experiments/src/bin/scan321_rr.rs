@@ -1,7 +1,7 @@
 use combpoly::order;
 use combpoly::permutation::avoiding_permutations;
-use polynomial_tools::real_rootedness as polynomial;
 use combpoly::statistics::Stat;
+use polynomial_tools::real_rootedness as polynomial;
 use rayon::prelude::*;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
@@ -20,11 +20,11 @@ fn main() {
         eprint!("n={:>2}: {:>8} perms, scanning RR... ", n, total);
 
         let t1 = std::time::Instant::now();
-        let result: Option<(usize, Vec<u8>, Vec<i64>)> = perms
-            .par_iter()
-            .enumerate()
-            .find_map_any(|(i, w)| {
-                if found.load(Ordering::Relaxed) { return None; }
+        let result: Option<(usize, Vec<u8>, Vec<i64>)> =
+            perms.par_iter().enumerate().find_map_any(|(i, w)| {
+                if found.load(Ordering::Relaxed) {
+                    return None;
+                }
                 let done = progress.fetch_add(1, Ordering::Relaxed);
                 if done % 100000 == 0 && done > 0 {
                     eprint!("{:.0}% ", 100.0 * done as f64 / total as f64);
@@ -43,10 +43,17 @@ fn main() {
                 let ideal_size: i64 = coeffs.iter().sum();
                 eprintln!("FAIL! ({:?})", t1.elapsed());
                 println!("  w = {:?}", w);
-                println!("  ideal={}, deg={}, coeffs={:?}", ideal_size, coeffs.len()-1, coeffs);
-                println!("  log-concave: {}, ULC: {}",
+                println!(
+                    "  ideal={}, deg={}, coeffs={:?}",
+                    ideal_size,
+                    coeffs.len() - 1,
+                    coeffs
+                );
+                println!(
+                    "  log-concave: {}, ULC: {}",
                     polynomial::is_log_concave(&coeffs),
-                    polynomial::is_ultra_log_concave(&coeffs));
+                    polynomial::is_ultra_log_concave(&coeffs)
+                );
             }
             None => {
                 eprintln!("all pass ({:?})", t1.elapsed());

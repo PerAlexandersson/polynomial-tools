@@ -5,36 +5,50 @@
 //!
 //! Usage: cargo run --release --bin peak_jgl -- 7
 
-use polynomial_tools::real_rootedness::{check_weak_interlacing, is_real_rooted, format_poly};
+use polynomial_tools::real_rootedness::{check_weak_interlacing, format_poly, is_real_rooted};
 use std::collections::BTreeSet;
 
 // ── Polynomial helpers (i64 coefficient vectors, ascending degree) ──
 
 fn pt(p: &[i64]) -> Vec<i64> {
     let mut v = p.to_vec();
-    while v.len() > 1 && *v.last().unwrap() == 0 { v.pop(); }
+    while v.len() > 1 && *v.last().unwrap() == 0 {
+        v.pop();
+    }
     v
 }
-fn pz(p: &[i64]) -> bool { p.iter().all(|&c| c == 0) }
+fn pz(p: &[i64]) -> bool {
+    p.iter().all(|&c| c == 0)
+}
 fn pa(a: &[i64], b: &[i64]) -> Vec<i64> {
     let l = a.len().max(b.len());
     let mut r = vec![0i64; l];
-    for (i, &v) in a.iter().enumerate() { r[i] += v; }
-    for (i, &v) in b.iter().enumerate() { r[i] += v; }
+    for (i, &v) in a.iter().enumerate() {
+        r[i] += v;
+    }
+    for (i, &v) in b.iter().enumerate() {
+        r[i] += v;
+    }
     pt(&r)
 }
 fn ps(a: &[i64], b: &[i64]) -> Vec<i64> {
     // a - b
     let l = a.len().max(b.len());
     let mut r = vec![0i64; l];
-    for (i, &v) in a.iter().enumerate() { r[i] += v; }
-    for (i, &v) in b.iter().enumerate() { r[i] -= v; }
+    for (i, &v) in a.iter().enumerate() {
+        r[i] += v;
+    }
+    for (i, &v) in b.iter().enumerate() {
+        r[i] -= v;
+    }
     pt(&r)
 }
 fn pmt(p: &[i64]) -> Vec<i64> {
     // multiply by t
     let mut r = vec![0i64; p.len() + 1];
-    for (i, &v) in p.iter().enumerate() { r[i + 1] = v; }
+    for (i, &v) in p.iter().enumerate() {
+        r[i + 1] = v;
+    }
     pt(&r)
 }
 fn pscale(p: &[i64], c: i64) -> Vec<i64> {
@@ -42,11 +56,17 @@ fn pscale(p: &[i64], c: i64) -> Vec<i64> {
 }
 fn pdeg(p: &[i64]) -> Option<usize> {
     let v = pt(p);
-    if pz(&v) { None } else { Some(v.len() - 1) }
+    if pz(&v) {
+        None
+    } else {
+        Some(v.len() - 1)
+    }
 }
 fn pf(p: &[i64]) -> String {
     let p = pt(p);
-    if pz(&p) { return "0".into(); }
+    if pz(&p) {
+        return "0".into();
+    }
     format_poly(&p)
 }
 
@@ -56,8 +76,12 @@ fn pf(p: &[i64]) -> String {
 fn interlaces(f: &[i64], g: &[i64]) -> bool {
     let f = pt(f);
     let g = pt(g);
-    if pz(&f) { return true; }
-    if pz(&g) { return false; }
+    if pz(&f) {
+        return true;
+    }
+    if pz(&g) {
+        return false;
+    }
     match check_weak_interlacing(&f, &g) {
         Some(true) => true,
         Some(false) => false,
@@ -160,9 +184,12 @@ fn interlaces(f: &[i64], g: &[i64]) -> bool {
                     let sign = if lc_g > 0 { 1i64 } else { -1i64 };
                     // g_padded = BIG * g + sign * t^{d+1}
                     // Use BIG = max(|coeff|) * (d+1) + 1 to ensure root separation
-                    let big: i64 = g.iter().map(|&c| c.abs()).max().unwrap_or(1).max(1) * ((d as i64) + 1) + 1;
+                    let big: i64 =
+                        g.iter().map(|&c| c.abs()).max().unwrap_or(1).max(1) * ((d as i64) + 1) + 1;
                     let mut g_padded: Vec<i64> = g.iter().map(|&c| c * big).collect();
-                    while g_padded.len() <= d + 1 { g_padded.push(0); }
+                    while g_padded.len() <= d + 1 {
+                        g_padded.push(0);
+                    }
                     g_padded[d + 1] += sign;
                     let f_scaled: Vec<i64> = f.iter().map(|&c| c * big).collect();
                     // Now deg(g_padded) = d+1, deg(f_scaled) = d
@@ -170,7 +197,7 @@ fn interlaces(f: &[i64], g: &[i64]) -> bool {
                         Some(b) => b,
                         None => false,
                     }
-                },
+                }
                 _ => false,
             }
         }
@@ -190,7 +217,9 @@ fn bruhat_lower_ideal(perm: &[u8]) -> Vec<Vec<u8>> {
                 if cur[i] > cur[j] {
                     let mut c = cur.clone();
                     c.swap(i, j);
-                    if !vis.contains(&c) { q.insert(c); }
+                    if !vis.contains(&c) {
+                        q.insert(c);
+                    }
                 }
             }
         }
@@ -205,7 +234,11 @@ fn board_to_perm(b: &[u8]) -> Vec<u8> {
     let mut u = vec![false; n + 1];
     for i in 0..n {
         for c in (1..=(b[i] as usize).min(n)).rev() {
-            if !u[c] { p[i] = c as u8; u[c] = true; break; }
+            if !u[c] {
+                p[i] = c as u8;
+                u[c] = true;
+                break;
+            }
         }
     }
     p
@@ -216,7 +249,9 @@ fn is_312_avoiding(perm: &[u8]) -> bool {
     for i in 0..n {
         for j in i + 1..n {
             for k in j + 1..n {
-                if perm[k] < perm[i] && perm[i] < perm[j] { return false; }
+                if perm[k] < perm[i] && perm[i] < perm[j] {
+                    return false;
+                }
             }
         }
     }
@@ -224,8 +259,12 @@ fn is_312_avoiding(perm: &[u8]) -> bool {
 }
 
 fn peaks(w: &[u8]) -> usize {
-    if w.len() < 3 { return 0; }
-    (1..w.len() - 1).filter(|&i| w[i - 1] < w[i] && w[i] > w[i + 1]).count()
+    if w.len() < 3 {
+        return 0;
+    }
+    (1..w.len() - 1)
+        .filter(|&i| w[i - 1] < w[i] && w[i] > w[i + 1])
+        .count()
 }
 
 fn gen_boards(n: usize) -> Vec<Vec<u8>> {
@@ -236,7 +275,10 @@ fn gen_boards(n: usize) -> Vec<Vec<u8>> {
 }
 
 fn gb(n: usize, mx: usize, d: usize, c: &mut Vec<u8>, r: &mut Vec<Vec<u8>>) {
-    if d == n { r.push(c.clone()); return; }
+    if d == n {
+        r.push(c.clone());
+        return;
+    }
     for v in (d + 1).max(if d > 0 { c[d - 1] as usize } else { 1 })..=mx {
         c.push(v as u8);
         gb(n, mx, d + 1, c, r);
@@ -250,12 +292,12 @@ struct BoardData {
     board: Vec<u8>,
     n: usize,
     m: usize,
-    d: Vec<Vec<i64>>,   // D_k polynomials, index 1..=m
-    u: Vec<Vec<i64>>,   // U_k polynomials
-    a: Vec<Vec<i64>>,   // A_k = D_k + U_k
-    w: Vec<Vec<i64>>,   // W_k = t*D_k + U_k
-    s: Vec<Vec<i64>>,   // S_k = sum_{j<k} A_j (partial sum, index 1..=m+1)
-    t: Vec<Vec<i64>>,   // T_k = sum_{j>=k} W_j (tail sum, index 1..=m+1)
+    d: Vec<Vec<i64>>,      // D_k polynomials, index 1..=m
+    u: Vec<Vec<i64>>,      // U_k polynomials
+    a: Vec<Vec<i64>>,      // A_k = D_k + U_k
+    w: Vec<Vec<i64>>,      // W_k = t*D_k + U_k
+    s: Vec<Vec<i64>>,      // S_k = sum_{j<k} A_j (partial sum, index 1..=m+1)
+    t: Vec<Vec<i64>>,      // T_k = sum_{j>=k} W_j (tail sum, index 1..=m+1)
     a_plus: Vec<Vec<i64>>, // A_k^+ = S_k + T_k
     w_plus: Vec<Vec<i64>>, // W_k^+ = t*S_k + T_k
 }
@@ -274,16 +316,22 @@ impl BoardData {
             if pi.len() < 2 {
                 let k = pi[0] as usize;
                 if k <= m {
-                    while u[k].len() < 1 { u[k].push(0); }
+                    while u[k].len() < 1 {
+                        u[k].push(0);
+                    }
                     u[k][0] += 1;
                 }
                 continue;
             }
             let k = pi[0] as usize;
-            if k > m { continue; }
+            if k > m {
+                continue;
+            }
             let pk = peaks(pi);
             let poly = if pi[0] > pi[1] { &mut d[k] } else { &mut u[k] };
-            while poly.len() <= pk { poly.push(0); }
+            while poly.len() <= pk {
+                poly.push(0);
+            }
             poly[pk] += 1;
         }
 
@@ -320,15 +368,25 @@ impl BoardData {
 
         BoardData {
             board: board.to_vec(),
-            n, m,
-            d, u, a, w, s, t,
-            a_plus, w_plus,
+            n,
+            m,
+            d,
+            u,
+            a,
+            w,
+            s,
+            t,
+            a_plus,
+            w_plus,
         }
     }
 }
 
 fn main() {
-    let max_n: usize = std::env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(7);
+    let max_n: usize = std::env::args()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(7);
     println!("================================================================");
     println!("  j > l GAP EXPLORATION for peak polynomials on Ferrers boards");
     println!("  312-avoiding boards, n <= {}", max_n);
@@ -337,37 +395,37 @@ fn main() {
 
     // Counters for Section 1: Degree analysis
     let mut total_pairs = 0u64;
-    let mut deg_sl_lt_tl = 0u64;  // deg(S_l) < deg(T_l)
-    let mut deg_sl_ge_tl = 0u64;  // deg(S_l) >= deg(T_l)
+    let mut deg_sl_lt_tl = 0u64; // deg(S_l) < deg(T_l)
+    let mut deg_sl_ge_tl = 0u64; // deg(S_l) >= deg(T_l)
 
     // Counters for Section 2: Transitivity
-    let mut chain1_aa = [0u64; 2];    // A_j^+ << A_l^+
-    let mut chain1_aw = [0u64; 2];    // A_l^+ << W_l^+
+    let mut chain1_aa = [0u64; 2]; // A_j^+ << A_l^+
+    let mut chain1_aw = [0u64; 2]; // A_l^+ << W_l^+
     let mut chain1_direct = [0u64; 2]; // A_j^+ << W_l^+ (direct)
     let mut chain1_trans_eq = [0u64; 2]; // transitivity when deg(A_l^+) == deg(W_l^+)
     let mut chain1_trans_p1 = [0u64; 2]; // when deg(A_l^+) + 1 == deg(W_l^+)
 
-    let mut chain2_at = [0u64; 2];    // A_j^+ << T_l
-    let mut chain2_tw = [0u64; 2];    // T_l << W_l^+  (should hold from paper)
+    let mut chain2_at = [0u64; 2]; // A_j^+ << T_l
+    let mut chain2_tw = [0u64; 2]; // T_l << W_l^+  (should hold from paper)
     let mut chain2_trans_eq = [0u64; 2]; // transitivity when deg(T_l) == deg(W_l^+)
     let mut chain2_trans_p1 = [0u64; 2]; // when deg(T_l) + 1 == deg(W_l^+)
 
     // Counters for Section 3: Cone decompositions
-    let mut sj_wl = [0u64; 2];   // S_j << W_l^+
-    let mut tj_wl = [0u64; 2];   // T_j << W_l^+
-    let mut sj_tsl = [0u64; 2];  // S_j << tS_l (equivalently S_l << S_j by Wagner)
-    let mut sj_tl = [0u64; 2];   // S_j << T_l
-    let mut tj_tsl = [0u64; 2];  // T_j << tS_l (equiv S_l << T_j)
-    let mut tj_tl = [0u64; 2];   // T_j << T_l (reverse of UU T_l << T_j)
+    let mut sj_wl = [0u64; 2]; // S_j << W_l^+
+    let mut tj_wl = [0u64; 2]; // T_j << W_l^+
+    let mut sj_tsl = [0u64; 2]; // S_j << tS_l (equivalently S_l << S_j by Wagner)
+    let mut sj_tl = [0u64; 2]; // S_j << T_l
+    let mut tj_tsl = [0u64; 2]; // T_j << tS_l (equiv S_l << T_j)
+    let mut tj_tl = [0u64; 2]; // T_j << T_l (reverse of UU T_l << T_j)
 
     // Counters for Section 4: (t-1) structure
-    let mut h_rr = [0u64; 2];      // h real-rooted?
-    let mut h_direct = [0u64; 2];   // A_j^+ << A_j^+ + (t-1)*h
+    let mut h_rr = [0u64; 2]; // h real-rooted?
+    let mut h_direct = [0u64; 2]; // A_j^+ << A_j^+ + (t-1)*h
 
     // Counters for Section 5: Alternative common interlacers
     let mut ci_al_plus = [0u64; 2]; // A_l^+ as common interlacer (A_j^+ << A_l^+ << W_l^+)
-    let mut ci_tl = [0u64; 2];     // T_l as common interlacer (A_j^+ << T_l << W_l^+)
-    let mut ci_sl_tj = [0u64; 2];  // S_l + T_j as common interlacer
+    let mut ci_tl = [0u64; 2]; // T_l as common interlacer (A_j^+ << T_l << W_l^+)
+    let mut ci_sl_tj = [0u64; 2]; // S_l + T_j as common interlacer
     let mut ci_total_p = [0u64; 2]; // P = sum_k A_k as common interlacer
 
     // Track hard cases
@@ -385,7 +443,9 @@ fn main() {
         let mut n_valid = 0u64;
         for board in &boards {
             let perm = board_to_perm(board);
-            if !is_312_avoiding(&perm) { continue; }
+            if !is_312_avoiding(&perm) {
+                continue;
+            }
             valid_boards += 1;
             n_valid += 1;
 
@@ -411,7 +471,9 @@ fn main() {
                     let tj = &bd.t[j];
 
                     // Skip trivial cases where key polynomials are zero
-                    if pz(aj_plus) || pz(wl_plus) { continue; }
+                    if pz(aj_plus) || pz(wl_plus) {
+                        continue;
+                    }
 
                     total_pairs += 1;
 
@@ -429,7 +491,11 @@ fn main() {
                         (None, Some(_)) => true,
                         _ => false,
                     };
-                    if sl_lt_tl { deg_sl_lt_tl += 1; } else { deg_sl_ge_tl += 1; }
+                    if sl_lt_tl {
+                        deg_sl_lt_tl += 1;
+                    } else {
+                        deg_sl_ge_tl += 1;
+                    }
 
                     // ── Section 2: Transitivity tests ──
 
@@ -437,33 +503,47 @@ fn main() {
                     let aa_ok = if !pz(al_plus) {
                         chain1_aa[0] += 1;
                         let r = interlaces(aj_plus, al_plus);
-                        if !r { chain1_aa[1] += 1; }
+                        if !r {
+                            chain1_aa[1] += 1;
+                        }
                         r
-                    } else { false };
+                    } else {
+                        false
+                    };
 
                     let aw_diag = if !pz(al_plus) {
                         chain1_aw[0] += 1;
                         let r = interlaces(al_plus, wl_plus);
-                        if !r { chain1_aw[1] += 1; }
+                        if !r {
+                            chain1_aw[1] += 1;
+                        }
                         r
-                    } else { false };
+                    } else {
+                        false
+                    };
 
                     // Direct check A_j^+ << W_l^+
                     chain1_direct[0] += 1;
                     let direct_ok = interlaces(aj_plus, wl_plus);
-                    if !direct_ok { chain1_direct[1] += 1; }
+                    if !direct_ok {
+                        chain1_direct[1] += 1;
+                    }
 
                     // Transitivity analysis for chain 1
                     if aa_ok && aw_diag {
                         match (deg_al_plus, deg_wl_plus) {
                             (Some(da), Some(dw)) if da == dw => {
                                 chain1_trans_eq[0] += 1;
-                                if !direct_ok { chain1_trans_eq[1] += 1; }
-                            },
+                                if !direct_ok {
+                                    chain1_trans_eq[1] += 1;
+                                }
+                            }
                             (Some(da), Some(dw)) if da + 1 == dw => {
                                 chain1_trans_p1[0] += 1;
-                                if !direct_ok { chain1_trans_p1[1] += 1; }
-                            },
+                                if !direct_ok {
+                                    chain1_trans_p1[1] += 1;
+                                }
+                            }
                             _ => {}
                         }
                     }
@@ -472,27 +552,39 @@ fn main() {
                     let at_ok = if !pz(tl) {
                         chain2_at[0] += 1;
                         let r = interlaces(aj_plus, tl);
-                        if !r { chain2_at[1] += 1; }
+                        if !r {
+                            chain2_at[1] += 1;
+                        }
                         r
-                    } else { false };
+                    } else {
+                        false
+                    };
 
                     let tw_ok = if !pz(tl) {
                         chain2_tw[0] += 1;
                         let r = interlaces(tl, wl_plus);
-                        if !r { chain2_tw[1] += 1; }
+                        if !r {
+                            chain2_tw[1] += 1;
+                        }
                         r
-                    } else { false };
+                    } else {
+                        false
+                    };
 
                     if at_ok && tw_ok {
                         match (deg_tl, deg_wl_plus) {
                             (Some(dt), Some(dw)) if dt == dw => {
                                 chain2_trans_eq[0] += 1;
-                                if !direct_ok { chain2_trans_eq[1] += 1; }
-                            },
+                                if !direct_ok {
+                                    chain2_trans_eq[1] += 1;
+                                }
+                            }
                             (Some(dt), Some(dw)) if dt + 1 == dw => {
                                 chain2_trans_p1[0] += 1;
-                                if !direct_ok { chain2_trans_p1[1] += 1; }
-                            },
+                                if !direct_ok {
+                                    chain2_trans_p1[1] += 1;
+                                }
+                            }
                             _ => {}
                         }
                     }
@@ -500,30 +592,42 @@ fn main() {
                     // ── Section 3: Cone decompositions ──
                     if !pz(sj) {
                         sj_wl[0] += 1;
-                        if !interlaces(sj, wl_plus) { sj_wl[1] += 1; }
+                        if !interlaces(sj, wl_plus) {
+                            sj_wl[1] += 1;
+                        }
                     }
                     if !pz(tj) {
                         tj_wl[0] += 1;
-                        if !interlaces(tj, wl_plus) { tj_wl[1] += 1; }
+                        if !interlaces(tj, wl_plus) {
+                            tj_wl[1] += 1;
+                        }
                     }
                     // S_j << tS_l means S_j << t*S_l. By Wagner reversal, this
                     // is equivalent to S_l << S_j (if S_l has smaller degree).
                     let tsl = pmt(sl);
                     if !pz(sj) && !pz(&tsl) {
                         sj_tsl[0] += 1;
-                        if !interlaces(sj, &tsl) { sj_tsl[1] += 1; }
+                        if !interlaces(sj, &tsl) {
+                            sj_tsl[1] += 1;
+                        }
                     }
                     if !pz(sj) && !pz(tl) {
                         sj_tl[0] += 1;
-                        if !interlaces(sj, tl) { sj_tl[1] += 1; }
+                        if !interlaces(sj, tl) {
+                            sj_tl[1] += 1;
+                        }
                     }
                     if !pz(tj) && !pz(&tsl) {
                         tj_tsl[0] += 1;
-                        if !interlaces(tj, &tsl) { tj_tsl[1] += 1; }
+                        if !interlaces(tj, &tsl) {
+                            tj_tsl[1] += 1;
+                        }
                     }
                     if !pz(tj) && !pz(tl) {
                         tj_tl[0] += 1;
-                        if !interlaces(tj, tl) { tj_tl[1] += 1; }
+                        if !interlaces(tj, tl) {
+                            tj_tl[1] += 1;
+                        }
                     }
 
                     // ── Section 4: (t-1) structure ──
@@ -544,15 +648,15 @@ fn main() {
                     //
                     // Alternative direct: W_l^+ - A_j^+ computed directly
                     let diff = ps(wl_plus, aj_plus); // W_l^+ - A_j^+
-                    // Check: is diff = (t-1)*h for some h?
-                    // (t-1)*h means coefficients: -h[0], h[0]-h[1], h[1]-h[2], ...
-                    // Factor out (t-1): diff / (t-1)
-                    // If diff = c_0 + c_1*t + c_2*t^2 + ...
-                    // then h = -c_0 + (-c_0-c_1)*t + ... (cumulative sum with negation... or)
-                    // Actually (t-1) * h(t) = t*h(t) - h(t)
-                    // If h = h_0 + h_1*t + ..., then (t-1)*h = -h_0 + (h_0-h_1)*t + (h_1-h_2)*t^2 + ...
-                    // So h_0 = -diff[0], h_1 = h_0 - diff[1], h_2 = h_1 - diff[2], ...
-                    // h_k = -sum_{i=0}^{k} diff[i]
+                                                     // Check: is diff = (t-1)*h for some h?
+                                                     // (t-1)*h means coefficients: -h[0], h[0]-h[1], h[1]-h[2], ...
+                                                     // Factor out (t-1): diff / (t-1)
+                                                     // If diff = c_0 + c_1*t + c_2*t^2 + ...
+                                                     // then h = -c_0 + (-c_0-c_1)*t + ... (cumulative sum with negation... or)
+                                                     // Actually (t-1) * h(t) = t*h(t) - h(t)
+                                                     // If h = h_0 + h_1*t + ..., then (t-1)*h = -h_0 + (h_0-h_1)*t + (h_1-h_2)*t^2 + ...
+                                                     // So h_0 = -diff[0], h_1 = h_0 - diff[1], h_2 = h_1 - diff[2], ...
+                                                     // h_k = -sum_{i=0}^{k} diff[i]
                     let diff_v = pt(&diff);
                     let mut h = vec![0i64; diff_v.len()];
                     let mut cumsum = 0i64;
@@ -572,13 +676,17 @@ fn main() {
 
                     if factorization_ok && !pz(&h) {
                         h_rr[0] += 1;
-                        if !is_real_rooted(&h) { h_rr[1] += 1; }
+                        if !is_real_rooted(&h) {
+                            h_rr[1] += 1;
+                        }
 
                         h_direct[0] += 1;
                         // A_j^+ << A_j^+ + (t-1)*h should be same as A_j^+ << W_l^+
                         let ajp_plus_tm1h = pa(aj_plus, &tm1_h);
                         let r = interlaces(aj_plus, &ajp_plus_tm1h);
-                        if !r { h_direct[1] += 1; }
+                        if !r {
+                            h_direct[1] += 1;
+                        }
                     }
 
                     // ── Section 5: Common interlacers ──
@@ -588,7 +696,9 @@ fn main() {
                         let leg1 = interlaces(aj_plus, al_plus);
                         let leg2 = interlaces(al_plus, wl_plus);
                         ci_al_plus[0] += 1;
-                        if !(leg1 && leg2) { ci_al_plus[1] += 1; }
+                        if !(leg1 && leg2) {
+                            ci_al_plus[1] += 1;
+                        }
                     }
 
                     // Candidate 2: T_l
@@ -596,7 +706,9 @@ fn main() {
                         let leg1 = interlaces(aj_plus, tl);
                         let leg2 = interlaces(tl, wl_plus);
                         ci_tl[0] += 1;
-                        if !(leg1 && leg2) { ci_tl[1] += 1; }
+                        if !(leg1 && leg2) {
+                            ci_tl[1] += 1;
+                        }
                     }
 
                     // Candidate 3: S_l + T_j
@@ -605,7 +717,9 @@ fn main() {
                         let leg1 = interlaces(aj_plus, &sl_tj);
                         let leg2 = interlaces(&sl_tj, wl_plus);
                         ci_sl_tj[0] += 1;
-                        if !(leg1 && leg2) { ci_sl_tj[1] += 1; }
+                        if !(leg1 && leg2) {
+                            ci_sl_tj[1] += 1;
+                        }
                     }
 
                     // Candidate 4: P = total peak polynomial
@@ -613,19 +727,30 @@ fn main() {
                         let leg1 = interlaces(aj_plus, &total_peak);
                         let leg2 = interlaces(&total_peak, wl_plus);
                         ci_total_p[0] += 1;
-                        if !(leg1 && leg2) { ci_total_p[1] += 1; }
+                        if !(leg1 && leg2) {
+                            ci_total_p[1] += 1;
+                        }
                     }
 
                     // Track hard cases and report
                     if !sl_lt_tl {
-                        let case_desc = format!("n={} board={:?} j={} l={} deg(S_l)={:?} deg(T_l)={:?}",
-                            n, board, j, l, deg_sl, deg_tl);
+                        let case_desc = format!(
+                            "n={} board={:?} j={} l={} deg(S_l)={:?} deg(T_l)={:?}",
+                            n, board, j, l, deg_sl, deg_tl
+                        );
 
                         // Check if any common interlacer works
-                        let al_works = !pz(al_plus) && interlaces(aj_plus, al_plus) && interlaces(al_plus, wl_plus);
-                        let tl_works = !pz(tl) && interlaces(aj_plus, tl) && interlaces(tl, wl_plus);
-                        let sl_tj_works = !pz(&sl_tj) && interlaces(aj_plus, &sl_tj) && interlaces(&sl_tj, wl_plus);
-                        let p_works = !pz(&total_peak) && interlaces(aj_plus, &total_peak) && interlaces(&total_peak, wl_plus);
+                        let al_works = !pz(al_plus)
+                            && interlaces(aj_plus, al_plus)
+                            && interlaces(al_plus, wl_plus);
+                        let tl_works =
+                            !pz(tl) && interlaces(aj_plus, tl) && interlaces(tl, wl_plus);
+                        let sl_tj_works = !pz(&sl_tj)
+                            && interlaces(aj_plus, &sl_tj)
+                            && interlaces(&sl_tj, wl_plus);
+                        let p_works = !pz(&total_peak)
+                            && interlaces(aj_plus, &total_peak)
+                            && interlaces(&total_peak, wl_plus);
 
                         let any_works = al_works || tl_works || sl_tj_works || p_works || direct_ok;
 
@@ -634,25 +759,36 @@ fn main() {
                         }
 
                         if hard_cases.len() < 50 {
-                            hard_cases.push(format!("{} direct={} A_l+={} T_l={} S_l+T_j={} P={}",
-                                case_desc, direct_ok, al_works, tl_works, sl_tj_works, p_works));
+                            hard_cases.push(format!(
+                                "{} direct={} A_l+={} T_l={} S_l+T_j={} P={}",
+                                case_desc, direct_ok, al_works, tl_works, sl_tj_works, p_works
+                            ));
                         }
                     }
 
                     // Print details for first few direct failures
                     if !direct_ok && detail_count < max_detail {
                         detail_count += 1;
-                        println!("--- DETAIL #{}: direct A_j^+ << W_l^+ FAILS ---", detail_count);
+                        println!(
+                            "--- DETAIL #{}: direct A_j^+ << W_l^+ FAILS ---",
+                            detail_count
+                        );
                         println!("  board={:?} n={} m={} j={} l={}", board, n, m, j, l);
                         println!("  A_j^+ = {}", pf(aj_plus));
                         println!("  W_l^+ = {}", pf(wl_plus));
-                        println!("  deg(A_j^+)={:?} deg(W_l^+)={:?}", deg_aj_plus, deg_wl_plus);
+                        println!(
+                            "  deg(A_j^+)={:?} deg(W_l^+)={:?}",
+                            deg_aj_plus, deg_wl_plus
+                        );
                         println!("  A_l^+ = {}", pf(al_plus));
                         println!("  T_l   = {}", pf(tl));
                         println!("  S_l   = {}", pf(sl));
                         println!("  S_j   = {}", pf(sj));
                         println!("  T_j   = {}", pf(tj));
-                        println!("  deg(S_l)={:?} deg(T_l)={:?} sl<tl={}", deg_sl, deg_tl, sl_lt_tl);
+                        println!(
+                            "  deg(S_l)={:?} deg(T_l)={:?} sl<tl={}",
+                            deg_sl, deg_tl, sl_lt_tl
+                        );
 
                         // Check all candidates
                         let aa = interlaces(aj_plus, al_plus);
@@ -666,7 +802,10 @@ fn main() {
                 }
             }
         }
-        println!("n={}: {} valid 312-avoiding boards (cumulative: {})", n, n_valid, valid_boards);
+        println!(
+            "n={}: {} valid 312-avoiding boards (cumulative: {})",
+            n, n_valid, valid_boards
+        );
     }
 
     // ── SUMMARY OUTPUT ──
@@ -688,8 +827,14 @@ fn main() {
     println!("Total (j,l) pairs with j > l tested: {}\n", total_pairs);
 
     println!("=== SECTION 1: Degree analysis ===");
-    println!("  deg(S_l) < deg(T_l):  {} pairs (transitivity-friendly)", deg_sl_lt_tl);
-    println!("  deg(S_l) >= deg(T_l): {} pairs (hard cases)", deg_sl_ge_tl);
+    println!(
+        "  deg(S_l) < deg(T_l):  {} pairs (transitivity-friendly)",
+        deg_sl_lt_tl
+    );
+    println!(
+        "  deg(S_l) >= deg(T_l): {} pairs (hard cases)",
+        deg_sl_ge_tl
+    );
     println!();
 
     println!("=== SECTION 2: Transitivity tests ===");
@@ -756,9 +901,16 @@ fn main() {
     println!("================================================================");
     println!("  Total boards: {}", valid_boards);
     println!("  Total (j>l) pairs: {}", total_pairs);
-    println!("  Direct A_j^+ << W_l^+ pass: {}/{}", chain1_direct[0] - chain1_direct[1], chain1_direct[0]);
+    println!(
+        "  Direct A_j^+ << W_l^+ pass: {}/{}",
+        chain1_direct[0] - chain1_direct[1],
+        chain1_direct[0]
+    );
     println!("  deg(S_l) < deg(T_l) (easy): {}", deg_sl_lt_tl);
     println!("  deg(S_l) >= deg(T_l) (hard): {}", deg_sl_ge_tl);
-    println!("  Hard cases with no interlacer: {}", no_interlacer_cases.len());
+    println!(
+        "  Hard cases with no interlacer: {}",
+        no_interlacer_cases.len()
+    );
     println!("================================================================");
 }
