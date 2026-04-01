@@ -77,11 +77,21 @@ polytool recurrence < polys.txt
 Options:
 
 ```
+--skip-prefix <k>    Ignore the first k input polynomials before searching
+--full-depth         Require all offsets 1..depth to appear in the recurrence
+--min-rec-len <k>    Minimum recurrence depth to try (default: 1)
 --max-rec-len <k>    Maximum recurrence depth (default: 5)
+--min-var-deg <d>    Minimum degree in t for coefficients (default: 0)
 --max-var-deg <d>    Maximum degree in t for coefficients (default: 3)
+--min-idx-deg <d>    Minimum degree in n for coefficients (default: 0)
 --max-idx-deg <d>    Maximum degree in n for coefficients (default: 3)
+--min-diff-deg <d>   Minimum derivative order (default: 0)
 --max-diff-deg <d>   Maximum derivative order (default: 2)
 --inhomogeneous      Also try inhomogeneous recurrences
+--min-inhomo-var-deg Minimum degree in t for the inhomogeneous term
+--max-inhomo-var-deg Maximum degree in t for the inhomogeneous term
+--min-inhomo-idx-deg Minimum degree in n for the inhomogeneous term
+--max-inhomo-idx-deg Maximum degree in n for the inhomogeneous term
 --denominator        Allow a nontrivial LHS factor f(n,t)
 --max-denom-var-deg  Max degree in t for f(n,t) (default: 2, implies --denominator)
 --max-denom-idx-deg  Max degree in n for f(n,t) (default: 2, implies --denominator)
