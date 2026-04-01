@@ -101,17 +101,40 @@ fn cmd_recurrence(args: &[String]) {
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
+            "--skip-prefix" => {
+                i += 1;
+                search.skip_prefix = args[i].parse().unwrap();
+            }
+            "--full-depth" => {
+                search.require_all_offsets = true;
+            }
+            "--min-rec-len" => {
+                i += 1;
+                search.min_rec_len = args[i].parse().unwrap();
+            }
             "--max-rec-len" => {
                 i += 1;
                 search.max_rec_len = args[i].parse().unwrap();
+            }
+            "--min-var-deg" => {
+                i += 1;
+                search.min_var_deg = args[i].parse().unwrap();
             }
             "--max-var-deg" => {
                 i += 1;
                 search.max_var_deg = args[i].parse().unwrap();
             }
+            "--min-idx-deg" => {
+                i += 1;
+                search.min_idx_deg = args[i].parse().unwrap();
+            }
             "--max-idx-deg" => {
                 i += 1;
                 search.max_idx_deg = args[i].parse().unwrap();
+            }
+            "--min-diff-deg" => {
+                i += 1;
+                search.min_diff_deg = args[i].parse().unwrap();
             }
             "--max-diff-deg" => {
                 i += 1;
@@ -119,6 +142,26 @@ fn cmd_recurrence(args: &[String]) {
             }
             "--inhomogeneous" => {
                 search.try_inhomogeneous = true;
+            }
+            "--min-inhomo-var-deg" => {
+                i += 1;
+                search.try_inhomogeneous = true;
+                search.min_inhomo_var_deg = args[i].parse().unwrap();
+            }
+            "--max-inhomo-var-deg" => {
+                i += 1;
+                search.try_inhomogeneous = true;
+                search.max_inhomo_var_deg = args[i].parse().unwrap();
+            }
+            "--min-inhomo-idx-deg" => {
+                i += 1;
+                search.try_inhomogeneous = true;
+                search.min_inhomo_idx_deg = args[i].parse().unwrap();
+            }
+            "--max-inhomo-idx-deg" => {
+                i += 1;
+                search.try_inhomogeneous = true;
+                search.max_inhomo_idx_deg = args[i].parse().unwrap();
             }
             "--denominator" => {
                 search.try_denominator = true;

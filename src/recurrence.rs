@@ -33,6 +33,14 @@ pub struct RecurrenceOptions {
     pub rec_len: usize,
     /// If false, allow an additive inhomogeneous polynomial g(n,t).
     pub homogeneous: bool,
+    /// Max degree in t of the inhomogeneous term g(n,t).
+    ///
+    /// Only used when `homogeneous == false`.
+    pub inhomo_var_deg: usize,
+    /// Max degree in n of the inhomogeneous term g(n,t).
+    ///
+    /// Only used when `homogeneous == false`.
+    pub inhomo_idx_deg: usize,
     /// Degree in t of the LHS factor f(n,t) beyond the implicit constant 1.
     pub denom_var_deg: usize,
     /// Degree in n of the LHS factor f(n,t) beyond the implicit constant 1.
@@ -47,6 +55,8 @@ impl Default for RecurrenceOptions {
             diff_deg: 0,
             rec_len: 2,
             homogeneous: true,
+            inhomo_var_deg: 1,
+            inhomo_idx_deg: 1,
             denom_var_deg: 0,
             denom_idx_deg: 0,
         }
@@ -181,14 +191,15 @@ pub fn find_polynomial_recurrence(
 
     // 3) Inhomogeneous unknowns (if needed).
     let inhomo_start = coeff_start + num_coeff_vars;
+    let inhomo_w = opts.inhomo_var_deg + 1;
     let num_inhomo_vars = if opts.homogeneous {
         0
     } else {
-        vars_per_coeff
+        (opts.inhomo_idx_deg + 1) * inhomo_w
     };
 
     let inhomo_col = |i: usize, j: usize| -> usize {
-        inhomo_start + i * (opts.var_deg + 1) + j
+        inhomo_start + i * inhomo_w + j
     };
 
     let num_vars = inhomo_start + num_inhomo_vars;
@@ -198,7 +209,10 @@ pub fn find_polynomial_recurrence(
 
     // --- Determine max t-degree across all equations ---
     let max_poly_deg = polys.iter().map(|p| poly_degree(p)).max().unwrap_or(0);
-    let max_j = opts.var_deg.max(opts.denom_var_deg);
+    let max_j = opts
+        .var_deg
+        .max(opts.denom_var_deg)
+        .max(if opts.homogeneous { 0 } else { opts.inhomo_var_deg });
     let max_t_deg = max_j + max_poly_deg;
     let eqs_per_nn = max_t_deg + 1;
 
@@ -266,8 +280,8 @@ pub fn find_polynomial_recurrence(
 
             // Inhomogeneous unknowns: −c_inh[i][j] * nn^i * delta(l,j).
             if !opts.homogeneous {
-                for i in 0..=opts.idx_deg {
-                    if l <= opts.var_deg {
+                for i in 0..=opts.inhomo_idx_deg {
+                    if l <= opts.inhomo_var_deg {
                         let val = BigRational::from(-num_traits::pow::pow(BigInt::from(nn as i64), i));
                         matrix[row][inhomo_col(i, l)] += val;
                     }
@@ -340,8 +354,8 @@ pub fn find_polynomial_recurrence(
         let bv = extract_bivar(
             &solution,
             inhomo_col,
-            opts.idx_deg,
-            opts.var_deg,
+            opts.inhomo_idx_deg,
+            opts.inhomo_var_deg,
         );
         if bv.is_zero() {
             None
@@ -702,7 +716,11 @@ pub fn count_unknowns(opts: &RecurrenceOptions) -> usize {
     let num_denom_vars = (opts.denom_idx_deg + 1) * (opts.denom_var_deg + 1) - 1;
     let vars_per_coeff = (opts.idx_deg + 1) * (opts.var_deg + 1);
     let num_coeff_vars = opts.rec_len * (opts.diff_deg + 1) * vars_per_coeff;
-    let num_inhomo_vars = if opts.homogeneous { 0 } else { vars_per_coeff };
+    let num_inhomo_vars = if opts.homogeneous {
+        0
+    } else {
+        (opts.inhomo_idx_deg + 1) * (opts.inhomo_var_deg + 1)
+    };
     num_denom_vars + num_coeff_vars + num_inhomo_vars
 }
 
@@ -714,7 +732,10 @@ pub fn count_equations(polys: &[Vec<i64>], opts: &RecurrenceOptions) -> usize {
         return 0;
     }
     let max_poly_deg = polys.iter().map(|p| poly_degree(p)).max().unwrap_or(0);
-    let max_j = opts.var_deg.max(opts.denom_var_deg);
+    let max_j = opts
+        .var_deg
+        .max(opts.denom_var_deg)
+        .max(if opts.homogeneous { 0 } else { opts.inhomo_var_deg });
     let eqs_per_nn = max_j + max_poly_deg + 1;
     (m - opts.rec_len) * eqs_per_nn
 }
@@ -726,16 +747,36 @@ pub fn count_equations(polys: &[Vec<i64>], opts: &RecurrenceOptions) -> usize {
 /// Options controlling the adaptive search bounds.
 #[derive(Debug, Clone)]
 pub struct AdaptiveSearchOptions {
+    /// Number of initial polynomials to ignore before searching.
+    pub skip_prefix: usize,
+    /// Require every offset 1..=rec_len to appear with a non-zero coefficient.
+    pub require_all_offsets: bool,
+    /// Minimum recurrence length to try.
+    pub min_rec_len: usize,
     /// Maximum recurrence length to try.
     pub max_rec_len: usize,
+    /// Minimum degree in t for coefficients.
+    pub min_var_deg: usize,
     /// Maximum degree in t for coefficients.
     pub max_var_deg: usize,
+    /// Minimum degree in n for coefficients.
+    pub min_idx_deg: usize,
     /// Maximum degree in n for coefficients.
     pub max_idx_deg: usize,
+    /// Minimum derivative order.
+    pub min_diff_deg: usize,
     /// Maximum derivative order.
     pub max_diff_deg: usize,
     /// Also search inhomogeneous recurrences.
     pub try_inhomogeneous: bool,
+    /// Minimum degree in t for the inhomogeneous term when enabled.
+    pub min_inhomo_var_deg: usize,
+    /// Maximum degree in t for the inhomogeneous term when enabled.
+    pub max_inhomo_var_deg: usize,
+    /// Minimum degree in n for the inhomogeneous term when enabled.
+    pub min_inhomo_idx_deg: usize,
+    /// Maximum degree in n for the inhomogeneous term when enabled.
+    pub max_inhomo_idx_deg: usize,
     /// Also search with LHS denominators.
     pub try_denominator: bool,
     /// Maximum denom_var_deg when try_denominator is true.
@@ -751,11 +792,21 @@ pub struct AdaptiveSearchOptions {
 impl Default for AdaptiveSearchOptions {
     fn default() -> Self {
         Self {
+            skip_prefix: 0,
+            require_all_offsets: false,
+            min_rec_len: 1,
             max_rec_len: 5,
+            min_var_deg: 0,
             max_var_deg: 3,
+            min_idx_deg: 0,
             max_idx_deg: 3,
+            min_diff_deg: 0,
             max_diff_deg: 2,
             try_inhomogeneous: false,
+            min_inhomo_var_deg: 0,
+            max_inhomo_var_deg: 3,
+            min_inhomo_idx_deg: 0,
+            max_inhomo_idx_deg: 3,
             try_denominator: false,
             max_denom_var_deg: 2,
             max_denom_idx_deg: 2,
@@ -763,6 +814,10 @@ impl Default for AdaptiveSearchOptions {
             verbose: false,
         }
     }
+}
+
+fn recurrence_uses_all_offsets(rec: &Recurrence, rec_len: usize) -> bool {
+    (1..=rec_len).all(|offset| rec.terms.iter().any(|term| term.offset == offset))
 }
 
 /// Result of an adaptive recurrence search, including metadata.
@@ -782,33 +837,46 @@ pub struct AdaptiveSearchResult {
 
 /// Generate candidate parameter sets, sorted by (unknowns, diff_deg, rec_len, idx_deg, var_deg).
 fn generate_candidates(m: usize, search: &AdaptiveSearchOptions) -> Vec<RecurrenceOptions> {
+    let min_rl = search.min_rec_len.max(1).min(m.saturating_sub(1));
     let max_rl = search.max_rec_len.min(m.saturating_sub(1));
     let mut candidates = Vec::new();
 
-    for rec_len in 1..=max_rl {
-        for diff_deg in 0..=search.max_diff_deg {
-            for idx_deg in 0..=search.max_idx_deg {
-                for var_deg in 0..=search.max_var_deg {
+    if min_rl > max_rl {
+        return candidates;
+    }
+
+    for rec_len in min_rl..=max_rl {
+        for diff_deg in search.min_diff_deg..=search.max_diff_deg {
+            for idx_deg in search.min_idx_deg..=search.max_idx_deg {
+                for var_deg in search.min_var_deg..=search.max_var_deg {
                     candidates.push(RecurrenceOptions {
                         rec_len,
                         var_deg,
                         idx_deg,
                         diff_deg,
                         homogeneous: true,
+                        inhomo_var_deg: 0,
+                        inhomo_idx_deg: 0,
                         denom_var_deg: 0,
                         denom_idx_deg: 0,
                     });
 
                     if search.try_inhomogeneous {
-                        candidates.push(RecurrenceOptions {
-                            rec_len,
-                            var_deg,
-                            idx_deg,
-                            diff_deg,
-                            homogeneous: false,
-                            denom_var_deg: 0,
-                            denom_idx_deg: 0,
-                        });
+                        for inhomo_idx_deg in search.min_inhomo_idx_deg..=search.max_inhomo_idx_deg {
+                            for inhomo_var_deg in search.min_inhomo_var_deg..=search.max_inhomo_var_deg {
+                                candidates.push(RecurrenceOptions {
+                                    rec_len,
+                                    var_deg,
+                                    idx_deg,
+                                    diff_deg,
+                                    homogeneous: false,
+                                    inhomo_var_deg,
+                                    inhomo_idx_deg,
+                                    denom_var_deg: 0,
+                                    denom_idx_deg: 0,
+                                });
+                            }
+                        }
                     }
 
                     if search.try_denominator {
@@ -823,6 +891,8 @@ fn generate_candidates(m: usize, search: &AdaptiveSearchOptions) -> Vec<Recurren
                                     idx_deg,
                                     diff_deg,
                                     homogeneous: true,
+                                    inhomo_var_deg: 0,
+                                    inhomo_idx_deg: 0,
                                     denom_var_deg: dvd,
                                     denom_idx_deg: did,
                                 });
@@ -852,6 +922,7 @@ pub fn find_recurrence_adaptive(
     polys: &[Vec<i64>],
     search: &AdaptiveSearchOptions,
 ) -> Option<AdaptiveSearchResult> {
+    let polys = polys.get(search.skip_prefix..).unwrap_or(&[]);
     let m = polys.len();
     if m < 2 {
         return None;
@@ -875,6 +946,7 @@ pub fn find_recurrence_adaptive(
             eprintln!(
                 "  try #{tried}: rec_len={} var_deg={} idx_deg={} diff_deg={} \
                  denom=({},{}) homog={} \
+                 inhomo=({},{}) \
                  (unknowns={unknowns}, equations={equations}, margin={})",
                 opts.rec_len,
                 opts.var_deg,
@@ -883,11 +955,16 @@ pub fn find_recurrence_adaptive(
                 opts.denom_var_deg,
                 opts.denom_idx_deg,
                 opts.homogeneous,
+                opts.inhomo_var_deg,
+                opts.inhomo_idx_deg,
                 equations - unknowns,
             );
         }
 
         if let Some(rec) = find_polynomial_recurrence(polys, opts) {
+            if search.require_all_offsets && !recurrence_uses_all_offsets(&rec, opts.rec_len) {
+                continue;
+            }
             if search.verbose {
                 eprintln!("  -> found!");
             }
@@ -944,6 +1021,9 @@ pub fn find_recurrence_adaptive(
             }
 
             if let Some(rec) = find_polynomial_recurrence(polys, opts) {
+                if search.require_all_offsets && !recurrence_uses_all_offsets(&rec, opts.rec_len) {
+                    continue;
+                }
                 if search.verbose {
                     eprintln!("  -> found (rational)!");
                 }
@@ -1115,6 +1195,30 @@ mod tests {
     }
 
     #[test]
+    fn constant_coeffs_with_separate_inhomogeneous_bounds() {
+        // P_n = P_{n-1} + n + t^2
+        let polys: Vec<Vec<i64>> = vec![
+            vec![0],
+            vec![2, 0, 1],
+            vec![5, 0, 2],
+            vec![9, 0, 3],
+            vec![14, 0, 4],
+            vec![20, 0, 5],
+        ];
+        let opts = RecurrenceOptions {
+            var_deg: 0,
+            idx_deg: 0,
+            diff_deg: 0,
+            rec_len: 1,
+            homogeneous: false,
+            inhomo_var_deg: 2,
+            inhomo_idx_deg: 1,
+            ..Default::default()
+        };
+        assert_recurrence(&polys, &opts, "P(n) = P(n-1) + n + t^2");
+    }
+
+    #[test]
     fn adaptive_geometric() {
         let polys: Vec<Vec<i64>> = vec![
             vec![1],
@@ -1126,6 +1230,53 @@ mod tests {
         ];
         let result =
             find_recurrence_adaptive(&polys, &AdaptiveSearchOptions::default()).unwrap();
+        assert_eq!(format!("{}", result.recurrence), "P(n) = 2 P(n-1)");
+    }
+
+    #[test]
+    fn adaptive_respects_min_bounds() {
+        let polys: Vec<Vec<i64>> = vec![
+            vec![1],
+            vec![1],
+            vec![2],
+            vec![3],
+            vec![5],
+            vec![8],
+            vec![13],
+        ];
+        let search = AdaptiveSearchOptions {
+            require_all_offsets: true,
+            min_rec_len: 2,
+            max_rec_len: 2,
+            min_var_deg: 0,
+            max_var_deg: 0,
+            min_idx_deg: 0,
+            max_idx_deg: 0,
+            min_diff_deg: 0,
+            max_diff_deg: 0,
+            ..Default::default()
+        };
+        let result = find_recurrence_adaptive(&polys, &search).unwrap();
+        assert_eq!(format!("{}", result.recurrence), "P(n) = P(n-1) + P(n-2)");
+        assert_eq!(result.opts.rec_len, 2);
+    }
+
+    #[test]
+    fn adaptive_can_skip_prefix() {
+        let polys: Vec<Vec<i64>> = vec![
+            vec![9],
+            vec![1],
+            vec![2],
+            vec![4],
+            vec![8],
+            vec![16],
+            vec![32],
+        ];
+        let search = AdaptiveSearchOptions {
+            skip_prefix: 1,
+            ..Default::default()
+        };
+        let result = find_recurrence_adaptive(&polys, &search).unwrap();
         assert_eq!(format!("{}", result.recurrence), "P(n) = 2 P(n-1)");
     }
 
@@ -1287,6 +1438,8 @@ mod tests {
             diff_deg: 0,
             rec_len: 2,
             homogeneous: true,
+            inhomo_var_deg: 0,
+            inhomo_idx_deg: 0,
             denom_var_deg: 0,
             denom_idx_deg: 0,
         };
@@ -1311,6 +1464,8 @@ mod tests {
             diff_deg: 0,
             rec_len: 2,
             homogeneous: true,
+            inhomo_var_deg: 0,
+            inhomo_idx_deg: 0,
             denom_var_deg: 0,
             denom_idx_deg: 0,
         };

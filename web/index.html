@@ -817,13 +817,17 @@ function startRecurrence(text) {
   setStatus('Computing (this may take a while for large search spaces)\u2026');
 
   const adaptive = document.querySelector('input[name="searchMode"][value="adaptive"]').checked;
+  const readInt = (id, fallback) => {
+    const value = parseInt(document.getElementById(id).value, 10);
+    return Number.isNaN(value) ? fallback : value;
+  };
   const params = {
     type: 'find_recurrence',
     input: text,
-    max_rec_len: adaptive ? 3 : (parseInt(document.getElementById('maxRecLen').value) || 3),
-    max_var_deg: adaptive ? 2 : (parseInt(document.getElementById('maxVarDeg').value) || 2),
-    max_idx_deg: adaptive ? 2 : (parseInt(document.getElementById('maxIdxDeg').value) || 2),
-    max_diff_deg: adaptive ? 1 : (parseInt(document.getElementById('maxDiffDeg').value) || 1),
+    max_rec_len: adaptive ? 3 : readInt('maxRecLen', 3),
+    max_var_deg: adaptive ? 2 : readInt('maxVarDeg', 2),
+    max_idx_deg: adaptive ? 2 : readInt('maxIdxDeg', 2),
+    max_diff_deg: adaptive ? 1 : readInt('maxDiffDeg', 1),
     try_inhomogeneous: document.getElementById('tryInhomogeneous').checked,
     try_denominator: document.getElementById('tryDenominator').checked,
   };
