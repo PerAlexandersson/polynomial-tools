@@ -20,6 +20,10 @@
 //! Demazure operator definition κ_{λ,σ} = π_σ(z^λ).
 
 use crate::partition::Partition;
+use crate::permutation::{
+    compose_permutations, inverse_permutation, longest_permutation,
+    permutation_from_simple_transpositions,
+};
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::{One, Zero};
@@ -325,7 +329,7 @@ pub fn reduced_kogan_faces(n: usize, sigma: &[usize]) -> Vec<Vec<(usize, usize)>
         }
 
         // Compute the permutation from the subword
-        let perm = permutation_from_word(n, &subword);
+        let perm = permutation_from_simple_transpositions(n, &subword);
 
         // Check if reduced: inversions(perm) == len(subword)
         let inv = inversion_count(&perm);
@@ -350,11 +354,7 @@ pub fn reduced_kogan_faces(n: usize, sigma: &[usize]) -> Vec<Vec<(usize, usize)>
 /// Word [a_1, ..., a_k] represents s_{a_1} · s_{a_2} · ... · s_{a_k},
 /// applied right-to-left (s_{a_k} first), matching the Mathematica convention.
 fn permutation_from_word(n: usize, word: &[usize]) -> Vec<usize> {
-    let mut perm: Vec<usize> = (1..=n).collect();
-    for &s in word.iter().rev() {
-        perm.swap(s - 1, s);
-    }
-    perm
+    permutation_from_simple_transpositions(n, word)
 }
 
 /// Count inversions of a permutation.
@@ -382,27 +382,6 @@ pub fn kogan_face_placements(n: usize, word: &[usize]) -> Vec<Vec<(usize, usize)
 
 // ── Key polynomial computation ──────────────────────────────────────────────
 
-/// Compute w₀ (longest permutation in S_n), as one-line notation.
-fn longest_perm(n: usize) -> Vec<usize> {
-    (1..=n).rev().collect()
-}
-
-/// Multiply two permutations: (a·b)(i) = a(b(i)).
-/// Both in 1-indexed one-line notation.
-fn perm_multiply(a: &[usize], b: &[usize]) -> Vec<usize> {
-    b.iter().map(|&i| a[i - 1]).collect()
-}
-
-/// Invert a permutation: σ⁻¹(σ(i)) = i.
-fn invert_perm(perm: &[usize]) -> Vec<usize> {
-    let n = perm.len();
-    let mut inv = vec![0; n];
-    for (i, &v) in perm.iter().enumerate() {
-        inv[v - 1] = i + 1;
-    }
-    inv
-}
-
 /// Compute all monomials (as weight vectors) appearing in the key polynomial
 /// κ_{λ,σ}, by enumerating integer points in the union of all reduced Kogan
 /// faces of type w₀σ.
@@ -412,11 +391,11 @@ fn invert_perm(perm: &[usize]) -> Vec<usize> {
 pub fn key_polynomial_weights(lambda: &Partition, sigma: &[usize]) -> BTreeMap<Vec<u32>, u64> {
     let n = sigma.len();
 
-    let w0 = longest_perm(n);
+    let w0 = longest_permutation(n);
     // The KST formula uses σ⁻¹ where the operator definition uses σ.
     // Invert sigma to match.
-    let sigma_inv = invert_perm(sigma);
-    let w0_sigma = perm_multiply(&sigma_inv, &w0);
+    let sigma_inv = inverse_permutation(sigma);
+    let w0_sigma = compose_permutations(&sigma_inv, &w0);
 
     // Find all reduced Kogan faces of type w₀σ directly.
     let faces = reduced_kogan_faces(n, &w0_sigma);
@@ -540,9 +519,9 @@ pub fn key_strict_lattice_point_count(lambda: &Partition, sigma: &[usize], dilat
     let n = sigma.len();
     let kl = scale_partition(lambda, n, dilation);
 
-    let w0 = longest_perm(n);
-    let sigma_inv = invert_perm(sigma);
-    let w0_sigma = perm_multiply(&sigma_inv, &w0);
+    let w0 = longest_permutation(n);
+    let sigma_inv = inverse_permutation(sigma);
+    let w0_sigma = compose_permutations(&sigma_inv, &w0);
     let faces = reduced_kogan_faces(n, &w0_sigma);
 
     let mut all_patterns: HashSet<GtPattern> = HashSet::new();

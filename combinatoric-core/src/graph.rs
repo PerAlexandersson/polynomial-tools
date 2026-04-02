@@ -41,106 +41,6 @@ fn vec_poly_sub(a: &[i64], b: &[i64]) -> Vec<i64> {
     r
 }
 
-/// Add two polynomials.
-fn vec_poly_add(a: &[i64], b: &[i64]) -> Vec<i64> {
-    let len = a.len().max(b.len());
-    let mut r = vec![0i64; len];
-    for (i, &c) in a.iter().enumerate() {
-        r[i] += c;
-    }
-    for (i, &c) in b.iter().enumerate() {
-        r[i] += c;
-    }
-    while r.last() == Some(&0) {
-        r.pop();
-    }
-    r
-}
-
-/// Multiply two polynomials.
-fn vec_poly_mul(a: &[i64], b: &[i64]) -> Vec<i64> {
-    if a.is_empty() || b.is_empty() {
-        return vec![];
-    }
-    let mut r = vec![0i64; a.len() + b.len() - 1];
-    for (i, &ca) in a.iter().enumerate() {
-        for (j, &cb) in b.iter().enumerate() {
-            r[i + j] += ca * cb;
-        }
-    }
-    while r.last() == Some(&0) {
-        r.pop();
-    }
-    r
-}
-
-/// Multiply a polynomial by t (shift coefficients up by 1).
-fn poly_mul_by_t(p: &[i64]) -> Vec<i64> {
-    if p.is_empty() {
-        return vec![];
-    }
-    let mut r = vec![0i64; p.len() + 1];
-    for (i, &c) in p.iter().enumerate() {
-        r[i + 1] = c;
-    }
-    r
-}
-
-/// Scale a polynomial by a constant.
-fn vec_poly_scale(p: &[i64], s: i64) -> Vec<i64> {
-    if s == 0 {
-        return vec![];
-    }
-    let mut r: Vec<i64> = p.iter().map(|&c| c * s).collect();
-    while r.last() == Some(&0) {
-        r.pop();
-    }
-    r
-}
-
-/// Product of a list of polynomials.
-fn poly_product(polys: &[Vec<i64>]) -> Vec<i64> {
-    let mut result = vec![1i64];
-    for p in polys {
-        result = vec_poly_mul(&result, p);
-    }
-    result
-}
-
-/// Exact polynomial division (assumes b divides a exactly).
-fn poly_exact_div(a: &[i64], b: &[i64]) -> Vec<i64> {
-    if b.is_empty() {
-        panic!("division by zero polynomial");
-    }
-    if a.is_empty() {
-        return vec![];
-    }
-    let da = a.len() - 1;
-    let db = b.len() - 1;
-    if da < db {
-        return vec![];
-    }
-    let mut rem = a.to_vec();
-    let mut quot = vec![0i64; da - db + 1];
-    let lead_b = *b.last().unwrap();
-    for i in (0..=da - db).rev() {
-        let q = rem[i + db] / lead_b;
-        quot[i] = q;
-        for (j, &bj) in b.iter().enumerate() {
-            rem[i + j] -= q * bj;
-        }
-    }
-    while quot.last() == Some(&0) {
-        quot.pop();
-    }
-    quot
-}
-
-/// Factorial.
-fn factorial(n: usize) -> u64 {
-    (1..=n as u64).product()
-}
-
 // ---------------------------------------------------------------------------
 // BigInt polynomial helpers (for tree sink polynomial)
 // ---------------------------------------------------------------------------
@@ -249,17 +149,59 @@ fn factorial_big(n: usize) -> BigInt {
     r
 }
 
-/// Multiply a polynomial by (t + c).
-fn poly_mul_linear(p: &[i64], c: i64) -> Vec<i64> {
-    let mut result = vec![0i64; p.len() + 1];
-    for (i, &coeff) in p.iter().enumerate() {
-        result[i] += c * coeff; // c · coeff · t^i
-        result[i + 1] += coeff; // coeff · t^{i+1}
+fn reachability_word_count(n: usize) -> usize {
+    n.div_ceil(64)
+}
+
+fn reachability_has_bit(row: &[u64], idx: usize) -> bool {
+    ((row[idx / 64] >> (idx % 64)) & 1) == 1
+}
+
+fn reachability_set_bit(row: &mut [u64], idx: usize) {
+    row[idx / 64] |= 1u64 << (idx % 64);
+}
+
+#[derive(Clone)]
+struct ReachabilityMatrix {
+    n: usize,
+    rows: Vec<Vec<u64>>,
+}
+
+impl ReachabilityMatrix {
+    fn new(n: usize) -> Self {
+        let words = reachability_word_count(n);
+        Self {
+            n,
+            rows: vec![vec![0u64; words]; n],
+        }
     }
-    while result.last() == Some(&0) {
-        result.pop();
+
+    fn reaches(&self, from: usize, to: usize) -> bool {
+        reachability_has_bit(&self.rows[from], to)
     }
-    result
+
+    fn add_arc(&mut self, from: usize, to: usize) -> bool {
+        if from == to || self.reaches(to, from) {
+            return false;
+        }
+        if self.reaches(from, to) {
+            return true;
+        }
+
+        let mut successors = self.rows[to].clone();
+        reachability_set_bit(&mut successors, to);
+
+        let predecessors: Vec<usize> = (0..self.n)
+            .filter(|&v| v == from || self.reaches(v, from))
+            .collect();
+        for v in predecessors {
+            for (dst, src) in self.rows[v].iter_mut().zip(&successors) {
+                *dst |= *src;
+            }
+        }
+
+        true
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1015,35 +957,52 @@ impl Graph {
     ///
     /// Returns orientations as lists of directed edges `(u, v)` meaning u → v.
     pub fn acyclic_orientations(&self) -> Vec<Vec<(usize, usize)>> {
-        // Use the coloring method: for each permutation of vertices,
-        // orient edges by the permutation order.
-        // This generates each acyclic orientation exactly once per
-        // linear extension of its transitive closure, so we deduplicate.
-        let mut seen = BTreeSet::new();
-        let mut result = Vec::new();
+        self.acyclic_orientations_with_frozen_edges(&[])
+    }
 
-        // Generate all permutations
-        let perms = all_perms(self.n);
-        for perm in &perms {
-            let mut orientation = Vec::new();
-            for &(u, v) in &self.edges {
-                if perm[u] < perm[v] {
-                    orientation.push((u, v));
-                } else {
-                    orientation.push((v, u));
-                }
-            }
-            orientation.sort();
-            if seen.insert(orientation.clone()) {
-                result.push(orientation);
-            }
-        }
+    /// All acyclic orientations extending the directed edges in `frozen_edges`.
+    ///
+    /// Each entry `(u, v)` in `frozen_edges` forces the undirected edge `{u, v}`
+    /// to be oriented as `u → v`. Repeated constraints with the same direction
+    /// are allowed; conflicting constraints panic. If the frozen directions
+    /// themselves create a directed cycle, the result is empty.
+    pub fn acyclic_orientations_with_frozen_edges(
+        &self,
+        frozen_edges: &[(usize, usize)],
+    ) -> Vec<Vec<(usize, usize)>> {
+        let frozen = self.frozen_edge_orientations(frozen_edges);
+        let Some((reachability, mut orientation, _)) =
+            self.initial_acyclic_orientation_state(&frozen)
+        else {
+            return Vec::new();
+        };
+
+        let mut result = Vec::new();
+        self.collect_acyclic_orientations_rec(
+            0,
+            &frozen,
+            &reachability,
+            &mut orientation,
+            &mut result,
+        );
         result
     }
 
     /// Number of acyclic orientations.
     pub fn num_acyclic_orientations(&self) -> usize {
-        self.acyclic_orientations().len()
+        self.num_acyclic_orientations_with_frozen_edges(&[])
+    }
+
+    /// Number of acyclic orientations extending the directions in `frozen_edges`.
+    pub fn num_acyclic_orientations_with_frozen_edges(
+        &self,
+        frozen_edges: &[(usize, usize)],
+    ) -> usize {
+        let frozen = self.frozen_edge_orientations(frozen_edges);
+        let Some((reachability, _, _)) = self.initial_acyclic_orientation_state(&frozen) else {
+            return 0;
+        };
+        self.count_acyclic_orientations_rec(0, &frozen, &reachability)
     }
 
     /// Sink polynomial of acyclic orientations: coefficients[k] = number of
@@ -1052,27 +1011,28 @@ impl Graph {
     /// A sink is a vertex with no outgoing edges in the orientation.
     /// This equals the chromatic polynomial evaluated at -t (up to sign).
     pub fn acyclic_sink_polynomial(&self) -> Vec<i64> {
-        let orientations = self.acyclic_orientations();
-        let mut max_sinks = 0;
-        let mut sink_counts: Vec<usize> = Vec::new();
+        self.acyclic_sink_polynomial_with_frozen_edges(&[])
+    }
 
-        for orient in &orientations {
-            let mut has_outgoing = vec![false; self.n];
-            for &(u, _v) in orient {
-                has_outgoing[u] = true;
-            }
-            let sinks = has_outgoing.iter().filter(|&&x| !x).count();
-            if sinks > max_sinks {
-                max_sinks = sinks;
-                sink_counts.resize(max_sinks + 1, 0);
-            }
-            if sinks < sink_counts.len() {
-                sink_counts[sinks] += 1;
-            }
+    /// Sink polynomial of acyclic orientations extending the directions in
+    /// `frozen_edges`.
+    pub fn acyclic_sink_polynomial_with_frozen_edges(
+        &self,
+        frozen_edges: &[(usize, usize)],
+    ) -> Vec<i64> {
+        let frozen = self.frozen_edge_orientations(frozen_edges);
+        let Some((reachability, _, mut has_outgoing)) =
+            self.initial_acyclic_orientation_state(&frozen)
+        else {
+            return vec![0];
+        };
+
+        let mut coeffs = vec![0i64; self.n + 1];
+        self.acyclic_sink_polynomial_rec(0, &frozen, &reachability, &mut has_outgoing, &mut coeffs);
+        while coeffs.len() > 1 && coeffs.last() == Some(&0) {
+            coeffs.pop();
         }
-
-        sink_counts.resize(max_sinks + 1, 0);
-        sink_counts.iter().map(|&c| c as i64).collect()
+        coeffs
     }
 
     // -- Chromatic polynomial (deletion-contraction) -----------------------
@@ -1117,66 +1077,13 @@ impl Graph {
         result
     }
 
-    /// Sink polynomial by enumerating 2^m edge orientations and checking acyclicity.
+    /// Sink polynomial of acyclic orientations.
     ///
-    /// For each of the 2^|E| orientations, check if the resulting digraph is
-    /// acyclic (via topological sort), and count sinks.
-    /// This is O(2^m · (n + m)) which is much faster than the n!-based method
-    /// when m is moderate relative to n.
+    /// This method is retained as a compatibility wrapper around the core
+    /// incremental acyclic-orientation engine used by
+    /// [`acyclic_sink_polynomial`](Self::acyclic_sink_polynomial).
     pub fn sink_polynomial_fast(&self) -> Vec<i64> {
-        let m = self.edges.len();
-        let n = self.n;
-        if n == 0 {
-            return vec![1];
-        }
-        let mut coeffs = vec![0i64; n + 1];
-
-        for mask in 0u64..(1u64 << m) {
-            // Build adjacency list for this orientation
-            // For each edge (u,v), bit i=0 means u→v, bit i=1 means v→u
-            let mut out_deg = vec![0usize; n];
-            let mut adj_out: Vec<Vec<usize>> = vec![Vec::new(); n];
-            for (i, &(u, v)) in self.edges.iter().enumerate() {
-                if mask & (1u64 << i) == 0 {
-                    adj_out[u].push(v);
-                    out_deg[u] += 1;
-                } else {
-                    adj_out[v].push(u);
-                    out_deg[v] += 1;
-                }
-            }
-
-            // Check acyclicity via Kahn's algorithm (topological sort)
-            let mut in_deg = vec![0usize; n];
-            for u in 0..n {
-                for &v in &adj_out[u] {
-                    in_deg[v] += 1;
-                }
-            }
-            let mut queue: Vec<usize> = (0..n).filter(|&v| in_deg[v] == 0).collect();
-            let mut visited = 0usize;
-            while let Some(u) = queue.pop() {
-                visited += 1;
-                for &v in &adj_out[u] {
-                    in_deg[v] -= 1;
-                    if in_deg[v] == 0 {
-                        queue.push(v);
-                    }
-                }
-            }
-
-            if visited == n {
-                // Acyclic: count sinks (vertices with out-degree 0)
-                let sinks = out_deg.iter().filter(|&&d| d == 0).count();
-                coeffs[sinks] += 1;
-            }
-        }
-
-        // Strip trailing zeros
-        while coeffs.last() == Some(&0) {
-            coeffs.pop();
-        }
-        coeffs
+        self.acyclic_sink_polynomial()
     }
 
     /// Sink polynomial over ALL orientations (not just acyclic ones).
@@ -1447,52 +1354,182 @@ impl Graph {
             .collect();
         format!("Graph({} vertices, edges: [{}])", self.n, edges.join(", "))
     }
+
+    fn frozen_edge_orientations(
+        &self,
+        frozen_edges: &[(usize, usize)],
+    ) -> Vec<Option<(usize, usize)>> {
+        let edge_index: std::collections::BTreeMap<(usize, usize), usize> = self
+            .edges
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(i, edge)| (edge, i))
+            .collect();
+
+        let mut frozen = vec![None; self.edges.len()];
+        for &(from, to) in frozen_edges {
+            assert!(
+                from < self.n && to < self.n,
+                "frozen edge ({from}, {to}) uses a vertex outside 0..{}",
+                self.n
+            );
+            assert_ne!(from, to, "frozen edge ({from}, {to}) is a loop");
+
+            let key = if from < to { (from, to) } else { (to, from) };
+            let Some(&edge_idx) = edge_index.get(&key) else {
+                panic!("frozen edge ({from}, {to}) is not an edge of the graph");
+            };
+
+            match frozen[edge_idx] {
+                Some((u, v)) => assert!(
+                    (u, v) == (from, to),
+                    "conflicting frozen directions for edge {{{}, {}}}",
+                    key.0,
+                    key.1
+                ),
+                None => frozen[edge_idx] = Some((from, to)),
+            }
+        }
+
+        frozen
+    }
+
+    fn initial_acyclic_orientation_state(
+        &self,
+        frozen: &[Option<(usize, usize)>],
+    ) -> Option<(ReachabilityMatrix, Vec<(usize, usize)>, Vec<bool>)> {
+        let mut reachability = ReachabilityMatrix::new(self.n);
+        let mut orientation = vec![(0usize, 0usize); self.edges.len()];
+        let mut has_outgoing = vec![false; self.n];
+
+        for (edge_idx, frozen_dir) in frozen.iter().enumerate() {
+            if let Some((from, to)) = frozen_dir {
+                if !reachability.add_arc(*from, *to) {
+                    return None;
+                }
+                orientation[edge_idx] = (*from, *to);
+                has_outgoing[*from] = true;
+            }
+        }
+
+        Some((reachability, orientation, has_outgoing))
+    }
+
+    fn collect_acyclic_orientations_rec(
+        &self,
+        edge_idx: usize,
+        frozen: &[Option<(usize, usize)>],
+        reachability: &ReachabilityMatrix,
+        orientation: &mut Vec<(usize, usize)>,
+        result: &mut Vec<Vec<(usize, usize)>>,
+    ) {
+        if edge_idx == self.edges.len() {
+            result.push(orientation.clone());
+            return;
+        }
+
+        if frozen[edge_idx].is_some() {
+            self.collect_acyclic_orientations_rec(
+                edge_idx + 1,
+                frozen,
+                reachability,
+                orientation,
+                result,
+            );
+            return;
+        }
+
+        let (u, v) = self.edges[edge_idx];
+        for (from, to) in [(u, v), (v, u)] {
+            let mut next_reachability = reachability.clone();
+            if next_reachability.add_arc(from, to) {
+                orientation[edge_idx] = (from, to);
+                self.collect_acyclic_orientations_rec(
+                    edge_idx + 1,
+                    frozen,
+                    &next_reachability,
+                    orientation,
+                    result,
+                );
+            }
+        }
+    }
+
+    fn count_acyclic_orientations_rec(
+        &self,
+        edge_idx: usize,
+        frozen: &[Option<(usize, usize)>],
+        reachability: &ReachabilityMatrix,
+    ) -> usize {
+        if edge_idx == self.edges.len() {
+            return 1;
+        }
+
+        if frozen[edge_idx].is_some() {
+            return self.count_acyclic_orientations_rec(edge_idx + 1, frozen, reachability);
+        }
+
+        let (u, v) = self.edges[edge_idx];
+        let mut total = 0;
+        for (from, to) in [(u, v), (v, u)] {
+            let mut next_reachability = reachability.clone();
+            if next_reachability.add_arc(from, to) {
+                total +=
+                    self.count_acyclic_orientations_rec(edge_idx + 1, frozen, &next_reachability);
+            }
+        }
+        total
+    }
+
+    fn acyclic_sink_polynomial_rec(
+        &self,
+        edge_idx: usize,
+        frozen: &[Option<(usize, usize)>],
+        reachability: &ReachabilityMatrix,
+        has_outgoing: &mut Vec<bool>,
+        coeffs: &mut Vec<i64>,
+    ) {
+        if edge_idx == self.edges.len() {
+            let sinks = has_outgoing.iter().filter(|&&out| !out).count();
+            coeffs[sinks] += 1;
+            return;
+        }
+
+        if frozen[edge_idx].is_some() {
+            self.acyclic_sink_polynomial_rec(
+                edge_idx + 1,
+                frozen,
+                reachability,
+                has_outgoing,
+                coeffs,
+            );
+            return;
+        }
+
+        let (u, v) = self.edges[edge_idx];
+        for (from, to) in [(u, v), (v, u)] {
+            let mut next_reachability = reachability.clone();
+            if next_reachability.add_arc(from, to) {
+                let was_outgoing = has_outgoing[from];
+                has_outgoing[from] = true;
+                self.acyclic_sink_polynomial_rec(
+                    edge_idx + 1,
+                    frozen,
+                    &next_reachability,
+                    has_outgoing,
+                    coeffs,
+                );
+                has_outgoing[from] = was_outgoing;
+            }
+        }
+    }
 }
 
 impl std::fmt::Display for Graph {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Graph(n={}, |E|={})", self.n, self.edges.len())
     }
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-fn all_perms(n: usize) -> Vec<Vec<usize>> {
-    if n == 0 {
-        return vec![vec![]];
-    }
-    let mut result = Vec::new();
-    let mut perm: Vec<usize> = (0..n).collect();
-    loop {
-        result.push(perm.clone());
-        if !next_perm(&mut perm) {
-            break;
-        }
-    }
-    result
-}
-
-fn next_perm(perm: &mut [usize]) -> bool {
-    let n = perm.len();
-    if n <= 1 {
-        return false;
-    }
-    let mut i = n - 2;
-    while perm[i] >= perm[i + 1] {
-        if i == 0 {
-            return false;
-        }
-        i -= 1;
-    }
-    let mut j = n - 1;
-    while perm[j] <= perm[i] {
-        j -= 1;
-    }
-    perm.swap(i, j);
-    perm[i + 1..].reverse();
-    true
 }
 
 // ---------------------------------------------------------------------------
@@ -1680,6 +1717,48 @@ mod tests {
     fn test_acyclic_orientations_k4() {
         // Mathematica: 24 (= 4!)
         assert_eq!(Graph::complete(4).num_acyclic_orientations(), 24);
+    }
+
+    #[test]
+    fn test_acyclic_orientations_with_frozen_edges_path() {
+        let g = Graph::path(3);
+        let orientations = g.acyclic_orientations_with_frozen_edges(&[(1, 0)]);
+        assert_eq!(orientations.len(), 2);
+        assert!(orientations.contains(&vec![(1, 0), (1, 2)]));
+        assert!(orientations.contains(&vec![(1, 0), (2, 1)]));
+    }
+
+    #[test]
+    fn test_acyclic_orientations_with_frozen_cycle_has_no_extensions() {
+        let g = Graph::cycle(3);
+        assert_eq!(
+            g.num_acyclic_orientations_with_frozen_edges(&[(0, 1), (1, 2), (2, 0)]),
+            0
+        );
+        assert_eq!(
+            g.acyclic_sink_polynomial_with_frozen_edges(&[(0, 1), (1, 2), (2, 0)]),
+            vec![0]
+        );
+    }
+
+    #[test]
+    fn test_acyclic_sink_polynomial_with_frozen_edges_path() {
+        let g = Graph::path(3);
+        assert_eq!(
+            g.acyclic_sink_polynomial_with_frozen_edges(&[(1, 0)]),
+            vec![0, 1, 1]
+        );
+    }
+
+    #[test]
+    fn test_acyclic_sink_polynomial_empty_graph() {
+        assert_eq!(Graph::empty(0).acyclic_sink_polynomial(), vec![1]);
+    }
+
+    #[test]
+    fn test_sink_polynomial_fast_is_compatibility_wrapper() {
+        let g = Graph::cycle(4);
+        assert_eq!(g.sink_polynomial_fast(), g.acyclic_sink_polynomial());
     }
 
     // -- Graph operation tests --
