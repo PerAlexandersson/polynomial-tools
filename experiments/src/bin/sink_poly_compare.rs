@@ -1,4 +1,4 @@
-/// Cross-check: sink_polynomial_tree() vs sink_polynomial_fast() on trees.
+/// Cross-check: sink_polynomial_tree() vs acyclic_sink_polynomial() on trees.
 /// Also benchmarks the tree method on large caterpillars.
 use combinatoric_core::graph::Graph;
 use polynomial_tools::real_rootedness::is_real_rooted;
@@ -59,7 +59,7 @@ fn main() {
 
         if n == 2 {
             let g = Graph::path(2);
-            let tree = g.line_graph().sink_polynomial_fast();
+            let tree = g.line_graph().acyclic_sink_polynomial();
             let fast_tree = g.sink_polynomial_tree();
             count = 1;
             if tree != fast_tree {
@@ -84,7 +84,7 @@ fn main() {
                 }
                 count += 1;
 
-                let fast = g.line_graph().sink_polynomial_fast();
+                let fast = g.line_graph().acyclic_sink_polynomial();
                 let tree = g.sink_polynomial_tree();
                 if fast != tree {
                     mismatches += 1;

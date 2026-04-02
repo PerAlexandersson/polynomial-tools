@@ -10,7 +10,6 @@ use combinatoric_core::graph::Graph;
 use num_bigint::BigInt;
 use num_traits::{Signed, ToPrimitive, Zero};
 use polynomial_tools::real_rootedness::is_real_rooted;
-use std::collections::BTreeSet;
 
 /// Check real-rootedness of a BigInt polynomial.
 /// Divides out the GCD of coefficients to reduce to i64 range.
@@ -57,7 +56,7 @@ fn check_and_print_tree(name: &str, g: &Graph) -> bool {
 
 fn check_and_print_fast(name: &str, g: &Graph) -> bool {
     let lg = g.line_graph();
-    let coeffs = lg.sink_polynomial_fast();
+    let coeffs = lg.acyclic_sink_polynomial();
     let rr = is_real_rooted(&coeffs);
     let status = if rr { "RR" } else { "NOT RR <<<" };
     println!(
@@ -69,52 +68,6 @@ fn check_and_print_fast(name: &str, g: &Graph) -> bool {
         status
     );
     rr
-}
-
-/// Generate tree from Prüfer sequence
-fn prufer_to_tree(seq: &[usize], n: usize) -> Graph {
-    let mut degree = vec![1usize; n];
-    for &v in seq {
-        degree[v] += 1;
-    }
-    let mut edges = Vec::new();
-    let mut seq_iter = seq.iter();
-    for _ in 0..n - 2 {
-        let &v = seq_iter.next().unwrap();
-        // find smallest leaf
-        for u in 0..n {
-            if degree[u] == 1 {
-                edges.push((u, v));
-                degree[u] -= 1;
-                degree[v] -= 1;
-                break;
-            }
-        }
-    }
-    // connect the last two nodes with degree 1
-    let remaining: Vec<usize> = (0..n).filter(|&v| degree[v] == 1).collect();
-    assert_eq!(remaining.len(), 2);
-    edges.push((remaining[0], remaining[1]));
-    Graph::new(n, &edges)
-}
-
-/// Estimate #AO of L(T) = product of degrees of T
-fn ao_count(g: &Graph) -> u64 {
-    let mut prod: u64 = 1;
-    for v in 0..g.num_vertices() {
-        let d = g.degree(v) as u64;
-        if d > 0 {
-            prod = prod.saturating_mul(d);
-        }
-    }
-    prod
-}
-
-/// Canonical form: sorted degree sequence (to deduplicate isomorphic trees)
-fn degree_seq(g: &Graph) -> Vec<usize> {
-    let mut ds: Vec<usize> = (0..g.num_vertices()).map(|v| g.degree(v)).collect();
-    ds.sort();
-    ds
 }
 
 /// Build a caterpillar Cat(a_1, ..., a_k):
@@ -137,39 +90,6 @@ fn build_caterpillar(a: &[usize]) -> Graph {
     }
     assert_eq!(next_vertex, total);
     Graph::new(total, &edges)
-}
-
-/// Product of degrees of non-leaf vertices in Cat(a_1,...,a_k).
-/// For the path vertices: deg(v_0) = a_0 + 1, deg(v_{k-1}) = a_{k-1} + 1,
-/// deg(v_i) = a_i + 2 for 1 <= i <= k-2.
-fn caterpillar_ao_estimate(a: &[usize]) -> u64 {
-    let k = a.len();
-    let mut prod: u64 = 1;
-    for i in 0..k {
-        let d = if i == 0 || i == k - 1 {
-            a[i] as u64 + 1
-        } else {
-            a[i] as u64 + 2
-        };
-        prod = prod.saturating_mul(d);
-    }
-    prod
-}
-
-/// Number of edges in L(T) for caterpillar T with leaf counts a.
-/// Equals Σ_v C(deg(v), 2) where deg is the degree in the caterpillar.
-fn caterpillar_line_edges(a: &[usize]) -> usize {
-    let k = a.len();
-    let mut total = 0;
-    for i in 0..k {
-        let d = if i == 0 || i == k - 1 {
-            a[i] + 1
-        } else {
-            a[i] + 2
-        };
-        total += d * (d - 1) / 2;
-    }
-    total
 }
 
 fn caterpillar_name(a: &[usize]) -> String {

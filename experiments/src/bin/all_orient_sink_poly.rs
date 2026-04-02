@@ -19,7 +19,7 @@ fn check(name: &str, g: &Graph) {
     let status = if rr { "RR" } else { "NOT RR <<<" };
 
     // Also compute the acyclic version for comparison
-    let acyclic = lg.sink_polynomial_fast();
+    let acyclic = lg.acyclic_sink_polynomial();
 
     println!(
         "{:<25} |V(L)|={:<3} |E(L)|={:<3}  all={:?}  [{}]",
