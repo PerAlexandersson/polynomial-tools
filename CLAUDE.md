@@ -83,6 +83,17 @@ paths continue to work.
 - `key_polynomial` — Key polynomials κ_{λ,σ} via Kogan faces of GT-polytopes,
   Ehrhart polynomials for key-Kostka coefficients
 
+**Numeric policy / upgrade path:**
+- Prefer one exact implementation plus one ergonomic wrapper, not two separate algorithms.
+- For integer-valued combinatorial functions whose coefficients may grow, the target pattern is:
+  `foo_bigint(...) -> Vec<BigInt>` as the canonical implementation, and
+  `foo(...) -> Vec<i64>` as a checked convenience wrapper calling `to_i64().expect(...)`.
+- For genuinely rational algorithms (for example Ehrhart interpolation), keep the exact
+  `BigRational` version as the primary API.
+- Avoid making every public API fully generic over coefficient type unless the generic
+  version clearly improves reuse; generic helper layers are preferred over genericizing
+  every algorithm.
+
 ### combpoly/
 Permutation statistics and generating polynomials. Provides the `combpoly` CLI.
 
