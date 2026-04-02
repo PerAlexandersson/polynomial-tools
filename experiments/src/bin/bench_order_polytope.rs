@@ -7,36 +7,27 @@ fn bench(label: &str, poset: &Poset, k: usize) {
     let nat = poset.natural_relabeling();
 
     let t0 = Instant::now();
-    let val_fast = poset.count_weak_order_preserving_dp(k);
-    let dur_fast = t0.elapsed();
-
-    let t_legacy = Instant::now();
-    let val_legacy = poset.count_weak_order_preserving_dp_legacy(k);
-    let dur_legacy = t_legacy.elapsed();
-    assert_eq!(
-        val_fast, val_legacy,
-        "{} k={}: fast/legacy mismatch",
-        label, k
-    );
+    let val_dp = poset.count_weak_order_preserving_dp(k);
+    let dur_dp = t0.elapsed();
 
     // Only run backtracking if DP was fast (otherwise it would be hours)
-    let (val_bt, dur_bt, speedup) = if dur_fast.as_millis() < 50 {
+    let (val_bt, dur_bt, speedup) = if dur_dp.as_millis() < 50 {
         let t1 = Instant::now();
         let v = nat.count_weak_order_preserving(k);
         let d = t1.elapsed();
-        assert_eq!(v, val_fast, "{} k={}: mismatch", label, k);
+        assert_eq!(v, val_dp, "{} k={}: mismatch", label, k);
         (
             v,
             format!("{:>10.2?}", d),
-            format!("{:.1}x", d.as_secs_f64() / dur_fast.as_secs_f64().max(1e-9)),
+            format!("{:.1}x", d.as_secs_f64() / dur_dp.as_secs_f64().max(1e-9)),
         )
     } else {
-        (val_fast, "  (skipped)".into(), "   >>".into())
+        (val_dp, "  (skipped)".into(), "   >>".into())
     };
 
     println!(
-        "  {:<28} k={:<3} Ω={:<14} bt={:<14} old={:>10.2?}  new={:>10.2?}  speedup={}",
-        label, k, val_bt, dur_bt, dur_legacy, dur_fast, speedup
+        "  {:<28} k={:<3} Ω={:<14} bt={:<14} dp={:>10.2?}  speedup={}",
+        label, k, val_bt, dur_bt, dur_dp, speedup
     );
 }
 
@@ -50,14 +41,10 @@ fn main() {
     // chain(20): DP only (backtracking would take hours)
     let t0 = Instant::now();
     let v = Poset::chain(20).count_weak_order_preserving_dp(20);
-    let dur_new = t0.elapsed();
-    let t1 = Instant::now();
-    let old = Poset::chain(20).count_weak_order_preserving_dp_legacy(20);
-    let dur_old = t1.elapsed();
-    assert_eq!(v, old);
+    let dur_dp = t0.elapsed();
     println!(
-        "  {:<28} k={:<3} Ω={:<14} bt={:<14} old={:>10.2?}  new={:>10.2?}  speedup=>>",
-        "chain(20)", 20, v, "(hours)", dur_old, dur_new
+        "  {:<28} k={:<3} Ω={:<14} bt={:<14} dp={:>10.2?}  speedup=>>",
+        "chain(20)", 20, v, "(hours)", dur_dp
     );
 
     println!("\n--- Antichains (frontier width 0) ---");
@@ -84,17 +71,13 @@ fn main() {
     // large-width comparison at a smaller but still informative value.
     let t0 = Instant::now();
     let v = Poset::fence(20).count_weak_order_preserving_dp(12);
-    let dur_new = t0.elapsed();
-    let t1 = Instant::now();
-    let old = Poset::fence(20).count_weak_order_preserving_dp_legacy(12);
-    let dur_old = t1.elapsed();
-    assert_eq!(v, old);
+    let dur_dp = t0.elapsed();
     println!(
-        "  {:<28} k={:<3} Ω={:<14} bt={:<14} old={:>10.2?}  new={:>10.2?}  speedup=>>",
-        "fence(20)", 12, v, "(hours)", dur_old, dur_new
+        "  {:<28} k={:<3} Ω={:<14} bt={:<14} dp={:>10.2?}  speedup=>>",
+        "fence(20)", 12, v, "(hours)", dur_dp
     );
 
-    println!("\n--- Ehrhart polynomial (BigRational — no overflow) ---");
+    println!("\n--- h* / P-Eulerian consistency (BigRational Ehrhart backend) ---");
     for (label, p) in &[
         ("chain(8)", Poset::chain(8)),
         ("antichain(5)", Poset::antichain(5)),
@@ -106,20 +89,15 @@ fn main() {
     ] {
         let t0 = Instant::now();
         let hstar = p.order_polytope_hstar();
-        let dur_fast = t0.elapsed();
-        let t1 = Instant::now();
-        let hstar_old = p.order_polytope_hstar_legacy();
-        let dur_old = t1.elapsed();
+        let dur_hstar = t0.elapsed();
         let nat = p.natural_relabeling();
         let pe = nat.p_eulerian_polynomial();
-        assert_eq!(hstar, hstar_old, "{}: fast/legacy h* mismatch", label);
         assert_eq!(hstar, pe, "{}: h* != P-Eulerian", label);
         println!(
-            "  {:<28} n={:<3} old={:>10.2?}  new={:>10.2?}  h*={:?}",
+            "  {:<28} n={:<3} h* time={:>10.2?}  h*={:?}",
             label,
             p.num_elements(),
-            dur_old,
-            dur_fast,
+            dur_hstar,
             hstar
         );
     }

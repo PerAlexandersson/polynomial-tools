@@ -386,114 +386,6 @@ impl Poset {
         plans
     }
 
-    /// Count order-preserving maps using frontier DP (requires natural labeling).
-    ///
-    /// Processes vertices 0..n in order, tracking only "live" vertices
-    /// (those with unprocessed children whose values constrain future vertices).
-    /// States are merged when they agree on live vertex values, giving
-    /// exponential speedup over backtracking for narrow posets (chains,
-    /// trees, Young diagrams).
-    ///
-    /// Complexity: O(n · k^w) where w = max frontier width ≤ poset width.
-    fn count_order_preserving_dp_legacy(&self, k: usize, weak: bool) -> usize {
-        use std::collections::HashMap;
-
-        let n = self.n;
-        if n == 0 {
-            return 1;
-        }
-        if k == 0 {
-            return 0;
-        }
-
-        debug_assert!(self.is_naturally_labeled());
-
-        let delta: usize = if weak { 0 } else { 1 };
-
-        // max_child[v] = largest child of v in the Hasse diagram
-        let mut max_child: Vec<Option<usize>> = vec![None; n];
-        for &(a, b) in &self.covers {
-            match max_child[a] {
-                None => max_child[a] = Some(b),
-                Some(cur) if b > cur => max_child[a] = Some(b),
-                _ => {}
-            }
-        }
-
-        // Live set: vertices u < v whose assigned value still constrains
-        // some future vertex (i.e., max_child[u] >= v). Maintained incrementally.
-        let mut live: Vec<usize> = Vec::new();
-        let mut dp: HashMap<Vec<usize>, usize> = HashMap::new();
-        dp.insert(Vec::new(), 1);
-
-        for v in 0..n {
-            // Positions of v's parents in the live vector
-            let parent_positions: Vec<usize> = self.parents[v]
-                .iter()
-                .map(|&p| live.iter().position(|&u| u == p).unwrap())
-                .collect();
-
-            // Which live slots die after processing v (their max child is v)
-            let dying_positions: Vec<usize> = live
-                .iter()
-                .enumerate()
-                .filter(|&(_, &u)| max_child[u] == Some(v))
-                .map(|(i, _)| i)
-                .collect();
-
-            // Positions to keep in the state vector
-            let keep_positions: Vec<usize> = (0..live.len())
-                .filter(|i| !dying_positions.contains(i))
-                .collect();
-
-            // Does v enter the next live set? (only if v has children)
-            let v_enters = max_child[v].is_some();
-
-            let mut new_dp: HashMap<Vec<usize>, usize> = HashMap::new();
-
-            for (state, &count) in &dp {
-                // Lower bound for f(v) from parent constraints
-                let mut lo = 1usize;
-                for &pos in &parent_positions {
-                    let bound = state[pos] + delta;
-                    if bound > lo {
-                        lo = bound;
-                    }
-                }
-
-                if lo > k {
-                    continue;
-                }
-
-                if !v_enters {
-                    // v has no children: all values c = lo..=k yield the same
-                    // successor state, so multiply instead of iterating.
-                    let num_choices = k - lo + 1;
-                    let new_state: Vec<usize> = keep_positions.iter().map(|&i| state[i]).collect();
-                    *new_dp.entry(new_state).or_insert(0) += count * num_choices;
-                } else {
-                    // v enters the live set; each value creates a distinct state.
-                    for c in lo..=k {
-                        let mut new_state: Vec<usize> =
-                            keep_positions.iter().map(|&i| state[i]).collect();
-                        new_state.push(c); // v is largest, appended at end
-                        *new_dp.entry(new_state).or_insert(0) += count;
-                    }
-                }
-            }
-
-            // Update the live set
-            live.retain(|u| max_child[*u] != Some(v));
-            if v_enters {
-                live.push(v);
-            }
-
-            dp = new_dp;
-        }
-
-        dp.values().sum()
-    }
-
     fn count_order_preserving_dp(&self, k: usize, weak: bool) -> usize {
         use std::collections::HashMap;
 
@@ -566,24 +458,12 @@ impl Poset {
         p.count_order_preserving_dp(k, true)
     }
 
-    /// Legacy frontier-DP implementation kept for benchmarking.
-    pub fn count_weak_order_preserving_dp_legacy(&self, k: usize) -> usize {
-        let p = self.natural_relabeling();
-        p.count_order_preserving_dp_legacy(k, true)
-    }
-
     /// Count strictly order-preserving maps P → {1,...,k} using frontier DP.
     ///
     /// Automatically relabels the poset to natural labeling if needed.
     pub fn count_strict_order_preserving_dp(&self, k: usize) -> usize {
         let p = self.natural_relabeling();
         p.count_order_preserving_dp(k, false)
-    }
-
-    /// Legacy frontier-DP implementation kept for benchmarking.
-    pub fn count_strict_order_preserving_dp_legacy(&self, k: usize) -> usize {
-        let p = self.natural_relabeling();
-        p.count_order_preserving_dp_legacy(k, false)
     }
 
     // -- Order polynomial ---------------------------------------------------
@@ -681,15 +561,6 @@ impl Poset {
     ///
     /// Returns rational coefficients as `Ratio<BigInt>` in ascending degree order.
     pub fn order_polytope_ehrhart(&self) -> Vec<BigRat> {
-        self.order_polytope_ehrhart_impl(false)
-    }
-
-    /// Legacy order-polytope Ehrhart computation kept for benchmarking.
-    pub fn order_polytope_ehrhart_legacy(&self) -> Vec<BigRat> {
-        self.order_polytope_ehrhart_impl(true)
-    }
-
-    fn order_polytope_ehrhart_impl(&self, use_legacy_dp: bool) -> Vec<BigRat> {
         let d = self.n; // dimension of O(P)
         if d == 0 {
             return vec![BigRat::one()];
@@ -707,11 +578,7 @@ impl Poset {
 
         // Positive evaluations: Ehr(t) = Ω(P, t+1)
         for t in 0..num_positive {
-            let val = if use_legacy_dp {
-                p.count_order_preserving_dp_legacy(t + 1, true)
-            } else {
-                p.count_order_preserving_dp(t + 1, true)
-            };
+            let val = p.count_order_preserving_dp(t + 1, true);
             points.push(t as i64);
             values.push(val as i64);
         }
@@ -719,11 +586,7 @@ impl Poset {
         // Negative evaluations via Stanley reciprocity:
         // Ehr(-k) = (-1)^n * Ω̄(P, k-1) for k ≥ 1.
         for k in 1..=num_negative {
-            let strict_val = if use_legacy_dp {
-                p.count_order_preserving_dp_legacy(k - 1, false)
-            } else {
-                p.count_order_preserving_dp(k - 1, false)
-            };
+            let strict_val = p.count_order_preserving_dp(k - 1, false);
             let ehr_neg = sign * strict_val as i64;
             points.push(-(k as i64));
             values.push(ehr_neg);
@@ -739,20 +602,7 @@ impl Poset {
     /// posets, h*_i equals the number of linear extensions with exactly
     /// i descents (i.e., the P-Eulerian polynomial).
     pub fn order_polytope_hstar(&self) -> Vec<i64> {
-        self.order_polytope_hstar_impl(false)
-    }
-
-    /// Legacy order-polytope h*-computation kept for benchmarking.
-    pub fn order_polytope_hstar_legacy(&self) -> Vec<i64> {
-        self.order_polytope_hstar_impl(true)
-    }
-
-    fn order_polytope_hstar_impl(&self, use_legacy_dp: bool) -> Vec<i64> {
-        let ehrhart = if use_legacy_dp {
-            self.order_polytope_ehrhart_legacy()
-        } else {
-            self.order_polytope_ehrhart()
-        };
+        let ehrhart = self.order_polytope_ehrhart();
         let d = self.n;
         if d == 0 {
             return vec![1];
@@ -1365,21 +1215,16 @@ mod tests {
     }
 
     #[test]
-    fn test_dp_matches_legacy() {
+    fn test_dp_large_shape_basic_bounds() {
         let p = Poset::from_shape(&Partition::new(vec![4, 3, 2, 1]));
         for k in 0..=7 {
-            assert_eq!(
-                p.count_weak_order_preserving_dp(k),
-                p.count_weak_order_preserving_dp_legacy(k),
-                "weak legacy mismatch k={}",
-                k
-            );
-            assert_eq!(
-                p.count_strict_order_preserving_dp(k),
-                p.count_strict_order_preserving_dp_legacy(k),
-                "strict legacy mismatch k={}",
-                k
-            );
+            let weak = p.count_weak_order_preserving_dp(k);
+            let strict = p.count_strict_order_preserving_dp(k);
+            assert!(strict <= weak, "strict should be bounded by weak at k={k}");
+            if k == 0 {
+                assert_eq!(weak, 0);
+                assert_eq!(strict, 0);
+            }
         }
     }
 
@@ -1492,12 +1337,27 @@ mod tests {
     }
 
     #[test]
-    fn test_ehrhart_matches_legacy() {
+    fn test_ehrhart_matches_dp_counts_large_shape() {
         let p = Poset::from_shape(&Partition::new(vec![4, 3, 2, 1]));
-        assert_eq!(
-            p.order_polytope_ehrhart(),
-            p.order_polytope_ehrhart_legacy()
-        );
-        assert_eq!(p.order_polytope_hstar(), p.order_polytope_hstar_legacy());
+        let ehr = p.order_polytope_ehrhart();
+        for t in 0..=4 {
+            assert_eq!(
+                eval_big_poly(&ehr, t as i64),
+                rat(p.count_weak_order_preserving_dp(t + 1) as i64, 1),
+                "positive Ehrhart evaluation mismatch at t={t}"
+            );
+        }
+
+        let sign = if p.num_elements() % 2 == 0 { 1 } else { -1 };
+        for k in 1..=4 {
+            assert_eq!(
+                eval_big_poly(&ehr, -(k as i64)),
+                rat(
+                    (sign * p.count_strict_order_preserving_dp(k - 1) as i64) as i64,
+                    1
+                ),
+                "negative Ehrhart reciprocity mismatch at k={k}"
+            );
+        }
     }
 }
