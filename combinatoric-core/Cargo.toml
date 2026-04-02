@@ -3,11 +3,9 @@ name = "combinatoric-core"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-description = "Shared library for combinatorics: partitions, compositions, symmetric functions"
+description = "Shared library for foundational combinatorics: partitions, compositions, permutations, graphs, and posets"
 
 [dependencies]
-sym-poly-core = { path = "../sym-poly/core" }
-sym-poly-sym = { path = "../sym-poly/sym" }
 num-bigint = "0.4"
 num-rational = "0.4"
 num-traits = "0.2"

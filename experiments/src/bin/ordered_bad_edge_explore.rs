@@ -1,9 +1,8 @@
 use std::collections::BTreeMap;
 
-use combinatoric_core::chromatic::{chromatic_symmetric, first_bad_edge_symmetric};
 use combinatoric_core::graph::Graph;
 use combinatoric_core::partition::Partition;
-use combinatoric_core::symmetric_function::{Basis, SymmetricFunction};
+use sym_poly_sym::{chromatic_symmetric, first_bad_edge_symmetric, Basis, SymmetricFunction};
 
 #[derive(Clone)]
 struct OrderedCase {

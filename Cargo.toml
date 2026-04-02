@@ -5,6 +5,7 @@ members = [
     "combinatoric-core",
     "combpoly",
     "kostka",
+    "KTT-search",
     "experiments",
     "sym-poly/core",
     "sym-poly/sym",

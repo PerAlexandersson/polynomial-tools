@@ -193,8 +193,6 @@ dependencies = [
  "num-integer",
  "num-rational",
  "num-traits",
- "sym-poly-core",
- "sym-poly-sym",
 ]
 
 [[package]]
@@ -372,6 +370,7 @@ dependencies = [
  "num-traits",
  "polynomial-tools",
  "rayon",
+ "sym-poly-sym",
 ]
 
 [[package]]
@@ -614,6 +613,17 @@ dependencies = [
  "num-traits",
  "rayon",
  "serde_json",
+]
+
+[[package]]
+name = "ktt-search"
+version = "0.1.0"
+dependencies = [
+ "hashbrown 0.15.5",
+ "kostka",
+ "num-bigint",
+ "num-rational",
+ "num-traits",
 ]
 
 [[package]]
@@ -1076,6 +1086,7 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 name = "sym-poly-core"
 version = "0.1.0"
 dependencies = [
+ "combinatoric-core",
  "num-bigint",
  "num-integer",
  "num-rational",
@@ -1086,6 +1097,7 @@ dependencies = [
 name = "sym-poly-multipoly"
 version = "0.1.0"
 dependencies = [
+ "combinatoric-core",
  "sym-poly-core",
 ]
 
@@ -1104,6 +1116,7 @@ dependencies = [
 name = "sym-poly-sym"
 version = "0.1.0"
 dependencies = [
+ "combinatoric-core",
  "num-bigint",
  "num-integer",
  "num-rational",

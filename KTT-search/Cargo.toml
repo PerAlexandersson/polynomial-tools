@@ -1,0 +1,16 @@
+[package]
+name = "ktt-search"
+version = "0.1.0"
+edition = "2021"
+description = "Adaptive search for GT polytopes with negative Ehrhart coefficients"
+
+[[bin]]
+name = "ktt-search"
+path = "src/main.rs"
+
+[dependencies]
+kostka       = { path = "../kostka" }
+num-bigint   = "0.4"
+num-rational = "0.4"
+num-traits   = "0.2"
+hashbrown    = "0.15"

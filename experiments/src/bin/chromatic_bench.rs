@@ -1,9 +1,9 @@
 /// Benchmark: compute chromatic symmetric functions for all area sequences
 /// of length n, expanded in the elementary basis.
-use combinatoric_core::chromatic::chromatic_symmetric;
 use combinatoric_core::graph::Graph;
 use combpoly::catalan::all_area_sequences;
 use std::time::Instant;
+use sym_poly_sym::chromatic_symmetric;
 
 fn main() {
     for n in 5..=9 {

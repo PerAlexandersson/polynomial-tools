@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 use std::env;
 
-use combinatoric_core::chromatic::chromatic_symmetric;
 use combinatoric_core::graph::Graph;
 use combinatoric_core::partition::Partition;
+use sym_poly_sym::chromatic_symmetric;
 
 fn main() {
     let mut max_cells = 8u32;

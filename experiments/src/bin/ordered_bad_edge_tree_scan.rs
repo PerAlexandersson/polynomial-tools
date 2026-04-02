@@ -2,9 +2,8 @@ use std::collections::BTreeMap;
 use std::env;
 use std::path::PathBuf;
 
-use combinatoric_core::chromatic::{chromatic_symmetric, first_bad_edge_symmetric};
 use combinatoric_core::graph::Graph;
-use combinatoric_core::symmetric_function::{Basis, SymmetricFunction};
+use sym_poly_sym::{chromatic_symmetric, first_bad_edge_symmetric, Basis, SymmetricFunction};
 
 fn main() {
     let mut graph_dir = PathBuf::from("/home/paxinum/Dropbox/mathematica-packages");

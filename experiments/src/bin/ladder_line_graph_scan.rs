@@ -1,7 +1,7 @@
 use std::env;
 
-use combinatoric_core::chromatic::chromatic_symmetric;
 use combinatoric_core::graph::Graph;
+use sym_poly_sym::chromatic_symmetric;
 
 fn main() {
     let mut max_n = 5usize;

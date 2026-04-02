@@ -12,21 +12,25 @@
 //! - [`matrix`] utilities for transition matrix computation
 //! - [`TransitionCache`] for per-algebra cached transition matrices
 
-pub mod composition;
+pub mod composition {
+    pub use combinatoric_core::composition::*;
+}
 pub mod formal_sum;
 pub mod index;
 pub mod matrix;
-pub mod partition;
+pub mod partition {
+    pub use combinatoric_core::partition::*;
+}
 pub mod polynomial;
-pub mod ring;
+pub mod ring {
+    pub use combinatoric_core::ring::*;
+}
 pub mod tableau;
 pub mod transition_cache;
 
-pub use composition::Composition;
+pub use combinatoric_core::{Composition, Partition, Ring};
 pub use formal_sum::FormalSum;
 pub use index::BasisIndex;
-pub use partition::Partition;
 pub use polynomial::UnivariatePolynomial;
-pub use ring::Ring;
 pub use tableau::Tableau;
 pub use transition_cache::TransitionCache;

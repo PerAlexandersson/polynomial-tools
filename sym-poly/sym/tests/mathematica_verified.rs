@@ -2,11 +2,8 @@
 //!
 //! All expected values in this file were computed using Mathematica and cross-checked.
 
-use combinatoric_core::composition::Composition;
-use combinatoric_core::kostka;
-use combinatoric_core::partition::Partition;
-use combinatoric_core::ring::Ring;
-use combinatoric_core::symmetric_function::{Basis, SymmetricFunction};
+use sym_poly_core::{Composition, Partition, Ring};
+use sym_poly_sym::{kostka, Basis, SymmetricFunction};
 use num_rational::Ratio;
 use std::collections::BTreeSet;
 

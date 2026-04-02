@@ -7,11 +7,13 @@
 //! Built on [`sym_poly_core`] for the Ring trait, Partition type, and matrix utilities.
 
 pub mod basis;
+pub mod chromatic;
 pub mod kostka;
 pub mod llt;
 pub mod symmetric_function;
 pub mod transition;
 
 pub use basis::Basis;
+pub use chromatic::{chromatic_symmetric, first_bad_edge_symmetric};
 pub use llt::{graph_llt_symmetric, unicellular_llt, unit_interval_edges};
 pub use symmetric_function::SymmetricFunction;

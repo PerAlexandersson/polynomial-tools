@@ -5,4 +5,5 @@ edition = "2021"
 description = "Multivariate polynomials with divided difference operators and key polynomials"
 
 [dependencies]
+combinatoric-core = { path = "../../combinatoric-core" }
 sym-poly-core = { path = "../core" }

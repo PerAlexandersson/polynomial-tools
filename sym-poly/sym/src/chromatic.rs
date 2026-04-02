@@ -23,8 +23,8 @@
 //!
 //! ```
 //! use combinatoric_core::graph::Graph;
-//! use combinatoric_core::chromatic::chromatic_symmetric;
 //! use combinatoric_core::partition::Partition;
+//! use sym_poly_sym::chromatic_symmetric;
 //!
 //! // X_{P3} = m_{2,1} + 6 m_{1,1,1}
 //! let p3 = Graph::path(3);
@@ -36,10 +36,9 @@
 
 use std::collections::BTreeMap;
 
-use crate::graph::Graph;
-use crate::partition::Partition;
-use crate::ring::Ring;
-use crate::symmetric_function::{Basis, SymmetricFunction};
+use combinatoric_core::{Graph, Partition, Ring};
+
+use crate::{Basis, SymmetricFunction};
 
 // ---------------------------------------------------------------------------
 // Chromatic symmetric function

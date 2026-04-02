@@ -1,7 +1,7 @@
 use std::env;
 
-use combinatoric_core::chromatic::first_bad_edge_symmetric;
 use combinatoric_core::graph::Graph;
+use sym_poly_sym::first_bad_edge_symmetric;
 
 fn main() {
     let mut args = env::args().skip(1);
