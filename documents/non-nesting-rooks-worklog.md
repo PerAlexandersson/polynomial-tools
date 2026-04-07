@@ -203,6 +203,47 @@ Open direction:
 - turn the big-block recurrence / rook-chain model into an actual
   real-rootedness or interlacing proof.
 
+## General Ferrers path-component extension
+
+Tried extending the staircase "union of directed paths" model to an arbitrary
+Ferrers board `mu = (mu_1 >= ... >= mu_ell)` as follows:
+
+- set `n(mu) = max_i (i + mu_i)`,
+- reverse columns inside the width-`n(mu)-1` rectangle,
+- interpret a rook in row `i` and original column `c` as an edge
+  `i -> n(mu)-c+1`.
+
+Then every edge satisfies `i < n(mu)-c+1`, so every standard rook placement
+becomes a directed graph on `[n(mu)]` with indegree/outdegree at most `1`,
+hence a disjoint union of directed paths.
+
+Define `P_{mu,j}(t)` to be the generating polynomial for the statistic
+
+- `rch_j(rho)` = number of path components with at least `j` vertices.
+
+What the experiments say:
+
+- For `j=2`, all scanned `P_{mu,2}(t)` are real-rooted for every Ferrers shape
+  with `|mu| <= 20` (`2713/2713`).
+- For `j=3` and `j=4`, all scanned `P_{mu,j}(t)` are real-rooted for every
+  Ferrers shape with `|mu| <= 18` (`1596/1596` in both cases).
+- Row-deletion interlacing fails early, so the real-rootedness does not seem to
+  come from a naive Sturm sequence under `mu -> most(mu)`.
+  Small failures:
+  - `j=2`: `mu=[2,2,1]`, where `P_[2,2]=1+4t+2t^2` and
+    `P_[2,2,1]=1+7t+2t^2` do not interlace.
+  - `j=3`: `mu=[2,1,1]`, where `4+t` and `6+t` do not interlace in the
+    directed same-degree sense.
+- The statistic is often genuinely different from the ordinary rook polynomial:
+  only `66/2713` shapes with `|mu| <= 20` had `P_{mu,2}` equal to the standard
+  rook polynomial.
+- But it also becomes trivial for wide/rectangular-ish shapes. Example:
+  `mu=[4,4,4]` has `P_{mu,3}(t)=73`, so no placement supports a path component
+  with at least `3` vertices.
+
+So the extension looks much better as a real-rootedness phenomenon than as an
+interlacing/Sturm phenomenon.
+
 ## Useful commands
 
 ```bash
@@ -217,6 +258,10 @@ CARGO_TARGET_DIR=/tmp/rust-target cargo run --offline --quiet -p experiments --b
 
 cargo check --offline -p experiments --bin touchard_staircase
 CARGO_TARGET_DIR=/tmp/rust-target cargo run --offline --quiet -p experiments --bin touchard_staircase
+
+cargo check --offline -p experiments --bin ferrers_rook_paths
+CARGO_TARGET_DIR=/tmp/rust-target cargo run --offline --quiet -p experiments --bin ferrers_rook_paths -- 18 4
+CARGO_TARGET_DIR=/tmp/rust-target cargo run --offline --quiet -p experiments --bin ferrers_rook_paths -- 20 2
 
 latexmk -pdf -interaction=nonstopmode -halt-on-error documents/non-nesting-rooks.tex
 ```
