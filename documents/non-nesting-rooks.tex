@@ -628,6 +628,85 @@ rook model, but proving the real-rootedness and interlacing conjectures for the
 resulting generating polynomials.
 \end{remark}
 
+\subsection{A Ferrers path-component extension}
+
+The staircase construction extends naturally to arbitrary Ferrers boards.
+Let $\mu = (\mu_1,\dotsc,\mu_\ell)$ be a partition and set
+\[
+  N(\mu) \coloneqq \max_{1 \leq i \leq \ell} (i + \mu_i).
+\]
+Embed the Ferrers board in the rectangle
+$[\ell] \times [N(\mu)-1]$, reverse the columns, and interpret a cell
+$(i,c)$ of~$\mu$ as the directed edge
+\[
+  i \longrightarrow N(\mu) - c + 1
+\]
+on the vertex set $[N(\mu)]$.
+If $\rho$ is a standard rook placement on~$\mu$, let $D_\mu(\rho)$ be the
+resulting directed graph.
+Since $c \leq \mu_i$, every edge satisfies
+\[
+  N(\mu) - c + 1 \geq N(\mu) - \mu_i + 1 > i,
+\]
+so $D_\mu(\rho)$ is acyclic.
+Because $\rho$ has at most one rook in each row and column, every vertex of
+$D_\mu(\rho)$ has indegree and outdegree at most~$1$. Thus every connected
+component of $D_\mu(\rho)$ is a directed path.
+
+For $j \geq 2$, define
+\[
+  \operatorname{rch}^{\mu}_j(\rho)
+  \coloneqq
+  \#\{\text{path components of $D_\mu(\rho)$ with at least $j$ vertices}\},
+\]
+and let
+\[
+  C_{\mu,j}(t)
+  \coloneqq
+  \sum_{\rho} t^{\operatorname{rch}^{\mu}_j(\rho)},
+\]
+where the sum ranges over all standard rook placements~$\rho$ on~$\mu$.
+For the staircase $\delta_{n-1}$ we have
+\[
+  N(\delta_{n-1}) = n,
+\]
+and Proposition~\ref{prop:touchard_rook_bijection} shows that
+\[
+  C_{\delta_{n-1},j}(t) = P_{n,j}(t).
+\]
+
+\begin{conjecture}\label{conj:ferrers_path_rr}
+For every fixed $j \geq 2$ and every Ferrers board~$\mu$,
+the polynomial $C_{\mu,j}(t)$ is real-rooted.
+\end{conjecture}
+
+Computations currently support Conjecture~\ref{conj:ferrers_path_rr}
+for all $\mu$ with $|\mu| \leq 20$ when $j=2$, and for all $\mu$
+with $|\mu| \leq 18$ when $j=3,4$.
+Unlike the staircase case, however, the family
+$\{C_{\mu,j}(t)\}$ does not appear to form a naive Sturm sequence under
+row deletion.
+
+\begin{remark}\label{rem:square_path}
+For the square board $\square_n \coloneqq (n^n)$ one has
+\[
+  N(\square_n) = 2n.
+\]
+Hence every edge of $D_{\square_n}(\rho)$ goes from $[n]$ to
+$\{n+1,\dotsc,2n\}$, so every path component has at most two vertices.
+Therefore, for $j=2$ the statistic $\operatorname{rch}^{\square_n}_2(\rho)$
+is simply the number of rooks in~$\rho$, and
+\[
+  C_{\square_n,2}(t)
+  =
+  \sum_{k=0}^{n} \binom{n}{k}^2 k!\, t^k
+  =
+  n! \, t^n L_n(-t^{-1}),
+\]
+where $L_n$ is the $n$-th Laguerre polynomial.
+For $j \geq 3$, the polynomial $C_{\square_n,j}(t)$ is constant.
+\end{remark}
+
 \section{Further observations}
 
 \subsection{Poset and LGV reformulation}
