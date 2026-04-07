@@ -358,6 +358,205 @@ The standard recursion $R_\mu = R_{\mu'} + \mu_\ell \cdot t \cdot R_{\mu'-1}$
 a product via the Goldman--Joichi--White theorem.
 \end{remark}
 
+\section{Touchard Polynomials and Big Blocks}\label{sec:touchard}
+
+Let $\Pi_n$ denote the set of set partitions of $[n] = \{1,\dotsc,n\}$,
+and let $\ell(\pi)$ be the number of blocks of~$\pi$.
+
+\subsection{Touchard polynomials}
+
+The \defin{Touchard polynomials}\footnote{\url{https://en.wikipedia.org/wiki/Touchard_polynomials}}
+(also called Bell polynomials) are
+\[
+  B_n(x)
+  \coloneqq
+  \sum_{k=1}^{n} S(n,k)\,x^k
+  =
+  \sum_{\pi \in \Pi_n} x^{\ell(\pi)},
+\]
+where $S(n,k)$ is a Stirling number of the second kind.
+
+The \defin{multivariate Bell polynomial} is
+\[
+  B_n(x_1,\dotsc,x_n)
+  \coloneqq
+  \sum_{\pi \in \Pi_n}
+  \prod_{B \in \pi} x_{|B|}.
+\]
+For example,
+\[
+  B_3(x_1,x_2,x_3) = x_1^3 + 3x_1x_2 + x_3,
+\]
+corresponding to the set partitions
+$1|2|3$, $1|23$, $12|3$, $13|2$, and $123$.
+
+This multivariate refinement is not same-phase stable in general.
+Indeed,
+\[
+  B_3(3t,t,t) = t + 9t^2 + 27t^3,
+\]
+which is not real-rooted.
+
+The reason this family is relevant here is that the staircase
+\emph{standard} rook polynomial is the reversal of a Touchard polynomial.
+If $R_\mu^{\mathrm{std}}(t)$ denotes the standard rook polynomial
+(nesting allowed), then for the staircase $\delta_{n-1} = (n-1,n-2,\dotsc,1)$,
+\[
+  R_{\delta_{n-1}}^{\mathrm{std}}(t)
+  =
+  \sum_{k=0}^{n-1} S(n,n-k)\,t^k
+  =
+  t^n B_n(t^{-1}).
+\]
+Thus the standard staircase-rook family is a rook model for the
+Touchard polynomials, up to coefficient reversal.
+
+\begin{openproblem}\label{open:touchard_multivar}
+Find a multivariate analog of $B_n(x)$ that is stable, or at least
+same-phase stable, and ideally is multi-affine and admits a natural
+recursive description compatible with the staircase-rook model.
+\end{openproblem}
+
+\subsection{Counting big blocks}
+
+For $j \geq 2$, define
+\[
+  \operatorname{bb}_j(\pi)
+  \coloneqq
+  \#\{B \in \pi : |B| \geq j\},
+\]
+the number of blocks of size at least~$j$, and set
+\[
+  P_{n,j}(t)
+  \coloneqq
+  \sum_{\pi \in \Pi_n} t^{\operatorname{bb}_j(\pi)}.
+\]
+
+\begin{proposition}\label{prop:big_block_recur}
+For $n \geq 0$ and $j \geq 2$,
+\begin{equation}\label{eq:big_block_recur}
+  P_{n+1,j}(t)
+  =
+  \sum_{k=0}^{j-2} \binom{n}{k} P_{n-k,j}(t)
+  + t \sum_{k=j-1}^{n} \binom{n}{k} P_{n-k,j}(t).
+\end{equation}
+\end{proposition}
+\begin{proof}
+Consider the block containing $n+1$.
+If it has size $k+1$, then one chooses its other $k$ elements in
+$\binom{n}{k}$ ways and partitions the remaining $n-k$ elements
+arbitrarily.
+If $k \leq j-2$, then the new block is not counted by
+$\operatorname{bb}_j$; if $k \geq j-1$, then it contributes one extra
+big block, hence a factor of~$t$.
+Summing over all $k$ gives~\eqref{eq:big_block_recur}.
+\end{proof}
+
+Equivalently, the exponential generating function is
+\begin{equation}\label{eq:big_block_egf}
+  \sum_{n \geq 0} P_{n,j}(t)\,\frac{z^n}{n!}
+  =
+  \exp\!\left(
+    \sum_{r=1}^{j-1} \frac{z^r}{r!}
+    +
+    t \sum_{r=j}^{\infty} \frac{z^r}{r!}
+  \right).
+\end{equation}
+
+Now define
+\[
+  Q_{n,j}(t) \coloneqq t\,P_{n,j}(t).
+\]
+
+\begin{proposition}\label{prop:Q_recur}
+For $n \geq 0$ and $j \geq 2$,
+\begin{equation}\label{eq:Q_recur}
+  Q_{n+1,j}(t)
+  =
+  t\,Q'_{n,j}(t)
+  +
+  \sum_{k=1}^{j-2} \binom{n}{k} Q_{n-k,j}(t)
+  +
+  t \binom{n}{j-1} Q_{n-j+1,j}(t),
+\end{equation}
+where the middle sum is empty if $j=2$.
+\end{proposition}
+\begin{proof}
+Let
+\[
+  G_j(z,t)
+  \coloneqq
+  \sum_{n \geq 0} Q_{n,j}(t)\,\frac{z^n}{n!}
+  =
+  t \sum_{n \geq 0} P_{n,j}(t)\,\frac{z^n}{n!}.
+\]
+By~\eqref{eq:big_block_egf},
+\[
+  G_j(z,t)
+  =
+  t\exp\!\left(
+    \sum_{r=1}^{j-1} \frac{z^r}{r!}
+    +
+    t \sum_{r=j}^{\infty} \frac{z^r}{r!}
+  \right).
+\]
+Differentiating with respect to~$z$ gives
+\[
+  \frac{\partial G_j}{\partial z}
+  =
+  \left(
+    \sum_{r=0}^{j-2} \frac{z^r}{r!}
+    +
+    t \sum_{r=j-1}^{\infty} \frac{z^r}{r!}
+  \right) G_j.
+\]
+Differentiating with respect to~$t$ gives
+\[
+  t \frac{\partial G_j}{\partial t}
+  =
+  \left(
+    1
+    +
+    t \sum_{r=j}^{\infty} \frac{z^r}{r!}
+  \right) G_j.
+\]
+Subtracting the second identity from the first yields
+\[
+  \frac{\partial G_j}{\partial z}
+  =
+  t \frac{\partial G_j}{\partial t}
+  +
+  \left(
+    \sum_{r=1}^{j-2} \frac{z^r}{r!}
+    +
+    t\,\frac{z^{j-1}}{(j-1)!}
+  \right) G_j.
+\]
+Extracting the coefficient of $z^n/n!$ gives~\eqref{eq:Q_recur}.
+\end{proof}
+
+\begin{conjecture}\label{conj:big_blocks_rr}
+For every fixed $j \geq 2$, the polynomials $P_{n,j}(t)$ are real-rooted.
+Moreover, they form a Sturm sequence:
+\[
+  P_{n,j}(t) \interl P_{n+1,j}(t)
+  \qquad (n \geq 1).
+\]
+\end{conjecture}
+
+\begin{remark}
+If one prefers to count blocks of size \emph{strictly greater than}~$j$,
+the same discussion applies after shifting the parameter from $j$ to $j+1$.
+\end{remark}
+
+\begin{openproblem}\label{open:big_blocks_rooks}
+Since the staircase standard rook polynomial is a reversed Touchard
+polynomial, it is natural to ask for a rook-placement refinement whose
+distribution records the statistic $\operatorname{bb}_j$.
+At present we do not know a natural staircase-rook statistic that produces
+the family $P_{n,j}(t)$ or $Q_{n,j}(t)$.
+\end{openproblem}
+
 \section{Further observations}
 
 \subsection{Poset and LGV reformulation}

@@ -148,6 +148,37 @@ Try to show that the interlacing property persists for the `q^{nest}` family
 and can be specialized from `q = 1` (standard rook) to `q = 0`
 (non-nesting rook).
 
+## Related Touchard / big-block thread
+
+- The staircase standard rook polynomial is the reversed Touchard polynomial:
+  `R^{std}_{delta_{n-1}}(t) = t^n B_n(1/t)`.
+- This motivated adding a related section to the draft on:
+  - Touchard/Bell polynomials,
+  - the multivariate Bell polynomial,
+  - big-block polynomials `P_{n,j}(t)`,
+  - and the derivative-style recurrence for `Q_{n,j}(t) = t P_{n,j}(t)`.
+
+What is now proved/documented in the draft:
+
+- `P_{n+1,j}(t) = sum_{k=0}^{j-2} binom(n,k) P_{n-k,j}(t)
+  + t sum_{k=j-1}^{n} binom(n,k) P_{n-k,j}(t)`.
+- If `Q_{n,j}(t) = t P_{n,j}(t)`, then
+  `Q_{n+1,j}(t) = t Q'_{n,j}(t)
+  + sum_{k=1}^{j-2} binom(n,k) Q_{n-k,j}(t)
+  + t binom(n,j-1) Q_{n-j+1,j}(t)`.
+- The clean proof of the `Q`-recurrence uses the exponential generating
+  function
+  `sum_n P_{n,j}(t) z^n/n! = exp(sum_{r=1}^{j-1} z^r/r! + t sum_{r=j}^\infty z^r/r!)`.
+
+Checked separately by brute-force set partitions:
+
+- both `P`- and `Q`-recurrences hold for `2 <= j <= 5` and `n <= 7`.
+
+Open direction:
+
+- find a natural rook statistic on staircase placements whose distribution is
+  `P_{n,j}` or `Q_{n,j}`.
+
 ## Useful commands
 
 ```bash
