@@ -669,6 +669,81 @@ In this tested range, the ordered family looks even more rigid than the
 unordered one: both real-rootedness and consecutive interlacing hold
 throughout.
 
+\begin{remark}[A possible route from ordered to unordered]\label{rem:ordered_to_unordered}
+Refining by the number of blocks makes the relation between the two families
+more transparent.
+Let
+\[
+  F_{n,j}(u,t)
+  \coloneqq
+  \sum_{\pi \in \Pi_n} u^{\ell(\pi)} t^{\operatorname{bb}_j(\pi)}
+\]
+and
+\[
+  G_{n,j}(u,t)
+  \coloneqq
+  \sum_{\pi \in \Pi_n^{\operatorname{ord}}}
+  u^{\ell(\pi)} t^{\operatorname{bb}_j(\pi)}.
+\]
+Then
+\[
+  F_{n,j}(1,t) = P_{n,j}(t),
+  \qquad
+  G_{n,j}(1,t) = O_{n,j}(t),
+\]
+and the corresponding exponential generating functions are
+\[
+  \sum_{n \geq 0} F_{n,j}(u,t)\,\frac{z^n}{n!}
+  =
+  \exp\!\left(
+    u\left(
+      \sum_{r=1}^{j-1} \frac{z^r}{r!}
+      +
+      t \sum_{r=j}^{\infty} \frac{z^r}{r!}
+    \right)
+  \right)
+\]
+and
+\[
+  \sum_{n \geq 0} G_{n,j}(u,t)\,\frac{z^n}{n!}
+  =
+  \frac{1}{
+    1
+    -
+    u\left(
+      \sum_{r=1}^{j-1} \frac{z^r}{r!}
+      +
+      t \sum_{r=j}^{\infty} \frac{z^r}{r!}
+    \right)
+  }.
+\]
+
+If $a_{n,m,b}$ denotes the number of set partitions of $[n]$ having
+$m$ blocks and exactly $b$ big blocks, then
+\[
+  F_{n,j}(u,t) = \sum_{m,b} a_{n,m,b}\, u^m t^b,
+  \qquad
+  G_{n,j}(u,t) = \sum_{m,b} m!\, a_{n,m,b}\, u^m t^b.
+\]
+Hence
+\[
+  F_{n,j}(u,t) = T_u\!\left( G_{n,j}(u,t) \right),
+  \qquad
+  T_u(u^m) = \frac{u^m}{m!}.
+\]
+Now the sequence $\{1/m!\}_{m \geq 0}$ is a classical multiplier sequence
+in the sense of P\'olya--Schur \cite{Branden2015}.
+Therefore, if one could prove that the ordered bivariate polynomials
+$G_{n,j}(u,t)$ are stable (or at least same-phase stable in a sufficiently
+strong sense), then applying $T_u$ would preserve that stability and would
+imply the corresponding stability, hence real-rootedness, for the unordered
+family $F_{n,j}(u,t)$ and in particular for $P_{n,j}(t) = F_{n,j}(1,t)$.
+
+This suggests that the ordered family may be the more natural object to attack
+first, with the unordered family then recovered by multiplier-sequence
+machinery.
+\end{remark}
+
 \subsection{Br\"and\'en--Leite and the generating functions}
 
 The following result from \cite[Thm.~4.4]{BrandenLeite2024x}
