@@ -8,4 +8,5 @@ pub mod parking;
 pub mod permutation;
 pub mod polynomial_builder;
 pub mod statistics;
+pub mod rook_placements;
 pub mod word;

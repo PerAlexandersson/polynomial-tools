@@ -1,0 +1,907 @@
+\documentclass[11pt,reqno]{amsart}
+
+\usepackage{lmodern}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{microtype}
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{ytableau}
+\ytableausetup{centertableaux,boxsize=1.4em}
+
+% ---------- Theorems ----------
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{conjecture}[theorem]{Conjecture}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{example}[theorem]{Example}
+\newtheorem{remark}[theorem]{Remark}
+\newtheorem{observation}[theorem]{Observation}
+\newtheorem{openproblem}[theorem]{Open problem}
+
+% ---------- Macros ----------
+\newcommand{\setN}{\mathbb{N}}
+\newcommand{\setZ}{\mathbb{Z}}
+\newcommand{\setR}{\mathbb{R}}
+
+\newcommand{\defin}[1]{%
+\relax\ifmmode%
+\textcolor{blue}{#1}%
+\else \textcolor{blue}{\emph{#1}}%
+\fi%
+}
+
+\DeclareMathOperator{\rk}{rk}
+
+\newcommand{\interl}{\ll}
+
+\title{Towards real-rootedness of non-nesting rook polynomials}
+\author{Per Alexandersson}
+\address{Department of Mathematics, Stockholm University}
+\email{per.alexandersson@math.su.se}
+\date{\today}
+
+\begin{document}
+
+\begin{abstract}
+We study the generating polynomial for non-nesting rook placements
+on Ferrers boards, weighted by the number of rooks.
+We conjecture that these polynomials are always real-rooted.
+We record a recursive interlacing framework, prove the conjecture in
+the staircase and rectangular cases, and isolate a difference-quotient
+recurrence package which would imply the full result.
+Computations for all partitions with $|\mu| \leq 20$
+support the missing interlacing statement.
+Special cases recover the Narayana polynomials (staircase shapes)
+and squared binomial coefficients (rectangular shapes).
+\end{abstract}
+
+\maketitle
+
+\section{Introduction}
+
+Let $\mu = (\mu_1 \geq \mu_2 \geq \dotsb \geq \mu_\ell > 0)$
+be a partition, defining a Ferrers board in English convention.
+A \defin{rook placement} on $\mu$ is a set of cells, at most one per
+row and at most one per column.
+A rook placement is \defin{non-nesting} if no rook is strictly
+north-west of another; equivalently, reading rooks left to right
+by column, the row indices are strictly decreasing.
+
+\begin{definition}
+The \defin{non-nesting rook polynomial} of $\mu$ is
+\[
+   \defin{R_\mu(t)} \coloneqq \sum_{k \geq 0}
+   r_k(\mu) \, t^k,
+\]
+where $r_k(\mu)$ is the number of non-nesting rook placements
+on $\mu$ with exactly $k$ rooks.
+\end{definition}
+
+\begin{example}\label{ex:small}
+For the staircase $\delta_3 = (3,2,1)$, we have $R_{\delta_3}(t) = 1 + 6t + 6t^2 + t^3$.
+For the $3 \times 3$ square, $R_{(3,3,3)}(t) = 1 + 9t + 9t^2 + t^3$.
+\end{example}
+
+Our main conjecture is:
+
+\begin{conjecture}\label{conj:main}
+For every partition $\mu$, the polynomial $R_\mu(t)$ is real-rooted.
+\end{conjecture}
+
+\section{Recursion and special cases}
+
+The polynomial $R_\mu(t)$ satisfies the following recursion,
+obtained by conditioning on whether a rook is placed in the
+last (shortest) row, and if so, in which column.
+
+\begin{figure}[ht]
+\centering
+\ytableausetup{boxsize=1.1em}
+\[
+R\Bigl(\;
+\begin{ytableau}
+{} & {} & {} \\
+{} & {} \\
+*(yellow!40)
+\end{ytableau}
+\;\Bigr)
+\;=\;
+R\Bigl(\;
+\begin{ytableau}
+{} & {} & {} \\
+{} & {}
+\end{ytableau}
+\;\Bigr)
+\;+\; t \cdot R\Bigl(\;
+\begin{ytableau}
+*(lightgray) & {} & {} \\
+*(lightgray) & {}
+\end{ytableau}
+\;\Bigr)
+\]
+\ytableausetup{boxsize=1.4em}
+\caption{The recursion for $\mu = (3,2,1)$.
+The bottom row (yellow) is processed: either no rook is placed,
+or a rook occupies column $c = 1$ of the last row
+and columns $\leq c$ (gray) become forbidden for remaining rooks.}
+\label{fig:recursion}
+\end{figure}
+
+\begin{lemma}\label{lem:recursion}
+Let $\mu = (\mu_1, \dotsc, \mu_\ell)$ with $\ell \geq 2$,
+and set $\mu' = (\mu_1, \dotsc, \mu_{\ell-1})$.
+Then
+\begin{equation}\label{eq:recursion}
+   R_\mu(t)
+   = R_{\mu'}(t)
+   + t \sum_{c=1}^{\mu_\ell}
+     R_{\mu'_c}(t),
+\end{equation}
+where $\mu'_c = (\max(0, \mu_1 - c), \dotsc, \max(0, \mu_{\ell-1} - c))$
+with zero parts removed.
+\end{lemma}
+\begin{proof}
+If no rook occupies the last row, the remaining placements
+live on $\mu'$.
+If a rook occupies column $c$ of the last row ($1 \leq c \leq \mu_\ell$),
+then every remaining rook must use a column $> c$ (otherwise a rook
+in a higher row at column $\leq c$ would be north-west of the bottom rook).
+Relabeling columns $c+1, c+2, \dotsc$ as $1, 2, \dotsc$
+gives a Ferrers board with parts $\max(0, \mu_i - c)$.
+\end{proof}
+
+
+\subsection{Staircase shapes}
+For the staircase partition $\delta_n = (n, n{-}1, \dotsc, 1)$,
+the polynomial $R_{\delta_n}(t)$ is the $n$th row of the
+Narayana triangle (shifted by one), i.e.,
+\[
+   R_{\delta_n}(t) = \sum_{k=0}^{n} N(n{+}1, k{+}1) \, t^k
+   = \sum_{k=0}^{n}
+     \frac{1}{n{+}1}\binom{n{+}1}{k{+}1}\binom{n{+}1}{k} \, t^k.
+\]
+These are palindromic and real-rooted (known, e.g., from the theory of
+non-crossing partitions).
+
+\subsection{Rectangular shapes}
+For the $n \times n$ square $\mu = (n^n)$,
+\[
+   R_{(n^n)}(t)
+   = \sum_{k=0}^{n} \binom{n}{k}^2 t^k.
+\]
+In particular, $R_{(n^n)}(1) = \binom{2n}{n}$ and the polynomial
+is palindromic. Real-rootedness follows from the fact that the
+squared binomial coefficients $\binom{n}{k}^2$ are the coefficients of
+$(1+t)^n \cdot (1+t)^n$ projected onto the diagonal, or equivalently
+from Legendre polynomial theory.
+
+More generally, for a rectangle $\mu = (m^n)$ with $m \geq n$,
+\[
+   R_{(m^n)}(t) = \sum_{k=0}^{n} \binom{m}{k}\binom{n}{k} \, t^k.
+\]
+In particular, $R_{(m^n)}(1) = \binom{m+n}{n}$ counts lattice paths, and
+$R_{(n^n)}(1) = \binom{2n}{n}$.
+
+
+\subsection{Table of small examples}
+
+\begin{center}
+\small
+\begin{tabular}{lccc}
+\toprule
+$\mu$ & $R_\mu(t)$ & palindromic & gamma vector \\
+\midrule
+$(1)$       & $1+t$             & --- & --- \\
+$(2)$       & $1+2t$            & --- & --- \\
+$(1,1)$     & $1+2t$            &     & --- \\
+$(2,1)$     & $1+3t+t^2$        & \checkmark & $(1,1)$ \\
+$(2,2)$     & $1+4t+t^2$        & \checkmark & $(1,2)$ \\
+$(3,1)$     & $1+4t+2t^2$       &     & --- \\
+$(3,2,1)$   & $1+6t+6t^2+t^3$   & \checkmark & $(1,3)$ \\
+$(3,3,1)$   & $1+7t+7t^2+t^3$   & \checkmark & $(1,4)$ \\
+$(3,3,3)$   & $1+9t+9t^2+t^3$   & \checkmark & $(1,6)$ \\
+$(4,3,2,1)$ & $1+10t+20t^2+10t^3+t^4$ & \checkmark & $(1,6,2)$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+
+\section{A Br\"and\'en-style interlacing attempt}
+
+A natural first approach to Conjecture~\ref{conj:main}
+is to try to show that the row-by-row recursion preserves
+an interlacing chain, via the framework of Br\"and\'en~\cite{Branden2015}.
+
+\begin{definition}\label{def:interlacing}
+Let $f$ and $g$ be polynomials with positive leading coefficients and
+all real, non-positive roots.
+We say $f$ \defin{(weakly) interlaces} $g$, written $f \interl g$,
+if the roots alternate: $\dotsb \leq a_2 \leq b_2 \leq a_1 \leq b_1 \leq 0$.
+A sequence $(f_1, \dotsc, f_n)$ of real-rooted polynomials is
+\defin{interlacing} if $f_i \interl f_j$ for all $i < j$.
+\end{definition}
+
+We recall the key tool from Br\"and\'en's theory.
+
+\begin{theorem}[{\cite[Cor.~8.7]{Branden2015}}]\label{thm:branden}
+Let $T = (t_{ij})$ be an $m \times n$ matrix of linear forms
+$t_{ij} = a_{ij} + b_{ij} x$ with $a_{ij}, b_{ij} \geq 0$.
+Suppose that for each row~$i$, there exists an index $p_i$ such that
+$b_{ij} > 0$ only for $j \leq p_i$ and
+$a_{ij} > 0$ only for $j > p_i$,
+and $p_1 \leq p_2 \leq \dotsb \leq p_m$.
+If $(f_1, \dotsc, f_n)$ is an interlacing sequence,
+then the nonzero entries of $T \cdot (f_1, \dotsc, f_n)^T$
+form an interlacing sequence.
+\end{theorem}
+
+\begin{definition}
+For a partition $\mu$ and integer $c \geq 0$, write
+\[
+  \mu_{\langle c \rangle} \coloneqq
+  (\max(0, \mu_1 {-} c), \dotsc, \max(0, \mu_\ell {-} c))
+  \quad\text{(zero parts removed)}
+\]
+for the board obtained by stripping the first $c$ columns from~$\mu$.
+Note $\mu_{\langle 0 \rangle} = \mu$.
+\end{definition}
+
+
+\begin{figure}[ht]
+\centering
+\ytableausetup{boxsize=1.1em}
+\begin{tabular}{c@{\quad}c@{\quad}c@{\quad}c@{\quad}c@{\quad}c@{\quad}c}
+$\mu_{\langle 3 \rangle}$ && $\mu_{\langle 2 \rangle}$ &&
+$\mu_{\langle 1 \rangle}$ && $\mu_{\langle 0 \rangle} = \mu$
+\\[4pt]
+$\varnothing$
+& $\interl$ &
+\begin{ytableau}
+{}
+\end{ytableau}
+& $\interl$ &
+\begin{ytableau}
+{} & {} \\
+{}
+\end{ytableau}
+& $\interl$ &
+\begin{ytableau}
+{} & {} & {} \\
+{} & {} \\
+{}
+\end{ytableau}
+\\[6pt]
+$1$ && $1{+}t$ && $1{+}3t{+}t^2$ && $1{+}6t{+}6t^2{+}t^3$
+\end{tabular}
+\ytableausetup{boxsize=1.4em}
+
+\medskip
+\caption{Column-strip sequence for $\mu = (3,2,1)$.
+Stripping $c$ columns from the left yields $\mu_{\langle c \rangle}$;
+the non-nesting rook polynomials form an interlacing chain.}
+\label{fig:column_strip}
+\end{figure}
+
+A natural strengthened conjecture is the following.
+
+\begin{conjecture}\label{conj:main_strong}
+For every partition $\mu$, the column-strip sequence
+\[
+  R_{\mu_{\langle M \rangle}} \interl
+  R_{\mu_{\langle M-1 \rangle}} \interl
+  \dotsb \interl
+  R_{\mu_{\langle 1 \rangle}} \interl R_\mu
+\]
+is interlacing, where $M = \mu_1$.
+In particular, $R_\mu$ is real-rooted.
+\end{conjecture}
+
+A first Br\"and\'en-style induction suggests why
+Conjecture~\ref{conj:main_strong} might be true.
+Let $m = \mu_\ell$, $\mu' = (\mu_1,\dotsc,\mu_{\ell-1})$, and
+\begin{equation}\label{eq:V_chain}
+  f_i \coloneqq R_{\mu'_{\langle m+1-i \rangle}}
+  \qquad (1 \leq i \leq m+1).
+\end{equation}
+Then the recursion of Lemma~\ref{lem:recursion} gives
+\[
+  g_k
+  \coloneqq R_{\mu_{\langle m+1-k \rangle}}
+  = f_k + t(f_1+\dotsb+f_{k-1}),
+  \qquad 1 \leq k \leq m+1.
+\]
+Equivalently, $(g_1,\dotsc,g_{m+1})^T = N (f_1,\dotsc,f_{m+1})^T$ where
+\[
+  N =
+  \begin{pmatrix}
+  1 & 0 & 0 & \cdots & 0 \\
+  t & 1 & 0 & \cdots & 0 \\
+  t & t & 1 & \cdots & 0 \\
+  \vdots & & & \ddots & \vdots \\
+  t & t & t & \cdots & 1
+  \end{pmatrix}.
+\]
+If the sequence $(f_1,\dotsc,f_{m+1})$ were pairwise interlacing,
+Br\"and\'en's Corollary~8.7 would imply that
+$(g_1,\dotsc,g_{m+1})$ is interlacing as well.
+The difficulty is that the outer induction supplies only
+\emph{adjacent} interlacing for the strip sequence of~$\mu'$,
+and that is not enough to invoke Corollary~8.7.
+This is the gap in the naive proof.
+
+\begin{remark}[Current Lean status]
+The current Lean development verifies the matrix-side structure of the rook
+update and proves termwise real-rootedness and nonnegativity for
+\[
+  g_k = f_k + t \cdot (f_1 + \dotsb + f_{k-1}).
+\]
+What has not yet been formalized there is the final pairwise interlacing-chain
+step that the naive Br\"and\'en-style argument would need.
+\end{remark}
+
+\begin{remark}
+The analogous result for the \emph{standard} rook polynomial
+(nesting allowed) also holds: the polynomials are real-rooted
+for all Ferrers boards.
+For staircases, the standard rook polynomial gives
+the reversed Stirling numbers of the second kind.
+The standard recursion $R_\mu = R_{\mu'} + \mu_\ell \cdot t \cdot R_{\mu'-1}$
+(where $\mu'-1$ subtracts~$1$ from each part) factors into
+a product via the Goldman--Joichi--White theorem.
+\end{remark}
+
+\section{Further observations}
+
+\subsection{Poset and LGV reformulation}
+
+Define the \defin{strict Ferrers-cell poset}
+\[
+  P_\mu
+  \coloneqq
+  \{(i,j) : 1 \leq i \leq \ell,\ 1 \leq j \leq \mu_i\},
+\]
+ordered by
+\[
+  (i,j) < (i',j')
+  \quad\Longleftrightarrow\quad
+  i < i' \text{ and } j > j'.
+\]
+
+\begin{proposition}\label{prop:poset}
+A non-nesting rook placement on~$\mu$ is exactly a chain in~$P_\mu$.
+In particular,
+\[
+  R_\mu(t)
+  = \sum_{k \geq 0} c_k(P_\mu)\, t^k,
+\]
+where $c_k(P_\mu)$ is the number of $k$-element chains in~$P_\mu$.
+\end{proposition}
+\begin{proof}
+If $(i,j)$ and $(i',j')$ lie in a chain, then necessarily $i \neq i'$ and
+$j \neq j'$, so a chain contains at most one cell from each row and column.
+Moreover, after ordering the cells by increasing row index,
+the column indices are strictly decreasing.
+This is exactly the non-nesting condition.
+Conversely, a non-nesting rook placement has strictly increasing row indices
+and strictly decreasing column indices, so its cells form a chain in~$P_\mu$.
+\end{proof}
+
+For a fixed set of rows
+$I = \{i_1 < \dotsb < i_k\} \subseteq [\ell]$,
+let $d_I(\mu)$ be the number of non-nesting rook placements using exactly
+those rows.
+
+\begin{proposition}[LGV determinant for fixed rows]\label{prop:lgv}
+For $I = \{i_1 < \dotsb < i_k\}$,
+\begin{equation}\label{eq:lgv}
+  d_I(\mu)
+  =
+  \det \!\left[
+    \binom{\mu_{i_{k+1-b}} - b + 1}{a - b + 1}
+  \right]_{a,b=1}^k.
+\end{equation}
+Consequently,
+\begin{equation}\label{eq:rk_lgv}
+  r_k(\mu)
+  =
+  \sum_{1 \leq i_1 < \dotsb < i_k \leq \ell}
+  \det \!\left[
+    \binom{\mu_{i_{k+1-b}} - b + 1}{a - b + 1}
+  \right]_{a,b=1}^k.
+\end{equation}
+\end{proposition}
+\begin{proof}
+A placement on the rows $i_1 < \dotsb < i_k$ is determined by columns
+$c_1 > \dotsb > c_k$ with $1 \leq c_a \leq \mu_{i_a}$.
+Reversing the order by setting $x_b = c_{k+1-b}$ gives
+\[
+  1 \leq x_1 < x_2 < \dotsb < x_k
+  \qquad\text{and}\qquad
+  x_b \leq \mu_{i_{k+1-b}}.
+\]
+The number of such flagged strict subsets is given by the standard
+Lindstr\"om--Gessel--Viennot determinant
+\cite{Lindstrom1973,GesselViennot1985}, namely~\eqref{eq:lgv}.
+Summing over all $k$-subsets of rows gives~\eqref{eq:rk_lgv}.
+\end{proof}
+
+\begin{remark}\label{rem:lgv}
+Proposition~\ref{prop:lgv} packages each fixed-row contribution as a
+flagged binomial determinant, hence as a local total-nonnegativity object.
+The missing step is global: we do not yet see a single planar network
+or a single totally nonnegative matrix whose relevant minors sum to
+$r_k(\mu)$ for all~$k$.
+\end{remark}
+
+\subsection{Monotonicity under containment}
+
+Conjecture~\ref{conj:main_strong} would immediately imply:
+if $\nu$ is obtained from $\mu$ by stripping columns
+(i.e., $\nu = \mu_{\langle c \rangle}$ for some $c \geq 1$),
+then $R_\nu \interl R_\mu$.
+A computational check for all pairs $\nu \subseteq \mu$
+with $|\mu| \leq 14$ suggests the stronger conjecture that
+$R_\nu \interl R_\mu$ whenever $\nu_i \leq \mu_i$ for all $i$
+(containment of Ferrers boards).
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Revised proof strategy}\label{sec:revised}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+The Br\"and\'en-style argument above has a gap:
+the sequence $(f_1, \dotsc, f_{m+1})$
+is only \emph{adjacent}-interlacing (from the column-strip of~$\mu'$),
+not pairwise-interlacing, so Br\"and\'en's
+Corollary~8.7 does not apply.
+The rest of this section explains a revised strategy,
+using the shift lemma and Wagner's cone lemma in place of
+Br\"and\'en's matrix criterion.
+
+\subsection{Tools}
+
+We collect the lemmas we need; all are from
+Wagner~\cite{Wagner1992},
+Borcea--Br\"and\'en~\cite{BorceaBranden2010},
+and Fisk~\cite{Fisk2006x}.
+Throughout, all polynomials have positive leading coefficients
+and only real non-positive roots.
+
+\begin{lemma}[Wagner's cone lemma]\label{lem:wagner}
+Let $f, g, h$ be real-rooted with non-positive roots.
+\begin{enumerate}
+\item If $f \interl h$ and $g \interl h$, then $f + g \interl h$.
+\item If $h \interl f$ and $h \interl g$, then $h \interl f + g$.
+\item $g \interl f$ if and only if $f \interl tg$.
+\end{enumerate}
+\end{lemma}
+
+\begin{corollary}[Standard additive step]\label{cor:add_tf}
+If $f \interl g$, then
+\[
+  g \interl g + t f.
+\]
+\end{corollary}
+\begin{proof}
+By Lemma~\ref{lem:wagner}(3), the hypothesis $f \interl g$ is equivalent to
+$g \interl t f$.
+Applying Lemma~\ref{lem:wagner}(2) to the trivial relation
+$g \interl g$ and to $g \interl t f$ gives
+$g \interl g + t f$.
+\end{proof}
+
+\begin{lemma}[Shift lemma]\label{lem:shift}
+Let $f$ and $h$ be real-rooted with non-positive roots
+and positive leading coefficients.
+Suppose $h \interl f$ and $f(0) \geq h(0)$.
+Then $g \coloneqq f + (t-1)h$ is real-rooted with
+non-positive roots, and $f \interl g$.
+\end{lemma}
+
+\begin{proof}
+At each root $r_i$ of $f$, $g(r_i) = (r_i - 1)\,h(r_i)$.
+Since $r_i \leq 0$, the factor $r_i - 1$ is negative.
+The interlacing $h \interl f$ forces $\operatorname{sign} h(r_i) = (-1)^{i-1}$,
+so $g(r_i)$ alternates in sign across consecutive roots of~$f$.
+The intermediate value theorem yields the required roots.
+The boundary conditions (at~$0$ and at $-\infty$) follow from
+$g(0) = f(0) - h(0) \geq 0$ and a leading-term comparison;
+see~\cite{AlexanderssonJaldevik2025x} for the complete argument.
+\end{proof}
+
+
+\subsection{Notation and key identity}
+
+As before, set $m = \mu_\ell$, $\mu' = (\mu_1, \dotsc, \mu_{\ell-1})$,
+and $f_c = R_{\mu'_{\langle c \rangle}}$.
+By the outer induction hypothesis,
+\begin{equation}\label{eq:outer_ih}
+  f_{c+1} \interl f_c \quad\text{for all } 0 \leq c < \mu_1.
+\end{equation}
+
+For $0 \leq c \leq s \leq m$, define the \defin{partial sums}
+\[
+  G(c, s)
+  \coloneqq f_c + t \sum_{j=c+1}^{s} f_j,
+  \qquad G(c, c) = f_c.
+\]
+The recursion gives $R_{\mu_{\langle c \rangle}} = G(c, m)$ for $0 \leq c < m$.
+
+\begin{observation}[Constant difference]\label{obs:const_diff}
+For all $s$,
+\[
+  G(c, s) - G(c{+}1, s) = f_c + (t-1)\,f_{c+1}
+  \eqqcolon D_c.
+\]
+In particular, $D_c$ is independent of~$s$.
+\end{observation}
+
+Since $f_c(0) = f_{c+1}(0) = 1$, we have $D_c(0) = 0$, so $D_c = t \cdot (D_c / t)$.
+We define
+\[
+  \defin{\psi_c} \coloneqq \frac{f_c - f_{c+1}}{t}
+  \qquad\text{(well-defined since $f_c(0) = f_{c+1}(0)$)}.
+\]
+Then $D_c / t = f_{c+1} + \psi_c$.
+
+\subsection{Difference quotients and a grid package}\label{sec:grid_package}
+
+For any Ferrers board~$\nu$ and $0 \leq c \leq \nu_1$, define
+\[
+  F_c^\nu \coloneqq R_{\nu_{\langle c \rangle}},
+\]
+For $0 \leq c < \nu_1$, set
+\[
+  \Delta_c^\nu \coloneqq \frac{F_c^\nu - F_{c+1}^\nu}{t}.
+\]
+Since $F_c^\nu(0) = F_{c+1}^\nu(0) = 1$, the quotient $\Delta_c^\nu$
+is a polynomial with integer coefficients.
+
+Now let $\mu = (\mu', m)$ with $m = \mu_\ell$, and keep the notation
+$f_c = F_c^{\mu'}$.
+For $0 \leq c \leq s \leq m$, recall
+\[
+  G(c,s) = f_c + t \sum_{j=c+1}^{s} f_j,
+\]
+so that $R_{\mu_{\langle c \rangle}} = G(c,m)$.
+
+\begin{lemma}[Difference-quotient recurrences]\label{lem:delta_grid}
+For every $0 \leq c < m$ and $c+1 \leq s \leq m$,
+\begin{align}
+  \Delta_c^\mu
+    &= \Delta_c^{\mu'} + F_{c+1}^{\mu'}
+     = \frac{f_c - f_{c+1}}{t} + f_{c+1}, \label{eq:delta_recur} \\
+  G(c,s)
+    &= G(c+1,s) + t\,\Delta_c^\mu, \label{eq:grid_horizontal} \\
+  G(c,s+1)
+    &= G(c,s) + t\,F_{s+1}^{\mu'}. \label{eq:grid_vertical}
+\end{align}
+\end{lemma}
+\begin{proof}
+The identity~\eqref{eq:delta_recur} is just
+\[
+  \Delta_c^\mu
+  = \frac{R_{\mu_{\langle c \rangle}} - R_{\mu_{\langle c+1 \rangle}}}{t}
+  = \frac{G(c,m) - G(c+1,m)}{t}
+  = \frac{f_c - f_{c+1}}{t} + f_{c+1},
+\]
+using Observation~\ref{obs:const_diff}.
+Equation~\eqref{eq:grid_horizontal} is the identity
+$G(c,s)-G(c+1,s) = D_c = t\,\Delta_c^\mu$.
+Equation~\eqref{eq:grid_vertical} is immediate from the definition of~$G(c,s)$.
+\end{proof}
+
+The horizontal recurrence~\eqref{eq:grid_horizontal} isolates the key
+auxiliary polynomial $\Delta_c^\mu$.
+Indeed, if one could prove
+\begin{equation}\label{eq:delta_suffices}
+  \Delta_c^\mu \interl G(c+1,s)
+  \qquad (0 \leq c < s \leq m),
+\end{equation}
+then adjacent strip interlacing would follow immediately:
+by Wagner's lemma,
+$\Delta_c^\mu \interl G(c+1,s)$ is equivalent to
+$G(c+1,s) \interl t\,\Delta_c^\mu$,
+and the cone then gives
+\[
+  G(c+1,s)
+  \interl G(c+1,s) + t\,\Delta_c^\mu
+  = G(c,s).
+\]
+In particular, taking $s=m$ yields
+$R_{\mu_{\langle c+1 \rangle}} \interl R_{\mu_{\langle c \rangle}}$.
+
+\begin{remark}[Computational grid package]\label{rem:grid_package}
+The binary \texttt{nn\_rook\_grid.rs}
+in \texttt{experiments/src/bin/}
+checks the recurrence package above for all partitions with $|\mu| \leq 20$.
+Every test passes:
+\begin{itemize}
+\item $\Delta_c^{\mu'} = (f_c - f_{c+1})/t$ is real-rooted and coefficientwise nonnegative:
+  $17605/17605$.
+\item $\Delta_c^\mu$ is real-rooted and coefficientwise nonnegative:
+  $3738/3738$.
+\item $\Delta_c^\mu \interl f_{c+1}$:
+  $3738/3738$.
+\item $\Delta_c^\mu \interl G(c+1,s)$ and $\Delta_c^\mu \interl G(c,s)$:
+  $5657/5657$ in each case.
+\item Hence $G(c+1,s) \interl G(c,s)$:
+  $5657/5657$.
+\item In addition, the diagonal relations
+  $G(c+1,s) \interl G(c,s+1)$ and
+  $G(c+1,s+1) \interl G(c,s)$
+  both hold:
+  $1919/1919$ in each case.
+\end{itemize}
+Computationally, this $\Delta$-package is substantially cleaner than the
+earlier $\psi_c$-based formulation below, and seems the right recurrence
+system to target in a proof.
+\end{remark}
+
+\subsection{Interlacing squares}\label{sec:squares}
+
+Fix $0 \leq c < s < m$ and write
+\[
+  A \coloneqq G(c+1,s),
+  \qquad
+  B \coloneqq G(c,s) = A + t\,\Delta_c^\mu,
+  \qquad
+  R \coloneqq F_{s+1}^{\mu'}.
+\]
+Then the corresponding $2 \times 2$ square in the grid is
+\[
+  \begin{matrix}
+    A & \interl? & B \\
+    \interl? & & \interl? \\
+    A + tR & \interl? & B + tR
+  \end{matrix}
+  \qquad
+  \text{where }
+  A + tR = G(c+1,s+1),\ B + tR = G(c,s+1).
+\]
+
+By Corollary~\ref{cor:add_tf}, the vertical relations
+\[
+  A \interl A+tR
+  \qquad\text{and}\qquad
+  B \interl B+tR
+\]
+would follow from $R \interl A$ and $R \interl B$, respectively.
+Computationally, however, these hypotheses fail frequently.
+The new binary \texttt{nn\_rook\_square.rs}
+checks all such squares for $|\mu| \leq 14$ and finds:
+\begin{itemize}
+\item the row relations
+  $A \interl B$ and $(A+tR) \interl (B+tR)$
+  both hold in all $333/333$ squares;
+\item the left vertical relation $A \interl A+tR$ holds in $290/333$ squares;
+\item the right vertical relation $B \interl B+tR$ holds in $195/333$ squares;
+\item nevertheless, both the diagonal relation
+  $A \interl B+tR$ and the anti-diagonal relation
+  $A+tR \interl B$
+  hold in all $333/333$ squares.
+\end{itemize}
+
+The diagonal relation has a clean experimental explanation.
+Indeed,
+\[
+  B+tR
+  = A + t\,(\Delta_c^\mu + R),
+\]
+and the same computation verifies
+\begin{equation}\label{eq:diag_candidate}
+  \Delta_c^\mu + F_{s+1}^{\mu'} \interl G(c+1,s)
+  \qquad\text{in all } 333/333 \text{ tested squares.}
+\end{equation}
+Thus Corollary~\ref{cor:add_tf} would imply the diagonal edge
+\[
+  G(c+1,s) \interl G(c,s+1).
+\]
+
+The anti-diagonal admits a parallel reformulation.
+Since
+\[
+  B
+  = (A+tR) + t\,(\Delta_c^\mu - R),
+\]
+the anti-diagonal edge
+\[
+  G(c+1,s+1) \interl G(c,s).
+\]
+would follow from
+\begin{equation}\label{eq:antidiag_candidate}
+  \Delta_c^\mu - F_{s+1}^{\mu'}
+  \interl G(c+1,s+1).
+\end{equation}
+The same square computation verifies two stronger facts in all
+$333/333$ tested squares:
+\begin{itemize}
+\item $\Delta_c^\mu - F_{s+1}^{\mu'}$ has nonnegative coefficients;
+\item $\Delta_c^\mu - F_{s+1}^{\mu'} \interl G(c+1,s+1)$ and
+  $\Delta_c^\mu - F_{s+1}^{\mu'} \interl G(c,s)$.
+\end{itemize}
+
+Thus the square seems to be governed by two coupled difference quotients:
+\[
+  \Delta_c^\mu + F_{s+1}^{\mu'}
+  = \frac{G(c,s+1)-G(c+1,s)}{t},
+  \qquad
+  \Delta_c^\mu - F_{s+1}^{\mu'}
+  = \frac{G(c,s)-G(c+1,s+1)}{t}.
+\]
+At present we do not know a conceptual proof of
+\eqref{eq:diag_candidate} or \eqref{eq:antidiag_candidate},
+but these diagonal and anti-diagonal phenomena seem more robust than the
+vertical edges, and may be the right local structure to target.
+
+\subsection{Verified properties for the \texorpdfstring{$\psi_c$}{psi_c} package}\label{sec:properties}
+
+The following six properties have been verified computationally
+for all partitions~$\mu$ with $|\mu| \leq 14$
+(see \texttt{experiments/src/bin/nn\_rook\_proof\_final.rs}).
+Properties~(P1)--(P3) are used in the proof;
+(P4)--(P6) record additional structure.
+
+\begin{enumerate}[label=(P\arabic*)]
+\item\label{P:ih} \textbf{Outer IH.}
+  $f_{c+1} \interl f_c$ for all $0 \leq c < \mu_1$.
+  \hfill{(induction hypothesis)}
+
+\item\label{P:psi_nonneg} \textbf{$\psi_c$ has nonnegative coefficients}
+  for all $0 \leq c < m$.
+  \hfill{(693/693)}
+
+\item\label{P:D_interl_f} \textbf{$D_c/t \interl f_{c+1}$}
+  for all $0 \leq c < m$, i.e., $D_c/t$ has roots
+  strictly to the left of those of~$f_{c+1}$.
+  \hfill{(693/693)}
+
+\item\label{P:D_interl_G} \textbf{$D_c/t \interl G(c{+}1, s)$}
+  for all $0 \leq c < m$ and $c{+}1 \leq s \leq m$.
+  \hfill{(1026/1026)}
+
+\item\label{P:main} \textbf{$G(c{+}1, s) \interl G(c, s)$}
+  for all $0 \leq c < m$ and $c{+}1 \leq s \leq m$.
+  \hfill{(1026/1026)}
+
+\item\label{P:psi_rr} \textbf{$\psi_c$ is real-rooted}
+  for all $0 \leq c < m$.
+  \hfill{(693/693)}
+\end{enumerate}
+
+\subsection{How Property (P4) Would Imply Adjacent Interlacing}
+
+The adjacent column-strip interlacing
+$R_{\mu_{\langle c+1 \rangle}} \interl R_{\mu_{\langle c \rangle}}$
+is property~\ref{P:main} at $s = m$.
+The next lemma shows that the missing ingredient is precisely
+property~\ref{P:D_interl_G}.
+
+\begin{lemma}[From \ref{P:D_interl_G} to \ref{P:main}]\label{lem:P4_implies_P5}
+If~\ref{P:D_interl_G} holds, then~\ref{P:main} holds.
+\end{lemma}
+\begin{proof}
+Fix $c$ and $s$.
+Since $D_c/t \interl G(c{+}1, s)$,
+Wagner's lemma (part~3) gives
+$G(c{+}1, s) \interl t \cdot (D_c/t) = D_c$.
+The left cone (part~2 of Wagner) applied to
+$G(c{+}1, s) \interl G(c{+}1, s)$ (trivially)
+and $G(c{+}1, s) \interl D_c$ yields
+\[
+  G(c{+}1, s) \interl G(c{+}1, s) + D_c = G(c, s). \qedhere
+\]
+\end{proof}
+
+\begin{lemma}[Shift lemma gives $D_c/t \interl f_c$]\label{lem:shift_gives_Dc}
+Property~\ref{P:ih} implies $D_c/t \interl f_c$.
+\end{lemma}
+\begin{proof}
+By~\ref{P:ih}, $f_{c+1} \interl f_c$ and $f_c(0) = 1 \geq 1 = f_{c+1}(0)$.
+The shift lemma gives $f_c \interl f_c + (t{-}1)f_{c+1} = D_c = t \cdot (D_c/t)$.
+By Wagner (part~3), this is equivalent to $D_c/t \interl f_c$.
+\end{proof}
+
+It remains to prove~\ref{P:D_interl_G}.
+The base case ($s = c{+}1$, i.e., $G(c{+}1, c{+}1) = f_{c+1}$)
+is exactly~\ref{P:D_interl_f}.
+The inductive step
+($D_c/t \interl G(c{+}1, s)
+ \Rightarrow D_c/t \interl G(c{+}1, s{+}1) = G(c{+}1, s) + t f_{s+1}$)
+would follow from the left cone if
+$D_c/t \interl t f_{s+1}$,
+equivalently $f_{s+1} \interl D_c/t$ by Wagner.
+However, this last condition \textbf{fails} in general
+(1508/2598 in the computational check).
+
+\begin{openproblem}\label{open:key}
+Find a proof of~\ref{P:D_interl_G}
+(or equivalently~\ref{P:main})
+that does not require $f_{s+1} \interl D_c/t$.
+In particular:
+\begin{itemize}
+\item Does the $q$-deformation $R_\mu(q, t) = \sum q^{\mathrm{nest}} t^k$
+  (which is real-rooted in~$t$ for all $q \in [0,1]$)
+  provide additional structure?
+\item Can~\ref{P:D_interl_G} be proved directly
+  from~\ref{P:D_interl_f} (the base case) and
+  the identity $G(c{+}1, s{+}1) = G(c{+}1, s) + t f_{s+1}$
+  by a continuous deformation argument?
+  (Computationally, interlacing is maintained along
+  $\alpha \mapsto G(c{+}1, s) + \alpha\, t f_{s+1}$
+  for $\alpha \in [0, 1]$; verified at 101 points
+  for $|\mu| \leq 14$.)
+\end{itemize}
+\end{openproblem}
+
+\subsection{What is proved unconditionally}
+
+Summarizing:
+\begin{itemize}
+\item The difference-quotient identities
+  \eqref{eq:delta_recur}--\eqref{eq:grid_vertical}
+  reduce adjacent strip interlacing to the single missing statement
+  $\Delta_c^\mu \interl G(c{+}1,s)$, and this entire grid package
+  is verified computationally for $|\mu| \leq 20$
+  (Remark~\ref{rem:grid_package}).
+\item The shift lemma gives
+  $D_c/t \interl f_c$ (Lemma~\ref{lem:shift_gives_Dc}).
+\item \ref{P:D_interl_G}${}\Rightarrow{}$\ref{P:main}
+  via Wagner's cone (Lemma~\ref{lem:P4_implies_P5}).
+\item The base case~\ref{P:D_interl_f} of~\ref{P:D_interl_G}
+  is strictly stronger than $D_c/t \interl f_c$
+  and is verified but not yet proved from~\ref{P:ih} alone.
+\item Properties~\ref{P:psi_nonneg} and~\ref{P:psi_rr}
+  ($\psi_c$ nonneg and real-rooted) hold computationally
+  and may provide the missing ingredient.
+\end{itemize}
+
+
+\begin{thebibliography}{99}
+
+\bibitem{AlexanderssonJaldevik2025x}
+P.~Alexandersson, O.~Jaldevik,
+\emph{Rook-Eulerian polynomials and permutation ideals},
+preprint, 2025.
+
+\bibitem{BorceaBranden2010}
+J.~Borcea, P.~Br\"and\'en,
+\emph{Multivariate P\'olya--Schur classification problems
+in the Weyl algebra},
+Proc.\ London Math.\ Soc., 101 (2010), 73--104.
+
+\bibitem{Branden2015}
+P.~Br\"and\'en,
+\emph{Unimodality, log-concavity, real-rootedness and beyond},
+Handbook of Enumerative Combinatorics, 2015.
+
+\bibitem{Fisk2006x}
+S.~Fisk,
+\emph{Polynomials, roots, and interlacing},
+preprint, 2006.
+
+\bibitem{GesselViennot1985}
+I.~Gessel, G.~Viennot,
+\emph{Binomial determinants, paths, and hook length formulae},
+Adv.\ Math., 58 (1985), 300--321.
+
+\bibitem{Lindstrom1973}
+B.~Lindstr\"om,
+\emph{On the vector representations of induced matroids},
+Bull.\ London Math.\ Soc., 5 (1973), 85--90.
+
+\bibitem{Wagner1992}
+D.~Wagner,
+\emph{Total positivity of Hadamard products},
+J.~Math.~Anal.~Appl., 163 (1992), 459--483.
+\end{thebibliography}
+
+\end{document}
