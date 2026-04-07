@@ -244,6 +244,40 @@ What the experiments say:
 So the extension looks much better as a real-rootedness phenomenon than as an
 interlacing/Sturm phenomenon.
 
+## Ordered set partitions with big blocks
+
+Also tested the ordered-set-partition analogue:
+
+- `O_{n,j}(t) = sum t^{bb_j(pi)}` over ordered set partitions of `[n]`.
+
+Useful generating function:
+
+- if `A_j(z,t) = sum_{r=1}^{j-1} z^r/r! + t sum_{r=j}^\infty z^r/r!`, then
+  `sum_n O_{n,j}(t) z^n/n! = 1 / (1 - A_j(z,t))`.
+
+Experimentally this looks even stronger than the unordered case.
+Using the refined-by-(blocks, big blocks) dynamic program in
+`ordered_big_blocks.rs`, the exact Bézout checks give:
+
+- for each `j = 2,3,4,5,6`, all rows `O_{n,j}(t)` with `n <= 18` are real-rooted,
+- for each `j = 2,3,4,5,6`, the consecutive rows `O_{n,j} << O_{n+1,j}` hold
+  for every tested `n <= 17`.
+
+Sample rows:
+
+- `j=2`:
+  - `n=4`: `24 + 45t + 6t^2`
+  - `n=5`: `120 + 311t + 110t^2`
+  - `n=6`: `720 + 2383t + 1490t^2 + 90t^3`
+- `j=3`:
+  - `n=4`: `66 + 9t`
+  - `n=5`: `450 + 91t`
+  - `n=6`: `3690 + 973t + 20t^2`
+
+At the moment this is only computational evidence, but it strongly suggests
+that ordered set partitions may be the cleaner family from the real-rootedness
+point of view.
+
 ## Useful commands
 
 ```bash
@@ -262,6 +296,9 @@ CARGO_TARGET_DIR=/tmp/rust-target cargo run --offline --quiet -p experiments --b
 cargo check --offline -p experiments --bin ferrers_rook_paths
 CARGO_TARGET_DIR=/tmp/rust-target cargo run --offline --quiet -p experiments --bin ferrers_rook_paths -- 18 4
 CARGO_TARGET_DIR=/tmp/rust-target cargo run --offline --quiet -p experiments --bin ferrers_rook_paths -- 20 2
+
+cargo check --offline -p experiments --bin ordered_big_blocks
+CARGO_TARGET_DIR=/tmp/rust-target cargo run --offline --quiet -p experiments --bin ordered_big_blocks -- 24 6
 
 latexmk -pdf -interaction=nonstopmode -halt-on-error documents/non-nesting-rooks.tex
 ```
