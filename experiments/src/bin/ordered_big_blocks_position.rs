@@ -367,6 +367,11 @@ fn main() {
         let mut tail_reverse_ineligible = 0usize;
         let mut tail_reverse_fail = Vec::new();
 
+        let mut tail_reverse_pairwise_pass = 0usize;
+        let mut tail_reverse_pairwise_total = 0usize;
+        let mut tail_reverse_pairwise_ineligible = 0usize;
+        let mut tail_reverse_pairwise_fail = Vec::new();
+
         let mut head_interlacing_pass = 0usize;
         let mut head_interlacing_total = 0usize;
         let mut head_interlacing_ineligible = 0usize;
@@ -504,6 +509,29 @@ fn main() {
                     None => tail_reverse_ineligible += 1,
                 }
             }
+            for p in 2..tails.len() {
+                for q in 1..p {
+                    match interlaces(&tails[p], &tails[q]) {
+                        Some(true) => {
+                            tail_reverse_pairwise_total += 1;
+                            tail_reverse_pairwise_pass += 1;
+                        }
+                        Some(false) => {
+                            tail_reverse_pairwise_total += 1;
+                            if tail_reverse_pairwise_fail.len() < 10 {
+                                tail_reverse_pairwise_fail.push((
+                                    n,
+                                    p,
+                                    q,
+                                    tails[p].clone(),
+                                    tails[q].clone(),
+                                ));
+                            }
+                        }
+                        None => tail_reverse_pairwise_ineligible += 1,
+                    }
+                }
+            }
 
             for p in 1..heads.len().saturating_sub(1) {
                 match interlaces(&heads[p], &heads[p + 1]) {
@@ -613,6 +641,12 @@ fn main() {
             tail_reverse_interlacing_pass,
             tail_reverse_interlacing_total,
             tail_reverse_ineligible
+        );
+        println!(
+            "Tail-sum interlacing, reversed pairwise: {}/{} passes ({} ineligible)",
+            tail_reverse_pairwise_pass,
+            tail_reverse_pairwise_total,
+            tail_reverse_pairwise_ineligible
         );
         println!(
             "Head-sum interlacing: {}/{} passes ({} ineligible)",
@@ -754,6 +788,20 @@ fn main() {
                     p,
                     format_poly_i128(a),
                     p - 1,
+                    format_poly_i128(b)
+                );
+            }
+        }
+
+        if !tail_reverse_pairwise_fail.is_empty() {
+            println!("First reversed tail-sum pairwise failures:");
+            for (n, p, q, a, b) in &tail_reverse_pairwise_fail {
+                println!(
+                    "  n={}, p={} -> {}, q={} -> {}",
+                    n,
+                    p,
+                    format_poly_i128(a),
+                    q,
                     format_poly_i128(b)
                 );
             }

@@ -431,6 +431,25 @@ useful.
 
 At the moment, the cumulative tails are the best lead on the position side.
 
+One important correction: the strong positive statement above is only about
+adjacent pairs in the reversed tail vector.
+If one asks for a full interlacing sequence in the usual sense, i.e. for
+`T_{n,j,p} << T_{n,j,q}` whenever `p > q`, that is still false in the tested
+range.
+
+For `n <= 18`, the pairwise results on eligible pairs were:
+
+- `j=2`: `368/393` passes, with `576` ineligible pairs;
+- `j=3`: `385/449` passes, with `520` ineligible pairs;
+- `j=4`: `504/567` passes, with `402` ineligible pairs;
+- `j=5`: `638/681` passes, with `288` ineligible pairs;
+- `j=6`: `744/779` passes, with `190` ineligible pairs;
+- `j=7`: `827/849` passes, with `120` ineligible pairs;
+- `j=8`: `900/906` passes, with `63` ineligible pairs.
+
+So the reversed tail vector is much closer to an interlacing sequence than the
+raw position vector, but we still do not have full pairwise interlacing.
+
 ## Useful commands
 
 ```bash
