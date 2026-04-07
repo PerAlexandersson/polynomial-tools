@@ -307,10 +307,20 @@ fn main() {
         let mut block_ineligible = 0usize;
         let mut block_fail = Vec::new();
 
+        let mut block_reverse_interlacing_pass = 0usize;
+        let mut block_reverse_interlacing_total = 0usize;
+        let mut block_reverse_ineligible = 0usize;
+        let mut block_reverse_fail = Vec::new();
+
         let mut coeff_interlacing_pass = 0usize;
         let mut coeff_interlacing_total = 0usize;
         let mut coeff_ineligible = 0usize;
         let mut coeff_fail = Vec::new();
+
+        let mut coeff_reverse_interlacing_pass = 0usize;
+        let mut coeff_reverse_interlacing_total = 0usize;
+        let mut coeff_reverse_ineligible = 0usize;
+        let mut coeff_reverse_fail = Vec::new();
 
         let mut eval_rr_pass = 0usize;
         let mut eval_rr_total = 0usize;
@@ -344,6 +354,22 @@ fn main() {
                     None => block_ineligible += 1,
                 }
             }
+            for m in (2..exact[n].len()).rev() {
+                match interlaces(&exact[n][m], &exact[n][m - 1]) {
+                    Some(true) => {
+                        block_reverse_interlacing_total += 1;
+                        block_reverse_interlacing_pass += 1;
+                    }
+                    Some(false) => {
+                        block_reverse_interlacing_total += 1;
+                        if block_reverse_fail.len() < 10 {
+                            block_reverse_fail
+                                .push((n, m, exact[n][m].clone(), exact[n][m - 1].clone()));
+                        }
+                    }
+                    None => block_reverse_ineligible += 1,
+                }
+            }
 
             for &u in &[1i128, 2, 3] {
                 let poly = eval_block_u(&exact[n], u);
@@ -370,6 +396,21 @@ fn main() {
                         }
                     }
                     None => coeff_ineligible += 1,
+                }
+            }
+            for p in (2..rows.len()).rev() {
+                match interlaces(&rows[p], &rows[p - 1]) {
+                    Some(true) => {
+                        coeff_reverse_interlacing_total += 1;
+                        coeff_reverse_interlacing_pass += 1;
+                    }
+                    Some(false) => {
+                        coeff_reverse_interlacing_total += 1;
+                        if coeff_reverse_fail.len() < 10 {
+                            coeff_reverse_fail.push((n, p, rows[p].clone(), rows[p - 1].clone()));
+                        }
+                    }
+                    None => coeff_reverse_ineligible += 1,
                 }
             }
 
@@ -416,6 +457,12 @@ fn main() {
             block_interlacing_pass, block_interlacing_total, block_ineligible
         );
         println!(
+            "Block-coefficient interlacing, reversed: {}/{} passes ({} ineligible)",
+            block_reverse_interlacing_pass,
+            block_reverse_interlacing_total,
+            block_reverse_ineligible
+        );
+        println!(
             "Positive u specialization real-rootedness: {}/{} tested",
             block_eval_rr_pass, block_eval_rr_total
         );
@@ -426,6 +473,12 @@ fn main() {
         println!(
             "Position-coefficient interlacing: {}/{} passes ({} ineligible)",
             coeff_interlacing_pass, coeff_interlacing_total, coeff_ineligible
+        );
+        println!(
+            "Position-coefficient interlacing, reversed: {}/{} passes ({} ineligible)",
+            coeff_reverse_interlacing_pass,
+            coeff_reverse_interlacing_total,
+            coeff_reverse_ineligible
         );
         println!(
             "Positive x specialization real-rootedness: {}/{} tested",
@@ -462,6 +515,20 @@ fn main() {
             }
         }
 
+        if !block_reverse_fail.is_empty() {
+            println!("First reversed block-coefficient interlacing failures:");
+            for (n, m, a, b) in &block_reverse_fail {
+                println!(
+                    "  n={}, m={} -> {}, m-1={} -> {}",
+                    n,
+                    m,
+                    format_poly_i128(a),
+                    m - 1,
+                    format_poly_i128(b)
+                );
+            }
+        }
+
         if !block_eval_rr_fail.is_empty() {
             println!("First positive-u real-rootedness failures:");
             for (n, u, poly) in &block_eval_rr_fail {
@@ -491,6 +558,20 @@ fn main() {
                     p,
                     format_poly_i128(a),
                     p + 1,
+                    format_poly_i128(b)
+                );
+            }
+        }
+
+        if !coeff_reverse_fail.is_empty() {
+            println!("First reversed coefficient-interlacing failures:");
+            for (n, p, a, b) in &coeff_reverse_fail {
+                println!(
+                    "  n={}, p={} -> {}, p-1={} -> {}",
+                    n,
+                    p,
+                    format_poly_i128(a),
+                    p - 1,
                     format_poly_i128(b)
                 );
             }

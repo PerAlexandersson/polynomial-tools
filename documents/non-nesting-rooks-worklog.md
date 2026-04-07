@@ -328,6 +328,60 @@ Small explicit failures:
 So the ordered refinements look promising as recurrence packages, but not as
 direct stable-polynomial lifts.
 
+### Matrix form and interlacing tests for the ordered refinements
+
+The exact-block refinement does admit a clean matrix/operator form.
+If
+`v_n = (O_{n,j}^{<0>}(t), O_{n,j}^{<1>}(t), O_{n,j}^{<2>}(t), ...)^\top`,
+then
+
+- `v_{n+1} = J ( sum_{k=0}^{j-2} binom(n,k) v_{n-k}
+             + t sum_{k=j-1}^n binom(n,k) v_{n-k} )`,
+
+where `J` is the weighted shift matrix with entries `J_{m,m-1} = m`.
+Equivalently, on the ordinary generating variable `u`, `J` is the operator
+`u(1+u d/du)`.
+
+So there is definitely a matrix picture, but it is not the same as the usual
+Brändén staircase-matrix setup: one step in `n` uses a whole binomially weighted
+sum of earlier vectors, not just one previous vector.
+
+I also checked whether the natural coefficient vectors are interlacing families.
+
+- For the exact-block vector in the natural order `m=1,2,...`, adjacent
+  interlacing fails often.
+- If one reverses the order to `m=n,n-1,...,1`, then every *eligible adjacent*
+  pair interlaces in the tested range:
+  - `j=2`: `55/55`
+  - `j=3`: `73/73`
+  - `j=4`: `81/81`
+  - `j=5`: `86/86`
+  - `j=6`: `88/88`
+- But this still does not make the full vector a Brändén interlacing sequence,
+  because the degrees are not globally compatible.
+  Example: for `j=2, n=5`, the reversed row contains
+  `120, 240t, 60t+90t^2, 10t+20t^2, t`;
+  the constant polynomial `120` and the quadratic `60t+90t^2` differ in degree
+  by `2`, so the full row cannot be pairwise interlacing in the usual sense.
+
+For the position-of-`n` refinement the situation is weaker.
+
+- In the natural order `p=1,2,...`, adjacent interlacing fails badly.
+- In the reversed order `p=n,n-1,...,1`, things improve but still do not become
+  clean:
+  - `j=2`: `21/91`
+  - `j=3`: `48/91`
+  - `j=4`: `62/91`
+  - `j=5`: `72/91`
+  - `j=6`: `82/91`
+
+So the current picture is:
+
+- exact-block refinement: clean matrix/operator, strong reversed-adjacent
+  interlacing, but not a full interlacing family;
+- position refinement: useful formulas, but not a clean interlacing family;
+- therefore no direct application yet of Brändén's matrix-preservation theorem.
+
 ## Useful commands
 
 ```bash
