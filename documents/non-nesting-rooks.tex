@@ -669,6 +669,107 @@ In this tested range, the ordered family looks even more rigid than the
 unordered one: both real-rootedness and consecutive interlacing hold
 throughout.
 
+\begin{proposition}[Ordered refinements]\label{prop:ordered_refinements}
+For $m \geq 1$, let
+\[
+  O_{n,j}^{\langle m \rangle}(t)
+  \coloneqq
+  \sum_{\substack{\pi \in \Pi_n^{\operatorname{ord}} \\ \ell(\pi)=m}}
+  t^{\operatorname{bb}_j(\pi)}.
+\]
+Then
+\[
+  O_{n,j}(t) = \sum_{m=1}^n O_{n,j}^{\langle m \rangle}(t),
+\]
+and for $n \geq 0$ and $m \geq 1$ one has the recurrence
+\begin{equation}\label{eq:ordered_big_blocks_exact_recur}
+  O_{n+1,j}^{\langle m \rangle}(t)
+  =
+  m\left(
+    \sum_{k=0}^{j-2} \binom{n}{k} O_{n-k,j}^{\langle m-1 \rangle}(t)
+    +
+    t\sum_{k=j-1}^{n} \binom{n}{k} O_{n-k,j}^{\langle m-1 \rangle}(t)
+  \right).
+\end{equation}
+
+Equivalently, if
+\[
+  G_{n,j}(u,t)
+  \coloneqq
+  \sum_{m \geq 0} O_{n,j}^{\langle m \rangle}(t)\, u^m,
+\]
+then
+\begin{equation}\label{eq:ordered_big_blocks_u_recur}
+  G_{n+1,j}(u,t)
+  =
+  u(1+u\partial_u)\left(
+    \sum_{k=0}^{j-2} \binom{n}{k} G_{n-k,j}(u,t)
+    +
+    t\sum_{k=j-1}^{n} \binom{n}{k} G_{n-k,j}(u,t)
+  \right).
+\end{equation}
+
+Finally, if $H_{n,j,p}(t)$ denotes the same statistic, but restricted to
+ordered set partitions in which the block containing $n$ sits in position $p$,
+and
+\[
+  H_{n,j}(x,t) \coloneqq \sum_{p \geq 1} H_{n,j,p}(t)\, x^{p-1},
+\]
+then with
+\[
+  A_j(z,t)
+  \coloneqq
+  \sum_{r=1}^{j-1} \frac{z^r}{r!}
+  +
+  t\sum_{r=j}^{\infty} \frac{z^r}{r!}
+\]
+one has
+\begin{equation}\label{eq:ordered_big_blocks_position_egf}
+  \sum_{n \geq 1} H_{n,j}(x,t)\,\frac{z^{n-1}}{(n-1)!}
+  =
+  \frac{A_j'(z,t)}{(1-A_j(z,t))(1-xA_j(z,t))}.
+\end{equation}
+\end{proposition}
+
+\begin{proof}
+For \eqref{eq:ordered_big_blocks_exact_recur}, consider the block containing
+$n+1$.
+If this block has size $k+1$, then we choose its $k$ companions in
+$\binom{n}{k}$ ways.
+The remaining elements form an ordered set partition with $m-1$ blocks, and
+there are exactly $m$ places to insert the distinguished block.
+This block contributes the extra factor $t$ exactly when $k+1 \geq j$.
+
+Summing \eqref{eq:ordered_big_blocks_exact_recur} against $u^m$ yields
+\eqref{eq:ordered_big_blocks_u_recur}, since multiplication by $m$ on the
+coefficient of $u^m$ is encoded by the operator $u(1+u\partial_u)$.
+
+For \eqref{eq:ordered_big_blocks_position_egf}, decompose an ordered set
+partition into the sequence of blocks to the left of the block containing $n$,
+that distinguished block itself, and the sequence of blocks to its right.
+The left sequence contributes the factor $(1-xA_j(z,t))^{-1}$, the right
+sequence contributes $(1-A_j(z,t))^{-1}$, and the distinguished block
+contributes $A_j'(z,t)$, because it contains the marked element $n$ together
+with an ordinary set of additional elements.
+\end{proof}
+
+\begin{remark}\label{rem:ordered_refinements_not_stable}
+These refinements do give cleaner recurrences, but they do \emph{not} seem to
+restore full bivariate stability.
+Computations currently show that for $2 \leq j \leq 6$ and $n \leq 14$, every
+coordinate specialization $G_{n,j}(c,t)$ and $H_{n,j}(c,t)$ with
+$c \in \{1,2,3\}$ is real-rooted.
+However, same-phase stability already fails in very small cases:
+\[
+  H_{3,2}(s,s) = 2 + 6s + 5s^2,
+  \qquad
+  G_{4,2}(s,s) = s^2 + 8s^3 + 66s^4,
+\]
+and neither polynomial is real-rooted.
+So these bivariate lifts look useful as recurrence packages, but probably not
+as direct stable-polynomial objects.
+\end{remark}
+
 \begin{remark}[A possible route from ordered to unordered]\label{rem:ordered_to_unordered}
 Refining by the number of blocks makes the relation between the two families
 more transparent.

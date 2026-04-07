@@ -278,6 +278,56 @@ At the moment this is only computational evidence, but it strongly suggests
 that ordered set partitions may be the cleaner family from the real-rootedness
 point of view.
 
+### Ordered refinements by block count and by position of `n`
+
+I then pushed the ordered family one level further in two different ways.
+
+1. Exact number of blocks:
+
+- Define `O_{n,j}^{<m>}(t)` to count ordered set partitions of `[n]` with
+  exactly `m` blocks, weighted by `bb_j`.
+- Then the block containing `n+1` gives the clean recurrence
+  `O_{n+1,j}^{<m>}(t)
+   = m (sum_{k=0}^{j-2} binom(n,k) O_{n-k,j}^{<m-1>}(t)
+      + t sum_{k=j-1}^n binom(n,k) O_{n-k,j}^{<m-1>}(t))`.
+- In bivariate form, for
+  `G_{n,j}(u,t) = sum_m O_{n,j}^{<m>}(t) u^m`,
+  this becomes
+  `G_{n+1,j}(u,t)
+   = u(1+u d/du)(sum_{k=0}^{j-2} binom(n,k) G_{n-k,j}(u,t)
+      + t sum_{k=j-1}^n binom(n,k) G_{n-k,j}(u,t))`.
+
+2. Position of the block containing `n`:
+
+- Let `H_{n,j,p}(t)` count ordered set partitions where the block containing
+  `n` is in position `p`, and put
+  `H_{n,j}(x,t) = sum_{p>=1} H_{n,j,p}(t) x^{p-1}`.
+- With
+  `A_j(z,t) = sum_{r=1}^{j-1} z^r/r! + t sum_{r=j}^\infty z^r/r!`,
+  the marked-block decomposition gives
+  `sum_{n>=1} H_{n,j}(x,t) z^{n-1}/(n-1)!
+   = A'_j(z,t) / ((1-A_j(z,t))(1-xA_j(z,t)))`.
+
+The good news is that these really are cleaner than the raw `O_{n,j}` family.
+The bad news is that they do not seem to become stable in any naive bivariate
+sense.
+
+Using `ordered_big_blocks_position.rs`, I checked:
+
+- for each `j = 2,3,4,5,6`, all coordinate specializations
+  `G_{n,j}(c,t)` and `H_{n,j}(c,t)` with `c = 1,2,3` are real-rooted for
+  every tested `n <= 14`;
+- but same-phase line tests fail very early.
+
+Small explicit failures:
+
+- `H_{3,2}(s,s) = 2 + 6s + 5s^2`, which has negative discriminant;
+- `G_{4,2}(s,s) = s^2 + 8s^3 + 66s^4 = s^2(1 + 8s + 66s^2)`, whose quadratic
+  factor is not real-rooted.
+
+So the ordered refinements look promising as recurrence packages, but not as
+direct stable-polynomial lifts.
+
 ## Useful commands
 
 ```bash
@@ -299,6 +349,9 @@ CARGO_TARGET_DIR=/tmp/rust-target cargo run --offline --quiet -p experiments --b
 
 cargo check --offline -p experiments --bin ordered_big_blocks
 CARGO_TARGET_DIR=/tmp/rust-target cargo run --offline --quiet -p experiments --bin ordered_big_blocks -- 24 6
+
+cargo check --offline -p experiments --bin ordered_big_blocks_position
+CARGO_TARGET_DIR=/tmp/rust-target cargo run --offline --quiet -p experiments --bin ordered_big_blocks_position -- 14 6
 
 latexmk -pdf -interaction=nonstopmode -halt-on-error documents/non-nesting-rooks.tex
 ```
