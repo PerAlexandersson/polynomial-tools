@@ -188,6 +188,41 @@ fn interlaces(a: &[i128], b: &[i128]) -> Option<bool> {
     }
 }
 
+fn add_poly(a: &[i128], b: &[i128]) -> Vec<i128> {
+    let len = a.len().max(b.len());
+    let mut out = vec![0i128; len];
+    for (i, &c) in a.iter().enumerate() {
+        out[i] += c;
+    }
+    for (i, &c) in b.iter().enumerate() {
+        out[i] += c;
+    }
+    while out.last().is_some_and(|&c| c == 0) {
+        out.pop();
+    }
+    out
+}
+
+fn cumulative_tails(rows: &[Vec<i128>]) -> Vec<Vec<i128>> {
+    let mut out = vec![Vec::<i128>::new(); rows.len()];
+    let mut running = Vec::<i128>::new();
+    for p in (1..rows.len()).rev() {
+        running = add_poly(&rows[p], &running);
+        out[p] = running.clone();
+    }
+    out
+}
+
+fn cumulative_heads(rows: &[Vec<i128>]) -> Vec<Vec<i128>> {
+    let mut out = vec![Vec::<i128>::new(); rows.len()];
+    let mut running = Vec::<i128>::new();
+    for p in 1..rows.len() {
+        running = add_poly(&running, &rows[p]);
+        out[p] = running.clone();
+    }
+    out
+}
+
 fn eval_x(position_rows: &[Vec<i128>], x: i128) -> Vec<i128> {
     let mut out = vec![0i128; position_rows.len() + 2];
     let mut x_pow = 1i128;
@@ -322,6 +357,26 @@ fn main() {
         let mut coeff_reverse_ineligible = 0usize;
         let mut coeff_reverse_fail = Vec::new();
 
+        let mut tail_interlacing_pass = 0usize;
+        let mut tail_interlacing_total = 0usize;
+        let mut tail_interlacing_ineligible = 0usize;
+        let mut tail_interlacing_fail = Vec::new();
+
+        let mut tail_reverse_interlacing_pass = 0usize;
+        let mut tail_reverse_interlacing_total = 0usize;
+        let mut tail_reverse_ineligible = 0usize;
+        let mut tail_reverse_fail = Vec::new();
+
+        let mut head_interlacing_pass = 0usize;
+        let mut head_interlacing_total = 0usize;
+        let mut head_interlacing_ineligible = 0usize;
+        let mut head_interlacing_fail = Vec::new();
+
+        let mut head_reverse_interlacing_pass = 0usize;
+        let mut head_reverse_interlacing_total = 0usize;
+        let mut head_reverse_ineligible = 0usize;
+        let mut head_reverse_fail = Vec::new();
+
         let mut eval_rr_pass = 0usize;
         let mut eval_rr_total = 0usize;
         let mut eval_rr_fail = Vec::new();
@@ -339,6 +394,9 @@ fn main() {
         let mut position_line_rr_fail = Vec::new();
 
         for (n, rows) in pos.iter().enumerate().take(max_n + 1).skip(1) {
+            let tails = cumulative_tails(rows);
+            let heads = cumulative_heads(rows);
+
             for m in 1..exact[n].len().saturating_sub(1) {
                 match interlaces(&exact[n][m], &exact[n][m + 1]) {
                     Some(true) => {
@@ -414,6 +472,72 @@ fn main() {
                 }
             }
 
+            for p in 1..tails.len().saturating_sub(1) {
+                match interlaces(&tails[p], &tails[p + 1]) {
+                    Some(true) => {
+                        tail_interlacing_total += 1;
+                        tail_interlacing_pass += 1;
+                    }
+                    Some(false) => {
+                        tail_interlacing_total += 1;
+                        if tail_interlacing_fail.len() < 10 {
+                            tail_interlacing_fail
+                                .push((n, p, tails[p].clone(), tails[p + 1].clone()));
+                        }
+                    }
+                    None => tail_interlacing_ineligible += 1,
+                }
+            }
+            for p in (2..tails.len()).rev() {
+                match interlaces(&tails[p], &tails[p - 1]) {
+                    Some(true) => {
+                        tail_reverse_interlacing_total += 1;
+                        tail_reverse_interlacing_pass += 1;
+                    }
+                    Some(false) => {
+                        tail_reverse_interlacing_total += 1;
+                        if tail_reverse_fail.len() < 10 {
+                            tail_reverse_fail
+                                .push((n, p, tails[p].clone(), tails[p - 1].clone()));
+                        }
+                    }
+                    None => tail_reverse_ineligible += 1,
+                }
+            }
+
+            for p in 1..heads.len().saturating_sub(1) {
+                match interlaces(&heads[p], &heads[p + 1]) {
+                    Some(true) => {
+                        head_interlacing_total += 1;
+                        head_interlacing_pass += 1;
+                    }
+                    Some(false) => {
+                        head_interlacing_total += 1;
+                        if head_interlacing_fail.len() < 10 {
+                            head_interlacing_fail
+                                .push((n, p, heads[p].clone(), heads[p + 1].clone()));
+                        }
+                    }
+                    None => head_interlacing_ineligible += 1,
+                }
+            }
+            for p in (2..heads.len()).rev() {
+                match interlaces(&heads[p], &heads[p - 1]) {
+                    Some(true) => {
+                        head_reverse_interlacing_total += 1;
+                        head_reverse_interlacing_pass += 1;
+                    }
+                    Some(false) => {
+                        head_reverse_interlacing_total += 1;
+                        if head_reverse_fail.len() < 10 {
+                            head_reverse_fail
+                                .push((n, p, heads[p].clone(), heads[p - 1].clone()));
+                        }
+                    }
+                    None => head_reverse_ineligible += 1,
+                }
+            }
+
             for &x in &[1i128, 2, 3] {
                 let poly = eval_x(rows, x);
                 if let Some(p64) = to_i64_poly(&poly) {
@@ -481,6 +605,26 @@ fn main() {
             coeff_reverse_ineligible
         );
         println!(
+            "Tail-sum interlacing: {}/{} passes ({} ineligible)",
+            tail_interlacing_pass, tail_interlacing_total, tail_interlacing_ineligible
+        );
+        println!(
+            "Tail-sum interlacing, reversed: {}/{} passes ({} ineligible)",
+            tail_reverse_interlacing_pass,
+            tail_reverse_interlacing_total,
+            tail_reverse_ineligible
+        );
+        println!(
+            "Head-sum interlacing: {}/{} passes ({} ineligible)",
+            head_interlacing_pass, head_interlacing_total, head_interlacing_ineligible
+        );
+        println!(
+            "Head-sum interlacing, reversed: {}/{} passes ({} ineligible)",
+            head_reverse_interlacing_pass,
+            head_reverse_interlacing_total,
+            head_reverse_ineligible
+        );
+        println!(
             "Positive x specialization real-rootedness: {}/{} tested",
             eval_rr_pass, eval_rr_total
         );
@@ -493,6 +637,16 @@ fn main() {
         println!("Sample H_{{{}, {}}}(x,t) coefficients in x:", sample_n, j);
         for p in 1..pos[sample_n].len() {
             println!("  p={}: {}", p, format_poly_i128(&pos[sample_n][p]));
+        }
+        let tails = cumulative_tails(&pos[sample_n]);
+        let heads = cumulative_heads(&pos[sample_n]);
+        println!("Sample tail sums:");
+        for p in 1..tails.len() {
+            println!("  tail p={}: {}", p, format_poly_i128(&tails[p]));
+        }
+        println!("Sample head sums:");
+        for p in 1..heads.len() {
+            println!("  head p={}: {}", p, format_poly_i128(&heads[p]));
         }
         println!("  x=1: {}", format_poly_i128(&eval_x(&pos[sample_n], 1)));
         println!("  x=2: {}", format_poly_i128(&eval_x(&pos[sample_n], 2)));
@@ -566,6 +720,62 @@ fn main() {
         if !coeff_reverse_fail.is_empty() {
             println!("First reversed coefficient-interlacing failures:");
             for (n, p, a, b) in &coeff_reverse_fail {
+                println!(
+                    "  n={}, p={} -> {}, p-1={} -> {}",
+                    n,
+                    p,
+                    format_poly_i128(a),
+                    p - 1,
+                    format_poly_i128(b)
+                );
+            }
+        }
+
+        if !tail_interlacing_fail.is_empty() {
+            println!("First tail-sum interlacing failures:");
+            for (n, p, a, b) in &tail_interlacing_fail {
+                println!(
+                    "  n={}, p={} -> {}, p+1={} -> {}",
+                    n,
+                    p,
+                    format_poly_i128(a),
+                    p + 1,
+                    format_poly_i128(b)
+                );
+            }
+        }
+
+        if !tail_reverse_fail.is_empty() {
+            println!("First reversed tail-sum interlacing failures:");
+            for (n, p, a, b) in &tail_reverse_fail {
+                println!(
+                    "  n={}, p={} -> {}, p-1={} -> {}",
+                    n,
+                    p,
+                    format_poly_i128(a),
+                    p - 1,
+                    format_poly_i128(b)
+                );
+            }
+        }
+
+        if !head_interlacing_fail.is_empty() {
+            println!("First head-sum interlacing failures:");
+            for (n, p, a, b) in &head_interlacing_fail {
+                println!(
+                    "  n={}, p={} -> {}, p+1={} -> {}",
+                    n,
+                    p,
+                    format_poly_i128(a),
+                    p + 1,
+                    format_poly_i128(b)
+                );
+            }
+        }
+
+        if !head_reverse_fail.is_empty() {
+            println!("First reversed head-sum interlacing failures:");
+            for (n, p, a, b) in &head_reverse_fail {
                 println!(
                     "  n={}, p={} -> {}, p-1={} -> {}",
                     n,

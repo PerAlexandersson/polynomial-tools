@@ -382,6 +382,55 @@ So the current picture is:
 - position refinement: useful formulas, but not a clean interlacing family;
 - therefore no direct application yet of Brändén's matrix-preservation theorem.
 
+### Cumulative tails of the position vector
+
+The next natural transform was to replace the raw position coefficients by
+cumulative tails
+
+- `T_{n,j,p}(t) = sum_{q >= p} H_{n,j,q}(t)`.
+
+This has a clean generating-function description: since
+`sum_n H_{n,j,p}(t) z^{n-1}/(n-1)! = A'_j(z,t) A_j(z,t)^{p-1} / (1-A_j(z,t))`,
+the tail sums satisfy
+
+- `sum_n T_{n,j,p}(t) z^{n-1}/(n-1)! = A'_j(z,t) A_j(z,t)^{p-1} / (1-A_j(z,t))^2`.
+
+Empirically this is the first really promising position-based family.
+
+For the reversed tail vector
+`(T_{n,j,n}, T_{n,j,n-1}, ..., T_{n,j,1})`,
+adjacent interlacing checks gave:
+
+- `n <= 14`:
+  - `j=2`: `83/91`
+  - `j=3`: `88/91`
+  - `j=4`: `91/91`
+  - `j=5`: `91/91`
+  - `j=6`: `91/91`
+- `n <= 18`:
+  - `j=2`: `128/153`
+  - `j=3`: `138/153`
+  - `j=4`: `145/153`
+  - `j=5`: `153/153`
+  - `j=6`: `153/153`
+  - `j=7`: `153/153`
+  - `j=8`: `153/153`
+
+So the large-`j` behavior is strikingly better here.
+
+Smallest failures:
+
+- `j=4`: first failure at `n=15`, comparing
+  `T_{15,4,7}` and `T_{15,4,6}`;
+- `j=3`: first failure at `n=13`, comparing
+  `T_{13,3,8}` and `T_{13,3,7}`;
+- `j=2`: failures already appear earlier and more often.
+
+The head sums `sum_{q <= p} H_{n,j,q}(t)` were much worse and do not look
+useful.
+
+At the moment, the cumulative tails are the best lead on the position side.
+
 ## Useful commands
 
 ```bash

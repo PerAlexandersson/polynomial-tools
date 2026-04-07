@@ -770,6 +770,32 @@ So these bivariate lifts look useful as recurrence packages, but probably not
 as direct stable-polynomial objects.
 \end{remark}
 
+\begin{remark}[Tail sums in the position variable]\label{rem:ordered_tail_sums}
+For $p \geq 1$, define the cumulative tail sums
+\[
+  T_{n,j,p}(t) \coloneqq \sum_{q \geq p} H_{n,j,q}(t).
+\]
+Summing \eqref{eq:ordered_big_blocks_position_egf} over $q \geq p$ gives
+\[
+  \sum_{n \geq 1} T_{n,j,p}(t)\,\frac{z^{n-1}}{(n-1)!}
+  =
+  \frac{A_j'(z,t)\,A_j(z,t)^{p-1}}{(1-A_j(z,t))^2}.
+\]
+
+Empirically, the reversed tail vector
+\[
+  \bigl(T_{n,j,n}(t),T_{n,j,n-1}(t),\dotsc,T_{n,j,1}(t)\bigr)
+\]
+is much better behaved than the raw position vector.
+Computations show that adjacent interlacing in this reversed order holds for
+all tested pairs when $5 \leq j \leq 8$ and $n \leq 18$.
+For $j=4$ the same property holds through $n \leq 14$ and then begins to fail
+sporadically, while for $j=2,3$ there are already failures in smaller sizes.
+
+So the cumulative tails appear to be the most promising position-refined family
+currently visible in the data.
+\end{remark}
+
 \begin{remark}[A possible route from ordered to unordered]\label{rem:ordered_to_unordered}
 Refining by the number of blocks makes the relation between the two families
 more transparent.
