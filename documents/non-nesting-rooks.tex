@@ -432,6 +432,76 @@ the number of blocks of size at least~$j$, and set
   \sum_{\pi \in \Pi_n} t^{\operatorname{bb}_j(\pi)}.
 \]
 
+\medskip
+
+For the staircase board it is convenient to reverse the columns and work on the
+triangular board
+\[
+  T_n
+  \coloneqq
+  \{(i,j) : 1 \leq i < j \leq n\}.
+\]
+Since standard rook numbers are unchanged by permuting columns, this is
+equivalent to working on~$\delta_{n-1}$ itself. If $\rho$ is a standard rook
+placement on~$T_n$, let $D(\rho)$ be the directed graph on~$[n]$ with an edge
+$i \to j$ for each rook~$(i,j)$, and define
+\[
+  \operatorname{rch}_j(\rho)
+  \coloneqq
+  \#\{\text{path components of $D(\rho)$ having at least $j$ vertices}\}.
+\]
+Equivalently, $\operatorname{rch}_j(\rho)$ counts maximal rook chains
+\[
+  (a_1,a_2),\ (a_2,a_3),\ \dotsc,\ (a_{m-1},a_m)
+\]
+with $m \geq j$.
+
+\begin{proposition}\label{prop:touchard_rook_bijection}
+The map sending a standard rook placement $\rho$ on~$T_n$ to the collection of
+vertex sets of the path components of~$D(\rho)$ is a bijection from staircase
+rook placements to set partitions of~$[n]$. Under this bijection, a block of
+size~$m$ corresponds to a path component with $m$ vertices, equivalently to a
+maximal rook chain with $m-1$ rooks. Consequently,
+\[
+  P_{n,j}(t)
+  =
+  \sum_{\rho} t^{\operatorname{rch}_j(\rho)},
+\]
+where the sum ranges over all standard rook placements $\rho$ on~$T_n$.
+In particular,
+\[
+  R_{\delta_{n-1}}^{\mathrm{std}}(t)
+  =
+  \sum_{\rho} t^{|\rho|}
+  =
+  \sum_{\pi \in \Pi_n} t^{n-\ell(\pi)}
+  =
+  t^n B_n(t^{-1}).
+\]
+\end{proposition}
+\begin{proof}
+Because $\rho$ has at most one rook in each row and column, every vertex of
+$D(\rho)$ has outdegree at most~$1$ and indegree at most~$1$. Since each edge
+has the form $i \to j$ with $i<j$, the graph is acyclic, hence every connected
+component is a directed path. The vertex sets of these path components
+therefore form a set partition of~$[n]$.
+
+Conversely, if $B = \{b_1 < \dotsb < b_m\}$ is a block of a set partition,
+place rooks at
+\[
+  (b_1,b_2),\ (b_2,b_3),\ \dotsc,\ (b_{m-1},b_m).
+\]
+Doing this for each block produces a standard rook placement on~$T_n$, since
+different blocks give disjoint sets of left endpoints and right endpoints.
+These two constructions are inverse to each other.
+
+Finally, a block of size at least~$j$ corresponds exactly to a path component
+with at least~$j$ vertices, or equivalently to a maximal rook chain of length
+at least~$j-1$. This proves the formula for~$P_{n,j}(t)$. The displayed
+formula for $R_{\delta_{n-1}}^{\mathrm{std}}(t)$ is the special case obtained
+by weighting a placement by its number of rooks.
+\end{proof}
+
 \begin{proposition}\label{prop:big_block_recur}
 For $n \geq 0$ and $j \geq 2$,
 \begin{equation}\label{eq:big_block_recur}
@@ -549,13 +619,14 @@ If one prefers to count blocks of size \emph{strictly greater than}~$j$,
 the same discussion applies after shifting the parameter from $j$ to $j+1$.
 \end{remark}
 
-\begin{openproblem}\label{open:big_blocks_rooks}
-Since the staircase standard rook polynomial is a reversed Touchard
-polynomial, it is natural to ask for a rook-placement refinement whose
-distribution records the statistic $\operatorname{bb}_j$.
-At present we do not know a natural staircase-rook statistic that produces
-the family $P_{n,j}(t)$ or $Q_{n,j}(t)$.
-\end{openproblem}
+\begin{remark}
+Proposition~\ref{prop:touchard_rook_bijection} shows that the statistic
+$\operatorname{bb}_j$ already has a natural staircase-rook interpretation:
+it is the number of maximal rook chains with at least $j-1$ rooks in the
+associated directed graph~$D(\rho)$. The remaining difficulty is not finding a
+rook model, but proving the real-rootedness and interlacing conjectures for the
+resulting generating polynomials.
+\end{remark}
 
 \section{Further observations}
 

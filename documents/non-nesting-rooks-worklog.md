@@ -174,10 +174,34 @@ Checked separately by brute-force set partitions:
 
 - both `P`- and `Q`-recurrences hold for `2 <= j <= 5` and `n <= 7`.
 
+What now also works:
+
+- There is an explicit staircase-rook bijection behind the Touchard identity.
+  After reversing columns, the staircase board is the triangular board
+  `T_n = {(i,j) : 1 <= i < j <= n}`.
+- A standard rook placement on `T_n` is a set of directed edges `i -> j` with
+  no repeated source and no repeated target, hence a disjoint union of directed
+  paths.
+- The vertex sets of those path components form a set partition of `[n]`, and
+  the inverse map sends a block `{b_1 < ... < b_m}` to the rook chain
+  `(b_1,b_2), (b_2,b_3), ..., (b_{m-1},b_m)`.
+- Under this bijection, `bb_j` is exactly the number of path components with at
+  least `j` vertices, equivalently the number of maximal rook chains with at
+  least `j-1` rooks.
+- So `P_{n,j}(t)` is already a natural staircase standard-rook generating
+  polynomial; the old "find a rook statistic" problem is solved.
+
+Verified directly by the dedicated checker `touchard_staircase.rs`:
+
+- bijection counts agree for `n <= 8`,
+- the map is onto and the inverse is correct on all tested placements,
+- the induced big-block distributions match set partitions for `2 <= j <= 5`
+  and `n <= 8`.
+
 Open direction:
 
-- find a natural rook statistic on staircase placements whose distribution is
-  `P_{n,j}` or `Q_{n,j}`.
+- turn the big-block recurrence / rook-chain model into an actual
+  real-rootedness or interlacing proof.
 
 ## Useful commands
 
@@ -190,6 +214,9 @@ CARGO_TARGET_DIR=/tmp/rust-target cargo run --offline --quiet -p experiments --b
 
 CARGO_TARGET_DIR=/tmp/rust-target cargo run --offline --quiet -p experiments --bin nn_rook_qdeform2
 CARGO_TARGET_DIR=/tmp/rust-target cargo run --offline --quiet -p experiments --bin nn_rook_deform
+
+cargo check --offline -p experiments --bin touchard_staircase
+CARGO_TARGET_DIR=/tmp/rust-target cargo run --offline --quiet -p experiments --bin touchard_staircase
 
 latexmk -pdf -interaction=nonstopmode -halt-on-error documents/non-nesting-rooks.tex
 ```
