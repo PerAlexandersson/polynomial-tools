@@ -628,6 +628,98 @@ rook model, but proving the real-rootedness and interlacing conjectures for the
 resulting generating polynomials.
 \end{remark}
 
+\subsection{Ordered set partitions}
+
+Let $\Pi_n^{\operatorname{ord}}$ denote the set of ordered set partitions
+of~$[n]$, and define
+\[
+  O_{n,j}(t)
+  \coloneqq
+  \sum_{\pi \in \Pi_n^{\operatorname{ord}}}
+  t^{\operatorname{bb}_j(\pi)}.
+\]
+Since an ordered set partition is a finite sequence of nonempty blocks,
+the symbolic method gives the exponential generating function
+\begin{equation}\label{eq:ordered_big_block_egf}
+  \sum_{n \geq 0} O_{n,j}(t)\,\frac{z^n}{n!}
+  =
+  \frac{1}{
+    1
+    -
+    \left(
+      \sum_{r=1}^{j-1} \frac{z^r}{r!}
+      +
+      t \sum_{r=j}^{\infty} \frac{z^r}{r!}
+    \right)
+  }.
+\end{equation}
+
+\begin{conjecture}\label{conj:ordered_big_blocks_rr}
+For every fixed $j \geq 2$, the polynomials $O_{n,j}(t)$ are real-rooted.
+Moreover, they form a Sturm sequence:
+\[
+  O_{n,j}(t) \interl O_{n+1,j}(t)
+  \qquad (n \geq 0).
+\]
+\end{conjecture}
+
+Computations currently verify Conjecture~\ref{conj:ordered_big_blocks_rr}
+for $2 \leq j \leq 6$ and $n \leq 18$.
+In this tested range, the ordered family looks even more rigid than the
+unordered one: both real-rootedness and consecutive interlacing hold
+throughout.
+
+\subsection{Br\"and\'en--Leite and the generating functions}
+
+The following result from \cite[Thm.~4.4]{BrandenLeite2024x}
+gives real-rootedness and interlacing directly from the generating function.
+
+\begin{theorem}[Br\"and\'en--Leite]\label{thm:brandenleite}
+Let $f(x)$ be a polynomial with nonnegative coefficients
+and all real zeros.
+Consider the formal power series
+\begin{equation}\label{eq:BLgf}
+\frac{1}{1-t(f(x)-f(0))} = \sum_{n\geq 0} r_n(t)\, x^n \in \setR[t][[x]].
+\end{equation}
+Then $r_n(t)$ is real-rooted for each $n\in\setN$,
+and $r_n(t) \interl r_{n+1}(t)$.
+Moreover, if $f(0)\neq 0$, then all zeros of $r_n(t)$ lie in $[-1/f(0),\, 0]$.
+\end{theorem}
+
+\begin{theorem}[Br\"and\'en--Leite]\label{thm:brandenleite2}
+Let $Q(x)$, where $Q(0)>0$, be a polynomial whose zeros are all real
+and positive, and let $r$ be a positive integer.
+Consider the power series
+\begin{equation}\label{eq:BLgf2}
+\frac{1}{Q(x)-tx^r} = \sum_{n\geq 0} q_n(t)\, x^n.
+\end{equation}
+Then $q_n(t)$ is a polynomial whose zeros are real and negative for each $n\in\setN$.
+Moreover, $q_n(t) \interl q_{n+1}(t)$ for each $n\in\setN$.
+\end{theorem}
+
+\begin{remark}\label{rem:BL_not_direct}
+Theorems~\ref{thm:brandenleite} and~\ref{thm:brandenleite2}
+are tantalizingly close to the generating functions
+\eqref{eq:big_block_egf} and~\eqref{eq:ordered_big_block_egf},
+but do not apply directly.
+For the unordered family, the exponential generating function
+\eqref{eq:big_block_egf} is exponential rather than reciprocal.
+For the ordered family, the denominator in~\eqref{eq:ordered_big_block_egf}
+contains both a $t$-free part
+\[
+  \sum_{r=1}^{j-1} \frac{z^r}{r!}
+\]
+and a $t$-weighted tail
+\[
+  t \sum_{r=j}^{\infty} \frac{z^r}{r!},
+\]
+so it is neither of the form $1-t(f(z)-f(0))$ nor of the form
+$Q(z)-t z^r$.
+Thus Br\"and\'en--Leite does not currently give a direct proof for these
+big-block polynomials, although it strongly suggests that some suitable
+normalization or extension of the theorem might.
+\end{remark}
+
 \subsection{A Ferrers path-component extension}
 
 The staircase construction extends naturally to arbitrary Ferrers boards.
@@ -1231,6 +1323,11 @@ Proc.\ London Math.\ Soc., 101 (2010), 73--104.
 P.~Br\"and\'en,
 \emph{Unimodality, log-concavity, real-rootedness and beyond},
 Handbook of Enumerative Combinatorics, 2015.
+
+\bibitem{BrandenLeite2024x}
+P.~Br\"and\'en, L.~S.~M.~Leite,
+\emph{Totally nonnegative matrices, chain enumeration and zeros of polynomials},
+arXiv:2412.06595, 2024.
 
 \bibitem{Fisk2006x}
 S.~Fisk,
