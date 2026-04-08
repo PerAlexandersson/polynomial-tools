@@ -753,6 +753,164 @@ contributes $A_j'(z,t)$, because it contains the marked element $n$ together
 with an ordinary set of additional elements.
 \end{proof}
 
+\begin{proposition}[Unrefined ordered recurrence]\label{prop:ordered_unrefined_recur}
+Let
+\[
+  \mathcal O_j(z,t)
+  \coloneqq
+  \sum_{n \geq 0} O_{n,j}(t)\,\frac{z^n}{n!}
+  =
+  \frac{1}{1-A_j(z,t)},
+\]
+where
+\[
+  A_j(z,t)
+  \coloneqq
+  \sum_{r=1}^{j-1} \frac{z^r}{r!}
+  +
+  t\sum_{r=j}^{\infty} \frac{z^r}{r!}.
+\]
+Then
+\begin{equation}\label{eq:ordered_unrefined_riccati}
+  \partial_z \mathcal O_j(z,t)
+  =
+  \left(
+    2 + (t-1)\frac{z^{j-1}}{(j-1)!}
+  \right)
+  \mathcal O_j(z,t)^2
+  -
+  \mathcal O_j(z,t).
+\end{equation}
+
+Equivalently, if
+\[
+  C_{n,j}(t)
+  \coloneqq
+  \sum_{r=0}^{n} \binom{n}{r} O_{r,j}(t)\,O_{n-r,j}(t),
+\]
+then for $n \geq 0$,
+\begin{equation}\label{eq:ordered_unrefined_recur}
+  O_{n+1,j}(t)
+  =
+  2\,C_{n,j}(t)
+  -
+  O_{n,j}(t)
+  +
+  (t-1)\binom{n}{j-1} C_{n-j+1,j}(t),
+\end{equation}
+with the convention that the last term is omitted when $n<j-1$.
+\end{proposition}
+
+\begin{proof}
+Differentiate
+\(
+  \mathcal O_j(z,t)=1/(1-A_j(z,t))
+\)
+to get
+\[
+  \partial_z \mathcal O_j(z,t)
+  =
+  A_j'(z,t)\,\mathcal O_j(z,t)^2.
+\]
+Now
+\[
+  A_j'(z,t)
+  =
+  \sum_{r=0}^{j-2} \frac{z^r}{r!}
+  +
+  t\sum_{r=j-1}^{\infty} \frac{z^r}{r!}
+  =
+  A_j(z,t)
+  +
+  1
+  +
+  (t-1)\frac{z^{j-1}}{(j-1)!}.
+\]
+Since \(A_j = 1 - 1/\mathcal O_j\), we have
+\[
+  A_j(z,t)\,\mathcal O_j(z,t)^2
+  =
+  \mathcal O_j(z,t)^2 - \mathcal O_j(z,t),
+\]
+which gives \eqref{eq:ordered_unrefined_riccati}.
+Finally, extracting coefficients of \(z^n/n!\) yields
+\eqref{eq:ordered_unrefined_recur}, because \(C_{n,j}(t)\) is the
+coefficient sequence of \(\mathcal O_j(z,t)^2\).
+\end{proof}
+
+\begin{remark}\label{rem:ordered_j3_recur}
+For \(j=3\), the exponential generating function is
+\[
+  \mathcal O_3(z,t)
+  =
+  \frac{1}{
+    1
+    -
+    z
+    -
+    \frac{z^2}{2}
+    -
+    t\left(e^z - 1 - z - \frac{z^2}{2}\right)
+  },
+\]
+and \eqref{eq:ordered_unrefined_riccati} becomes
+\[
+  \partial_z \mathcal O_3(z,t)
+  =
+  \left(2 + (t-1)\frac{z^2}{2}\right)\mathcal O_3(z,t)^2
+  -
+  \mathcal O_3(z,t).
+\]
+Thus
+\[
+  O_{n+1,3}(t)
+  =
+  2\,C_{n,3}(t)
+  -
+  O_{n,3}(t)
+  +
+  (t-1)\binom{n}{2} C_{n-2,3}(t).
+\]
+This is the closest unrefined ordered analogue we currently know of the
+derivative recurrence for the unordered family:
+it closes not with \(t\,O'_{n,3}(t)\), but with the quadratic convolution
+companion \(C_{n,3}(t)\).
+\end{remark}
+
+\begin{remark}[Recurrence for the quadratic companion]\label{rem:ordered_companion_recur}
+Write \(d \coloneqq j-1\).
+Rearranging \eqref{eq:ordered_unrefined_recur} gives a finite-step recurrence
+for the quadratic companion itself:
+\begin{equation}\label{eq:ordered_companion_recur}
+  C_{n,j}(t)
+  =
+  \frac{O_{n+1,j}(t)+O_{n,j}(t)}{2}
+  -
+  \frac{t-1}{2}\binom{n}{d} C_{n-d,j}(t)
+  \qquad (n \geq d),
+\end{equation}
+while for \(0 \leq n < d\) one simply has
+\[
+  C_{n,j}(t) = \frac{O_{n+1,j}(t)+O_{n,j}(t)}{2}.
+\]
+So the sequence \(\{C_{n,j}(t)\}_{n \geq 0}\) breaks into \(d\) residue classes
+modulo \(d\), each satisfying a first-order recurrence with varying
+coefficients.
+
+In particular, when \(j=3\),
+\[
+  C_{n,3}(t)
+  =
+  \frac{O_{n+1,3}(t)+O_{n,3}(t)}{2}
+  -
+  \frac{t-1}{2}\binom{n}{2} C_{n-2,3}(t),
+\]
+so the even and odd subsequences evolve independently.
+Iterating \eqref{eq:ordered_companion_recur} expresses \(C_{n,j}(t)\) as a
+finite alternating sum of spaced values of \(O_{m,j}(t)\), but it does not
+appear to produce a fixed finite-memory recurrence for \(O_{n,j}(t)\) alone.
+\end{remark}
+
 \begin{remark}\label{rem:ordered_refinements_not_stable}
 These refinements do give cleaner recurrences, but they do \emph{not} seem to
 restore full bivariate stability.

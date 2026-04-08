@@ -450,6 +450,62 @@ For `n <= 18`, the pairwise results on eligible pairs were:
 So the reversed tail vector is much closer to an interlacing sequence than the
 raw position vector, but we still do not have full pairwise interlacing.
 
+### Clean unrefined recurrence for the ordered family
+
+There is a nice closed formula for the unrefined ordered polynomials after all,
+but it is not a derivative-in-`t` recurrence like the unordered one.
+
+If
+
+- `O_j(z,t) = sum_{n>=0} O_{n,j}(t) z^n/n! = 1/(1-A_j(z,t))`,
+- `A_j(z,t) = sum_{r=1}^{j-1} z^r/r! + t sum_{r>=j} z^r/r!`,
+
+then
+
+- `A'_j(z,t) = A_j(z,t) + 1 + (t-1) z^{j-1}/(j-1)!`,
+
+so
+
+- `O'_j(z,t) = (2 + (t-1) z^{j-1}/(j-1)!) O_j(z,t)^2 - O_j(z,t)`.
+
+Thus the natural companion family is not `t O'_{n,j}(t)` but the square
+convolution
+
+- `C_{n,j}(t) = sum_{r=0}^n binom(n,r) O_{r,j}(t) O_{n-r,j}(t)`.
+
+Coefficient extraction gives
+
+- `O_{n+1,j}(t)
+   = 2 C_{n,j}(t) - O_{n,j}(t)
+     + (t-1) binom(n,j-1) C_{n-j+1,j}(t)`.
+
+For `j=3` this specializes to
+
+- `O_{n+1,3}(t)
+   = 2 C_{n,3}(t) - O_{n,3}(t)
+     + (t-1) binom(n,2) C_{n-2,3}(t)`.
+
+So the ordered analogue of the unordered derivative recurrence is really a
+Riccati / quadratic-convolution recurrence.
+
+There is also a clean fixed-step recurrence for the companion itself.
+Writing `d=j-1`, one gets by rearranging:
+
+- `C_{n,j}(t)
+   = (O_{n+1,j}(t)+O_{n,j}(t))/2
+     - ((t-1)/2) binom(n,d) C_{n-d,j}(t)` for `n >= d`,
+- and for `0 <= n < d`,
+  `C_{n,j}(t) = (O_{n+1,j}(t)+O_{n,j}(t))/2`.
+
+So `C_{n,j}` splits into `d` residue classes modulo `d`, each satisfying a
+first-order recurrence with varying coefficients.
+For `j=3`, this means the even and odd subsequences satisfy independent
+first-order recurrences.
+
+This is finite-length for the companion, but it still does not obviously turn
+into a fixed finite-memory recurrence for the unrefined ordered sequence
+`O_{n,j}(t)` alone.
+
 ## Useful commands
 
 ```bash
