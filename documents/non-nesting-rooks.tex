@@ -1160,6 +1160,42 @@ So even the most obvious ``factor-through-Br\"and\'en--Leite'' approach fails at
 the level of total nonnegativity.
 \end{remark}
 
+\begin{remark}\label{rem:BL_j3_matrix_object}
+For the ordered \(j=3\) family, the full coefficient matrix is a more natural
+candidate object than the individual factors \(U\) and \(F\). Write
+\[
+  O_{n,3}(t)=\sum_{b\geq 0} M_{n,b}\,t^b.
+\]
+Then
+\[
+  \sum_{n\geq 0} M_{n,b}\frac{z^n}{n!}
+  =
+  \frac{\bigl(e^z-1-z-z^2/2\bigr)^b}{\bigl(1-z-z^2/2\bigr)^{b+1}}
+  =
+  g(z)\,f(z)^b,
+\]
+where
+\[
+  g(z)\coloneqq \frac{1}{1-z-z^2/2},
+  \qquad
+  f(z)\coloneqq \frac{e^z-1-z-z^2/2}{1-z-z^2/2}.
+\]
+Equivalently, the normalized matrix
+\[
+  \widetilde M_{n,b}\coloneqq \frac{M_{n,b}}{b!}
+\]
+is the exponential Riordan array \((g,f)\). Thus a plausible extension of the
+Br\"and\'en--Leite method would be a total-nonnegativity criterion for the whole
+exponential Riordan array, or for its production matrix, rather than separate
+P\'olya-frequency assumptions on \(g\) and \(f\).
+
+Empirically, this matrix looks much better behaved than the factorization
+pieces: in the tested range, all \(2\times 2\) minors with rows \(\leq 12\),
+all \(3\times 3\) minors with rows \(\leq 10\), all \(4\times 4\) minors with
+rows \(\leq 8\), and all \(5\times 5\) minors with rows \(\leq 7\) are
+nonnegative.
+\end{remark}
+
 \subsection{A Ferrers path-component extension}
 
 The staircase construction extends naturally to arbitrary Ferrers boards.

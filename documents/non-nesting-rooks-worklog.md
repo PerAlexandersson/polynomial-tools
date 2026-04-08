@@ -671,6 +671,56 @@ This seems to locate the real obstacle:
   class of lower-triangular operators or Toeplitz pencils, not just a repackaging
   of the same theorem.
 
+There is, however, a much more promising candidate object than the individual
+factors `U` and `F`: the actual coefficient matrix of the ordered `j=3` family.
+
+If
+
+- `O_{n,3}(t) = sum_b M_{n,b} t^b`,
+
+then
+
+- `sum_n M_{n,b} z^n/n! = (e^z - 1 - z - z^2/2)^b / (1 - z - z^2/2)^{b+1}`.
+
+Equivalently, after dividing column `b` by `b!`, this is the exponential
+Riordan array
+
+- `(g,f)` with
+  `g(z) = 1/(1-z-z^2/2)` and
+  `f(z) = (e^z - 1 - z - z^2/2)/(1-z-z^2/2)`.
+
+So the natural generalization target is no longer the separate PF behavior of
+`U` and `F`, but rather a TN criterion for the whole exponential Riordan array,
+or for its production matrix.
+
+Empirically the matrix `M = (M_{n,b})` looks strikingly totally nonnegative in
+the tested range, even though the natural factorization pieces fail PF/TN.
+
+Added checker:
+
+- `experiments/src/bin/ordered_j3_tn.rs`
+
+Current evidence:
+
+- `2x2` minors: all nonnegative for rows `<= 12`, cols `<= 4`,
+- `3x3` minors: all nonnegative for rows `<= 10`, cols `<= 4`,
+- `4x4` minors: all nonnegative for rows `<= 8`, cols `<= 4`.
+- `5x5` minors: all nonnegative for rows `<= 7`, cols `<= 4`.
+
+First rows of the matrix:
+
+- `n=0: 1`
+- `n=1: 1`
+- `n=2: 3`
+- `n=3: 12 + t`
+- `n=4: 66 + 9t`
+- `n=5: 450 + 91t`
+- `n=6: 3690 + 973t + 20t^2`
+
+So the matrix-pencil route still looks alive, but the right matrix may be the
+full coefficient matrix of `O_{n,3}(t)` rather than the BL factor pieces
+`U(z)` and `F(z)` separately.
+
 ## Useful commands
 
 ```bash
@@ -698,6 +748,9 @@ CARGO_TARGET_DIR=/tmp/rust-target cargo run --offline --quiet -p experiments --b
 
 cargo check --offline -p experiments --bin ordered_ferrers_rook_paths
 CARGO_TARGET_DIR=/tmp/rust-target cargo run --offline --quiet -p experiments --bin ordered_ferrers_rook_paths -- 16 4
+
+cargo check --offline -p experiments --bin ordered_j3_tn
+CARGO_TARGET_DIR=/tmp/rust-target cargo run --offline --quiet -p experiments --bin ordered_j3_tn -- 12 4
 
 latexmk -pdf -interaction=nonstopmode -halt-on-error documents/non-nesting-rooks.tex
 ```
