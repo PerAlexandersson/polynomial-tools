@@ -244,11 +244,79 @@ fn ordered_set_partition_poly(n: usize, j: usize) -> Vec<i128> {
     poly
 }
 
+fn ordered_narayana_poly(n: usize) -> Vec<i128> {
+    let facts = factorials(n);
+    let mut poly = vec![0i128; n + 1];
+    for m in 1..=n {
+        poly[m] = facts[m] * binom(n, m) * binom(n, m - 1) / n as i128;
+    }
+    while poly.len() > 1 && poly.last().is_some_and(|&c| c == 0) {
+        poly.pop();
+    }
+    poly
+}
+
 fn to_i64_poly(poly: &[i128]) -> Option<Vec<i64>> {
     poly.iter()
         .copied()
         .map(|c| i64::try_from(c).ok())
         .collect()
+}
+
+fn poly_derivative_i128(poly: &[i128]) -> Vec<i128> {
+    if poly.len() <= 1 {
+        return vec![0];
+    }
+    let mut out = vec![0i128; poly.len() - 1];
+    for i in 1..poly.len() {
+        out[i - 1] = (i as i128) * poly[i];
+    }
+    while out.len() > 1 && out.last().is_some_and(|&c| c == 0) {
+        out.pop();
+    }
+    out
+}
+
+fn poly_add_i128(a: &[i128], b: &[i128]) -> Vec<i128> {
+    let mut out = vec![0i128; a.len().max(b.len())];
+    for (i, &c) in a.iter().enumerate() {
+        out[i] += c;
+    }
+    for (i, &c) in b.iter().enumerate() {
+        out[i] += c;
+    }
+    while out.len() > 1 && out.last().is_some_and(|&c| c == 0) {
+        out.pop();
+    }
+    out
+}
+
+fn poly_sub_i128(a: &[i128], b: &[i128]) -> Vec<i128> {
+    let mut out = vec![0i128; a.len().max(b.len())];
+    for (i, &c) in a.iter().enumerate() {
+        out[i] += c;
+    }
+    for (i, &c) in b.iter().enumerate() {
+        out[i] -= c;
+    }
+    while out.len() > 1 && out.last().is_some_and(|&c| c == 0) {
+        out.pop();
+    }
+    out
+}
+
+fn poly_shift_mul_scalar_i128(poly: &[i128], shift: usize, scalar: i128) -> Vec<i128> {
+    if scalar == 0 {
+        return vec![0];
+    }
+    let mut out = vec![0i128; poly.len() + shift];
+    for (i, &c) in poly.iter().enumerate() {
+        out[i + shift] = scalar * c;
+    }
+    while out.len() > 1 && out.last().is_some_and(|&c| c == 0) {
+        out.pop();
+    }
+    out
 }
 
 fn main() {
@@ -305,6 +373,35 @@ fn main() {
         }
         println!();
     }
+
+    println!("=== Staircase q=0, t=1 recurrence ===\n");
+    println!("Let A_n(x) = G_(delta_(n-1),j)(x,0,1); this is independent of j.");
+    println!("Claim: A_(n+1)(x) = (1 + (2n+1)x) A_n(x) - x^2 A'_n(x).\n");
+    let mut recurrence_ok = true;
+    for n in 1..=8 {
+        let a_n = ordered_narayana_poly(n);
+        let a_n1 = ordered_narayana_poly(n + 1);
+        let deriv = poly_derivative_i128(&a_n);
+        let rhs = poly_sub_i128(
+            &poly_add_i128(
+                &a_n,
+                &poly_shift_mul_scalar_i128(&a_n, 1, (2 * n + 1) as i128),
+            ),
+            &poly_shift_mul_scalar_i128(&deriv, 2, 1),
+        );
+        let ok = rhs == a_n1;
+        recurrence_ok &= ok;
+        println!(
+            "n={}: A_n={} ; recurrence_ok={}",
+            n,
+            format_poly(&to_i64_poly(&a_n).unwrap_or_default()),
+            ok
+        );
+    }
+    println!(
+        "\nOverall recurrence check: {}\n",
+        if recurrence_ok { "all pass ✓" } else { "FAIL" }
+    );
 
     let mut shapes = Vec::new();
     for cells in 1..=max_cells {

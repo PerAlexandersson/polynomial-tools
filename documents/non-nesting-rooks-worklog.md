@@ -587,6 +587,45 @@ This looks like a genuinely useful bridge object: it contains the ordered
 set-partition family at one corner and an ordered non-nesting rook family at
 another, while staying entirely inside the Ferrers-rook language.
 
+## Staircase q=0, t=1
+
+For the staircase specialization of the ordered model at `q=0` and `t=1`,
+the resulting polynomial is independent of `j`. Writing
+
+- `A_n(x) = G_{delta_(n-1),j}(x,0,1)`,
+
+one gets
+
+- `A_n(x) = sum_{m=1}^n m! N(n,m) x^m`,
+
+so this is the Narayana distribution with an extra `m!` block-order factor.
+First rows:
+
+- `A_1(x) = x`
+- `A_2(x) = x + 2x^2`
+- `A_3(x) = x + 6x^2 + 6x^3`
+- `A_4(x) = x + 12x^2 + 36x^3 + 24x^4`
+- `A_5(x) = x + 20x^2 + 120x^3 + 240x^4 + 120x^5`
+
+The clean positive recurrence is
+
+- `A_{n+1}(x) = (1 + (2n+1)x) A_n(x) - x^2 A_n'(x)`, with `A_1(x)=x`.
+
+Equivalently, if `B_n(x)=A_n(x)/x`, then
+
+- `B_{n+1}(x) = (1 + 2n x) B_n(x) - x^2 B_n'(x)`, with `B_1(x)=1`.
+
+This is exactly the OEIS recurrence up to the alternating-sign normalization
+
+- `P_n(x) = (-1)^{n-1} B_n(x)`,
+
+for which
+
+- `P_{n+1}(x) = x^2 P_n'(x) - (1 + 2n x) P_n(x)`, `P_1(x)=1`.
+
+Added recurrence verification to `ordered_ferrers_rook_paths.rs`; it passes for
+`n <= 8`.
+
 ## Useful commands
 
 ```bash

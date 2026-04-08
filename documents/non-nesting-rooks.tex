@@ -1298,6 +1298,124 @@ the staircase, while $\mathcal G_{\mu,j}(1,0,t)$ gives an ``ordered''
 non-nesting analogue on arbitrary Ferrers boards.
 \end{remark}
 
+\begin{proposition}[The staircase $q=0$, $t=1$ specialization]\label{prop:ordered_narayana}
+For the staircase $\delta_{n-1}$, the specialization
+\[
+  A_n(x)
+  \coloneqq
+  \mathcal G_{\delta_{n-1},j}(x,0,1)
+\]
+is independent of~$j$ and is given by
+\[
+  A_n(x)
+  =
+  \sum_{m=1}^{n} m!\,N(n,m)\,x^m,
+\]
+where $N(n,m)$ is the Narayana number.
+Equivalently,
+\[
+  A_n(x)
+  =
+  \sum_{m=1}^{n}
+  \frac{n!\,(n-1)!}{(m-1)!\,(n-m)!\,(n-m+1)!}\,x^m.
+\]
+The first few polynomials are
+\[
+  x,\qquad
+  x+2x^2,\qquad
+  x+6x^2+6x^3,\qquad
+  x+12x^2+36x^3+24x^4.
+\]
+Moreover, they satisfy the differential recurrence
+\begin{equation}\label{eq:ordered_narayana_recur}
+  A_{n+1}(x)
+  =
+  \bigl(1+(2n+1)x\bigr)A_n(x)
+  -
+  x^2 A_n'(x),
+  \qquad
+  A_1(x)=x.
+\end{equation}
+
+If one instead sets
+\[
+  B_n(x) \coloneqq \frac{A_n(x)}{x},
+\]
+then $B_1(x)=1$ and
+\[
+  B_{n+1}(x)
+  =
+  \bigl(1+2n x\bigr)B_n(x)
+  -
+  x^2 B_n'(x).
+\]
+Finally, with the alternating normalization
+\[
+  P_n(x) \coloneqq (-1)^{n-1} B_n(x),
+\]
+this becomes
+\[
+  P_{n+1}(x)
+  =
+  x^2 P_n'(x) - \bigl(1+2n x\bigr) P_n(x),
+  \qquad
+  P_1(x)=1.
+\]
+\end{proposition}
+\begin{proof}
+By Proposition~\ref{prop:ferrers_ordered_q}, setting $q=0$ and $t=1$ counts
+non-nesting staircase rook placements together with an order on their path
+components. For $\delta_{n-1}$, the Narayana formula for staircase
+non-nesting rook polynomials gives
+\[
+  R_{\delta_{n-1}}(t)
+  =
+  \sum_{k=0}^{n-1} N(n,k+1)t^k.
+\]
+Since a placement with $k$ rooks has exactly $n-k$ path components,
+grouping the ordered model by the value of $m=n-k$ gives
+\[
+  A_n(x)
+  =
+  \sum_{m=1}^{n} m!\,N(n,m)\,x^m.
+\]
+The explicit coefficient formula is the standard closed form for the Narayana
+numbers.
+
+Now write
+\[
+  A_n(x)=\sum_{m=1}^{n} a_{n,m}x^m,
+  \qquad
+  a_{n,m}=m!\,N(n,m).
+\]
+Using
+\[
+  a_{n,m}
+  =
+  \frac{n!\,(n-1)!}{(m-1)!\,(n-m)!\,(n-m+1)!},
+\]
+one checks directly that
+\[
+  a_{n+1,m}
+  =
+  a_{n,m} + (2n-m+2)a_{n,m-1}
+  \qquad (1 \leq m \leq n+1),
+\]
+where $a_{n,0}=0$.
+But the coefficient of $x^m$ in
+\[
+  \bigl(1+(2n+1)x\bigr)A_n(x)-x^2A_n'(x)
+\]
+is exactly
+\[
+  a_{n,m} + (2n+1)a_{n,m-1} - (m-1)a_{n,m-1}
+  =
+  a_{n,m} + (2n-m+2)a_{n,m-1}.
+\]
+This proves~\eqref{eq:ordered_narayana_recur}. The formulas for $B_n$ and
+$P_n$ are immediate from the definitions.
+\end{proof}
+
 \section{Further observations}
 
 \subsection{Poset and LGV reformulation}
