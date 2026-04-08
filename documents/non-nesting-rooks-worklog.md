@@ -882,6 +882,17 @@ What remains open is only the stronger Sturm/interlacing statement.
 - `latexmk -pdf -interaction=nonstopmode -halt-on-error documents/non-nesting-rooks.tex`
   still succeeds after the cut.
 
+## 2026-04-08 global bibliography switch
+
+- Switched `documents/big-block-polynomials.tex` from a local
+  `thebibliography` block to the shared `documents/bibliography.bib`.
+- Added the missing thesis entry for Jack Zhan:
+  `Zhan2023 = Polynomial recursions for counting big blocks in set partitions`.
+- Adjusted the note to use the existing shared keys
+  `AlexanderssonNabawanda2021` and `BonaHezo2016`.
+- `latexmk -pdf -interaction=nonstopmode -halt-on-error documents/big-block-polynomials.tex`
+  now runs through BibTeX successfully.
+
 ## Useful commands
 
 ```bash
