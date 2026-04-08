@@ -6,6 +6,13 @@
 //! Since dividing row n by n! only rescales rows by a positive factor, the sign
 //! pattern of minors is unchanged. Thus this integer matrix is the natural test
 //! object for the "matrix pencil" extension suggested by the Branden--Leite proof.
+//!
+//! We also test the more naive column-production operator coming from
+//! multiplication by
+//!   f(z) = (e^z - 1 - z - z^2/2) / (1 - z - z^2/2).
+//! Since the b-th column has EGF g(z) f(z)^b, the original coefficient matrix is
+//! the orbit of column 0 under this operator. If that operator were TN, it would
+//! give a simple explanation for the matrix-TN phenomenon. In fact it is not.
 
 use std::cmp::min;
 
@@ -95,6 +102,32 @@ fn build_matrix(max_n: usize) -> Vec<Vec<i128>> {
     for (n, poly) in polys.iter().enumerate() {
         for (b, &coeff) in poly.iter().enumerate() {
             mat[n][b] = coeff;
+        }
+    }
+    mat
+}
+
+fn f_coeffs(max_n: usize) -> Vec<i128> {
+    let mut coeffs = vec![0i128; max_n + 1];
+    for n in 0..=max_n {
+        let mut val = if n >= 3 { 1 } else { 0 };
+        if n >= 1 {
+            val += n as i128 * coeffs[n - 1];
+        }
+        if n >= 2 {
+            val += binom(n, 2) * coeffs[n - 2];
+        }
+        coeffs[n] = val;
+    }
+    coeffs
+}
+
+fn build_column_operator(max_n: usize) -> Vec<Vec<i128>> {
+    let coeffs = f_coeffs(max_n);
+    let mut mat = vec![vec![0i128; max_n + 1]; max_n + 1];
+    for n in 0..=max_n {
+        for k in 0..=n {
+            mat[n][k] = binom(n, k) * coeffs[n - k];
         }
     }
     mat
@@ -211,6 +244,7 @@ fn main() {
 
     let mat = build_matrix(max_n);
     let max_col = mat.iter().map(Vec::len).max().unwrap_or(1) - 1;
+    let prod = build_column_operator(max_n);
 
     println!("=== Ordered j=3 coefficient matrix ===\n");
     println!("M_(n,b) = [t^b] O_(n,3)(t)");
@@ -241,6 +275,44 @@ fn main() {
             None => {
                 println!(
                     "{}x{} minors up to rows<= {}, cols<= {}: all nonnegative",
+                    size, size, row_bound, col_bound
+                );
+            }
+        }
+    }
+
+    println!();
+    println!("=== Column-production operator ===\n");
+    println!("The original columns satisfy C_b = T_f C_(b-1),");
+    println!("where T_f is multiplication by f(z) on EGF coefficients.");
+    println!("There is no standard row-production matrix: row_0 = row_1 = [1,0,...],");
+    println!("but row_2 = [3,0,...], so a fixed P with row_(n+1)=row_n P cannot exist.\n");
+
+    let coeffs = f_coeffs(max_n);
+    print!("f(z) coefficients [z^n/n!]:");
+    for (n, coeff) in coeffs.iter().enumerate().take(min(max_n + 1, 10)) {
+        print!("  f_{n}={coeff}");
+    }
+    println!("\n");
+
+    for size in 2..=min(max_minor, 4) {
+        let row_bound = max_n.min(match size {
+            2 => 12,
+            3 => 10,
+            _ => 8,
+        });
+        let col_bound = row_bound.min(6);
+        match first_negative_minor(&prod, row_bound, col_bound, size) {
+            Some((rows, cols, det)) => {
+                println!(
+                    "T_f {}x{} minors up to rows<= {}, cols<= {}: FAIL",
+                    size, size, row_bound, col_bound
+                );
+                println!("  first negative minor rows={rows:?} cols={cols:?} det={det}");
+            }
+            None => {
+                println!(
+                    "T_f {}x{} minors up to rows<= {}, cols<= {}: all nonnegative",
                     size, size, row_bound, col_bound
                 );
             }

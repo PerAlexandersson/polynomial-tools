@@ -1184,9 +1184,40 @@ Equivalently, the normalized matrix
 \[
   \widetilde M_{n,b}\coloneqq \frac{M_{n,b}}{b!}
 \]
-is the exponential Riordan array \((g,f)\). Thus a plausible extension of the
-Br\"and\'en--Leite method would be a total-nonnegativity criterion for the whole
-exponential Riordan array, or for its production matrix, rather than separate
+has the Riordan-type column form \(g(z)f(z)^b/b!\). However, since
+\[
+  f(z)=\frac{z^3}{3!}+O(z^4),
+\]
+this is \emph{not} a classical exponential Riordan array in the usual sense:
+there is no ordinary compositional inverse for \(f\), and there cannot be a
+fixed row-production matrix \(P\) with \(r_{n+1}=r_nP\), because
+\[
+  r_0=r_1=(1,0,0,\dotsc),\qquad r_2=(3,0,0,\dotsc).
+\]
+So the natural generalization, if this approach is to work, is some kind of
+\(3\)-striped or block-production formalism rather than the standard one.
+
+There is nevertheless a canonical column-production operator. If
+\[
+  f(z)=\sum_{n\geq 0} f_n \frac{z^n}{n!},
+\]
+then the original columns \(C_b\) of \(M\) satisfy \(C_b=T_f C_{b-1}\), where
+\[
+  (T_f)_{n,k}=\binom{n}{k}f_{n-k}.
+\]
+The coefficients \(f_n\) are determined by
+\[
+  f_n=\mathbf{1}_{n\geq 3}+n f_{n-1}+\binom{n}{2}f_{n-2},
+\]
+so \(f_3=1\), \(f_4=5\), \(f_5=36\), \(f_6=292\), and so on. However,
+\(T_f\) itself is not totally nonnegative: the \(2\times 2\) minor on rows
+\((4,5)\) and columns \((0,1)\) equals \(-19\). Thus the observed
+total-nonnegativity of \(M\) is subtler than a naive TN production-operator
+explanation.
+
+The remaining plausible extension of the Br\"and\'en--Leite method is therefore
+a total-nonnegativity criterion for the whole column-generated matrix itself,
+or for some appropriate block-production system, rather than separate
 P\'olya-frequency assumptions on \(g\) and \(f\).
 
 Empirically, this matrix looks much better behaved than the factorization

@@ -689,9 +689,46 @@ Riordan array
   `g(z) = 1/(1-z-z^2/2)` and
   `f(z) = (e^z - 1 - z - z^2/2)/(1-z-z^2/2)`.
 
+Important correction: this is not a \emph{classical} exponential Riordan array,
+since `f(z)` starts in degree `3`, not degree `1`. So there is no ordinary
+compositional inverse and no standard row-production matrix. In fact a fixed
+matrix `P` with `r_{n+1} = r_n P` is impossible already from the first rows:
+
+- `r_0 = r_1 = (1,0,0,...)`,
+- `r_2 = (3,0,0,...)`.
+
+The more honest generalization target is therefore a `3`-striped / block
+production formalism.
+
+There is a canonical \emph{column}-production operator, though. If
+
+- `f(z) = sum_n f_n z^n/n!`,
+
+then the original columns satisfy
+
+- `C_b = T_f C_{b-1}`,
+
+with
+
+- `(T_f)_{n,k} = binom(n,k) f_{n-k}`.
+
+The coefficients are given by
+
+- `f_n = 1_{n>=3} + n f_{n-1} + binom(n,2) f_{n-2}`,
+
+so
+
+- `f_3=1, f_4=5, f_5=36, f_6=292, f_7=2801, ...`.
+
+Unfortunately this naive production operator is not TN:
+
+- the `2x2` minor on rows `(4,5)` and columns `(0,1)` is `-19`,
+- the first negative `3x3` minor occurs on rows `(3,5,6)` and columns
+  `(0,1,2)`, with determinant `-285`.
+
 So the natural generalization target is no longer the separate PF behavior of
-`U` and `F`, but rather a TN criterion for the whole exponential Riordan array,
-or for its production matrix.
+`U` and `F`, nor a naive TN production operator, but rather a TN criterion for
+the whole column-generated matrix itself, or for some block-production system.
 
 Empirically the matrix `M = (M_{n,b})` looks strikingly totally nonnegative in
 the tested range, even though the natural factorization pieces fail PF/TN.
