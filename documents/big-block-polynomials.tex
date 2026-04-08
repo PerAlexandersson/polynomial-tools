@@ -14,6 +14,7 @@
 \newtheorem{lemma}[theorem]{Lemma}
 \newtheorem{corollary}[theorem]{Corollary}
 \newtheorem{conjecture}[theorem]{Conjecture}
+\newtheorem{problem}[theorem]{Problem}
 \theoremstyle{definition}
 \newtheorem{definition}[theorem]{Definition}
 \newtheorem{remark}[theorem]{Remark}
@@ -30,7 +31,7 @@
 
 \newcommand{\interl}{\ll}
 
-\title{Big-Block Polynomials of Set Partitions and Ordered Set Partitions}
+\title{A Planar-Network Method for Ordered Big-Block Polynomials}
 \author{Per Alexandersson}
 \address{Department of Mathematics, Stockholm University}
 \email{per.alexandersson@math.su.se}
@@ -43,14 +44,21 @@ For $j \geq 2$, let $P_{n,j}(t)$ denote the generating polynomial for set
 partitions of $[n]$, weighted by the number of blocks of size at least~$j$.
 These polynomials were studied in Jack Zhan's 2023 thesis, where recurrences
 were derived and real-rootedness/interlacing was posed as a natural problem.
-We record the basic recurrences for the unordered family, introduce the
-ordered analog $O_{n,j}(t)$, and prove that for every fixed $j \geq 2$ the
-polynomials $O_{n,j}(t)$ are real-rooted with only nonpositive zeros. The
-proof uses a planar network whose exact coefficient matrix is totally
-nonnegative, together with a Toeplitz/P\'olya-frequency argument. We also
-record the staircase rook interpretation, and explain how a stable bivariate
-refinement of the ordered family would imply the corresponding unordered
-statement by multiplier-sequence machinery.
+We prove real-rootedness for the ordered analog $O_{n,j}(t)$ by placing its
+exact coefficient matrix inside a planar network and then applying a
+Toeplitz/P\'olya-frequency argument. More generally, we show that every family
+defined by a reciprocal exponential generating function of the form
+\[
+  \frac{1}{1-U(z)-tV(z)}
+\]
+with nonnegative coefficients in $U$ and $V$ is termwise real-rooted. The
+ordered big-block polynomials are one instance of this template. We also
+record the staircase rook interpretation for the unordered family and explain
+how a stable bivariate refinement of the ordered family would imply the
+corresponding unordered statement by multiplier-sequence machinery. A central
+problem is to characterize when ordered recurrences admit such a planar-network
+interpretation, and when this stronger structure can be upgraded to
+interlacing.
 \end{abstract}
 
 \maketitle
@@ -89,7 +97,13 @@ $[n]$, and define
   \sum_{\pi \in \Pi_n^{\operatorname{ord}}}
   t^{\operatorname{bb}_j(\pi)}.
 \]
-Our main unconditional result is:
+Our main observation is that the ordered family sits inside a much broader
+planar-network template. The specific ordered big-block family is then an
+application of that theorem.
+
+\medskip
+
+For later reference, we state the ordered big-block consequence up front:
 
 \begin{theorem}\label{thm:ordered_rr}
 For every fixed $j \geq 2$ and every $n \geq 0$, the polynomial $O_{n,j}(t)$
@@ -115,6 +129,28 @@ sequence:
   \qquad (n \geq 0).
 \]
 \end{conjecture}
+
+The central structural questions of this note are the following.
+
+\begin{problem}[Planar-network classification]\label{prob:classification}
+Characterize the ordered combinatorial models, or more generally the
+reciprocal generating functions and recurrences, whose exact coefficient
+matrices arise as planar path matrices. The ordered big-block polynomials show
+that reciprocal exponential generating functions of the form
+\[
+  \frac{1}{1-U(z)-tV(z)}
+\]
+with nonnegative coefficients in \(U\) and \(V\) form one robust class, but it
+is natural to ask how far beyond this affine-linear block-weight setting the
+planar-network method extends.
+\end{problem}
+
+\begin{problem}[Upgrading to Sturm sequences]\label{prob:sturm_upgrade}
+Find natural hypotheses guaranteeing that a planar-network realization yields a
+global interlacing theorem, rather than only termwise real-rootedness. In
+particular, can one recognize when the ordered family itself forms a Sturm
+sequence?
+\end{problem}
 
 \section{Touchard Polynomials and Staircase Rooks}
 
@@ -188,7 +224,8 @@ two constructions are inverse to one another.
 \section{Unordered Big-Block Polynomials}
 
 The following recurrence already appears in \cite[Lem.~3.2]{Zhan2023}; we
-include it for completeness.
+record it here because it is the basic unordered analogue of the ordered
+recursions below.
 
 \begin{proposition}\label{prop:unordered_recur}
 For $n \geq 0$ and $j \geq 2$,
@@ -219,146 +256,103 @@ Equivalently, the exponential generating function is
   \right).
 \end{equation}
 
-Now define
-\[
-  Q_{n,j}(t) \coloneqq t\,P_{n,j}(t).
-\]
+Zhan also observed that after the normalization \(Q_{n,j}(t)=tP_{n,j}(t)\), the
+unordered family satisfies a derivative recurrence. For \(j=2\), this connects
+the big-block polynomials to the run-sorted permutation family studied in
+\cite{AlexanderssonNabawanda2021,BonaHezo2016,Zhan2023}. For \(j\ge 3\), both
+real-rootedness and interlacing remain open; see
+Conjecture~\ref{conj:unordered_rr}.
 
-\begin{proposition}\label{prop:unordered_Q_recur}
-For $n \geq 0$ and $j \geq 2$,
-\begin{equation}\label{eq:unordered_Q_recur}
-  Q_{n+1,j}(t)
+\section{A Planar-Network Template}
+
+Let \(u_1,u_2,\dotsc\) and \(v_1,v_2,\dotsc\) be nonnegative real numbers, and
+set
+\[
+  U(z)\coloneqq \sum_{r\geq 1} u_r \frac{z^r}{r!},
+  \qquad
+  V(z)\coloneqq \sum_{r\geq 1} v_r \frac{z^r}{r!}.
+\]
+Define polynomials \(W_n(t)\) by
+\begin{equation}\label{eq:template_egf}
+  \sum_{n \geq 0} W_n(t)\,\frac{z^n}{n!}
   =
-  t\,Q'_{n,j}(t)
-  +
-  \sum_{k=1}^{j-2} \binom{n}{k} Q_{n-k,j}(t)
-  +
-  t \binom{n}{j-1} Q_{n-j+1,j}(t),
+  \frac{1}{1-U(z)-tV(z)}.
 \end{equation}
-where the middle sum is empty if $j=2$.
-\end{proposition}
-
-\begin{proof}
-Set
-\[
-  G_j(z,t)
-  \coloneqq
-  \sum_{n \geq 0} Q_{n,j}(t)\,\frac{z^n}{n!}
+Equivalently, \(W_0(t)=1\) and
+\begin{equation}\label{eq:template_recur}
+  W_{n+1}(t)
   =
-  t\exp\!\left(
-    \sum_{r=1}^{j-1} \frac{z^r}{r!}
-    +
-    t \sum_{r=j}^{\infty} \frac{z^r}{r!}
-  \right).
-\]
-Differentiating with respect to $z$ and with respect to $t$, and subtracting,
-gives
-\[
-  \frac{\partial G_j}{\partial z}
-  =
-  t \frac{\partial G_j}{\partial t}
-  +
-  \left(
-    \sum_{r=1}^{j-2} \frac{z^r}{r!}
-    +
-    t\,\frac{z^{j-1}}{(j-1)!}
-  \right) G_j.
-\]
-Extracting the coefficient of $z^n/n!$ yields the claim.
-\end{proof}
-
-\begin{remark}
-For $j=2$, the family is known to be real-rooted and interlacing
-\cite{AlexanderssonNabawanda2021,BonaHezo2016,Zhan2023}. The general case
-remains open.
-\end{remark}
-
-\section{Ordered Big-Block Polynomials}
-
-Since an ordered set partition is a finite sequence of nonempty blocks, the
-symbolic method gives the exponential generating function
-\begin{equation}\label{eq:ordered_egf}
-  \sum_{n \geq 0} O_{n,j}(t)\,\frac{z^n}{n!}
-  =
-  \frac{1}{
-    1
-    -
-    \left(
-      \sum_{r=1}^{j-1} \frac{z^r}{r!}
-      +
-      t \sum_{r=j}^{\infty} \frac{z^r}{r!}
-    \right)
-  }.
+  \sum_{r=1}^{n+1} \binom{n+1}{r}\bigl(u_r+t v_r\bigr)\,W_{n+1-r}(t).
 \end{equation}
+This is the natural recursion for an ordered sequence of labeled blocks, where
+a block of size \(r\) carries weight \(u_r+t v_r\).
 
-\begin{proposition}[The exact coefficient matrix is TNN]\label{prop:ordered_tnn}
+\begin{proposition}[The exact coefficient matrix is TNN]\label{prop:template_tnn}
 Write
 \[
-  O_{n,j}(t)=\sum_{b\geq 0} M^{(j)}_{n,b}\,t^b,
+  W_n(t)=\sum_{b\geq 0} M_{n,b}\,t^b,
   \qquad
-  \widetilde M^{(j)}_{n,b}\coloneqq \frac{M^{(j)}_{n,b}}{n!}.
+  \widetilde M_{n,b}\coloneqq \frac{M_{n,b}}{n!}.
 \]
-Then the infinite matrix
-\(\widetilde M^{(j)}=(\widetilde M^{(j)}_{n,b})_{n,b\geq 0}\) is totally
-nonnegative.
+Then the infinite matrix \(\widetilde M=(\widetilde M_{n,b})_{n,b\geq 0}\) is
+totally nonnegative.
 
-More precisely, \(\widetilde M^{(j)}\) is the transpose of the path matrix of
-the planar network \(\mathcal N_j\) with vertices \((x,h)\in \setN^2\), sources
+More precisely, \(\widetilde M\) is the transpose of the path matrix of the
+planar network \(\mathcal N(U,V)\) with vertices \((x,h)\in \setN^2\), sources
 \(s_b\coloneqq (0,b)\), sinks \(t_n\coloneqq (n,0)\), and edges
 \[
   (x,h)\to (x+r,h)
   \quad\text{of weight}\quad
-  \frac{1}{r!}
-  \qquad (1\leq r\leq j-1),
+  \frac{u_r}{r!}
+  \qquad (r\geq 1),
 \]
 and
 \[
   (x,h)\to (x+r,h-1)
   \quad\text{of weight}\quad
-  \frac{1}{r!}
-  \qquad (h\geq 1,\ r\geq j).
+  \frac{v_r}{r!}
+  \qquad (h\geq 1,\ r\geq 1).
 \]
 \end{proposition}
 
 \begin{proof}
-Set
-\[
-  A_j(z)\coloneqq \sum_{r=1}^{j-1}\frac{z^r}{r!},
-  \qquad
-  B_j(z)\coloneqq \sum_{r=j}^{\infty}\frac{z^r}{r!}.
-\]
 For fixed \(b\), a path from \(s_b\) to \(t_n\) consists of arbitrary strings
-of small edges, separated by exactly \(b\) big edges. Therefore the ordinary
-generating function for weighted paths from \(s_b\) is
+of horizontal edges, separated by exactly \(b\) downward edges. Therefore the
+ordinary generating function for weighted paths from \(s_b\) is
 \[
   \sum_{n\geq 0} w(s_b\to t_n)\,z^n
   =
-  \frac{1}{1-A_j(z)}
-  \left(\frac{B_j(z)}{1-A_j(z)}\right)^b
+  \frac{1}{1-U(z)}
+  \left(\frac{V(z)}{1-U(z)}\right)^b
   =
-  \frac{B_j(z)^b}{(1-A_j(z))^{b+1}}.
+  \frac{V(z)^b}{(1-U(z))^{b+1}}.
 \]
 On the other hand, extracting the coefficient of \(t^b\) in
-\eqref{eq:ordered_egf} gives
+\eqref{eq:template_egf} gives
 \[
-  \sum_{n\geq 0} M^{(j)}_{n,b}\,\frac{z^n}{n!}
+  \sum_{n\geq 0} M_{n,b}\,\frac{z^n}{n!}
   =
-  \frac{B_j(z)^b}{(1-A_j(z))^{b+1}}.
+  \frac{V(z)^b}{(1-U(z))^{b+1}}.
 \]
-Hence \(w(s_b\to t_n)=\widetilde M^{(j)}_{n,b}\), so the path matrix of
-\(\mathcal N_j\) is \((\widetilde M^{(j)}_{n,b})^\mathsf{T}\). Since
-\(\mathcal N_j\) is planar, the Lindstr\"om--Gessel--Viennot lemma
-\cite{Lindstrom1973,GesselViennot1985} implies that \(\widetilde M^{(j)}\) is
+Hence \(w(s_b\to t_n)=\widetilde M_{n,b}\), so the path matrix of
+\(\mathcal N(U,V)\) is \((\widetilde M_{n,b})^\mathsf{T}\). Since
+\(\mathcal N(U,V)\) is planar, the Lindstr\"om--Gessel--Viennot lemma
+\cite{Lindstrom1973,GesselViennot1985} implies that \(\widetilde M\) is
 totally nonnegative.
 \end{proof}
 
-\begin{proof}[Proof of Theorem~\ref{thm:ordered_rr}]
-Fix \(n\) and \(j\), and write
+\begin{theorem}\label{thm:template_rr}
+For every \(n \geq 0\), the polynomial \(W_n(t)\) has only real nonpositive
+zeros.
+\end{theorem}
+
+\begin{proof}
+Fix \(n\), and write
 \[
-  a_b \coloneqq \widetilde M^{(j)}_{n,b} = \frac{M^{(j)}_{n,b}}{n!}.
+  a_b \coloneqq \widetilde M_{n,b} = \frac{M_{n,b}}{n!}.
 \]
-Consider the strip of the network \(\mathcal N_j\) between the lines \(x=0\)
-and \(x=n\), with sources \(s_i\coloneqq(0,i)\) and sinks
+Consider the strip of the network \(\mathcal N(U,V)\) between the lines
+\(x=0\) and \(x=n\), with sources \(s_i\coloneqq(0,i)\) and sinks
 \(u_k\coloneqq(n,k)\). Let \(T=(T_{i,k})_{i,k\geq 0}\) be its path matrix. If
 \(i<k\), then \(T_{i,k}=0\), since heights never increase. If \(i\geq k\),
 vertical translation by \(k\) identifies paths from \((0,i)\) to \((n,k)\)
@@ -378,56 +372,64 @@ its generating polynomial
   \sum_{b\geq 0} a_b t^b
 \]
 has only real nonpositive zeros. Multiplying by the positive scalar \(n!\)
-does not change the zeros, so \(O_{n,j}(t)\) is real-rooted.
+does not change the zeros, so \(W_n(t)\) is real-rooted.
+\end{proof}
+
+\begin{corollary}\label{cor:ordered_big_blocks}
+For fixed \(j \geq 2\), the ordered big-block polynomials satisfy
+\[
+  \sum_{n \geq 0} O_{n,j}(t)\,\frac{z^n}{n!}
+  =
+  \frac{1}{
+    1
+    -
+    \left(
+      \sum_{r=1}^{j-1} \frac{z^r}{r!}
+      +
+      t \sum_{r=j}^{\infty} \frac{z^r}{r!}
+    \right)
+  },
+\]
+and hence Theorem~\ref{thm:ordered_rr} holds.
+Moreover,
+\begin{equation}\label{eq:ordered_big_block_recur}
+  O_{n+1,j}(t)
+  =
+  \sum_{r=1}^{j-1} \binom{n+1}{r} O_{n+1-r,j}(t)
+  + t \sum_{r=j}^{n+1} \binom{n+1}{r} O_{n+1-r,j}(t).
+\end{equation}
+\end{corollary}
+
+\begin{proof}
+Take \(u_r=1\) and \(v_r=0\) for \(1 \leq r \leq j-1\), and \(u_r=0\),
+\(v_r=1\) for \(r\geq j\). Then \eqref{eq:template_egf} becomes the ordered
+big-block generating function. The recurrence \eqref{eq:ordered_big_block_recur}
+is the specialization of \eqref{eq:template_recur}.
 \end{proof}
 
 \begin{remark}\label{rem:ordered_rowwise}
-The proof of Theorem~\ref{thm:ordered_rr} is \emph{rowwise}: for each fixed
+The proof of Theorem~\ref{thm:template_rr} is \emph{rowwise}: for each fixed
 \(n\) it produces a Toeplitz totally nonnegative matrix whose first column is
-the coefficient sequence of \(O_{n,j}(t)\). This is enough for
-real-rootedness, but it does not yet give a single lower unitriangular totally
-nonnegative matrix whose associated chain polynomials are the whole sequence
-\(\{O_{n,j}(t)\}_{n\geq 0}\). Thus the interlacing theorem of
-Br\"and\'en--Leite does not yet apply directly to the ordered family.
+the coefficient sequence of \(W_n(t)\). This is enough for real-rootedness,
+but it does not yet give a single lower unitriangular totally nonnegative
+matrix whose associated chain polynomials are the whole sequence
+\(\{W_n(t)\}_{n\geq 0}\). Thus the interlacing theorem of
+Br\"and\'en--Leite does not yet apply directly.
 \end{remark}
 
-\section{Refinements and the Ordered-to-Unordered Bridge}
+\begin{remark}\label{rem:template_problem}
+The argument above settles one broad family of examples, but it also isolates
+the two guiding problems of the note. Problem~\ref{prob:classification} asks
+for a structural characterization of ordered recurrences admitting a planar
+network. Problem~\ref{prob:sturm_upgrade} asks how one can pass from the
+rowwise totally nonnegative matrices used here to a global interlacing
+statement for the whole sequence \(\{W_n(t)\}_{n\ge 0}\).
+\end{remark}
 
-For $m \geq 1$, define
-\[
-  O_{n,j}^{\langle m \rangle}(t)
-  \coloneqq
-  \sum_{\substack{\pi \in \Pi_n^{\operatorname{ord}} \\ \ell(\pi)=m}}
-  t^{\operatorname{bb}_j(\pi)}.
-\]
-Then
-\[
-  O_{n,j}(t) = \sum_{m=1}^n O_{n,j}^{\langle m \rangle}(t),
-\]
-and the exact-block refinement satisfies a clean recurrence.
+\section{The Ordered-to-Unordered Bridge}
 
-\begin{proposition}\label{prop:ordered_exact_recur}
-For $n \geq 0$ and $m \geq 1$,
-\begin{equation}\label{eq:ordered_exact_recur}
-  O_{n+1,j}^{\langle m \rangle}(t)
-  =
-  m\left(
-    \sum_{k=0}^{j-2} \binom{n}{k} O_{n-k,j}^{\langle m-1 \rangle}(t)
-    +
-    t\sum_{k=j-1}^{n} \binom{n}{k} O_{n-k,j}^{\langle m-1 \rangle}(t)
-  \right).
-\end{equation}
-\end{proposition}
-
-\begin{proof}
-Consider the block containing $n+1$. If this block has size $k+1$, then there
-are $\binom{n}{k}$ ways to choose the other $k$ elements, and the remaining
-elements form an ordered set partition with $m-1$ blocks. There are exactly
-$m$ places to insert the distinguished block. This block contributes an extra
-factor of $t$ exactly when $k+1\geq j$.
-\end{proof}
-
-Now let
+The ordered real-rootedness theorem does not by itself imply the unordered one,
+but there is a natural bivariate bridge between the two families. Let
 \[
   F_{n,j}(u,t)
   \coloneqq
@@ -470,20 +472,21 @@ unordered one.
 
 \section{Open Problems}
 
-The ordered and unordered big-block families now have very different statuses:
+The ordered and unordered big-block families now have very different statuses.
+The ordered family is termwise real-rooted by Theorem~\ref{thm:ordered_rr},
+while the unordered family remains conjectural. The point of this note is that
+the ordered proof is not ad hoc: it comes from an exact planar-network model
+for the coefficient matrix.
 
-\begin{itemize}
-\item The unordered family \(P_{n,j}(t)\) has clean recurrences, a staircase
-rook interpretation, and a longstanding real-rootedness/interlacing
-conjecture.
-\item The ordered family \(O_{n,j}(t)\) is now known to be real-rooted for all
-fixed \(j\), but the stronger Sturm/interlacing statement remains open.
-\item A global totally nonnegative model for the full sequence
-\(\{O_{n,j}(t)\}_{n\geq 0}\) would likely settle
-Conjecture~\ref{conj:ordered_sturm}.
-\item A stable bivariate refinement of the ordered family would, by
-Remark~\ref{rem:multiplier_bridge}, transfer to the unordered family.
-\end{itemize}
+This leaves two natural directions. First, one would like to solve
+Problem~\ref{prob:classification} beyond the affine-linear block-weight setting
+treated here. Second, one would like to solve
+Problem~\ref{prob:sturm_upgrade}; a global totally nonnegative model for the
+full sequence \(\{O_{n,j}(t)\}_{n\geq 0}\) would likely imply
+Conjecture~\ref{conj:ordered_sturm}. Finally, a sufficiently strong stable
+bivariate refinement of the ordered family would, by
+Remark~\ref{rem:multiplier_bridge}, transfer to the unordered family and could
+thereby prove Conjecture~\ref{conj:unordered_rr}.
 
 \bibliographystyle{plain}
 \bibliography{documents/bibliography}
