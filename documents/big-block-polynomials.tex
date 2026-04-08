@@ -6,6 +6,7 @@
 \usepackage[english]{babel}
 \usepackage{microtype}
 \usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{tikz}
 \usepackage{xcolor}
 \usepackage{hyperref}
 
@@ -313,6 +314,7 @@ and
   \frac{v_r}{r!}
   \qquad (h\geq 1,\ r\geq 1).
 \]
+A truncated schematic is shown in Figure~\ref{fig:template_network}.
 \end{proposition}
 
 \begin{proof}
@@ -340,6 +342,50 @@ Hence \(w(s_b\to t_n)=\widetilde M_{n,b}\), so the path matrix of
 \cite{Lindstrom1973,GesselViennot1985} implies that \(\widetilde M\) is
 totally nonnegative.
 \end{proof}
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[x=1.35cm,y=0.95cm, every node/.style={font=\small}]
+  \foreach \x in {0,...,5} {
+    \foreach \h in {0,1,2} {
+      \fill (\x,\h) circle (1.4pt);
+    }
+  }
+
+  \node[left] at (0,2) {$s_2$};
+  \node[left] at (0,1) {$s_1$};
+  \node[left] at (0,0) {$s_0=t_0$};
+  \foreach \x in {1,...,5} {
+    \node[below] at (\x,0) {$t_{\x}$};
+  }
+
+  \draw[gray!60,->] (-0.35,0) -- (5.55,0) node[right] {$x$};
+  \draw[gray!60,->] (0,-0.35) -- (0,2.45) node[above] {$h$};
+
+  \draw[blue,thick,->] (0,2) -- (1,2);
+  \node[blue,above] at (0.5,2) {$\frac{u_1}{1!}$};
+
+  \draw[blue,thick,->] (1,1) -- (3,1);
+  \node[blue,above] at (2,1) {$\frac{u_2}{2!}$};
+
+  \draw[blue,thick,->] (2,2) -- (5,2);
+  \node[blue,above] at (3.5,2) {$\frac{u_3}{3!}$};
+
+  \draw[red!70!black,thick,->] (0,2) -- (1,1);
+  \node[red!70!black,left] at (0.55,1.5) {$\frac{v_1}{1!}$};
+
+  \draw[red!70!black,thick,->] (1,2) -- (3,1);
+  \node[red!70!black,sloped,above] at (2,1.5) {$\frac{v_2}{2!}$};
+
+  \draw[red!70!black,thick,->] (1,1) -- (4,0);
+  \node[red!70!black,sloped,above] at (2.5,0.5) {$\frac{v_3}{3!}$};
+\end{tikzpicture}
+\caption{A truncated schematic of the planar network \(\mathcal N(U,V)\). From
+\((x,h)\) one may move horizontally to \((x+r,h)\) with weight \(u_r/r!\), or
+down one level to \((x+r,h-1)\) with weight \(v_r/r!\). Only a few
+representative edges are shown; all lengths \(r\geq 1\) occur.}
+\label{fig:template_network}
+\end{figure}
 
 \begin{theorem}\label{thm:template_rr}
 For every \(n \geq 0\), the polynomial \(W_n(t)\) has only real nonpositive
