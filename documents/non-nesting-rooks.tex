@@ -654,20 +654,10 @@ the symbolic method gives the exponential generating function
   }.
 \end{equation}
 
-\begin{conjecture}\label{conj:ordered_big_blocks_rr}
-For every fixed $j \geq 2$, the polynomials $O_{n,j}(t)$ are real-rooted.
-Moreover, they form a Sturm sequence:
-\[
-  O_{n,j}(t) \interl O_{n+1,j}(t)
-  \qquad (n \geq 0).
-\]
-\end{conjecture}
-
-Computations currently verify Conjecture~\ref{conj:ordered_big_blocks_rr}
-for $2 \leq j \leq 6$ and $n \leq 18$.
-In this tested range, the ordered family looks even more rigid than the
-unordered one: both real-rootedness and consecutive interlacing hold
-throughout.
+\begin{theorem}\label{thm:ordered_big_blocks_rr}
+For every fixed \(j \geq 2\) and every \(n \geq 0\), the polynomial
+\(O_{n,j}(t)\) has only real nonpositive zeros.
+\end{theorem}
 
 \begin{proposition}[The exact coefficient matrix is TNN]\label{prop:ordered_tnn}
 Write
@@ -733,12 +723,67 @@ Finally, multiplying row \(n\) by the positive scalar \(n!\) preserves the sign
 of every minor, so \(M^{(j)}\) is totally nonnegative as well.
 \end{proof}
 
+\begin{proof}[Proof of Theorem~\ref{thm:ordered_big_blocks_rr}]
+Fix \(n\) and \(j\), and write
+\[
+  a_b \coloneqq \widetilde M^{(j)}_{n,b} = \frac{M^{(j)}_{n,b}}{n!}.
+\]
+Consider the strip of the planar network \(\mathcal N_j\) between the lines
+\(x=0\) and \(x=n\), with sources
+\[
+  s_i \coloneqq (0,i)
+\]
+on the left boundary and sinks
+\[
+  u_k \coloneqq (n,k)
+\]
+on the right boundary. Let \(T=(T_{i,k})_{i,k\geq 0}\) be its path matrix, with
+rows and columns indexed by increasing height. Since every edge either preserves
+the height or decreases it by \(1\), one has \(T_{i,k}=0\) whenever \(i<k\).
+If \(i\geq k\), then vertical translation by \(k\) identifies paths from
+\((0,i)\) to \((n,k)\) with paths from \((0,i-k)\) to \((n,0)\), preserving all
+weights. Hence
+\[
+  T_{i,k} = a_{i-k}
+  \qquad (i\geq k),
+\]
+so \(T\) is the lower triangular Toeplitz matrix of the sequence
+\((a_0,a_1,a_2,\dotsc)\).
+
+Because \(T\) is again a planar path matrix, the Lindstr\"om--Gessel--Viennot
+lemma implies that \(T\) is totally nonnegative. Therefore
+\((a_0,a_1,a_2,\dotsc)\) is a P\'olya frequency sequence; see, for instance,
+\cite[Section~4]{BrandenLeite2024x}. Since this sequence has finite support,
+its generating polynomial
+\[
+  \sum_{b\geq 0} a_b t^b
+\]
+has only real nonpositive zeros. Multiplying by the positive scalar \(n!\) does
+not change the zeros, so
+\[
+  O_{n,j}(t)=\sum_{b\geq 0} M^{(j)}_{n,b} t^b
+\]
+is real-rooted as well.
+\end{proof}
+
+\begin{conjecture}\label{conj:ordered_big_blocks_sturm}
+For every fixed \(j \geq 2\), the polynomials \(O_{n,j}(t)\) form a Sturm
+sequence:
+\[
+  O_{n,j}(t) \interl O_{n+1,j}(t)
+  \qquad (n \geq 0).
+\]
+\end{conjecture}
+
+Computations currently verify Conjecture~\ref{conj:ordered_big_blocks_sturm}
+for \(2 \leq j \leq 6\) and \(n \leq 18\).
+In this tested range, the ordered family looks even more rigid than the
+unordered one: consecutive interlacing holds throughout.
+
 \begin{remark}\label{rem:ordered_tnn_rr}
-Proposition~\ref{prop:ordered_tnn} gives a clean structural explanation for the
-exact-\(b\) coefficient matrix, but we have not yet turned it into a proof of
-Conjecture~\ref{conj:ordered_big_blocks_rr}. It strongly suggests that the
-ordered big-block family belongs to the same TNN/planar-network world as other
-real-rooted enumerative triangles.
+Theorem~\ref{thm:ordered_big_blocks_rr} shows that the ordered big-block family
+already lies in the classical PF/TNN world. What remains open is the stronger
+Sturm/interlacing statement of Conjecture~\ref{conj:ordered_big_blocks_sturm}.
 \end{remark}
 
 \begin{proposition}[Ordered refinements]\label{prop:ordered_refinements}

@@ -807,7 +807,52 @@ accidental and not specific to one threshold.
 What remains unclear is the final bridge from this TNN matrix to the
 real-rootedness/interlacing conjecture for the row polynomials `O_{n,j}(t)`.
 So the ordered family now sits very naturally in the planar-network world, but
-I have not yet upgraded the conjecture to a theorem.
+I had not yet upgraded the conjecture to a theorem.
+
+### Final bridge: Toeplitz by vertical translation
+
+This bridge actually works.
+
+For fixed `n` and `j`, let
+
+- `a_b = M^(j)_(n,b) / n!`.
+
+Now keep the same planar network, but instead of taking sinks only at height
+`0`, take sinks
+
+- `u_k = (n,k)`
+
+on the right boundary, and sources
+
+- `s_i = (0,i)`
+
+on the left boundary.
+
+Because the network is translation-invariant in the vertical direction and all
+edges either preserve height or decrease it by `1`, the path weight from `s_i`
+to `u_k` is
+
+- `0` if `i < k`,
+- `a_(i-k)` if `i >= k`.
+
+So for fixed `n`, the lower triangular Toeplitz matrix of the sequence
+`(a_0,a_1,a_2,...)` is itself a planar path matrix, hence TNN by LGV.
+
+By the Aissen--Schoenberg--Whitney characterization of P\'olya frequency
+sequences (cited via `Brenti1989`), the sequence `(a_b)` is PF. Therefore its
+generating polynomial
+
+- `sum_b a_b t^b`
+
+has only real nonpositive zeros. Multiplying by `n!` does not change the zeros,
+so
+
+- `O_{n,j}(t) = sum_b M^(j)_(n,b) t^b`
+
+is real-rooted for every fixed `j >= 2` and `n >= 0`.
+
+This finally proves the real-rootedness part of the ordered big-block story.
+What remains open is only the stronger Sturm/interlacing statement.
 
 ## Useful commands
 
