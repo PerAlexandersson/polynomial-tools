@@ -1,0 +1,527 @@
+\documentclass[11pt,reqno]{amsart}
+
+\usepackage{lmodern}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{microtype}
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{xcolor}
+\usepackage{hyperref}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{conjecture}[theorem]{Conjecture}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{remark}[theorem]{Remark}
+
+\newcommand{\setN}{\mathbb{N}}
+\newcommand{\setR}{\mathbb{R}}
+
+\newcommand{\defin}[1]{%
+\relax\ifmmode%
+\textcolor{blue}{#1}%
+\else \textcolor{blue}{\emph{#1}}%
+\fi%
+}
+
+\newcommand{\interl}{\ll}
+
+\title{Big-Block Polynomials of Set Partitions and Ordered Set Partitions}
+\author{Per Alexandersson}
+\address{Department of Mathematics, Stockholm University}
+\email{per.alexandersson@math.su.se}
+\date{\today}
+
+\begin{document}
+
+\begin{abstract}
+For $j \geq 2$, let $P_{n,j}(t)$ denote the generating polynomial for set
+partitions of $[n]$, weighted by the number of blocks of size at least~$j$.
+These polynomials were studied in Jack Zhan's 2023 thesis, where recurrences
+were derived and real-rootedness/interlacing was posed as a natural problem.
+We record the basic recurrences for the unordered family, introduce the
+ordered analog $O_{n,j}(t)$, and prove that for every fixed $j \geq 2$ the
+polynomials $O_{n,j}(t)$ are real-rooted with only nonpositive zeros. The
+proof uses a planar network whose exact coefficient matrix is totally
+nonnegative, together with a Toeplitz/P\'olya-frequency argument. We also
+record the staircase rook interpretation, and explain how a stable bivariate
+refinement of the ordered family would imply the corresponding unordered
+statement by multiplier-sequence machinery.
+\end{abstract}
+
+\maketitle
+
+\section{Introduction}
+
+Let $\Pi_n$ denote the set of set partitions of $[n]=\{1,\dotsc,n\}$. For
+$j \geq 2$, define
+\[
+  \operatorname{bb}_j(\pi)
+  \coloneqq
+  \#\{B \in \pi : |B| \geq j\},
+\]
+the number of \defin{big blocks} of~$\pi$. The associated generating
+polynomial is
+\[
+  P_{n,j}(t)
+  \coloneqq
+  \sum_{\pi \in \Pi_n} t^{\operatorname{bb}_j(\pi)}.
+\]
+
+These polynomials were studied systematically in Zhan's 2023 thesis
+\cite{Zhan2023}, where several recurrence formulas were obtained and the
+real-rootedness and interlacing problem was highlighted. The cases $j=1$ and
+$j=2$ are well behaved: $P_{n,1}(t)$ is the Touchard polynomial, while the
+$j=2$ family is equivalent to the descent polynomials for run-sorted
+permutations and is known to be real-rooted and interlacing
+\cite{AlexanderssonNabawanda2022,BonaMezo2016,Zhan2023}.
+
+The ordered analog turns out to be even more rigid. Let
+$\Pi_n^{\operatorname{ord}}$ denote the set of ordered set partitions of
+$[n]$, and define
+\[
+  O_{n,j}(t)
+  \coloneqq
+  \sum_{\pi \in \Pi_n^{\operatorname{ord}}}
+  t^{\operatorname{bb}_j(\pi)}.
+\]
+Our main unconditional result is:
+
+\begin{theorem}\label{thm:ordered_rr}
+For every fixed $j \geq 2$ and every $n \geq 0$, the polynomial $O_{n,j}(t)$
+has only real nonpositive zeros.
+\end{theorem}
+
+The remaining conjectures are:
+
+\begin{conjecture}\label{conj:unordered_rr}
+For every fixed $j \geq 2$, the polynomials $P_{n,j}(t)$ are real-rooted.
+Moreover, they form a Sturm sequence:
+\[
+  P_{n,j}(t) \interl P_{n+1,j}(t)
+  \qquad (n \geq 1).
+\]
+\end{conjecture}
+
+\begin{conjecture}\label{conj:ordered_sturm}
+For every fixed $j \geq 2$, the polynomials $O_{n,j}(t)$ form a Sturm
+sequence:
+\[
+  O_{n,j}(t) \interl O_{n+1,j}(t)
+  \qquad (n \geq 0).
+\]
+\end{conjecture}
+
+\section{Touchard Polynomials and Staircase Rooks}
+
+The \defin{Touchard polynomial} is
+\[
+  B_n(x)
+  \coloneqq
+  \sum_{k=1}^{n} S(n,k)\,x^k
+  =
+  \sum_{\pi \in \Pi_n} x^{\ell(\pi)},
+\]
+where $\ell(\pi)$ is the number of blocks of~$\pi$ and $S(n,k)$ is a
+Stirling number of the second kind.
+
+Let $\delta_{n-1}=(n-1,n-2,\dotsc,1)$ be the staircase board, and let
+$R_{\delta_{n-1}}^{\mathrm{std}}(t)$ denote the ordinary staircase rook
+polynomial, where nestings are allowed. Then
+\[
+  R_{\delta_{n-1}}^{\mathrm{std}}(t)
+  =
+  \sum_{k=0}^{n-1} S(n,n-k)\,t^k
+  =
+  t^n B_n(t^{-1}).
+\]
+So the ordinary staircase rook family is precisely the coefficient-reversal of
+the Touchard family.
+
+For the big-block statistic, it is convenient to reverse columns and work on
+the triangular board
+\[
+  T_n \coloneqq \{(i,j) : 1 \leq i < j \leq n\}.
+\]
+If $\rho$ is a standard rook placement on $T_n$, let $D(\rho)$ be the
+directed graph on $[n]$ with an edge $i \to j$ for each rook~$(i,j)$, and
+define
+\[
+  \operatorname{rch}_j(\rho)
+  \coloneqq
+  \#\{\text{path components of $D(\rho)$ having at least $j$ vertices}\}.
+\]
+
+\begin{proposition}\label{prop:touchard_rook_bijection}
+The map sending a standard rook placement $\rho$ on $T_n$ to the collection of
+vertex sets of the path components of $D(\rho)$ is a bijection from staircase
+rook placements to set partitions of $[n]$. Under this bijection, a block of
+size $m$ corresponds to a path component with $m$ vertices. Consequently,
+\[
+  P_{n,j}(t)
+  =
+  \sum_{\rho} t^{\operatorname{rch}_j(\rho)},
+\]
+where the sum ranges over all standard rook placements $\rho$ on~$T_n$.
+\end{proposition}
+
+\begin{proof}
+Because $\rho$ has at most one rook in each row and column, every vertex of
+$D(\rho)$ has outdegree at most $1$ and indegree at most $1$. Since every edge
+has the form $i \to j$ with $i<j$, the graph is acyclic, so every connected
+component is a directed path. The vertex sets of these path components
+therefore form a set partition of~$[n]$.
+
+Conversely, if $B=\{b_1<\dotsb<b_m\}$ is a block of a set partition, place
+rooks at
+\[
+  (b_1,b_2),\ (b_2,b_3),\ \dotsc,\ (b_{m-1},b_m).
+\]
+Doing this for each block produces a standard rook placement on~$T_n$, and the
+two constructions are inverse to one another.
+\end{proof}
+
+\section{Unordered Big-Block Polynomials}
+
+The following recurrence already appears in \cite[Lem.~3.2]{Zhan2023}; we
+include it for completeness.
+
+\begin{proposition}\label{prop:unordered_recur}
+For $n \geq 0$ and $j \geq 2$,
+\begin{equation}\label{eq:unordered_recur}
+  P_{n+1,j}(t)
+  =
+  \sum_{k=0}^{j-2} \binom{n}{k} P_{n-k,j}(t)
+  + t \sum_{k=j-1}^{n} \binom{n}{k} P_{n-k,j}(t).
+\end{equation}
+\end{proposition}
+
+\begin{proof}
+Consider the block containing $n+1$. If it has size $k+1$, then one chooses
+its other $k$ elements in $\binom{n}{k}$ ways and partitions the remaining
+$n-k$ elements arbitrarily. If $k \leq j-2$, then this block is not counted by
+$\operatorname{bb}_j$; if $k \geq j-1$, then it contributes an extra factor
+of~$t$.
+\end{proof}
+
+Equivalently, the exponential generating function is
+\begin{equation}\label{eq:unordered_egf}
+  \sum_{n \geq 0} P_{n,j}(t)\,\frac{z^n}{n!}
+  =
+  \exp\!\left(
+    \sum_{r=1}^{j-1} \frac{z^r}{r!}
+    +
+    t \sum_{r=j}^{\infty} \frac{z^r}{r!}
+  \right).
+\end{equation}
+
+Now define
+\[
+  Q_{n,j}(t) \coloneqq t\,P_{n,j}(t).
+\]
+
+\begin{proposition}\label{prop:unordered_Q_recur}
+For $n \geq 0$ and $j \geq 2$,
+\begin{equation}\label{eq:unordered_Q_recur}
+  Q_{n+1,j}(t)
+  =
+  t\,Q'_{n,j}(t)
+  +
+  \sum_{k=1}^{j-2} \binom{n}{k} Q_{n-k,j}(t)
+  +
+  t \binom{n}{j-1} Q_{n-j+1,j}(t),
+\end{equation}
+where the middle sum is empty if $j=2$.
+\end{proposition}
+
+\begin{proof}
+Set
+\[
+  G_j(z,t)
+  \coloneqq
+  \sum_{n \geq 0} Q_{n,j}(t)\,\frac{z^n}{n!}
+  =
+  t\exp\!\left(
+    \sum_{r=1}^{j-1} \frac{z^r}{r!}
+    +
+    t \sum_{r=j}^{\infty} \frac{z^r}{r!}
+  \right).
+\]
+Differentiating with respect to $z$ and with respect to $t$, and subtracting,
+gives
+\[
+  \frac{\partial G_j}{\partial z}
+  =
+  t \frac{\partial G_j}{\partial t}
+  +
+  \left(
+    \sum_{r=1}^{j-2} \frac{z^r}{r!}
+    +
+    t\,\frac{z^{j-1}}{(j-1)!}
+  \right) G_j.
+\]
+Extracting the coefficient of $z^n/n!$ yields the claim.
+\end{proof}
+
+\begin{remark}
+For $j=2$, the family is known to be real-rooted and interlacing
+\cite{AlexanderssonNabawanda2022,BonaMezo2016,Zhan2023}. The general case
+remains open.
+\end{remark}
+
+\section{Ordered Big-Block Polynomials}
+
+Since an ordered set partition is a finite sequence of nonempty blocks, the
+symbolic method gives the exponential generating function
+\begin{equation}\label{eq:ordered_egf}
+  \sum_{n \geq 0} O_{n,j}(t)\,\frac{z^n}{n!}
+  =
+  \frac{1}{
+    1
+    -
+    \left(
+      \sum_{r=1}^{j-1} \frac{z^r}{r!}
+      +
+      t \sum_{r=j}^{\infty} \frac{z^r}{r!}
+    \right)
+  }.
+\end{equation}
+
+\begin{proposition}[The exact coefficient matrix is TNN]\label{prop:ordered_tnn}
+Write
+\[
+  O_{n,j}(t)=\sum_{b\geq 0} M^{(j)}_{n,b}\,t^b,
+  \qquad
+  \widetilde M^{(j)}_{n,b}\coloneqq \frac{M^{(j)}_{n,b}}{n!}.
+\]
+Then the infinite matrix
+\(\widetilde M^{(j)}=(\widetilde M^{(j)}_{n,b})_{n,b\geq 0}\) is totally
+nonnegative.
+
+More precisely, \(\widetilde M^{(j)}\) is the transpose of the path matrix of
+the planar network \(\mathcal N_j\) with vertices \((x,h)\in \setN^2\), sources
+\(s_b\coloneqq (0,b)\), sinks \(t_n\coloneqq (n,0)\), and edges
+\[
+  (x,h)\to (x+r,h)
+  \quad\text{of weight}\quad
+  \frac{1}{r!}
+  \qquad (1\leq r\leq j-1),
+\]
+and
+\[
+  (x,h)\to (x+r,h-1)
+  \quad\text{of weight}\quad
+  \frac{1}{r!}
+  \qquad (h\geq 1,\ r\geq j).
+\]
+\end{proposition}
+
+\begin{proof}
+Set
+\[
+  A_j(z)\coloneqq \sum_{r=1}^{j-1}\frac{z^r}{r!},
+  \qquad
+  B_j(z)\coloneqq \sum_{r=j}^{\infty}\frac{z^r}{r!}.
+\]
+For fixed \(b\), a path from \(s_b\) to \(t_n\) consists of arbitrary strings
+of small edges, separated by exactly \(b\) big edges. Therefore the ordinary
+generating function for weighted paths from \(s_b\) is
+\[
+  \sum_{n\geq 0} w(s_b\to t_n)\,z^n
+  =
+  \frac{1}{1-A_j(z)}
+  \left(\frac{B_j(z)}{1-A_j(z)}\right)^b
+  =
+  \frac{B_j(z)^b}{(1-A_j(z))^{b+1}}.
+\]
+On the other hand, extracting the coefficient of \(t^b\) in
+\eqref{eq:ordered_egf} gives
+\[
+  \sum_{n\geq 0} M^{(j)}_{n,b}\,\frac{z^n}{n!}
+  =
+  \frac{B_j(z)^b}{(1-A_j(z))^{b+1}}.
+\]
+Hence \(w(s_b\to t_n)=\widetilde M^{(j)}_{n,b}\), so the path matrix of
+\(\mathcal N_j\) is \((\widetilde M^{(j)}_{n,b})^\mathsf{T}\). Since
+\(\mathcal N_j\) is planar, the Lindstr\"om--Gessel--Viennot lemma
+\cite{Lindstrom1973,GesselViennot1985} implies that \(\widetilde M^{(j)}\) is
+totally nonnegative.
+\end{proof}
+
+\begin{proof}[Proof of Theorem~\ref{thm:ordered_rr}]
+Fix \(n\) and \(j\), and write
+\[
+  a_b \coloneqq \widetilde M^{(j)}_{n,b} = \frac{M^{(j)}_{n,b}}{n!}.
+\]
+Consider the strip of the network \(\mathcal N_j\) between the lines \(x=0\)
+and \(x=n\), with sources \(s_i\coloneqq(0,i)\) and sinks
+\(u_k\coloneqq(n,k)\). Let \(T=(T_{i,k})_{i,k\geq 0}\) be its path matrix. If
+\(i<k\), then \(T_{i,k}=0\), since heights never increase. If \(i\geq k\),
+vertical translation by \(k\) identifies paths from \((0,i)\) to \((n,k)\)
+with paths from \((0,i-k)\) to \((n,0)\), preserving all weights. Hence
+\[
+  T_{i,k} = a_{i-k}
+  \qquad (i\geq k),
+\]
+so \(T\) is the lower triangular Toeplitz matrix of the sequence
+\((a_0,a_1,a_2,\dotsc)\).
+
+Because \(T\) is again a planar path matrix, it is totally nonnegative. Hence
+\((a_0,a_1,a_2,\dotsc)\) is a P\'olya frequency sequence; see, for instance,
+\cite[Section~4]{BrandenLeite2024x}. Since this sequence has finite support,
+its generating polynomial
+\[
+  \sum_{b\geq 0} a_b t^b
+\]
+has only real nonpositive zeros. Multiplying by the positive scalar \(n!\)
+does not change the zeros, so \(O_{n,j}(t)\) is real-rooted.
+\end{proof}
+
+\begin{remark}\label{rem:ordered_rowwise}
+The proof of Theorem~\ref{thm:ordered_rr} is \emph{rowwise}: for each fixed
+\(n\) it produces a Toeplitz totally nonnegative matrix whose first column is
+the coefficient sequence of \(O_{n,j}(t)\). This is enough for
+real-rootedness, but it does not yet give a single lower unitriangular totally
+nonnegative matrix whose associated chain polynomials are the whole sequence
+\(\{O_{n,j}(t)\}_{n\geq 0}\). Thus the interlacing theorem of
+Br\"and\'en--Leite does not yet apply directly to the ordered family.
+\end{remark}
+
+\section{Refinements and the Ordered-to-Unordered Bridge}
+
+For $m \geq 1$, define
+\[
+  O_{n,j}^{\langle m \rangle}(t)
+  \coloneqq
+  \sum_{\substack{\pi \in \Pi_n^{\operatorname{ord}} \\ \ell(\pi)=m}}
+  t^{\operatorname{bb}_j(\pi)}.
+\]
+Then
+\[
+  O_{n,j}(t) = \sum_{m=1}^n O_{n,j}^{\langle m \rangle}(t),
+\]
+and the exact-block refinement satisfies a clean recurrence.
+
+\begin{proposition}\label{prop:ordered_exact_recur}
+For $n \geq 0$ and $m \geq 1$,
+\begin{equation}\label{eq:ordered_exact_recur}
+  O_{n+1,j}^{\langle m \rangle}(t)
+  =
+  m\left(
+    \sum_{k=0}^{j-2} \binom{n}{k} O_{n-k,j}^{\langle m-1 \rangle}(t)
+    +
+    t\sum_{k=j-1}^{n} \binom{n}{k} O_{n-k,j}^{\langle m-1 \rangle}(t)
+  \right).
+\end{equation}
+\end{proposition}
+
+\begin{proof}
+Consider the block containing $n+1$. If this block has size $k+1$, then there
+are $\binom{n}{k}$ ways to choose the other $k$ elements, and the remaining
+elements form an ordered set partition with $m-1$ blocks. There are exactly
+$m$ places to insert the distinguished block. This block contributes an extra
+factor of $t$ exactly when $k+1\geq j$.
+\end{proof}
+
+Now let
+\[
+  F_{n,j}(u,t)
+  \coloneqq
+  \sum_{\pi \in \Pi_n} u^{\ell(\pi)} t^{\operatorname{bb}_j(\pi)}
+\]
+and
+\[
+  G_{n,j}(u,t)
+  \coloneqq
+  \sum_{\pi \in \Pi_n^{\operatorname{ord}}}
+  u^{\ell(\pi)} t^{\operatorname{bb}_j(\pi)}.
+\]
+If $a_{n,m,b}$ denotes the number of set partitions of $[n]$ with $m$ blocks
+and exactly $b$ big blocks, then
+\[
+  F_{n,j}(u,t) = \sum_{m,b} a_{n,m,b}\,u^m t^b,
+  \qquad
+  G_{n,j}(u,t) = \sum_{m,b} m!\,a_{n,m,b}\,u^m t^b.
+\]
+Hence
+\[
+  F_{n,j}(u,t) = T_u\!\left(G_{n,j}(u,t)\right),
+  \qquad
+  T_u(u^m)=\frac{u^m}{m!}.
+\]
+
+\begin{remark}\label{rem:multiplier_bridge}
+The sequence \(\{1/m!\}_{m\geq 0}\) is a classical multiplier sequence in the
+sense of P\'olya--Schur \cite{Branden2015}. Therefore, if one could prove that
+the ordered bivariate polynomials \(G_{n,j}(u,t)\) are stable, or satisfy a
+sufficiently strong same-phase stability property, then applying \(T_u\) would
+preserve that stability and would imply the corresponding statement for the
+unordered family \(F_{n,j}(u,t)\), and in particular for
+\[
+  P_{n,j}(t)=F_{n,j}(1,t).
+\]
+This is the precise sense in which the ordered family should control the
+unordered one.
+\end{remark}
+
+\section{Open Problems}
+
+The ordered and unordered big-block families now have very different statuses:
+
+\begin{itemize}
+\item The unordered family \(P_{n,j}(t)\) has clean recurrences, a staircase
+rook interpretation, and a longstanding real-rootedness/interlacing
+conjecture.
+\item The ordered family \(O_{n,j}(t)\) is now known to be real-rooted for all
+fixed \(j\), but the stronger Sturm/interlacing statement remains open.
+\item A global totally nonnegative model for the full sequence
+\(\{O_{n,j}(t)\}_{n\geq 0}\) would likely settle
+Conjecture~\ref{conj:ordered_sturm}.
+\item A stable bivariate refinement of the ordered family would, by
+Remark~\ref{rem:multiplier_bridge}, transfer to the unordered family.
+\end{itemize}
+
+\begin{thebibliography}{99}
+
+\bibitem{AlexanderssonNabawanda2022}
+P.~Alexandersson, O.~Nabawanda,
+\emph{Peaks are preserved under run-sorting},
+Enumer.\ Combin.\ Appl.\ 2 (2022), no.~1.
+
+\bibitem{BonaMezo2016}
+M.~B\'ona, I.~Mez\H{o},
+\emph{Real zeros and partitions without singleton blocks},
+European J.\ Combin.\ 51 (2016), 500--510.
+
+\bibitem{Branden2015}
+P.~Br\"and\'en,
+\emph{Unimodality, log-concavity, real-rootedness and beyond},
+in: Handbook of Enumerative Combinatorics, 2015.
+
+\bibitem{BrandenLeite2024x}
+P.~Br\"and\'en, L.~S.~M.~Leite,
+\emph{Totally nonnegative matrices, chain enumeration and zeros of polynomials},
+arXiv:2412.06595, 2024.
+
+\bibitem{GesselViennot1985}
+I.~Gessel, G.~Viennot,
+\emph{Binomial determinants, paths, and hook length formulae},
+Adv.\ Math.\ 58 (1985), 300--321.
+
+\bibitem{Lindstrom1973}
+B.~Lindstr\"om,
+\emph{On the vector representations of induced matroids},
+Bull.\ London Math.\ Soc.\ 5 (1973), 85--90.
+
+\bibitem{Zhan2023}
+J.~Zhan,
+\emph{Polynomial recursions for counting big blocks in set partitions},
+B.S.\ thesis, Stockholm University, 2023:K17, 2023.
+
+\end{thebibliography}
+
+\end{document}

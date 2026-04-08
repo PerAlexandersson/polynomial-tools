@@ -854,6 +854,24 @@ is real-rooted for every fixed `j >= 2` and `n >= 0`.
 This finally proves the real-rootedness part of the ordered big-block story.
 What remains open is only the stronger Sturm/interlacing statement.
 
+## 2026-04-08 standalone extraction
+
+- Spun the set-partition tangent out into
+  `documents/big-block-polynomials.tex`.
+- The new note is self-contained and cites Jack Zhan's 2023 thesis as the
+  background source for the original big-block recurrences and conjectural
+  real-rootedness/interlacing picture.
+- It records:
+  - the staircase-rook interpretation,
+  - the unordered recurrence and EGF,
+  - the ordered EGF,
+  - the planar-network/TNN proof that every `O_{n,j}(t)` is real-rooted,
+  - the exact-block ordered refinement,
+  - and the precise multiplier-sequence bridge from ordered to unordered
+    via the bivariate `(u,t)` refinement.
+- `latexmk -pdf -interaction=nonstopmode -halt-on-error documents/big-block-polynomials.tex`
+  succeeds.
+
 ## Useful commands
 
 ```bash
