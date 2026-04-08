@@ -1124,6 +1124,42 @@ big-block polynomials, although it strongly suggests that some suitable
 normalization or extension of the theorem might.
 \end{remark}
 
+\begin{remark}\label{rem:BL_j3_obstruction}
+For \(j=3\), one may rewrite
+\[
+  \mathcal O_3(z,t)
+  =
+  \frac{U(z)}{1-tF(z)},
+  \qquad
+  U(z) \coloneqq \frac{1}{1-z-z^2/2},
+  \qquad
+  F(z) \coloneqq \frac{e^z-1-z-z^2/2}{1-z-z^2/2}.
+\]
+This suggests a possible extension of Theorem~\ref{thm:brandenleite}:
+if \(F\) is of P\'olya frequency type and \(U\) is a lower-triangular Toeplitz
+TN-transform, then the coefficients of \(U(z)/(1-tF(z))\) should still form an
+interlacing sequence, by combining Theorem~\ref{thm:brandenleite} with
+Br\"and\'en's matrix-preserver criterion for constant matrices.
+
+However, this does \emph{not} directly apply to \(\mathcal O_3\), because neither
+of the two natural series above is P\'olya frequency. Indeed, the Toeplitz minors
+already fail in the smallest nontrivial cases:
+\[
+  u_1^2-u_0u_2 = 1-\frac{3}{2} = -\frac{1}{2},
+\]
+for \(U(z)=\sum_{n\geq 0} u_n z^n\), and
+\[
+  f_4^2-f_3f_5
+  =
+  \left(\frac{5}{24}\right)^2-\frac{1}{6}\cdot\frac{3}{10}
+  =
+  -\frac{19}{2880},
+\]
+for \(F(z)=\sum_{n\geq 0} f_n z^n\).
+So even the most obvious ``factor-through-Br\"and\'en--Leite'' approach fails at
+the level of total nonnegativity.
+\end{remark}
+
 \subsection{A Ferrers path-component extension}
 
 The staircase construction extends naturally to arbitrary Ferrers boards.

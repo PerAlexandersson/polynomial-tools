@@ -626,6 +626,51 @@ for which
 Added recurrence verification to `ordered_ferrers_rook_paths.rs`; it passes for
 `n <= 8`.
 
+## Brändén--Leite and the j=3 ordered family
+
+Looked at the proof of Theorem 4.4 in `references/Branden-Leite.pdf`.
+The key point is that it does not really use the generating function directly;
+it routes through:
+
+- a PF sequence `{a_n}`,
+- the Toeplitz matrix `R = (a_{i-j})`,
+- and then Theorem 3.7 for lower-unitriangular TN matrices.
+
+So any extension to the ordered `j=3` family has to generalize that matrix input,
+not just cosmetically alter the denominator.
+
+For
+
+- `O_3(z,t) = 1 / (1 - z - z^2/2 - t(e^z - 1 - z - z^2/2))`,
+
+the most obvious factorization is
+
+- `O_3(z,t) = U(z) / (1 - t F(z))`,
+  where
+  `U(z) = 1/(1 - z - z^2/2)` and
+  `F(z) = (e^z - 1 - z - z^2/2)/(1 - z - z^2/2)`.
+
+There is a plausible BL-style extension here:
+
+- if `F` were PF and `U` were a Toeplitz TN-transform, then the coefficients of
+  `U(z)/(1 - tF(z))` should still be real-rooted/interlacing, by combining
+  Theorem 4.4 with Brändén’s constant-matrix criterion.
+
+But for our actual `j=3` data, both natural series already fail PF/TN:
+
+- for `U(z) = sum u_n z^n`, the Toeplitz minor
+  `u_1^2 - u_0 u_2 = 1 - 3/2 = -1/2`,
+- for `F(z) = sum f_n z^n`, the Toeplitz minor
+  `f_4^2 - f_3 f_5 = (5/24)^2 - (1/6)(3/10) = -19/2880`.
+
+So the cleanest ``factor through BL'' route is blocked immediately.
+
+This seems to locate the real obstacle:
+
+- we would need a genuine generalization from PF Toeplitz matrices to a broader
+  class of lower-triangular operators or Toeplitz pencils, not just a repackaging
+  of the same theorem.
+
 ## Useful commands
 
 ```bash
