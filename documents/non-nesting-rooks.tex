@@ -911,6 +911,50 @@ finite alternating sum of spaced values of \(O_{m,j}(t)\), but it does not
 appear to produce a fixed finite-memory recurrence for \(O_{n,j}(t)\) alone.
 \end{remark}
 
+\begin{remark}[The \(j=3\) hierarchy]\label{rem:ordered_j3_hierarchy}
+For \(j=3\), let
+\[
+  D_{n}^{(m)}(t)
+  \coloneqq
+  [z^n/n!]\bigl(\mathcal O_3(z,t)^m\bigr)
+  \qquad (m \geq 1).
+\]
+Thus \(D_n^{(1)}(t)=O_{n,3}(t)\) and \(D_n^{(2)}(t)=C_{n,3}(t)\).
+Since
+\[
+  \partial_z \mathcal O_3(z,t)
+  =
+  \left(2+(t-1)\frac{z^2}{2}\right)\mathcal O_3(z,t)^2
+  -
+  \mathcal O_3(z,t),
+\]
+we get for every \(m \geq 1\),
+\[
+  \partial_z \bigl(\mathcal O_3(z,t)^m\bigr)
+  =
+  m\left(2+(t-1)\frac{z^2}{2}\right)\mathcal O_3(z,t)^{m+1}
+  -
+  m\,\mathcal O_3(z,t)^m.
+\]
+Extracting coefficients gives the linear hierarchy
+\begin{equation}\label{eq:ordered_j3_hierarchy}
+  D_{n+1}^{(m)}(t)
+  =
+  -m\,D_n^{(m)}(t)
+  +
+  2m\,D_n^{(m+1)}(t)
+  +
+  m(t-1)\binom{n}{2} D_{n-2}^{(m+1)}(t).
+\end{equation}
+
+For \(m=1\) this is exactly the recurrence for \(O_{n,3}\) with companion
+\(C_{n,3}\), and for \(m=2\) it gives the next quadratic companion in terms of
+the cubic convolution coefficients \(D_n^{(3)}\).
+So the natural state-space is an infinite upper-shift hierarchy in the power
+index \(m\), not a closed finite-dimensional matrix recursion on just a few of
+the sequences \(O_{n,3},C_{n,3},\dotsc\).
+\end{remark}
+
 \begin{remark}\label{rem:ordered_refinements_not_stable}
 These refinements do give cleaner recurrences, but they do \emph{not} seem to
 restore full bivariate stability.

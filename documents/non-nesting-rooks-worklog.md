@@ -506,6 +506,22 @@ This is finite-length for the companion, but it still does not obviously turn
 into a fixed finite-memory recurrence for the unrefined ordered sequence
 `O_{n,j}(t)` alone.
 
+For `j=3`, the cleanest matrix-like object is actually an infinite hierarchy.
+If
+
+- `D_n^{(m)}(t) = [z^n/n!] O_3(z,t)^m`,
+
+so `D_n^{(1)} = O_{n,3}` and `D_n^{(2)} = C_{n,3}`, then
+
+- `D_{n+1}^{(m)}(t)
+   = -m D_n^{(m)}(t)
+     + 2m D_n^{(m+1)}(t)
+     + m(t-1) binom(n,2) D_{n-2}^{(m+1)}(t)`.
+
+So there is a very clean linear recursion in the power index `m`, but it is an
+infinite upper-shift hierarchy, not a closed finite-dimensional package on just
+`O`, `C`, and a few of their predecessors.
+
 ## Useful commands
 
 ```bash
