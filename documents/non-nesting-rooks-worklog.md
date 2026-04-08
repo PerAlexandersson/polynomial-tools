@@ -872,6 +872,16 @@ What remains open is only the stronger Sturm/interlacing statement.
 - `latexmk -pdf -interaction=nonstopmode -halt-on-error documents/big-block-polynomials.tex`
   succeeds.
 
+## 2026-04-08 rook draft prune
+
+- Replaced the long Touchard / big-block detour inside
+  `documents/non-nesting-rooks.tex` by a short notation-and-pointer section.
+- The Ferrers path-component extension and the uniform ordered `q`-extension
+  now refer directly to the staircase/path-component model instead of relying
+  on internal labels from the extracted material.
+- `latexmk -pdf -interaction=nonstopmode -halt-on-error documents/non-nesting-rooks.tex`
+  still succeeds after the cut.
+
 ## Useful commands
 
 ```bash
