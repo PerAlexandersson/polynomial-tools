@@ -669,6 +669,78 @@ In this tested range, the ordered family looks even more rigid than the
 unordered one: both real-rootedness and consecutive interlacing hold
 throughout.
 
+\begin{proposition}[The exact coefficient matrix is TNN]\label{prop:ordered_tnn}
+Write
+\[
+  O_{n,j}(t)=\sum_{b\geq 0} M^{(j)}_{n,b}\,t^b,
+  \qquad
+  \widetilde M^{(j)}_{n,b}\coloneqq \frac{M^{(j)}_{n,b}}{n!}.
+\]
+Then the infinite matrix \(\widetilde M^{(j)}=(\widetilde M^{(j)}_{n,b})_{n,b\geq 0}\)
+is totally nonnegative. Equivalently, the matrix \(M^{(j)}\) is totally
+nonnegative as well.
+
+More precisely, \(\widetilde M^{(j)}\) is the transpose of the path matrix of
+the planar network \(\mathcal N_j\) with vertices \((x,h)\in \setN^2\), sources
+\(s_b\coloneqq (0,b)\), sinks \(t_n\coloneqq (n,0)\), and edges
+\[
+  (x,h)\to (x+r,h)
+  \quad\text{of weight}\quad
+  \frac{1}{r!}
+  \qquad (1\leq r\leq j-1),
+\]
+and
+\[
+  (x,h)\to (x+r,h-1)
+  \quad\text{of weight}\quad
+  \frac{1}{r!}
+  \qquad (h\geq 1,\ r\geq j).
+\]
+\end{proposition}
+
+\begin{proof}
+Set
+\[
+  A_j(z)\coloneqq \sum_{r=1}^{j-1}\frac{z^r}{r!},
+  \qquad
+  B_j(z)\coloneqq \sum_{r=j}^{\infty}\frac{z^r}{r!}.
+\]
+For fixed \(b\), a directed path from \(s_b\) to \(t_n\) consists of
+arbitrary sequences of ``small'' edges (which keep the height unchanged),
+separated by exactly \(b\) ``big'' edges (which decrease the height by \(1\)).
+Therefore the ordinary generating function for weighted paths from \(s_b\) is
+\[
+  \sum_{n\geq 0} w(s_b\to t_n)\,z^n
+  =
+  \frac{1}{1-A_j(z)}
+  \left(\frac{B_j(z)}{1-A_j(z)}\right)^b
+  =
+  \frac{B_j(z)^b}{(1-A_j(z))^{b+1}}.
+\]
+On the other hand, extracting the coefficient of \(t^b\) in
+\eqref{eq:ordered_big_block_egf} gives
+\[
+  \sum_{n\geq 0} M^{(j)}_{n,b}\,\frac{z^n}{n!}
+  =
+  \frac{B_j(z)^b}{(1-A_j(z))^{b+1}}.
+\]
+Hence \(w(s_b\to t_n)=\widetilde M^{(j)}_{n,b}\), so the path matrix of
+\(\mathcal N_j\) is \(P=(\widetilde M^{(j)}_{n,b})^\mathsf{T}\).
+Since \(\mathcal N_j\) is planar, the Lindstr\"om--Gessel--Viennot lemma
+\cite{Lindstrom1973,GesselViennot1985} implies that \(P\), and therefore also
+\(\widetilde M^{(j)}\), is totally nonnegative.
+Finally, multiplying row \(n\) by the positive scalar \(n!\) preserves the sign
+of every minor, so \(M^{(j)}\) is totally nonnegative as well.
+\end{proof}
+
+\begin{remark}\label{rem:ordered_tnn_rr}
+Proposition~\ref{prop:ordered_tnn} gives a clean structural explanation for the
+exact-\(b\) coefficient matrix, but we have not yet turned it into a proof of
+Conjecture~\ref{conj:ordered_big_blocks_rr}. It strongly suggests that the
+ordered big-block family belongs to the same TNN/planar-network world as other
+real-rooted enumerative triangles.
+\end{remark}
+
 \begin{proposition}[Ordered refinements]\label{prop:ordered_refinements}
 For $m \geq 1$, let
 \[
@@ -1216,15 +1288,12 @@ total-nonnegativity of \(M\) is subtler than a naive TN production-operator
 explanation.
 
 The remaining plausible extension of the Br\"and\'en--Leite method is therefore
-a total-nonnegativity criterion for the whole column-generated matrix itself,
-or for some appropriate block-production system, rather than separate
-P\'olya-frequency assumptions on \(g\) and \(f\).
-
-Empirically, this matrix looks much better behaved than the factorization
-pieces: in the tested range, all \(2\times 2\) minors with rows \(\leq 12\),
-all \(3\times 3\) minors with rows \(\leq 10\), all \(4\times 4\) minors with
-rows \(\leq 8\), and all \(5\times 5\) minors with rows \(\leq 7\) are
-nonnegative.
+a criterion that sees the whole column-generated matrix, or some appropriate
+block-production system, rather than separate P\'olya-frequency assumptions on
+\(g\) and \(f\). In fact, Proposition~\ref{prop:ordered_tnn} shows that this
+matrix is totally nonnegative for a much more direct reason: it is a planar
+path matrix. What fails is the more naive factorwise or production-operator
+explanation.
 \end{remark}
 
 \subsection{A Ferrers path-component extension}

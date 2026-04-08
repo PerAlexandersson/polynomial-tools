@@ -758,6 +758,57 @@ So the matrix-pencil route still looks alive, but the right matrix may be the
 full coefficient matrix of `O_{n,3}(t)` rather than the BL factor pieces
 `U(z)` and `F(z)` separately.
 
+## Planar network for ordered big blocks
+
+There is actually a clean TNN model for the whole exact-coefficient matrix, and
+it works for every threshold `j >= 2`, not just for `j=3`.
+
+Write
+
+- `O_{n,j}(t) = sum_b M^(j)_(n,b) t^b`,
+- `M~^(j)_(n,b) = M^(j)_(n,b) / n!`.
+
+Then `M~^(j)` is the transpose of a planar path matrix. The network has:
+
+- sources `s_b = (0,b)`,
+- sinks `t_n = (n,0)`,
+- horizontal ``small-block'' edges
+  `(x,h) -> (x+r,h)` of weight `1/r!` for `1 <= r <= j-1`,
+- down-right ``big-block'' edges
+  `(x,h) -> (x+r,h-1)` of weight `1/r!` for `r >= j`.
+
+A path from `s_b` to `t_n` is exactly a sequence of blocks with exactly `b`
+big ones, so
+
+- `sum_n w(s_b -> t_n) z^n = B_j(z)^b / (1-A_j(z))^(b+1)`,
+
+which is exactly the coefficient-extraction formula for `M^(j)_(n,b)/n!`.
+
+Hence `M~^(j)` is totally nonnegative by LGV, and so is `M^(j)` itself.
+
+Added checker:
+
+- `experiments/src/bin/ordered_big_blocks_tnn.rs`
+
+Current computational confirmation:
+
+- for each `j = 2,3,4,5,6`, the coefficient matrix computed from ordered set
+  partitions matches the planar path DP exactly on the window `n <= 18`.
+- on the smaller full minor window `n <= 12`, every minor is nonnegative in the
+  available rectangle:
+  - `j=2`: all minors up to `7x7`,
+  - `j=3`: all minors up to `5x5`,
+  - `j=4`: all minors up to `4x4`,
+  - `j=5,6`: all minors up to `3x3`.
+
+This is stronger than the old `j=3` matrix data: the TNN phenomenon is not
+accidental and not specific to one threshold.
+
+What remains unclear is the final bridge from this TNN matrix to the
+real-rootedness/interlacing conjecture for the row polynomials `O_{n,j}(t)`.
+So the ordered family now sits very naturally in the planar-network world, but
+I have not yet upgraded the conjecture to a theorem.
+
 ## Useful commands
 
 ```bash
@@ -788,6 +839,9 @@ CARGO_TARGET_DIR=/tmp/rust-target cargo run --offline --quiet -p experiments --b
 
 cargo check --offline -p experiments --bin ordered_j3_tn
 CARGO_TARGET_DIR=/tmp/rust-target cargo run --offline --quiet -p experiments --bin ordered_j3_tn -- 12 4
+
+cargo check --offline -p experiments --bin ordered_big_blocks_tnn
+CARGO_TARGET_DIR=/tmp/rust-target cargo run --offline --quiet -p experiments --bin ordered_big_blocks_tnn -- 18 6
 
 latexmk -pdf -interaction=nonstopmode -halt-on-error documents/non-nesting-rooks.tex
 ```
