@@ -793,8 +793,8 @@ Added checker:
 Current computational confirmation:
 
 - for each `j = 2,3,4,5,6`, the coefficient matrix computed from ordered set
-  partitions matches the planar path DP exactly on the window `n <= 18`.
-- on the smaller full minor window `n <= 12`, every minor is nonnegative in the
+  partitions matches the planar path DP exactly on the window `n <= 12`.
+- on that same full minor window `n <= 12`, every minor is nonnegative in the
   available rectangle:
   - `j=2`: all minors up to `7x7`,
   - `j=3`: all minors up to `5x5`,
@@ -841,7 +841,7 @@ cargo check --offline -p experiments --bin ordered_j3_tn
 CARGO_TARGET_DIR=/tmp/rust-target cargo run --offline --quiet -p experiments --bin ordered_j3_tn -- 12 4
 
 cargo check --offline -p experiments --bin ordered_big_blocks_tnn
-CARGO_TARGET_DIR=/tmp/rust-target cargo run --offline --quiet -p experiments --bin ordered_big_blocks_tnn -- 18 6
+CARGO_TARGET_DIR=/tmp/rust-target cargo run --offline --quiet -p experiments --bin ordered_big_blocks_tnn -- 12 6
 
 latexmk -pdf -interaction=nonstopmode -halt-on-error documents/non-nesting-rooks.tex
 ```
