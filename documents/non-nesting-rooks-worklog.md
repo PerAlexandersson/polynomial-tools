@@ -522,6 +522,71 @@ So there is a very clean linear recursion in the power index `m`, but it is an
 infinite upper-shift hierarchy, not a closed finite-dimensional package on just
 `O`, `C`, and a few of their predecessors.
 
+## Ordered Ferrers rook-path model
+
+Circled back to the rook side and wrote down the uniform ordered model that
+packages together:
+
+- a Ferrers board `mu`,
+- a nesting weight `q`,
+- the path-component big-block statistic `rch_j`,
+- and an order on the path components.
+
+For a standard rook placement `rho` on `mu`, build the reversed-column digraph
+`D_mu(rho)` on `[N(mu)]` as in the Ferrers path model. Let
+
+- `nest(rho)` be the usual number of nesting pairs,
+- `kappa_mu(rho)` be the number of path components of `D_mu(rho)`,
+- `rch_j^mu(rho)` be the number of path components with at least `j` vertices.
+
+Since `D_mu(rho)` is a forest of directed paths on `N(mu)` vertices with
+`|rho|` edges, one has
+
+- `kappa_mu(rho) = N(mu) - |rho|`.
+
+The ordered generating function is therefore
+
+- `G_{mu,j}(u,q,t)
+   = sum_rho kappa_mu(rho)! u^{kappa_mu(rho)}
+       q^{nest(rho)} t^{rch_j^mu(rho)}`,
+
+equivalently, it counts pairs `(rho, sigma)` where `sigma` is a total order on
+the path components of `D_mu(rho)`.
+
+This is exactly the right staircase extension:
+
+- for `mu = delta_{n-1}` and `q=1`, it agrees with the ordered set-partition
+  family `G_{n,j}(u,t)`,
+- at `u=1`, this gives `O_{n,j}(t)`,
+- at `q=0`, it gives an ordered non-nesting rook-path model on arbitrary
+  Ferrers boards.
+
+Added checker:
+
+- `experiments/src/bin/ordered_ferrers_rook_paths.rs`
+
+What it verifies:
+
+- staircase sanity check: for `n <= 8` and `j = 2,3,4,5`, the `q=1`
+  staircase specialization agrees exactly with the ordered set-partition
+  big-block polynomials,
+- endpoint real-rootedness:
+  - `q=0`: all shapes `|mu| <= 16` passed for `j = 2,3,4` (`914/914` each),
+  - `q=1`: all shapes `|mu| <= 16` passed for `j = 2,3,4` (`914/914` each).
+
+Sample staircase rows:
+
+- `j=2`:
+  - `q=1`: `1`, `2+t`, `6+7t`, `24+45t+6t^2`, `120+311t+110t^2`, ...
+  - `q=0`: `1`, `2+t`, `6+7t`, `24+45t+4t^2`, `120+311t+70t^2`, ...
+- `j=3`:
+  - `q=1`: `1`, `3`, `12+t`, `66+9t`, `450+91t`, ...
+  - `q=0`: `1`, `3`, `12+t`, `64+9t`, `420+81t`, ...
+
+This looks like a genuinely useful bridge object: it contains the ordered
+set-partition family at one corner and an ordered non-nesting rook family at
+another, while staying entirely inside the Ferrers-rook language.
+
 ## Useful commands
 
 ```bash
@@ -546,6 +611,9 @@ CARGO_TARGET_DIR=/tmp/rust-target cargo run --offline --quiet -p experiments --b
 
 cargo check --offline -p experiments --bin ordered_big_blocks_position
 CARGO_TARGET_DIR=/tmp/rust-target cargo run --offline --quiet -p experiments --bin ordered_big_blocks_position -- 14 6
+
+cargo check --offline -p experiments --bin ordered_ferrers_rook_paths
+CARGO_TARGET_DIR=/tmp/rust-target cargo run --offline --quiet -p experiments --bin ordered_ferrers_rook_paths -- 16 4
 
 latexmk -pdf -interaction=nonstopmode -halt-on-error documents/non-nesting-rooks.tex
 ```

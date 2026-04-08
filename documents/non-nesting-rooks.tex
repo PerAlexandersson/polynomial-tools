@@ -1203,6 +1203,101 @@ where $L_n$ is the $n$-th Laguerre polynomial.
 For $j \geq 3$, the polynomial $C_{\square_n,j}(t)$ is constant.
 \end{remark}
 
+\begin{proposition}[A uniform ordered $q$-extension]\label{prop:ferrers_ordered_q}
+For a standard rook placement $\rho$ on~$\mu$, let
+\[
+  \operatorname{nest}(\rho)
+  \coloneqq
+  \#\{((i,c),(i',c')) \in \rho^2 : i < i' \text{ and } c < c'\},
+\]
+the number of nesting pairs in the original Ferrers coordinates, and let
+\[
+  \kappa_\mu(\rho)
+  \coloneqq
+  \#\{\text{path components of } D_\mu(\rho)\}.
+\]
+Since $D_\mu(\rho)$ is a forest of directed paths on $N(\mu)$ vertices with
+$|\rho|$ edges, one has
+\[
+  \kappa_\mu(\rho) = N(\mu) - |\rho|.
+\]
+
+For $m \geq 0$, define the exact-component refinement
+\[
+  \mathcal F_{\mu,j}^{\langle m \rangle}(q,t)
+  \coloneqq
+  \sum_{\substack{\rho \\ \kappa_\mu(\rho)=m}}
+  q^{\operatorname{nest}(\rho)} t^{\operatorname{rch}^{\mu}_j(\rho)},
+\]
+and set
+\[
+  \mathcal G_{\mu,j}(u,q,t)
+  \coloneqq
+  \sum_{m \geq 0} m!\,\mathcal F_{\mu,j}^{\langle m \rangle}(q,t)\,u^m.
+\]
+Equivalently,
+\[
+  \mathcal G_{\mu,j}(u,q,t)
+  =
+  \sum_{\rho}
+  \kappa_\mu(\rho)!\,u^{\kappa_\mu(\rho)}
+  q^{\operatorname{nest}(\rho)}
+  t^{\operatorname{rch}^{\mu}_j(\rho)}.
+\]
+Thus $\mathcal G_{\mu,j}(u,q,t)$ counts pairs $(\rho,\sigma)$ where
+$\rho$ is a rook placement on~$\mu$ and $\sigma$ is a total order on the
+path components of~$D_\mu(\rho)$.
+
+For the staircase $\delta_{n-1}$ one has
+\[
+  \mathcal F_{\delta_{n-1},j}^{\langle m \rangle}(1,t)
+  =
+  \sum_{\substack{\pi \in \Pi_n \\ \ell(\pi)=m}}
+  t^{\operatorname{bb}_j(\pi)},
+\]
+and hence
+\[
+  \mathcal G_{\delta_{n-1},j}(u,1,t) = G_{n,j}(u,t),
+\]
+where $G_{n,j}(u,t)$ is the ordered-set-partition refinement from
+Proposition~\ref{prop:ordered_refinements}. In particular,
+\[
+  \mathcal G_{\delta_{n-1},j}(1,1,t) = O_{n,j}(t).
+\]
+At $q=0$, the same construction counts non-nesting rook placements together
+with an arbitrary order on the path components of~$D_\mu(\rho)$.
+\end{proposition}
+\begin{proof}
+The identity $\kappa_\mu(\rho)=N(\mu)-|\rho|$ follows because every connected
+component of $D_\mu(\rho)$ is a path, hence $D_\mu(\rho)$ is acyclic and each
+edge decreases the number of connected components by~$1$.
+
+The displayed formula for $\mathcal G_{\mu,j}(u,q,t)$ is simply the same sum
+grouped according to the value of~$\kappa_\mu(\rho)$.
+For the staircase, Proposition~\ref{prop:touchard_rook_bijection} identifies
+path components of $D_{\delta_{n-1}}(\rho)$ with blocks of a set partition of
+$[n]$, preserving the statistic $\operatorname{rch}_j = \operatorname{bb}_j$.
+Ordering the path components is therefore exactly the same as ordering the
+blocks, and the factor $m!$ records the number of such orders.
+\end{proof}
+
+\begin{remark}\label{rem:ferrers_ordered_q_data}
+The family from Proposition~\ref{prop:ferrers_ordered_q} gives a uniform model
+depending simultaneously on the Ferrers board, the nesting parameter~$q$, and
+the big-block threshold~$j$.
+Computations currently verify that the endpoint specializations
+\[
+  \mathcal G_{\mu,j}(1,0,t)
+  \qquad\text{and}\qquad
+  \mathcal G_{\mu,j}(1,1,t)
+\]
+are real-rooted for every Ferrers board~$\mu$ with $|\mu| \leq 16$ and
+$j=2,3,4$.
+In particular, $\mathcal G_{\delta_{n-1},j}(1,1,t)=O_{n,j}(t)$ is recovered on
+the staircase, while $\mathcal G_{\mu,j}(1,0,t)$ gives an ``ordered''
+non-nesting analogue on arbitrary Ferrers boards.
+\end{remark}
+
 \section{Further observations}
 
 \subsection{Poset and LGV reformulation}
