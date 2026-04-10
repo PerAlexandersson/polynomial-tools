@@ -196,10 +196,7 @@ pub fn determinant(mat: &[Vec<BigInt>]) -> BigInt {
 ///
 /// Returns `None` if the system is inconsistent.
 /// For underdetermined systems, free variables are set to zero.
-pub fn solve_linear_system(
-    a: &[Vec<Q>],
-    b: &[Q],
-) -> Option<Vec<Q>> {
+pub fn solve_linear_system(a: &[Vec<Q>], b: &[Q]) -> Option<Vec<Q>> {
     let num_rows = a.len();
     if num_rows == 0 {
         return Some(vec![]);
@@ -238,7 +235,10 @@ pub fn solve_linear_system(
             }
             let factor = aug[row][col].clone() / pivot_val.clone();
             let pivot_snapshot: Vec<_> = aug[pivot_row][col..=num_cols].to_vec();
-            for (aug_j, pivot_j) in aug[row][col..=num_cols].iter_mut().zip(pivot_snapshot.iter()) {
+            for (aug_j, pivot_j) in aug[row][col..=num_cols]
+                .iter_mut()
+                .zip(pivot_snapshot.iter())
+            {
                 let sub = pivot_j.clone() * &factor;
                 *aug_j -= sub;
             }
@@ -295,7 +295,9 @@ pub fn check_total_positivity(
     strict: bool,
 ) -> Result<(), String> {
     let nrows = mat.len();
-    if nrows == 0 { return Ok(()); }
+    if nrows == 0 {
+        return Ok(());
+    }
     let ncols = mat[0].len();
     let max_k = max_minor_size.min(nrows).min(ncols);
 
@@ -314,9 +316,7 @@ pub fn check_total_positivity(
                 }
                 if strict && det.is_zero() {
                     // Check if this is a non-trivial zero
-                    let all_zero = rows.iter().all(|&r|
-                        cols.iter().all(|&c| mat[r][c] == 0)
-                    );
+                    let all_zero = rows.iter().all(|&r| cols.iter().all(|&c| mat[r][c] == 0));
                     if !all_zero {
                         return Err(format!(
                             "{}x{} minor rows {:?} cols {:?} has det = 0 (strict mode)",
@@ -360,14 +360,23 @@ pub fn is_totally_nonnegative(mat: &[Vec<i64>], max_minor_size: usize) -> bool {
 /// ```
 pub fn check_tnn_neville(mat: &[Vec<i64>]) -> Result<(), String> {
     let nrows = mat.len();
-    if nrows == 0 { return Ok(()); }
+    if nrows == 0 {
+        return Ok(());
+    }
     let ncols = mat[0].len();
-    if ncols == 0 { return Ok(()); }
+    if ncols == 0 {
+        return Ok(());
+    }
 
     // Convert to rationals for exact arithmetic
-    let mut a: Vec<Vec<Q>> = mat.iter().map(|row|
-        row.iter().map(|&v| Q::from_integer(BigInt::from(v))).collect()
-    ).collect();
+    let mut a: Vec<Vec<Q>> = mat
+        .iter()
+        .map(|row| {
+            row.iter()
+                .map(|&v| Q::from_integer(BigInt::from(v)))
+                .collect()
+        })
+        .collect();
 
     // Check all entries are non-negative
     for i in 0..nrows {
@@ -409,7 +418,11 @@ pub fn check_tnn_neville(mat: &[Vec<i64>]) -> Result<(), String> {
                     return Err(format!(
                         "Neville elimination: entry [{},{}] became negative \
                          (multiplier at column {}, rows [{},{}])",
-                        i, j, k, i - 1, i
+                        i,
+                        j,
+                        k,
+                        i - 1,
+                        i
                     ));
                 }
             }
@@ -429,13 +442,18 @@ pub fn is_tnn(mat: &[Vec<i64>]) -> bool {
 /// Use this when entries may overflow i64.
 pub fn check_tnn_neville_bigint(mat: &[Vec<BigInt>]) -> Result<(), String> {
     let nrows = mat.len();
-    if nrows == 0 { return Ok(()); }
+    if nrows == 0 {
+        return Ok(());
+    }
     let ncols = mat[0].len();
-    if ncols == 0 { return Ok(()); }
+    if ncols == 0 {
+        return Ok(());
+    }
 
-    let mut a: Vec<Vec<Q>> = mat.iter().map(|row|
-        row.iter().map(|v| Q::from_integer(v.clone())).collect()
-    ).collect();
+    let mut a: Vec<Vec<Q>> = mat
+        .iter()
+        .map(|row| row.iter().map(|v| Q::from_integer(v.clone())).collect())
+        .collect();
 
     for i in 0..nrows {
         for j in 0..ncols {
@@ -448,7 +466,9 @@ pub fn check_tnn_neville_bigint(mat: &[Vec<BigInt>]) -> Result<(), String> {
     let min_dim = nrows.min(ncols);
     for k in 0..min_dim {
         for i in (k + 1..nrows).rev() {
-            if a[i][k].is_zero() { continue; }
+            if a[i][k].is_zero() {
+                continue;
+            }
             if a[i - 1][k].is_zero() {
                 a.swap(i - 1, i);
                 continue;
@@ -463,7 +483,11 @@ pub fn check_tnn_neville_bigint(mat: &[Vec<BigInt>]) -> Result<(), String> {
                 if a[i][j] < Q::zero() {
                     return Err(format!(
                         "Neville: entry [{},{}] negative (col {}, rows [{},{}])",
-                        i, j, k, i - 1, i
+                        i,
+                        j,
+                        k,
+                        i - 1,
+                        i
                     ));
                 }
             }
@@ -473,17 +497,26 @@ pub fn check_tnn_neville_bigint(mat: &[Vec<BigInt>]) -> Result<(), String> {
 }
 
 fn extract_submatrix_i64(mat: &[Vec<i64>], rows: &[usize], cols: &[usize]) -> Vec<Vec<BigInt>> {
-    rows.iter().map(|&r|
-        cols.iter().map(|&c| BigInt::from(mat[r][c])).collect()
-    ).collect()
+    rows.iter()
+        .map(|&r| cols.iter().map(|&c| BigInt::from(mat[r][c])).collect())
+        .collect()
 }
 
 fn combinations_usize(n: usize, k: usize) -> Vec<Vec<usize>> {
     let mut result = Vec::new();
     let mut combo = vec![0usize; k];
-    fn gen(pos: usize, start: usize, n: usize, k: usize,
-           combo: &mut Vec<usize>, result: &mut Vec<Vec<usize>>) {
-        if pos == k { result.push(combo.clone()); return; }
+    fn gen(
+        pos: usize,
+        start: usize,
+        n: usize,
+        k: usize,
+        combo: &mut Vec<usize>,
+        result: &mut Vec<Vec<usize>>,
+    ) {
+        if pos == k {
+            result.push(combo.clone());
+            return;
+        }
         for i in start..n {
             combo[pos] = i;
             gen(pos + 1, i + 1, n, k, combo, result);
@@ -501,4 +534,238 @@ fn bigint_to_q(mat: &[Vec<BigInt>]) -> Vec<Vec<Q>> {
     mat.iter()
         .map(|row| row.iter().map(|v| Q::from_integer(v.clone())).collect())
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn bi(v: i64) -> BigInt {
+        BigInt::from(v)
+    }
+
+    fn bi_mat(rows: &[&[i64]]) -> Vec<Vec<BigInt>> {
+        rows.iter()
+            .map(|row| row.iter().map(|&v| bi(v)).collect())
+            .collect()
+    }
+
+    // -----------------------------------------------------------------------
+    // Determinant
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_determinant_empty() {
+        assert_eq!(determinant(&[]), BigInt::one());
+    }
+
+    #[test]
+    fn test_determinant_1x1() {
+        assert_eq!(determinant(&bi_mat(&[&[7]])), bi(7));
+    }
+
+    #[test]
+    fn test_determinant_2x2() {
+        // [[1, 2], [3, 4]] -> det = 1*4 - 2*3 = -2
+        let m = bi_mat(&[&[1, 2], &[3, 4]]);
+        assert_eq!(determinant(&m), bi(-2));
+    }
+
+    #[test]
+    fn test_determinant_3x3() {
+        // [[1, 2, 3], [4, 5, 6], [7, 8, 10]] -> det = 1*(50-48) - 2*(40-42) + 3*(32-35) = 2+4-9 = -3
+        let m = bi_mat(&[&[1, 2, 3], &[4, 5, 6], &[7, 8, 10]]);
+        assert_eq!(determinant(&m), bi(-3));
+    }
+
+    #[test]
+    fn test_determinant_singular() {
+        // [[1, 2], [2, 4]] -> det = 0
+        let m = bi_mat(&[&[1, 2], &[2, 4]]);
+        assert_eq!(determinant(&m), BigInt::zero());
+    }
+
+    #[test]
+    fn test_determinant_identity() {
+        let m = bi_mat(&[&[1, 0, 0], &[0, 1, 0], &[0, 0, 1]]);
+        assert_eq!(determinant(&m), bi(1));
+    }
+
+    // -----------------------------------------------------------------------
+    // Positive definiteness
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_pd_identity() {
+        let m = bi_mat(&[&[1, 0, 0], &[0, 1, 0], &[0, 0, 1]]);
+        assert!(is_positive_definite(&m));
+    }
+
+    #[test]
+    fn test_pd_2x2() {
+        // [[2, 1], [1, 2]] -> pivots: 2, 2 - 1/2 = 3/2 > 0
+        let m = bi_mat(&[&[2, 1], &[1, 2]]);
+        assert!(is_positive_definite(&m));
+    }
+
+    #[test]
+    fn test_pd_negative_definite() {
+        // [[-1, 0], [0, -1]] -> first pivot = -1 < 0
+        let m = bi_mat(&[&[-1, 0], &[0, -1]]);
+        assert!(!is_positive_definite(&m));
+    }
+
+    #[test]
+    fn test_pd_zero_matrix() {
+        let m = bi_mat(&[&[0, 0], &[0, 0]]);
+        assert!(!is_positive_definite(&m)); // PD requires strict positivity
+    }
+
+    #[test]
+    fn test_pd_indefinite() {
+        // [[1, 0], [0, -1]]
+        let m = bi_mat(&[&[1, 0], &[0, -1]]);
+        assert!(!is_positive_definite(&m));
+    }
+
+    // -----------------------------------------------------------------------
+    // Positive semi-definiteness
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_psd_identity() {
+        let m = bi_mat(&[&[1, 0], &[0, 1]]);
+        assert!(is_positive_semidefinite(&m));
+    }
+
+    #[test]
+    fn test_psd_zero_matrix() {
+        let m = bi_mat(&[&[0, 0], &[0, 0]]);
+        assert!(is_positive_semidefinite(&m));
+    }
+
+    #[test]
+    fn test_psd_rank_deficient() {
+        // [[1, 1], [1, 1]] -> eigenvalues 0, 2 -> PSD
+        let m = bi_mat(&[&[1, 1], &[1, 1]]);
+        assert!(is_positive_semidefinite(&m));
+    }
+
+    #[test]
+    fn test_psd_indefinite() {
+        // [[1, 2], [2, 1]] -> eigenvalues 3, -1 -> not PSD
+        let m = bi_mat(&[&[1, 2], &[2, 1]]);
+        assert!(!is_positive_semidefinite(&m));
+    }
+
+    // -----------------------------------------------------------------------
+    // Solve linear system
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_solve_identity() {
+        let a = vec![
+            vec![Q::one(), Q::zero()],
+            vec![Q::zero(), Q::one()],
+        ];
+        let b = vec![Q::from_integer(bi(3)), Q::from_integer(bi(5))];
+        let x = solve_linear_system(&a, &b).unwrap();
+        assert_eq!(x[0], Q::from_integer(bi(3)));
+        assert_eq!(x[1], Q::from_integer(bi(5)));
+    }
+
+    #[test]
+    fn test_solve_2x2() {
+        // x + 2y = 5, 3x + 4y = 11 -> x = 1, y = 2
+        let a = vec![
+            vec![Q::from_integer(bi(1)), Q::from_integer(bi(2))],
+            vec![Q::from_integer(bi(3)), Q::from_integer(bi(4))],
+        ];
+        let b = vec![Q::from_integer(bi(5)), Q::from_integer(bi(11))];
+        let x = solve_linear_system(&a, &b).unwrap();
+        assert_eq!(x[0], Q::from_integer(bi(1)));
+        assert_eq!(x[1], Q::from_integer(bi(2)));
+    }
+
+    #[test]
+    fn test_solve_inconsistent() {
+        // x + y = 1, x + y = 2 -> no solution
+        let a = vec![
+            vec![Q::one(), Q::one()],
+            vec![Q::one(), Q::one()],
+        ];
+        let b = vec![Q::one(), Q::from_integer(bi(2))];
+        assert!(solve_linear_system(&a, &b).is_none());
+    }
+
+    // -----------------------------------------------------------------------
+    // Total non-negativity
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_tnn_pascal() {
+        let pascal = vec![
+            vec![1, 0, 0],
+            vec![1, 1, 0],
+            vec![1, 2, 1],
+            vec![1, 3, 3],
+            vec![1, 4, 6],
+        ];
+        assert!(is_tnn(&pascal));
+        assert!(check_tnn_neville(&pascal).is_ok());
+        assert!(check_total_positivity(&pascal, 3, false).is_ok());
+    }
+
+    #[test]
+    fn test_tnn_identity() {
+        let id = vec![vec![1, 0, 0], vec![0, 1, 0], vec![0, 0, 1]];
+        assert!(is_tnn(&id));
+    }
+
+    #[test]
+    fn test_tnn_negative_entry() {
+        let m = vec![vec![1, -1], vec![0, 1]];
+        assert!(!is_tnn(&m));
+    }
+
+    #[test]
+    fn test_tnn_not_tnn_positive_entries() {
+        // All entries ≥ 0 but 2x2 minor det = 1*1 - 2*2 = -3 < 0
+        let m = vec![vec![1, 2], vec![2, 1]];
+        assert!(!is_tnn(&m));
+    }
+
+    #[test]
+    fn test_tnn_path_matrix() {
+        // Path matrix for P3: entry (i,j) = 1 if i <= j, 0 otherwise
+        // These are always TNN
+        let m = vec![
+            vec![1, 1, 1],
+            vec![0, 1, 1],
+            vec![0, 0, 1],
+        ];
+        assert!(is_tnn(&m));
+    }
+
+    #[test]
+    fn test_tnn_neville_vs_brute() {
+        // Verify Neville and brute-force agree on a 3x3 matrix
+        let m = vec![
+            vec![1, 1, 0],
+            vec![0, 1, 1],
+            vec![0, 0, 1],
+        ];
+        let neville = check_tnn_neville(&m).is_ok();
+        let brute = check_total_positivity(&m, 3, false).is_ok();
+        assert_eq!(neville, brute);
+    }
+
+    #[test]
+    fn test_tnn_bigint() {
+        let m = vec![
+            vec![bi(1), bi(1)],
+            vec![bi(0), bi(1)],
+        ];
+        assert!(check_tnn_neville_bigint(&m).is_ok());
+    }
 }
