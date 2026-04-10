@@ -1,7 +1,7 @@
 //! Dense univariate polynomial toolkit for combinatorial research.
 //!
 //! Provides [`Polynomial<C>`] with generic coefficients, plus specialized routines
-//! for real-rootedness, interlacing, gamma-positivity, resultants, Ehrhart theory,
+//! for real-rootedness, interlacing, gamma-positivity, Stapledon decomposition, resultants, Ehrhart theory,
 //! recurrence search, and standard polynomial sequences — all with exact arithmetic.
 //!
 //! # Quick start
@@ -42,7 +42,8 @@
 //! - [`real_rootedness`] — Bézout matrix (default) and Sturm chain real-rootedness,
 //!   strict/weak interlacing (including same-degree via Cauchy bound reduction),
 //!   log-concavity, ultra-log-concavity, palindromic check, gamma-positivity,
-//!   resultant, discriminant, Ehrhart ↔ h*-vector, display utilities
+//!   Stapledon decomposition, resultant, discriminant, Ehrhart ↔ h*-vector,
+//!   display utilities
 //! - [`sturm`] — Sturm chains for exact root isolation (used internally)
 //! - [`recurrence`] — Adaptive recurrence search for polynomial sequences
 //! - [`sequences`] — Standard sequences: Eulerian, Narayana, type B Eulerian,
@@ -50,59 +51,53 @@
 //! - [`parse`] — Flexible polynomial parsing (comma/space-separated, bracketed,
 //!   expanded polynomial notation)
 
-pub mod polynomial;
 pub mod linalg;
+pub mod polynomial;
 pub mod sturm;
+pub mod vec_poly;
 
 pub use linalg::{
-    check_total_positivity,
-    is_totally_nonnegative,
-    check_tnn_neville,
-    check_tnn_neville_bigint,
-    is_tnn,
-    is_positive_definite,
-    is_positive_semidefinite,
-    determinant,
+    check_tnn_neville, check_tnn_neville_bigint, check_total_positivity, determinant,
+    is_positive_definite, is_positive_semidefinite, is_tnn, is_totally_nonnegative,
 };
 
+pub mod parse;
 pub mod real_rootedness;
 pub mod recurrence;
 pub mod sequences;
-pub mod parse;
 
-pub use polynomial::{Polynomial, CoeffRing, FieldRing};
+pub use parse::{parse_polynomial, parse_polynomials};
+pub use polynomial::{CoeffRing, FieldRing, Polynomial};
 pub use real_rootedness::{
-    // Default (Bézout-based) methods
-    is_real_rooted,
-    check_interlacing,
-    check_weak_interlacing,
-    // Sturm-chain methods (slower, but can isolate roots)
-    is_real_rooted_sturm,
-    check_interlacing_sturm,
-    real_roots,
     // Bézout matrix directly
     bezout_matrix,
-    // Concavity and symmetry
-    is_log_concave,
-    is_ultra_log_concave,
-    is_palindromic,
-    is_gamma_positive,
-    gamma_coefficients,
-    // Resultant and discriminant
-    resultant,
+    check_interlacing,
+    check_interlacing_sturm,
+    check_weak_interlacing,
     discriminant,
-    sylvester_matrix,
-    // Ehrhart polynomial <-> h*-vector
-    hstar_to_ehrhart,
     ehrhart_to_hstar,
     ehrhart_to_hstar_with_denom,
     // Display
     format_poly,
     format_poly_var,
+    gamma_coefficients,
+    // Ehrhart polynomial <-> h*-vector
+    hstar_to_ehrhart,
+    is_gamma_positive,
+    // Concavity and symmetry
+    is_log_concave,
+    is_palindromic,
+    // Default (Bézout-based) methods
+    is_real_rooted,
+    // Sturm-chain methods (slower, but can isolate roots)
+    is_real_rooted_sturm,
+    is_ultra_log_concave,
+    real_roots,
+    // Resultant and discriminant
+    resultant,
+    stapledon_decomposition,
+    sylvester_matrix,
 };
 pub use real_rootedness::{
-    is_real_rooted_bezout,
-    check_interlacing_bezout,
-    check_weak_interlacing_bezout,
+    check_interlacing_bezout, check_weak_interlacing_bezout, is_real_rooted_bezout,
 };
-pub use parse::{parse_polynomial, parse_polynomials};

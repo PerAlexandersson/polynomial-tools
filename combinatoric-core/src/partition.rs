@@ -596,6 +596,38 @@ impl Partition {
         parts
     }
 
+    /// All sub-partitions μ ⊆ λ (component-wise: μ_i ≤ λ_i for all i).
+    ///
+    /// Returns partitions in lexicographic order. Includes both ∅ and λ itself.
+    pub fn sub_partitions(&self) -> Vec<Partition> {
+        let n = self.num_parts();
+        if n == 0 {
+            return vec![Partition::empty()];
+        }
+        let mut results = Vec::new();
+        let mut mu = vec![0u32; n];
+        Self::sub_partitions_helper(self.parts(), &mut mu, 0, u32::MAX, &mut results);
+        results
+    }
+
+    fn sub_partitions_helper(
+        lambda: &[u32],
+        mu: &mut Vec<u32>,
+        pos: usize,
+        max_val: u32,
+        results: &mut Vec<Partition>,
+    ) {
+        if pos == lambda.len() {
+            results.push(Partition::new(mu.clone()));
+            return;
+        }
+        let upper = lambda[pos].min(max_val);
+        for v in 0..=upper {
+            mu[pos] = v;
+            Self::sub_partitions_helper(lambda, mu, pos + 1, v, results);
+        }
+    }
+
     // -----------------------------------------------------------------------
     // Parsing
     // -----------------------------------------------------------------------
@@ -766,5 +798,38 @@ mod tests {
         let (rho, sigma) = Partition::disjoint_union_skew_shapes(&shapes);
         assert_eq!(rho, Partition::new(vec![5, 2]));
         assert_eq!(sigma, Partition::new(vec![2]));
+    }
+
+    #[test]
+    fn test_sub_partitions_empty() {
+        assert_eq!(Partition::empty().sub_partitions(), vec![Partition::empty()]);
+    }
+
+    #[test]
+    fn test_sub_partitions_single_row() {
+        // Sub-partitions of (3): (0), (1), (2), (3) = 4
+        let subs = Partition::new(vec![3]).sub_partitions();
+        assert_eq!(subs.len(), 4);
+        assert!(subs.contains(&Partition::empty()));
+        assert!(subs.contains(&Partition::new(vec![3])));
+    }
+
+    #[test]
+    fn test_sub_partitions_21() {
+        // Sub-partitions of (2,1): mu_1 <= 2, mu_2 <= 1, mu_1 >= mu_2
+        // (0,0), (1,0), (1,1), (2,0), (2,1) = 5
+        let subs = Partition::new(vec![2, 1]).sub_partitions();
+        assert_eq!(subs.len(), 5);
+        for mu in &subs {
+            assert!(mu.partition_less_equal(&Partition::new(vec![2, 1])));
+        }
+    }
+
+    #[test]
+    fn test_sub_partitions_contains_extremes() {
+        let lam = Partition::new(vec![3, 2, 1]);
+        let subs = lam.sub_partitions();
+        assert!(subs.contains(&Partition::empty()));
+        assert!(subs.contains(&lam));
     }
 }

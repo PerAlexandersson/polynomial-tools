@@ -6,6 +6,9 @@
 // ============================================================
 
 /// Generate all permutations of \[1..n\] in lexicographic order.
+///
+/// Uses `u8` elements (1-indexed) for compact storage in permutation statistics.
+/// For `usize` elements (0-indexed), see `combinatoric_core::all_permutations_zero_indexed`.
 pub fn all_permutations(n: u8) -> Vec<Vec<u8>> {
     if n == 0 {
         return vec![vec![]];
@@ -134,7 +137,13 @@ pub fn filtered_permutations(n: u8, constraints: &PermConstraints) -> Vec<Vec<u8
     }
     let mut result = Vec::new();
     let available: Vec<u8> = (1..=n).collect();
-    build_filtered(n, constraints, &mut Vec::with_capacity(n as usize), &available, &mut result);
+    build_filtered(
+        n,
+        constraints,
+        &mut Vec::with_capacity(n as usize),
+        &available,
+        &mut result,
+    );
     result
 }
 
@@ -298,14 +307,18 @@ fn build_filtered(
         // starts_with: position 0 must have the specified value
         if pos == 0 {
             if let Some(sw) = constraints.starts_with {
-                if v != sw { continue; }
+                if v != sw {
+                    continue;
+                }
             }
         }
 
         // ends_with: if this is the last position, must match
         if pos == (n as usize) - 1 {
             if let Some(ew) = constraints.ends_with {
-                if v != ew { continue; }
+                if v != ew {
+                    continue;
+                }
             }
         }
 
@@ -331,17 +344,24 @@ fn build_filtered(
             let prev = *current.last().unwrap();
             if pos % 2 == 1 {
                 // odd position (1-indexed: even): should be a descent (prev > v)
-                if prev <= v { continue; }
+                if prev <= v {
+                    continue;
+                }
             } else {
                 // even position (1-indexed: odd): should be an ascent (prev < v)
-                if prev >= v { continue; }
+                if prev >= v {
+                    continue;
+                }
             }
         }
 
         current.push(v);
 
         // Pattern avoidance: check if appending v creates any forbidden pattern
-        let ok = constraints.avoiding.iter().all(|pat| !has_pattern_ending_here(current, pat));
+        let ok = constraints
+            .avoiding
+            .iter()
+            .all(|pat| !has_pattern_ending_here(current, pat));
 
         if ok {
             // For involutions: if v > pos+1, position v must map back to pos+1.
@@ -530,10 +550,7 @@ pub fn cycle_decomposition(perm: &[u8]) -> Vec<Vec<u8>> {
 /// Return the cycle type: a partition (sorted in decreasing order)
 /// of cycle lengths.
 pub fn cycle_type(perm: &[u8]) -> Vec<usize> {
-    let mut lengths: Vec<usize> = cycle_decomposition(perm)
-        .iter()
-        .map(|c| c.len())
-        .collect();
+    let mut lengths: Vec<usize> = cycle_decomposition(perm).iter().map(|c| c.len()).collect();
     lengths.sort_unstable_by(|a, b| b.cmp(a));
     lengths
 }
@@ -792,11 +809,7 @@ pub fn backtrack_image(pi: &[u8], s_set: &[Vec<u8>]) -> Vec<u8> {
 
     for &pi_k in pi.iter() {
         let pos = pi_k as usize - 1;
-        let min_val = candidates
-            .iter()
-            .map(|&idx| s_set[idx][pos])
-            .min()
-            .unwrap();
+        let min_val = candidates.iter().map(|&idx| s_set[idx][pos]).min().unwrap();
         candidates.retain(|&idx| s_set[idx][pos] == min_val);
     }
 
@@ -908,7 +921,9 @@ pub fn num_cycles(sigma: &[u8]) -> usize {
     let mut visited = vec![false; n];
     let mut cycles = 0;
     for i in 0..n {
-        if visited[i] { continue; }
+        if visited[i] {
+            continue;
+        }
         cycles += 1;
         let mut j = i;
         while !visited[j] {
@@ -960,8 +975,11 @@ fn alt_perms_cached(
             // Choose which elements go left
             let elems: Vec<u8> = (1..n).collect();
             for subset in subsets_of_size(&elems, left_size as usize) {
-                let complement: Vec<u8> =
-                    elems.iter().copied().filter(|x| !subset.contains(x)).collect();
+                let complement: Vec<u8> = elems
+                    .iter()
+                    .copied()
+                    .filter(|x| !subset.contains(x))
+                    .collect();
                 for al in &alt_left {
                     for ar in &alt_right {
                         // Map left alternating perm to the chosen subset
@@ -1095,8 +1113,12 @@ mod tests {
     fn test_derangements_no_fixed_points() {
         for n in 1..=6u8 {
             for d in all_derangements(n) {
-                assert!(d.iter().enumerate().all(|(i, &v)| v != (i as u8 + 1)),
-                    "n={} d={:?} has fixed point", n, d);
+                assert!(
+                    d.iter().enumerate().all(|(i, &v)| v != (i as u8 + 1)),
+                    "n={} d={:?} has fixed point",
+                    n,
+                    d
+                );
             }
         }
     }
@@ -1115,8 +1137,13 @@ mod tests {
         for n in 1..=6u8 {
             for inv in all_involutions(n) {
                 for (i, &v) in inv.iter().enumerate() {
-                    assert_eq!(inv[(v - 1) as usize], (i as u8 + 1),
-                        "n={} inv={:?} not self-inverse", n, inv);
+                    assert_eq!(
+                        inv[(v - 1) as usize],
+                        (i as u8 + 1),
+                        "n={} inv={:?} not self-inverse",
+                        n,
+                        inv
+                    );
                 }
             }
         }
@@ -1174,13 +1201,30 @@ mod tests {
     #[test]
     fn test_avoiding_permutations_catalan() {
         // Direct generation should give same results as filter approach.
-        for (pat_str, n, catalan) in [("132", 5, 42), ("231", 5, 42), ("321", 5, 42), ("213", 6, 132)] {
+        for (pat_str, n, catalan) in [
+            ("132", 5, 42),
+            ("231", 5, 42),
+            ("321", 5, 42),
+            ("213", 6, 132),
+        ] {
             let pat = parse_sequence(pat_str);
             let direct = avoiding_permutations(n, &[pat.clone()]);
-            assert_eq!(direct.len(), catalan, "Av_{}({}) should have {} elements", pat_str, n, catalan);
+            assert_eq!(
+                direct.len(),
+                catalan,
+                "Av_{}({}) should have {} elements",
+                pat_str,
+                n,
+                catalan
+            );
             // Verify each element actually avoids the pattern
             for p in &direct {
-                assert!(!contains_pattern(p, &pat), "{:?} should avoid {}", p, pat_str);
+                assert!(
+                    !contains_pattern(p, &pat),
+                    "{:?} should avoid {}",
+                    p,
+                    pat_str
+                );
             }
         }
     }
@@ -1195,10 +1239,20 @@ mod tests {
                 .into_iter()
                 .filter(|p| !contains_pattern(p, &pat))
                 .collect();
-            assert_eq!(direct.len(), filtered.len(), "Av_{}(5) count mismatch", pat_str);
+            assert_eq!(
+                direct.len(),
+                filtered.len(),
+                "Av_{}(5) count mismatch",
+                pat_str
+            );
             // Check same elements (both should be sorted since we build left-to-right)
             for p in &direct {
-                assert!(filtered.contains(p), "{:?} in direct but not filtered for Av_{}", p, pat_str);
+                assert!(
+                    filtered.contains(p),
+                    "{:?} in direct but not filtered for Av_{}",
+                    p,
+                    pat_str
+                );
             }
         }
     }
@@ -1217,7 +1271,10 @@ mod tests {
 
     #[test]
     fn test_filtered_derangements() {
-        let c = PermConstraints { derangement: true, ..Default::default() };
+        let c = PermConstraints {
+            derangement: true,
+            ..Default::default()
+        };
         for n in 1..=6 {
             let direct = filtered_permutations(n, &c);
             let filtered: Vec<Vec<u8>> = all_permutations(n)
@@ -1230,7 +1287,10 @@ mod tests {
 
     #[test]
     fn test_filtered_alternating() {
-        let c = PermConstraints { alternating: true, ..Default::default() };
+        let c = PermConstraints {
+            alternating: true,
+            ..Default::default()
+        };
         for n in 1..=7 {
             let direct = filtered_permutations(n, &c);
             let filtered: Vec<Vec<u8>> = all_permutations(n)
@@ -1243,7 +1303,10 @@ mod tests {
 
     #[test]
     fn test_filtered_involutions() {
-        let c = PermConstraints { involution: true, ..Default::default() };
+        let c = PermConstraints {
+            involution: true,
+            ..Default::default()
+        };
         // Involutions of S_n: 1, 1, 2, 4, 10, 26, 76
         for (n, expected) in [(1, 1), (2, 2), (3, 4), (4, 10), (5, 26), (6, 76)] {
             let direct = filtered_permutations(n, &c);
@@ -1266,10 +1329,14 @@ mod tests {
             let direct = filtered_permutations(n, &c);
             let filtered: Vec<Vec<u8>> = all_permutations(n)
                 .into_iter()
-                .filter(|p| !contains_pattern(p, &[1,3,2]) && is_derangement(p))
+                .filter(|p| !contains_pattern(p, &[1, 3, 2]) && is_derangement(p))
                 .collect();
-            assert_eq!(direct.len(), filtered.len(),
-                "132-avoiding derangements of S_{}", n);
+            assert_eq!(
+                direct.len(),
+                filtered.len(),
+                "132-avoiding derangements of S_{}",
+                n
+            );
         }
     }
 
@@ -1375,10 +1442,7 @@ mod tests {
             vec![vec![1], vec![2], vec![3]]
         );
         assert_eq!(cycle_decomposition(&[2, 3, 1]), vec![vec![1, 2, 3]]);
-        assert_eq!(
-            cycle_decomposition(&[2, 1, 3]),
-            vec![vec![1, 2], vec![3]]
-        );
+        assert_eq!(cycle_decomposition(&[2, 1, 3]), vec![vec![1, 2], vec![3]]);
         assert_eq!(
             cycle_decomposition(&[2, 1, 4, 3]),
             vec![vec![1, 2], vec![3, 4]]
@@ -1454,10 +1518,7 @@ mod tests {
 
     #[test]
     fn test_foata_known_value() {
-        assert_eq!(
-            foata_map(&[4, 1, 3, 7, 5, 6, 2]),
-            vec![7, 1, 4, 3, 5, 6, 2]
-        );
+        assert_eq!(foata_map(&[4, 1, 3, 7, 5, 6, 2]), vec![7, 1, 4, 3, 5, 6, 2]);
     }
 
     #[test]
@@ -1585,18 +1646,12 @@ mod tests {
 
     #[test]
     fn test_split_separable_identity() {
-        assert_eq!(
-            split_separable(&[1, 2, 3]),
-            vec![vec![1], vec![2], vec![3]]
-        );
+        assert_eq!(split_separable(&[1, 2, 3]), vec![vec![1], vec![2], vec![3]]);
     }
 
     #[test]
     fn test_split_separable_w0() {
-        assert_eq!(
-            split_separable(&[3, 2, 1]),
-            vec![vec![3], vec![2], vec![1]]
-        );
+        assert_eq!(split_separable(&[3, 2, 1]), vec![vec![3], vec![2], vec![1]]);
     }
 
     #[test]
@@ -1641,10 +1696,7 @@ mod tests {
     fn test_simsun_counts() {
         // Tangent/secant numbers E_n (OEIS A000111): 1, 2, 5, 16, 61
         for (n, expected) in [(1, 1), (2, 2), (3, 5), (4, 16), (5, 61)] {
-            let count = all_permutations(n)
-                .iter()
-                .filter(|p| is_simsun(p))
-                .count();
+            let count = all_permutations(n).iter().filter(|p| is_simsun(p)).count();
             assert_eq!(count, expected, "Simsun(S_{}) = {}", n, expected);
         }
     }
@@ -1921,11 +1973,23 @@ mod tests {
                     for i in 0..(w.len() - 1) {
                         let pos = i + 1; // 1-indexed
                         if pos % k as usize == 0 {
-                            assert!(w[i] > w[i + 1],
-                                "k={} n={} w={:?} expected descent at pos {}", k, n, w, pos);
+                            assert!(
+                                w[i] > w[i + 1],
+                                "k={} n={} w={:?} expected descent at pos {}",
+                                k,
+                                n,
+                                w,
+                                pos
+                            );
                         } else {
-                            assert!(w[i] < w[i + 1],
-                                "k={} n={} w={:?} expected ascent at pos {}", k, n, w, pos);
+                            assert!(
+                                w[i] < w[i + 1],
+                                "k={} n={} w={:?} expected ascent at pos {}",
+                                k,
+                                n,
+                                w,
+                                pos
+                            );
                         }
                     }
                 }
