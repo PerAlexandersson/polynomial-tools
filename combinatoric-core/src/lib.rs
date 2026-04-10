@@ -1,5 +1,5 @@
-//! Shared library for foundational combinatorics: partitions, compositions,
-//! permutations, graphs, posets, and related utilities.
+//! Shared library for foundational combinatorics: partitions, set partitions,
+//! compositions, permutations, graphs, posets, and related utilities.
 
 pub mod composition;
 pub mod graph;
@@ -8,9 +8,10 @@ pub mod partition;
 pub mod permutation;
 pub mod poset;
 pub mod ring;
+pub mod set_partition;
 
 // Top-level re-exports for convenience
-pub use composition::Composition;
+pub use composition::{Composition, WeakComposition};
 pub use graph::Graph;
 pub use partition::Partition;
 pub use permutation::{
@@ -18,3 +19,6 @@ pub use permutation::{
     next_permutation, permutation_from_simple_transpositions, reduced_word,
 };
 pub use ring::Ring;
+pub use set_partition::{
+    ordered_set_partitions, set_partitions, OrderedSetPartition, SetPartition,
+};

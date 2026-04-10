@@ -1,6 +1,134 @@
 use crate::partition::Partition;
 use std::collections::BTreeSet;
 use std::fmt;
+use std::hash::Hash;
+
+// =========================================================================
+// WeakComposition
+// =========================================================================
+
+/// A weak integer composition: an ordered tuple of non-negative integers
+/// with a fixed number of parts (including trailing zeros).
+///
+/// Unlike [`Composition`], trailing zeros are **not** stripped — the length
+/// encodes the number of variables, which is structural for polynomial bases
+/// (key, atom, slide, etc.).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct WeakComposition(Vec<u32>);
+
+impl WeakComposition {
+    /// Create a weak composition from parts. Length is preserved exactly.
+    pub fn new(parts: Vec<u32>) -> Self {
+        WeakComposition(parts)
+    }
+
+    /// Create from a slice.
+    pub fn from_slice(s: &[u32]) -> Self {
+        WeakComposition(s.to_vec())
+    }
+
+    /// The zero weak composition with `k` parts (all zeros).
+    pub fn zero(k: usize) -> Self {
+        WeakComposition(vec![0; k])
+    }
+
+    /// The parts as a slice.
+    pub fn parts(&self) -> &[u32] {
+        &self.0
+    }
+
+    /// Number of parts (= number of variables).
+    pub fn num_vars(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Sum of all parts.
+    pub fn degree(&self) -> u32 {
+        self.0.iter().sum()
+    }
+
+    /// Whether all parts are zero.
+    pub fn is_zero(&self) -> bool {
+        self.0.iter().all(|&p| p == 0)
+    }
+
+    /// Whether the parts are weakly decreasing (dominant composition).
+    pub fn is_dominant(&self) -> bool {
+        self.0.windows(2).all(|w| w[0] >= w[1])
+    }
+
+    /// Remove zero parts to get a (strong) composition.
+    pub fn flat(&self) -> Composition {
+        let parts: Vec<u32> = self.0.iter().copied().filter(|&p| p > 0).collect();
+        Composition::new(parts)
+    }
+
+    /// Sort non-zero parts into a partition (the "content" of the composition).
+    pub fn content(&self) -> Partition {
+        let mut parts: Vec<u32> = self.0.iter().copied().filter(|&p| p > 0).collect();
+        parts.sort_unstable_by(|a, b| b.cmp(a));
+        Partition::from_sorted(parts)
+    }
+
+    /// Convert to a `Composition` by stripping trailing zeros.
+    pub fn to_composition(&self) -> Composition {
+        Composition::new(self.0.clone())
+    }
+
+    /// Create from a `Composition` by padding with zeros to `num_vars` parts.
+    /// Panics if `num_vars < c.num_parts()`.
+    pub fn from_composition(c: &Composition, num_vars: usize) -> Self {
+        assert!(
+            num_vars >= c.num_parts(),
+            "num_vars ({}) < composition length ({})",
+            num_vars,
+            c.num_parts()
+        );
+        let mut parts = c.parts().to_vec();
+        parts.resize(num_vars, 0);
+        WeakComposition(parts)
+    }
+
+    /// All weak compositions of `d` into exactly `k` parts (parts >= 0).
+    pub fn all_weak_compositions(d: u32, k: usize) -> Vec<Self> {
+        if k == 0 {
+            return if d == 0 {
+                vec![WeakComposition(vec![])]
+            } else {
+                vec![]
+            };
+        }
+        let mut results = Vec::new();
+        Self::enumerate_helper(d, k, &mut Vec::with_capacity(k), &mut results);
+        results
+    }
+
+    fn enumerate_helper(
+        remaining: u32,
+        parts_left: usize,
+        current: &mut Vec<u32>,
+        results: &mut Vec<WeakComposition>,
+    ) {
+        if parts_left == 1 {
+            let mut c = current.clone();
+            c.push(remaining);
+            results.push(WeakComposition(c));
+            return;
+        }
+        for part in 0..=remaining {
+            current.push(part);
+            Self::enumerate_helper(remaining - part, parts_left - 1, current, results);
+            current.pop();
+        }
+    }
+}
+
+impl fmt::Display for WeakComposition {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s: Vec<String> = self.0.iter().map(|p| p.to_string()).collect();
+        write!(f, "({})", s.join(","))
+    }
+}
 
 /// An integer composition: an ordered tuple of positive integers.
 ///
@@ -403,5 +531,74 @@ mod tests {
     fn test_slinky_zero_12() {
         let c = Composition::new(vec![1, 2]);
         assert!(c.composition_slinky().is_none());
+    }
+
+    // WeakComposition tests
+
+    #[test]
+    fn test_weak_composition_preserves_trailing_zeros() {
+        let wc = WeakComposition::new(vec![2, 0, 1, 0]);
+        assert_eq!(wc.num_vars(), 4);
+        assert_eq!(wc.parts(), &[2, 0, 1, 0]);
+    }
+
+    #[test]
+    fn test_weak_composition_degree() {
+        let wc = WeakComposition::new(vec![2, 0, 3]);
+        assert_eq!(wc.degree(), 5);
+    }
+
+    #[test]
+    fn test_weak_composition_is_dominant() {
+        assert!(WeakComposition::new(vec![3, 2, 0]).is_dominant());
+        assert!(!WeakComposition::new(vec![1, 2, 0]).is_dominant());
+    }
+
+    #[test]
+    fn test_weak_composition_flat() {
+        let wc = WeakComposition::new(vec![2, 0, 3, 0, 1]);
+        assert_eq!(wc.flat(), Composition::new(vec![2, 3, 1]));
+    }
+
+    #[test]
+    fn test_weak_composition_content() {
+        let wc = WeakComposition::new(vec![1, 0, 3, 2]);
+        assert_eq!(wc.content(), Partition::new(vec![3, 2, 1]));
+    }
+
+    #[test]
+    fn test_weak_composition_enumeration_count() {
+        // C(d+k-1, k-1) = C(3+3-1, 3-1) = C(5,2) = 10
+        assert_eq!(WeakComposition::all_weak_compositions(3, 3).len(), 10);
+        // C(0+3-1, 3-1) = C(2,2) = 1
+        assert_eq!(WeakComposition::all_weak_compositions(0, 3).len(), 1);
+        // C(2+1-1, 1-1) = C(2,0) = 1
+        assert_eq!(WeakComposition::all_weak_compositions(2, 1).len(), 1);
+        // k=0, d=0 -> 1
+        assert_eq!(WeakComposition::all_weak_compositions(0, 0).len(), 1);
+        // k=0, d>0 -> 0
+        assert_eq!(WeakComposition::all_weak_compositions(3, 0).len(), 0);
+    }
+
+    #[test]
+    fn test_weak_composition_enumeration_length() {
+        for wc in WeakComposition::all_weak_compositions(4, 3) {
+            assert_eq!(wc.num_vars(), 3);
+            assert_eq!(wc.degree(), 4);
+        }
+    }
+
+    #[test]
+    fn test_weak_composition_from_composition() {
+        let c = Composition::new(vec![2, 3, 1]);
+        let wc = WeakComposition::from_composition(&c, 5);
+        assert_eq!(wc.parts(), &[2, 3, 1, 0, 0]);
+    }
+
+    #[test]
+    fn test_weak_composition_ordering() {
+        let a = WeakComposition::new(vec![0, 3]);
+        let b = WeakComposition::new(vec![1, 2]);
+        assert!(a < b); // lexicographic
     }
 }

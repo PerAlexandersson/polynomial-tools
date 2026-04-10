@@ -6,7 +6,7 @@
 //! - [`Ring`] trait for generic coefficients (i64, BigInt, rationals)
 //! - [`Partition`] and [`Composition`] types for basis indexing
 //! - [`UnivariatePolynomial`] for polynomial-valued coefficients
-//! - [`Tableau`] for basic Young tableau combinatorics
+//! - [`Tableau`], [`SkewTableau`], and their lazy standard-tableau iterators
 //! - [`BasisIndex`] trait abstracting over index types
 //! - [`FormalSum`] for generic linear combinations of basis elements
 //! - [`matrix`] utilities for transition matrix computation
@@ -25,12 +25,14 @@ pub mod polynomial;
 pub mod ring {
     pub use combinatoric_core::ring::*;
 }
+pub mod ssaf;
 pub mod tableau;
 pub mod transition_cache;
 
-pub use combinatoric_core::{Composition, Partition, Ring};
+pub use combinatoric_core::{Composition, Partition, Ring, WeakComposition};
 pub use formal_sum::FormalSum;
 pub use index::BasisIndex;
 pub use polynomial::UnivariatePolynomial;
-pub use tableau::Tableau;
+pub use ssaf::Ssaf;
+pub use tableau::{SkewTableau, StandardSkewTableauxIter, StandardTableauxIter, Tableau};
 pub use transition_cache::TransitionCache;

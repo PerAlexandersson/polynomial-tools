@@ -6,6 +6,7 @@ use combinatoric_core::{
 use sym_poly_core::Ring;
 
 use crate::multipoly::MultiPoly;
+use crate::multipoly_function::MultiPolyFunction;
 use crate::operators::partial_word;
 
 /// Compute the Schubert polynomial S_w for a permutation in one-line notation.
@@ -25,6 +26,27 @@ pub fn schubert_polynomial<C: Ring>(perm: &[usize]) -> MultiPoly<C> {
     let delta: Vec<u32> = (0..n).map(|i| (n - 1 - i) as u32).collect();
     let top = MultiPoly::x_power(n, delta);
     partial_word(&top, &word)
+}
+
+/// Express the Schubert polynomial S_w in the monomial basis as a `MultiPolyFunction`.
+pub fn schubert_to_monomial<C: Ring>(perm: &[usize]) -> MultiPolyFunction<C> {
+    let poly: MultiPoly<C> = schubert_polynomial(perm);
+    MultiPolyFunction::from_multipoly(&poly)
+}
+
+/// Express the Schubert polynomial S_w in the key basis.
+pub fn schubert_to_key<C: Ring>(perm: &[usize]) -> MultiPolyFunction<C> {
+    schubert_to_monomial::<C>(perm).to_key_basis()
+}
+
+/// Express the Schubert polynomial S_w in the fundamental slide basis.
+pub fn schubert_to_fund_slide<C: Ring>(perm: &[usize]) -> MultiPolyFunction<C> {
+    schubert_to_monomial::<C>(perm).to_fund_slide_basis()
+}
+
+/// Express the Schubert polynomial S_w in the atom basis.
+pub fn schubert_to_atom<C: Ring>(perm: &[usize]) -> MultiPolyFunction<C> {
+    schubert_to_monomial::<C>(perm).to_atom_basis()
 }
 
 #[cfg(test)]
