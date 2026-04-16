@@ -16,6 +16,14 @@ rust/
   experiments/                ← 44 research exploration binaries
 ```
 
+## Operational guidance
+
+- Run Rust commands with both `nice` and a 60 second timeout.
+  Preferred pattern: `timeout 60s nice -n 10 cargo ...`
+- Assume work in several projects may be happening simultaneously.
+  Avoid broad cleanup, long-running background jobs, or edits outside the
+  current Rust task unless they are clearly intended.
+
 ### sym-poly/ (multi-crate)
 Modular workspace for symmetric polynomial algebras. Four crates, all generic
 over `Ring` coefficients (i64, BigInt, Ratio<BigInt>, Ratio<i64>).
@@ -128,8 +136,37 @@ Located in `~/AI-projects/combinatoric-tools/mathematica-packages/` (shared, rea
 - `CombinatoricTools.m` (~1600 lines) — partitions, compositions, tableaux, charge
 - `NewTableaux.m` — SSYT/SYT generation, cylindric tableaux
 
-Also: `bezout-interlacing.md` in workspace root has Mathematica code for the Bézout
+Also: `~/Dropbox/AI-projects/INTERLACING.md` has Mathematica code for the Bézout
 interlacing algorithm, ready to add to the symmetric functions package.
+
+## Non-nesting rook polynomial paper
+
+Paper: `~/Dropbox/AI-projects/documents/Real-rooted-non-nesting-rooks/non-nesting-rooks.tex`
+Overleaf companion: `Rook-Eulerian-Polynomials-and-permutation-ideals/`
+
+### Status (2026-04-07)
+- **Theorem**: R_μ(t) is real-rooted for every partition μ (non-nesting rook polynomial)
+- **Proof approach**: Row-by-row induction, column-strip adjacent interlacing
+- **Gap identified**: Original proof incorrectly applies Brändén Cor. 8.7 (requires pairwise
+  interlacing, but input sequence is only adjacent-interlacing; verified computationally).
+- **Revised approach** (Section 5 of tex): Uses shift lemma + Wagner cone instead.
+  - The reduction `D_c/t ≪ G(c+1, s)  ⟹  G(c+1, s) ≪ G(c, s)` is clean (Lemma 5.6).
+  - Shift lemma gives `D_c/t ≪ f_c` (proved, Lemma 5.7).
+  - **Remaining gap**: Need `D_c/t ≪ f_{c+1}` (base case, verified 693/693)
+    and `D_c/t ≪ G(c+1, s)` (full claim, verified 1026/1026).
+    The inductive step s → s+1 via left cone requires `f_{s+1} ≪ D_c/t`, which fails.
+  - ψ_c = (f_c − f_{c+1})/t has nonneg coefficients (693/693) and is real-rooted (693/693).
+  - q-deformation R(q,t) = Σ q^{nest} t^k is real-rooted in t for all q ∈ [0,1] (verified n≤10).
+
+### Experiment binaries
+- `nn_rook_proof_check.rs` — First round: adjacent vs pairwise, sub-lemma, matrix N step
+- `nn_rook_proof_check2.rs` — Partial sums G(c,s), diagonal interlacing, (A+tR)≪(B+tR)
+- `nn_rook_proof_check3.rs` — 4-polynomial diagram, summand compatibility
+- `nn_rook_qdeform.rs` — q-deformation (q^{nest} weight), column-strip for various q
+- `nn_rook_qdeform2.rs` — Standard rook (q=1) properties, q^{crossing} weight
+- `nn_rook_common.rs` — Common interlacing approach (fails for degree-gap reasons)
+- `nn_rook_deform.rs` — Continuous deformation α∈[0,1], D/t properties (all pass)
+- `nn_rook_proof_final.rs` — Final: all 6 properties P1–P6 checked
 
 ## What's next
 
