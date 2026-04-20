@@ -2,10 +2,10 @@
 //!
 //! All expected values in this file were computed using Mathematica and cross-checked.
 
-use sym_poly_core::{Composition, Partition, Ring};
-use sym_poly_sym::{kostka, Basis, SymmetricFunction};
 use num_rational::Ratio;
 use std::collections::BTreeSet;
+use sym_poly_core::{Composition, Partition, Ring};
+use sym_poly_sym::{kostka, Basis, SymmetricFunction};
 
 type Q = Ratio<i64>;
 

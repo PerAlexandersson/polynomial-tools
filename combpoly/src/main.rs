@@ -2,7 +2,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::io::{self, Write};
 
 use combpoly::{order, parking, permutation, polynomial_builder, statistics, word};
-use polynomial_tools::real_rootedness::{format_poly, is_real_rooted, is_log_concave};
+use polynomial_tools::real_rootedness::{format_poly, is_log_concave, is_real_rooted};
 use polynomial_tools::recurrence;
 use statistics::Stat;
 
@@ -270,7 +270,6 @@ fn get_objects(source: &Source) -> Vec<Vec<u8>> {
         std::process::exit(1);
     }
 }
-
 
 fn format_obj(p: &[u8]) -> String {
     if p.iter().all(|&x| x < 10) {

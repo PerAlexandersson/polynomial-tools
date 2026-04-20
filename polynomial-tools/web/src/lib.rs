@@ -1,7 +1,7 @@
-use wasm_bindgen::prelude::*;
-use polynomial_tools::*;
 use polynomial_tools::recurrence::*;
+use polynomial_tools::*;
 use serde::Serialize;
+use wasm_bindgen::prelude::*;
 
 // ---------------------------------------------------------------------------
 // Result types (serialized to JSON)
@@ -38,6 +38,10 @@ struct RecurrenceResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     latex: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    mathematica: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sage: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     unknowns: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     equations: Option<usize>,
@@ -50,8 +54,53 @@ struct RecurrenceResult {
 #[derive(Serialize)]
 #[serde(untagged)]
 enum ParsedOrError {
-    Ok { polynomial: String, coefficients: Vec<i64> },
-    Err { error: String },
+    Ok {
+        polynomial: String,
+        coefficients: Vec<i64>,
+    },
+    Err {
+        error: String,
+    },
+}
+
+#[derive(Serialize)]
+struct DisplayedPoly {
+    polynomial: String,
+    coefficients: Vec<i64>,
+}
+
+#[derive(Serialize)]
+struct MagicBasisReport {
+    coordinates: Vec<String>,
+    left_partial_sums: Vec<String>,
+    right_partial_sums: Vec<String>,
+    partial_sum_checks: Vec<bool>,
+    all_nonnegative: bool,
+    left_leq_right: bool,
+}
+
+#[derive(Serialize)]
+struct DecompositionResult {
+    polynomial: String,
+    degree: usize,
+    coefficients: Vec<i64>,
+    reciprocal: DisplayedPoly,
+    a: DisplayedPoly,
+    b: DisplayedPoly,
+    a_real_rooted: bool,
+    b_real_rooted: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    b_interlaces_a: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reciprocal_interlaces_input: Option<bool>,
+    alternatingly_increasing: bool,
+    f_polynomial: DisplayedPoly,
+    r_transform_of_f: DisplayedPoly,
+    r_a: DisplayedPoly,
+    r_b: DisplayedPoly,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    r_interlaces_f: Option<bool>,
+    magic: MagicBasisReport,
 }
 
 // ---------------------------------------------------------------------------
@@ -60,7 +109,11 @@ enum ParsedOrError {
 
 fn strip_trailing_zeros(coeffs: &[i64]) -> &[i64] {
     let end = coeffs.iter().rposition(|&c| c != 0).map_or(0, |i| i + 1);
-    if end == 0 { &[0i64; 0] } else { &coeffs[..end] }
+    if end == 0 {
+        &[0i64; 0]
+    } else {
+        &coeffs[..end]
+    }
 }
 
 fn parse_input(input: &str) -> Vec<Result<Vec<i64>, String>> {
@@ -77,6 +130,13 @@ fn parse_ok(input: &str) -> (Vec<Vec<i64>>, Vec<String>) {
         }
     }
     (polys, errors)
+}
+
+fn display_poly(coeffs: &[i64]) -> DisplayedPoly {
+    DisplayedPoly {
+        polynomial: format_poly(coeffs),
+        coefficients: coeffs.to_vec(),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -97,9 +157,9 @@ pub fn check_properties(input: &str) -> String {
                     degree: deg,
                     coefficients: c.to_vec(),
                     real_rooted: is_real_rooted(c),
-                    palindromic: is_palindromic(c),
-                    gamma_positive: is_gamma_positive(c),
-                    gamma_coefficients: gamma_coefficients(c),
+                    palindromic: is_palindromic_ignoring_initial_zeros(c),
+                    gamma_positive: is_gamma_positive_ignoring_initial_zeros(c),
+                    gamma_coefficients: gamma_coefficients_ignoring_initial_zeros(c),
                     log_concave: is_log_concave(c),
                     ultra_log_concave: is_ultra_log_concave(c),
                 };
@@ -195,6 +255,8 @@ pub fn find_recurrence(
             found: false,
             recurrence: None,
             latex: None,
+            mathematica: None,
+            sage: None,
             unknowns: None,
             equations: None,
             candidates_tried: None,
@@ -218,6 +280,8 @@ pub fn find_recurrence(
             found: true,
             recurrence: Some(format!("{}", res.recurrence)),
             latex: Some(res.recurrence.to_latex()),
+            mathematica: Some(res.recurrence.to_mathematica_definition(&polys)),
+            sage: Some(res.recurrence.to_sage_definition(&polys)),
             unknowns: Some(res.num_unknowns),
             equations: Some(res.num_equations),
             candidates_tried: Some(res.candidates_tried),
@@ -228,6 +292,8 @@ pub fn find_recurrence(
             found: false,
             recurrence: None,
             latex: None,
+            mathematica: None,
+            sage: None,
             unknowns: None,
             equations: None,
             candidates_tried: None,
@@ -237,6 +303,79 @@ pub fn find_recurrence(
     }
 }
 
+#[wasm_bindgen]
+pub fn analyze_decompositions(input: &str) -> String {
+    let mut results: Vec<serde_json::Value> = Vec::new();
+
+    for r in parse_input(input) {
+        match r {
+            Ok(coeffs) => {
+                let c = strip_trailing_zeros(&coeffs);
+                match analyze_symmetric_decomposition_i64(c) {
+                    Ok(analysis) => {
+                        let report = DecompositionResult {
+                            polynomial: format_poly(c),
+                            degree: analysis.degree,
+                            coefficients: c.to_vec(),
+                            reciprocal: display_poly(&analysis.reciprocal),
+                            a: display_poly(&analysis.a),
+                            b: display_poly(&analysis.b),
+                            a_real_rooted: analysis.a_real_rooted,
+                            b_real_rooted: analysis.b_real_rooted,
+                            b_interlaces_a: analysis.b_interlaces_a,
+                            reciprocal_interlaces_input: analysis.reciprocal_interlaces_input,
+                            alternatingly_increasing: analysis.alternatingly_increasing,
+                            f_polynomial: display_poly(&analysis.f_polynomial),
+                            r_transform_of_f: display_poly(&analysis.r_transform_of_f),
+                            r_a: display_poly(&analysis.r_a),
+                            r_b: display_poly(&analysis.r_b),
+                            r_interlaces_f: analysis.r_interlaces_f,
+                            magic: MagicBasisReport {
+                                coordinates: analysis
+                                    .magic
+                                    .coordinates
+                                    .iter()
+                                    .map(ToString::to_string)
+                                    .collect(),
+                                left_partial_sums: analysis
+                                    .magic
+                                    .left_partial_sums
+                                    .iter()
+                                    .map(ToString::to_string)
+                                    .collect(),
+                                right_partial_sums: analysis
+                                    .magic
+                                    .right_partial_sums
+                                    .iter()
+                                    .map(ToString::to_string)
+                                    .collect(),
+                                partial_sum_checks: analysis
+                                    .magic
+                                    .left_partial_sums
+                                    .iter()
+                                    .zip(analysis.magic.right_partial_sums.iter())
+                                    .map(|(left, right)| left <= right)
+                                    .collect(),
+                                all_nonnegative: analysis.magic.all_nonnegative,
+                                left_leq_right: analysis.magic.left_leq_right,
+                            },
+                        };
+                        results.push(serde_json::to_value(&report).unwrap());
+                    }
+                    Err(e) => {
+                        results.push(serde_json::json!({"error": e.to_string()}));
+                    }
+                }
+            }
+            Err(e) => {
+                results.push(serde_json::json!({"error": e}));
+            }
+        }
+    }
+
+    serde_json::to_string(&results).unwrap()
+}
+
 /// Check interlacing between two polynomials given as JSON arrays of i64.
 /// Returns JSON: {"strict": bool, "weak": bool}
 #[wasm_bindgen]
@@ -244,7 +383,11 @@ pub fn check_interlacing_pair(p_json: &str, q_json: &str) -> String {
     let p: Vec<i64> = serde_json::from_str(p_json).unwrap_or_default();
     let q: Vec<i64> = serde_json::from_str(q_json).unwrap_or_default();
     let strict = check_interlacing(&p, &q) == Some(true);
-    let weak = if strict { true } else { check_weak_interlacing(&p, &q) == Some(true) };
+    let weak = if strict {
+        true
+    } else {
+        check_weak_interlacing(&p, &q) == Some(true)
+    };
     serde_json::json!({"strict": strict, "weak": weak}).to_string()
 }
 

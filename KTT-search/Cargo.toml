@@ -14,3 +14,6 @@ num-bigint   = "0.4"
 num-rational = "0.4"
 num-traits   = "0.2"
 hashbrown    = "0.15"
+clap         = { version = "4", features = ["derive", "env"] }
+dotenv       = "0.15.0"
+mysql        = { version = "27.0.0", default-features = false, features = ["default-rust"] }

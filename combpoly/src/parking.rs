@@ -97,16 +97,10 @@ pub fn for_each_runsorted_pf(
     let mut word = Vec::with_capacity(m);
     let mut freq = vec![0usize; m];
     gen_rs_pf(
-        n,
-        m,
-        &mut word,
-        &mut freq,
-        run_break,
-        run_sort,
-        0,    // cur_run_start
-        0,    // prev_run_start
-        0,    // prev_run_end
-        0,    // num_completed_runs
+        n, m, &mut word, &mut freq, run_break, run_sort, 0, // cur_run_start
+        0, // prev_run_start
+        0, // prev_run_end
+        0, // num_completed_runs
         callback,
     );
 }
@@ -157,10 +151,7 @@ fn gen_rs_pf(
             if pos == 0 {
                 // First position: start first run.
                 word.push(v);
-                gen_rs_pf(
-                    n, m, word, freq, run_break, run_sort,
-                    0, 0, 0, 0, callback,
-                );
+                gen_rs_pf(n, m, word, freq, run_break, run_sort, 0, 0, 0, 0, callback);
                 word.pop();
             } else {
                 let is_descent = match run_break {
@@ -172,9 +163,17 @@ fn gen_rs_pf(
                     // Continue current run.
                     word.push(v);
                     gen_rs_pf(
-                        n, m, word, freq, run_break, run_sort,
-                        cur_run_start, prev_run_start, prev_run_end,
-                        num_completed, callback,
+                        n,
+                        m,
+                        word,
+                        freq,
+                        run_break,
+                        run_sort,
+                        cur_run_start,
+                        prev_run_start,
+                        prev_run_end,
+                        num_completed,
+                        callback,
                     );
                     word.pop();
                 } else {
@@ -185,15 +184,12 @@ fn gen_rs_pf(
                             // v = min(new run); word[cur_run_start] = min(just-completed run).
                             v > word[cur_run_start]
                         }
-                        RunSort::WeakMin => {
-                            v >= word[cur_run_start]
-                        }
+                        RunSort::WeakMin => v >= word[cur_run_start],
                         RunSort::Lex => {
                             // 1. If there is an earlier run, verify the just-completed
                             //    run against it.
                             let prev_ok = num_completed == 0
-                                || word[cur_run_start..pos]
-                                    > word[prev_run_start..prev_run_end];
+                                || word[cur_run_start..pos] > word[prev_run_start..prev_run_end];
                             // 2. Early prune: if v < first element of just-completed
                             //    run, the new run will be lex-smaller for sure.
                             prev_ok && v >= word[cur_run_start]
@@ -203,10 +199,15 @@ fn gen_rs_pf(
                     if ok {
                         word.push(v);
                         gen_rs_pf(
-                            n, m, word, freq, run_break, run_sort,
-                            pos,             // new cur_run_start
-                            cur_run_start,   // new prev_run_start
-                            pos,             // new prev_run_end
+                            n,
+                            m,
+                            word,
+                            freq,
+                            run_break,
+                            run_sort,
+                            pos,           // new cur_run_start
+                            cur_run_start, // new prev_run_start
+                            pos,           // new prev_run_end
                             num_completed + 1,
                             callback,
                         );
@@ -224,10 +225,7 @@ fn gen_rs_pf(
 pub fn is_parking_function(a: &[u8]) -> bool {
     let mut sorted: Vec<u8> = a.to_vec();
     sorted.sort();
-    sorted
-        .iter()
-        .enumerate()
-        .all(|(i, &v)| v as usize <= i + 1)
+    sorted.iter().enumerate().all(|(i, &v)| v as usize <= i + 1)
 }
 
 #[cfg(test)]
@@ -269,7 +267,10 @@ mod tests {
             let mut runs = Vec::new();
             let mut start = 0;
             for i in 1..w.len() {
-                if w[i] <= w[i - 1] { runs.push(&w[start..i]); start = i; }
+                if w[i] <= w[i - 1] {
+                    runs.push(&w[start..i]);
+                    start = i;
+                }
             }
             runs.push(&w[start..]);
             runs
@@ -278,30 +279,57 @@ mod tests {
             let mut runs = Vec::new();
             let mut start = 0;
             for i in 1..w.len() {
-                if w[i] < w[i - 1] { runs.push(&w[start..i]); start = i; }
+                if w[i] < w[i - 1] {
+                    runs.push(&w[start..i]);
+                    start = i;
+                }
             }
             runs.push(&w[start..]);
             runs
         }
         fn mins_strict(runs: &[&[u8]]) -> bool {
-            runs.len() <= 1 || (1..runs.len()).all(|i|
-                runs[i].iter().min() > runs[i-1].iter().min())
+            runs.len() <= 1
+                || (1..runs.len()).all(|i| runs[i].iter().min() > runs[i - 1].iter().min())
         }
         fn mins_weak(runs: &[&[u8]]) -> bool {
-            runs.len() <= 1 || (1..runs.len()).all(|i|
-                runs[i].iter().min() >= runs[i-1].iter().min())
+            runs.len() <= 1
+                || (1..runs.len()).all(|i| runs[i].iter().min() >= runs[i - 1].iter().min())
         }
         fn lex(runs: &[&[u8]]) -> bool {
-            runs.len() <= 1 || (1..runs.len()).all(|i| runs[i] > runs[i-1])
+            runs.len() <= 1 || (1..runs.len()).all(|i| runs[i] > runs[i - 1])
         }
 
         let variants: Vec<(RunBreak, RunSort, Box<dyn Fn(&[u8]) -> bool>)> = vec![
-            (RunBreak::StrictAsc, RunSort::StrictMin, Box::new(|w: &[u8]| mins_strict(&ascending_runs(w)))),
-            (RunBreak::StrictAsc, RunSort::WeakMin,   Box::new(|w: &[u8]| mins_weak(&ascending_runs(w)))),
-            (RunBreak::StrictAsc, RunSort::Lex,       Box::new(|w: &[u8]| lex(&ascending_runs(w)))),
-            (RunBreak::NonDecr,   RunSort::StrictMin, Box::new(|w: &[u8]| mins_strict(&nondecr_runs(w)))),
-            (RunBreak::NonDecr,   RunSort::WeakMin,   Box::new(|w: &[u8]| mins_weak(&nondecr_runs(w)))),
-            (RunBreak::NonDecr,   RunSort::Lex,       Box::new(|w: &[u8]| lex(&nondecr_runs(w)))),
+            (
+                RunBreak::StrictAsc,
+                RunSort::StrictMin,
+                Box::new(|w: &[u8]| mins_strict(&ascending_runs(w))),
+            ),
+            (
+                RunBreak::StrictAsc,
+                RunSort::WeakMin,
+                Box::new(|w: &[u8]| mins_weak(&ascending_runs(w))),
+            ),
+            (
+                RunBreak::StrictAsc,
+                RunSort::Lex,
+                Box::new(|w: &[u8]| lex(&ascending_runs(w))),
+            ),
+            (
+                RunBreak::NonDecr,
+                RunSort::StrictMin,
+                Box::new(|w: &[u8]| mins_strict(&nondecr_runs(w))),
+            ),
+            (
+                RunBreak::NonDecr,
+                RunSort::WeakMin,
+                Box::new(|w: &[u8]| mins_weak(&nondecr_runs(w))),
+            ),
+            (
+                RunBreak::NonDecr,
+                RunSort::Lex,
+                Box::new(|w: &[u8]| lex(&nondecr_runs(w))),
+            ),
         ];
 
         for n in 1..=6u8 {

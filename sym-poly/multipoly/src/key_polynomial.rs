@@ -99,7 +99,18 @@ pub(crate) fn sorting_reduced_word(alpha: &[u32]) -> Vec<usize> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::*;
+    use sym_poly_core::Ssaf;
+
+    fn key_ssaf_weight_counts(alpha: &[u32]) -> BTreeMap<Vec<u32>, i64> {
+        let mut counts = BTreeMap::new();
+        for filling in Ssaf::key_fillings(alpha) {
+            *counts.entry(filling.weight_vector()).or_insert(0) += 1;
+        }
+        counts
+    }
 
     #[test]
     fn test_key_dominant() {
@@ -186,5 +197,26 @@ mod tests {
         let key: MultiPoly<i64> = key_polynomial(&[2, 3, 1]);
         let t_key: MultiPoly<i64> = t_key_polynomial(&[2, 3, 1], &0);
         assert_eq!(key, t_key);
+    }
+
+    #[test]
+    fn test_key_matches_ssaf_weight_enumerator() {
+        let test_cases: Vec<Vec<u32>> = vec![
+            vec![0, 2],
+            vec![1, 2],
+            vec![2, 1],
+            vec![1, 0, 2],
+            vec![0, 1, 2],
+        ];
+
+        for alpha in &test_cases {
+            let key: MultiPoly<i64> = key_polynomial(alpha);
+            let ssaf_counts = key_ssaf_weight_counts(alpha);
+            assert_eq!(
+                key.terms(),
+                &ssaf_counts,
+                "key polynomial/SSAF mismatch for alpha={alpha:?}"
+            );
+        }
     }
 }

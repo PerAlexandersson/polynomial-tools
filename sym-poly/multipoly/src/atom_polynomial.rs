@@ -34,7 +34,18 @@ pub fn t_atom_polynomial<C: Ring>(alpha: &[u32], t: &C) -> MultiPoly<C> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::*;
+    use sym_poly_core::Ssaf;
+
+    fn atom_ssaf_weight_counts(alpha: &[u32]) -> BTreeMap<Vec<u32>, i64> {
+        let mut counts = BTreeMap::new();
+        for filling in Ssaf::atom_fillings(alpha) {
+            *counts.entry(filling.weight_vector()).or_insert(0) += 1;
+        }
+        counts
+    }
 
     #[test]
     fn test_atom_dominant_is_monomial() {
@@ -57,5 +68,26 @@ mod tests {
         let atom: MultiPoly<i64> = atom_polynomial(&[0, 2]);
         let t_atom: MultiPoly<i64> = t_atom_polynomial(&[0, 2], &0);
         assert_eq!(atom, t_atom);
+    }
+
+    #[test]
+    fn test_atom_matches_ssaf_weight_enumerator() {
+        let test_cases: Vec<Vec<u32>> = vec![
+            vec![0, 2],
+            vec![1, 2],
+            vec![2, 1],
+            vec![1, 0, 2],
+            vec![0, 1, 2],
+        ];
+
+        for alpha in &test_cases {
+            let atom: MultiPoly<i64> = atom_polynomial(alpha);
+            let ssaf_counts = atom_ssaf_weight_counts(alpha);
+            assert_eq!(
+                atom.terms(),
+                &ssaf_counts,
+                "atom polynomial/SSAF mismatch for alpha={alpha:?}"
+            );
+        }
     }
 }

@@ -2,6 +2,7 @@
 members = [
     "polynomial-tools",
     "polynomial-tools/web",
+    "polynomial-tools/mcp",
     "combinatoric-core",
     "combpoly",
     "kostka",

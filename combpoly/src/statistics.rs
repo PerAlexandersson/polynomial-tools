@@ -581,7 +581,7 @@ mod tests {
     fn test_major_index() {
         assert_eq!(compute(&[1, 2, 3], Stat::Maj), 0);
         assert_eq!(compute(&[3, 2, 1], Stat::Maj), 3); // des at 1-indexed pos 1,2 -> 1+2
-        // [2,3,1]: descent at 1-indexed position 2 (3>1), so maj = 2
+                                                       // [2,3,1]: descent at 1-indexed position 2 (3>1), so maj = 2
         assert_eq!(compute(&[2, 3, 1], Stat::Maj), 2);
     }
 
@@ -697,10 +697,7 @@ mod tests {
     #[test]
     fn test_descent_top_set() {
         // [3,1,4,2]: descent at pos 1 gives top w[0]=3, descent at pos 3 gives top w[2]=4
-        assert_eq!(
-            compute_set(&[3, 1, 4, 2], SetStat::DesTopSet),
-            set(&[3, 4])
-        );
+        assert_eq!(compute_set(&[3, 1, 4, 2], SetStat::DesTopSet), set(&[3, 4]));
     }
 
     #[test]
@@ -723,10 +720,7 @@ mod tests {
         assert_eq!(compute_set(&[1, 3, 2], SetStat::PeakSet), set(&[2]));
         assert_eq!(compute_set(&[1, 2, 3], SetStat::PeakSet), set(&[]));
         // [2,4,1,3,5]: peak at position 2 (2<4>1)
-        assert_eq!(
-            compute_set(&[2, 4, 1, 3, 5], SetStat::PeakSet),
-            set(&[2])
-        );
+        assert_eq!(compute_set(&[2, 4, 1, 3, 5], SetStat::PeakSet), set(&[2]));
     }
 
     #[test]
@@ -741,10 +735,7 @@ mod tests {
         // [3,1,4,2]: LR-min at pos 1 (3), pos 2 (1)
         assert_eq!(compute_set(&[3, 1, 4, 2], SetStat::LrminSet), set(&[1, 2]));
         // [1,2,3]: LR-max at all positions
-        assert_eq!(
-            compute_set(&[1, 2, 3], SetStat::LrmaxSet),
-            set(&[1, 2, 3])
-        );
+        assert_eq!(compute_set(&[1, 2, 3], SetStat::LrmaxSet), set(&[1, 2, 3]));
     }
 
     #[test]
@@ -752,10 +743,7 @@ mod tests {
         // [3,2,1]: scanning right-to-left: val 1 (pos 3) is min, then 2>1, 3>1 — only pos 3
         assert_eq!(compute_set(&[3, 2, 1], SetStat::RlminSet), set(&[3]));
         // [1,2,3]: scanning right-to-left: 3(pos3), 2(pos2) new min, 1(pos1) new min
-        assert_eq!(
-            compute_set(&[1, 2, 3], SetStat::RlminSet),
-            set(&[1, 2, 3])
-        );
+        assert_eq!(compute_set(&[1, 2, 3], SetStat::RlminSet), set(&[1, 2, 3]));
         // [1,2,3]: RL-max at pos 3 only (scanning right-to-left: 3 is first and biggest)
         assert_eq!(compute_set(&[1, 2, 3], SetStat::RlmaxSet), set(&[3]));
     }
@@ -837,8 +825,8 @@ mod tests {
         // H_4 = [1, 3, 1], H_5 = [1, 7, 7, 1]
         // Verify by brute force on small n
         let expected: Vec<Vec<i64>> = vec![
-            vec![1, 3, 1],       // n=4
-            vec![1, 7, 7, 1],    // n=5
+            vec![1, 3, 1],    // n=4
+            vec![1, 7, 7, 1], // n=5
         ];
         for (idx, coeffs) in expected.iter().enumerate() {
             let n = (idx + 4) as u8;
@@ -846,13 +834,19 @@ mod tests {
             let mut perm = (1..=n).collect::<Vec<u8>>();
             loop {
                 let is_alt = (0..n as usize - 1).all(|i| {
-                    if i % 2 == 0 { perm[i] < perm[i + 1] } else { perm[i] > perm[i + 1] }
+                    if i % 2 == 0 {
+                        perm[i] < perm[i + 1]
+                    } else {
+                        perm[i] > perm[i + 1]
+                    }
                 });
                 if is_alt {
                     let s = compute(&perm, Stat::Swaps);
                     poly[s] += 1;
                 }
-                if !next_perm(&mut perm) { break; }
+                if !next_perm(&mut perm) {
+                    break;
+                }
             }
             assert_eq!(&poly, coeffs, "H_{} mismatch", n);
         }
@@ -870,16 +864,46 @@ mod tests {
             p
         };
         for pi in &perms {
-            assert_eq!(compute_set(pi, SetStat::DesSet).len(), compute(pi, Stat::Des));
-            assert_eq!(compute_set(pi, SetStat::PeakSet).len(), compute(pi, Stat::Peak));
-            assert_eq!(compute_set(pi, SetStat::ExcSet).len(), compute(pi, Stat::Exc));
-            assert_eq!(compute_set(pi, SetStat::FixSet).len(), compute(pi, Stat::Fix));
-            assert_eq!(compute_set(pi, SetStat::ValleySet).len(), compute(pi, Stat::Valley));
-            assert_eq!(compute_set(pi, SetStat::LrminSet).len(), compute(pi, Stat::Lrmin));
-            assert_eq!(compute_set(pi, SetStat::LrmaxSet).len(), compute(pi, Stat::Lrmax));
-            assert_eq!(compute_set(pi, SetStat::RlminSet).len(), compute(pi, Stat::Rlmin));
-            assert_eq!(compute_set(pi, SetStat::RlmaxSet).len(), compute(pi, Stat::Rlmax));
-            assert_eq!(compute_set(pi, SetStat::SwapsSet).len(), compute(pi, Stat::Swaps));
+            assert_eq!(
+                compute_set(pi, SetStat::DesSet).len(),
+                compute(pi, Stat::Des)
+            );
+            assert_eq!(
+                compute_set(pi, SetStat::PeakSet).len(),
+                compute(pi, Stat::Peak)
+            );
+            assert_eq!(
+                compute_set(pi, SetStat::ExcSet).len(),
+                compute(pi, Stat::Exc)
+            );
+            assert_eq!(
+                compute_set(pi, SetStat::FixSet).len(),
+                compute(pi, Stat::Fix)
+            );
+            assert_eq!(
+                compute_set(pi, SetStat::ValleySet).len(),
+                compute(pi, Stat::Valley)
+            );
+            assert_eq!(
+                compute_set(pi, SetStat::LrminSet).len(),
+                compute(pi, Stat::Lrmin)
+            );
+            assert_eq!(
+                compute_set(pi, SetStat::LrmaxSet).len(),
+                compute(pi, Stat::Lrmax)
+            );
+            assert_eq!(
+                compute_set(pi, SetStat::RlminSet).len(),
+                compute(pi, Stat::Rlmin)
+            );
+            assert_eq!(
+                compute_set(pi, SetStat::RlmaxSet).len(),
+                compute(pi, Stat::Rlmax)
+            );
+            assert_eq!(
+                compute_set(pi, SetStat::SwapsSet).len(),
+                compute(pi, Stat::Swaps)
+            );
         }
     }
 

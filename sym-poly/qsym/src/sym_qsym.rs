@@ -9,8 +9,8 @@
 use std::collections::BTreeMap;
 
 use sym_poly_core::{Composition, Partition, Ring};
-use sym_poly_sym::SymmetricFunction;
 use sym_poly_sym::Basis;
+use sym_poly_sym::SymmetricFunction;
 
 use crate::basis::QSymBasis;
 use crate::qsym_function::QSymFunction;
@@ -63,7 +63,11 @@ fn compositions_sorting_to(lambda: &Partition) -> Vec<Composition> {
 }
 
 /// Generate all distinct permutations of a multiset given as a sorted (desc) slice.
-fn multiset_permutations(remaining: &[u32], current: &mut Vec<u32>, results: &mut Vec<Composition>) {
+fn multiset_permutations(
+    remaining: &[u32],
+    current: &mut Vec<u32>,
+    results: &mut Vec<Composition>,
+) {
     if remaining.is_empty() {
         results.push(Composition::new(current.clone()));
         return;
@@ -167,8 +171,12 @@ mod tests {
             let q = sym_to_qsym(&f);
             let back = qsym_to_sym(&q);
             let num_perms = compositions_sorting_to(&lambda).len() as i64;
-            assert_eq!(back.coefficient(&lambda), num_perms,
-                "scaling for m_{}", lambda);
+            assert_eq!(
+                back.coefficient(&lambda),
+                num_perms,
+                "scaling for m_{}",
+                lambda
+            );
         }
     }
 }

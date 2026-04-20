@@ -3,9 +3,9 @@
 //! Reads polynomials from stdin as comma-separated integer coefficients
 //! in ascending degree order, one polynomial per line.
 
-use std::io::{self, Read};
-use polynomial_tools::*;
 use polynomial_tools::recurrence::*;
+use polynomial_tools::*;
+use std::io::{self, Read};
 
 fn read_polys() -> Vec<Vec<i64>> {
     let mut input = String::new();
@@ -56,12 +56,7 @@ fn cmd_interlacing() {
             (Some(false), _) => "do NOT interlace",
             _ => "incompatible degrees",
         };
-        println!(
-            "{} & {}: {}",
-            format_poly(p),
-            format_poly(q),
-            status
-        );
+        println!("{} & {}: {}", format_poly(p), format_poly(q), status);
     }
 }
 
@@ -73,11 +68,11 @@ fn cmd_properties() {
         if is_real_rooted(c) {
             props.push("real-rooted".to_string());
         }
-        if is_palindromic(c) {
+        if is_palindromic_ignoring_initial_zeros(c) {
             props.push("palindromic".to_string());
         }
-        if is_gamma_positive(c) {
-            if let Some(gamma) = gamma_coefficients(c) {
+        if is_gamma_positive_ignoring_initial_zeros(c) {
+            if let Some(gamma) = gamma_coefficients_ignoring_initial_zeros(c) {
                 props.push(format!("gamma-positive {:?}", gamma));
             }
         }
@@ -190,7 +185,10 @@ fn cmd_recurrence(args: &[String]) {
         return;
     }
 
-    eprintln!("Searching for recurrence among {} polynomials...", polys.len());
+    eprintln!(
+        "Searching for recurrence among {} polynomials...",
+        polys.len()
+    );
     match find_recurrence_adaptive(&polys, &search) {
         Some(res) => {
             println!("{}", res.recurrence);
@@ -212,7 +210,12 @@ fn cmd_resultant() {
         return;
     }
     let r = resultant(&polys[0], &polys[1]);
-    println!("Res({}, {}) = {}", format_poly(&polys[0]), format_poly(&polys[1]), r);
+    println!(
+        "Res({}, {}) = {}",
+        format_poly(&polys[0]),
+        format_poly(&polys[1]),
+        r
+    );
 }
 
 fn cmd_discriminant() {
@@ -227,7 +230,47 @@ fn cmd_hstar_to_ehrhart() {
     for coeffs in read_polys() {
         let ehrhart = hstar_to_ehrhart(&coeffs);
         let display: Vec<String> = ehrhart.iter().map(|r| format!("{}", r)).collect();
-        println!("h*={} => L(n) coeffs: [{}]", format_poly(&coeffs), display.join(", "));
+        println!(
+            "h*={} => L(n) coeffs: [{}]",
+            format_poly(&coeffs),
+            display.join(", ")
+        );
+    }
+}
+
+fn cmd_stapledon(args: &[String]) {
+    if args.len() != 1 {
+        eprintln!("Usage: polytool stapledon <n>");
+        return;
+    }
+
+    let n: usize = match args[0].parse() {
+        Ok(n) => n,
+        Err(_) => {
+            eprintln!("Expected a nonnegative integer degree bound.");
+            return;
+        }
+    };
+
+    for coeffs in read_polys() {
+        let c = strip_trailing_zeros(&coeffs);
+        match stapledon_decomposition(c, n) {
+            Some((a, b)) => {
+                println!(
+                    "{} = {} + x ({})",
+                    format_poly(c),
+                    format_poly(&a),
+                    format_poly(&b),
+                );
+            }
+            None => {
+                eprintln!(
+                    "{} has degree greater than the requested bound {}.",
+                    format_poly(c),
+                    n,
+                );
+            }
+        }
     }
 }
 
@@ -239,11 +282,16 @@ fn main() {
         eprintln!("Commands:");
         eprintln!("  real-rooted     Check real-rootedness of each polynomial");
         eprintln!("  interlacing     Check interlacing of consecutive polynomial pairs");
-        eprintln!("  properties      Show all properties (real-rooted, palindromic, gamma, log-concave)");
+        eprintln!(
+            "  properties      Show all properties (real-rooted, palindromic, gamma, log-concave)"
+        );
         eprintln!("  recurrence      Search for a polynomial recurrence");
         eprintln!("  resultant       Compute resultant of two polynomials");
         eprintln!("  discriminant    Compute discriminant of each polynomial");
         eprintln!("  hstar-to-ehrhart  Convert h*-vector to Ehrhart polynomial");
+        eprintln!(
+            "  stapledon       Compute the Stapledon decomposition with respect to a bound n"
+        );
         eprintln!();
         eprintln!("Input: polynomials as comma-separated integer coefficients (ascending degree),");
         eprintln!("       one per line on stdin. Lines starting with # are ignored.");
@@ -260,6 +308,7 @@ fn main() {
         "resultant" => cmd_resultant(),
         "discriminant" => cmd_discriminant(),
         "hstar-to-ehrhart" => cmd_hstar_to_ehrhart(),
+        "stapledon" => cmd_stapledon(rest),
         _ => {
             eprintln!("Unknown command: {}", cmd);
             std::process::exit(1);

@@ -44,10 +44,7 @@ fn gen_cayley(
         freq[vi] += 1;
 
         // Count values in 1..=new_max that still have freq 0
-        let uncovered = freq[..new_max as usize]
-            .iter()
-            .filter(|&&f| f == 0)
-            .count();
+        let uncovered = freq[..new_max as usize].iter().filter(|&&f| f == 0).count();
 
         if uncovered <= remaining {
             current.push(v);
@@ -99,10 +96,7 @@ fn gen_fpf_cayley(
         let new_max = if v > max_used { v } else { max_used };
         freq[vi] += 1;
 
-        let uncovered = freq[..new_max as usize]
-            .iter()
-            .filter(|&&f| f == 0)
-            .count();
+        let uncovered = freq[..new_max as usize].iter().filter(|&&f| f == 0).count();
 
         if uncovered <= remaining {
             current.push(v);

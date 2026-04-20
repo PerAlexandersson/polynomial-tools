@@ -45,7 +45,10 @@ impl<C: Ring> QSymFunction<C> {
     }
 
     pub fn zero(basis: QSymBasis) -> Self {
-        QSymFunction { basis, terms: BTreeMap::new() }
+        QSymFunction {
+            basis,
+            terms: BTreeMap::new(),
+        }
     }
 
     // Named constructors
@@ -61,15 +64,23 @@ impl<C: Ring> QSymFunction<C> {
     // Accessors
     // -----------------------------------------------------------------------
 
-    pub fn basis(&self) -> QSymBasis { self.basis }
-    pub fn terms(&self) -> &BTreeMap<Composition, C> { &self.terms }
-    pub fn into_terms(self) -> BTreeMap<Composition, C> { self.terms }
+    pub fn basis(&self) -> QSymBasis {
+        self.basis
+    }
+    pub fn terms(&self) -> &BTreeMap<Composition, C> {
+        &self.terms
+    }
+    pub fn into_terms(self) -> BTreeMap<Composition, C> {
+        self.terms
+    }
 
     pub fn coefficient(&self, comp: &Composition) -> C {
         self.terms.get(comp).cloned().unwrap_or_else(C::zero)
     }
 
-    pub fn is_zero(&self) -> bool { self.terms.is_empty() }
+    pub fn is_zero(&self) -> bool {
+        self.terms.is_empty()
+    }
 
     pub fn degree(&self) -> Option<u32> {
         let mut deg = None;
@@ -91,7 +102,9 @@ impl<C: Ring> QSymFunction<C> {
         if scalar.is_zero() {
             return Self::zero(self.basis);
         }
-        let terms = self.terms.iter()
+        let terms = self
+            .terms
+            .iter()
             .map(|(c, v)| (c.clone(), v.clone() * scalar.clone()))
             .collect();
         Self::from_terms(self.basis, terms)
@@ -108,10 +121,18 @@ impl<C: Ring> QSymFunction<C> {
         crate::transition::convert(self, target)
     }
 
-    pub fn to_monomial_basis(&self) -> Self { self.to_basis(QSymBasis::Monomial) }
-    pub fn to_fundamental_basis(&self) -> Self { self.to_basis(QSymBasis::Fundamental) }
-    pub fn to_psi_basis(&self) -> Self { self.to_basis(QSymBasis::PowerSumPsi) }
-    pub fn to_phi_basis(&self) -> Self { self.to_basis(QSymBasis::PowerSumPhi) }
+    pub fn to_monomial_basis(&self) -> Self {
+        self.to_basis(QSymBasis::Monomial)
+    }
+    pub fn to_fundamental_basis(&self) -> Self {
+        self.to_basis(QSymBasis::Fundamental)
+    }
+    pub fn to_psi_basis(&self) -> Self {
+        self.to_basis(QSymBasis::PowerSumPsi)
+    }
+    pub fn to_phi_basis(&self) -> Self {
+        self.to_basis(QSymBasis::PowerSumPhi)
+    }
 
     // -----------------------------------------------------------------------
     // Omega involution
@@ -212,8 +233,10 @@ fn quasi_shuffles(alpha: &Composition, beta: &Composition) -> Vec<Composition> {
 }
 
 fn quasi_shuffle_helper(
-    a: &[u32], ai: usize,
-    b: &[u32], bi: usize,
+    a: &[u32],
+    ai: usize,
+    b: &[u32],
+    bi: usize,
     current: &mut Vec<u32>,
     results: &mut Vec<Composition>,
 ) {
@@ -263,14 +286,19 @@ impl<C: Ring> Add for QSymFunction<C> {
 
 impl<C: Ring> Sub for QSymFunction<C> {
     type Output = Self;
-    fn sub(self, rhs: Self) -> Self { self + (-rhs) }
+    fn sub(self, rhs: Self) -> Self {
+        self + (-rhs)
+    }
 }
 
 impl<C: Ring> Neg for QSymFunction<C> {
     type Output = Self;
     fn neg(self) -> Self {
         let terms = self.terms.into_iter().map(|(c, v)| (c, -v)).collect();
-        QSymFunction { basis: self.basis, terms }
+        QSymFunction {
+            basis: self.basis,
+            terms,
+        }
     }
 }
 
@@ -289,7 +317,9 @@ impl<C: Ring> fmt::Display for QSymFunction<C> {
         let sym = self.basis.symbol();
         let mut first = true;
         for (comp, coeff) in &self.terms {
-            if !first { write!(f, " + ")?; }
+            if !first {
+                write!(f, " + ")?;
+            }
             first = false;
             if *coeff == C::one() {
                 write!(f, "{}[{}]", sym, comp)?;
@@ -319,7 +349,10 @@ mod tests {
     fn test_add() {
         let m1: QSymFunction<i64> = QSymFunction::monomial_qsym(Composition::new(vec![2, 1]));
         let m2: QSymFunction<i64> = QSymFunction::scaled_basis_element(
-            QSymBasis::Monomial, Composition::new(vec![1, 2]), 3);
+            QSymBasis::Monomial,
+            Composition::new(vec![1, 2]),
+            3,
+        );
         let sum = m1 + m2;
         assert_eq!(sum.coefficient(&Composition::new(vec![2, 1])), 1);
         assert_eq!(sum.coefficient(&Composition::new(vec![1, 2])), 3);

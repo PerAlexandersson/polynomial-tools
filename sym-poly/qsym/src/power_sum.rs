@@ -396,7 +396,11 @@ fn invert_rational_matrix(m: &[Vec<(i64, i64)>]) -> Vec<Vec<(i64, i64)>> {
             row.push(Q::new(num, den));
         }
         for j in 0..n {
-            row.push(if i == j { Q::from_integer(1) } else { Q::from_integer(0) });
+            row.push(if i == j {
+                Q::from_integer(1)
+            } else {
+                Q::from_integer(0)
+            });
         }
         aug.push(row);
     }
@@ -418,7 +422,9 @@ fn invert_rational_matrix(m: &[Vec<(i64, i64)>]) -> Vec<Vec<(i64, i64)>> {
         }
 
         for row in 0..n {
-            if row == col { continue; }
+            if row == col {
+                continue;
+            }
             let factor = aug[row][col].clone();
             for j in 0..2 * n {
                 let val = aug[col][j].clone() * factor.clone();
@@ -451,16 +457,16 @@ mod tests {
 
     #[test]
     fn test_pi_value() {
-        assert_eq!(pi_value(&[2, 1]), 6);  // 2 * 3
+        assert_eq!(pi_value(&[2, 1]), 6); // 2 * 3
         assert_eq!(pi_value(&[3]), 3);
-        assert_eq!(pi_value(&[1, 1, 1]), 6);  // 1 * 2 * 3
+        assert_eq!(pi_value(&[1, 1, 1]), 6); // 1 * 2 * 3
     }
 
     #[test]
     fn test_sp_value() {
-        assert_eq!(sp_value(&[2, 1]), 2 * 2 * 1);  // 2! * 2 * 1 = 4
-        assert_eq!(sp_value(&[3]), 1 * 3);  // 1! * 3 = 3
-        assert_eq!(sp_value(&[1, 1, 1]), 6 * 1 * 1 * 1);  // 3! * 1 * 1 * 1 = 6
+        assert_eq!(sp_value(&[2, 1]), 2 * 2 * 1); // 2! * 2 * 1 = 4
+        assert_eq!(sp_value(&[3]), 1 * 3); // 1! * 3 = 3
+        assert_eq!(sp_value(&[1, 1, 1]), 6 * 1 * 1 * 1); // 3! * 1 * 1 * 1 = 6
     }
 
     #[test]
@@ -484,7 +490,10 @@ mod tests {
     fn test_psi_single_part() {
         // Ψ_(n) = M_(n)
         let psi3: QSymFunction<Q> = psi_in_monomial_basis(&Composition::new(vec![3]));
-        assert_eq!(psi3.coefficient(&Composition::new(vec![3])), Q::from_integer(1));
+        assert_eq!(
+            psi3.coefficient(&Composition::new(vec![3])),
+            Q::from_integer(1)
+        );
         assert_eq!(psi3.terms().len(), 1);
     }
 
@@ -495,11 +504,17 @@ mod tests {
         assert_ne!(psi21, psi12);
 
         // Ψ_(2,1) = M_(2,1) + 1/3 M_(3)
-        assert_eq!(psi21.coefficient(&Composition::new(vec![2, 1])), Q::from_integer(1));
+        assert_eq!(
+            psi21.coefficient(&Composition::new(vec![2, 1])),
+            Q::from_integer(1)
+        );
         assert_eq!(psi21.coefficient(&Composition::new(vec![3])), Q::new(1, 3));
 
         // Ψ_(1,2) = M_(1,2) + 2/3 M_(3)
-        assert_eq!(psi12.coefficient(&Composition::new(vec![1, 2])), Q::from_integer(1));
+        assert_eq!(
+            psi12.coefficient(&Composition::new(vec![1, 2])),
+            Q::from_integer(1)
+        );
         assert_eq!(psi12.coefficient(&Composition::new(vec![3])), Q::new(2, 3));
     }
 
@@ -507,18 +522,36 @@ mod tests {
     fn test_psi_11() {
         // Ψ_(1,1) = 2*M_(1,1) + M_(2)
         let psi11: QSymFunction<Q> = psi_in_monomial_basis(&Composition::new(vec![1, 1]));
-        assert_eq!(psi11.coefficient(&Composition::new(vec![1, 1])), Q::from_integer(2));
-        assert_eq!(psi11.coefficient(&Composition::new(vec![2])), Q::from_integer(1));
+        assert_eq!(
+            psi11.coefficient(&Composition::new(vec![1, 1])),
+            Q::from_integer(2)
+        );
+        assert_eq!(
+            psi11.coefficient(&Composition::new(vec![2])),
+            Q::from_integer(1)
+        );
     }
 
     #[test]
     fn test_psi_111() {
         // Ψ_(1,1,1) = 6*M_(1,1,1) + 3*M_(2,1) + 3*M_(1,2) + M_(3)
         let psi: QSymFunction<Q> = psi_in_monomial_basis(&Composition::new(vec![1, 1, 1]));
-        assert_eq!(psi.coefficient(&Composition::new(vec![1, 1, 1])), Q::from_integer(6));
-        assert_eq!(psi.coefficient(&Composition::new(vec![2, 1])), Q::from_integer(3));
-        assert_eq!(psi.coefficient(&Composition::new(vec![1, 2])), Q::from_integer(3));
-        assert_eq!(psi.coefficient(&Composition::new(vec![3])), Q::from_integer(1));
+        assert_eq!(
+            psi.coefficient(&Composition::new(vec![1, 1, 1])),
+            Q::from_integer(6)
+        );
+        assert_eq!(
+            psi.coefficient(&Composition::new(vec![2, 1])),
+            Q::from_integer(3)
+        );
+        assert_eq!(
+            psi.coefficient(&Composition::new(vec![1, 2])),
+            Q::from_integer(3)
+        );
+        assert_eq!(
+            psi.coefficient(&Composition::new(vec![3])),
+            Q::from_integer(1)
+        );
     }
 
     #[test]
@@ -527,8 +560,12 @@ mod tests {
             let m: QSymFunction<Q> = QSymFunction::monomial_qsym(alpha.clone());
             let in_psi = monomial_to_psi(&m);
             let back = psi_to_monomial(&in_psi);
-            assert_eq!(back.coefficient(&alpha), Q::from_integer(1),
-                "Ψ roundtrip failed for M_{}", alpha);
+            assert_eq!(
+                back.coefficient(&alpha),
+                Q::from_integer(1),
+                "Ψ roundtrip failed for M_{}",
+                alpha
+            );
             assert_eq!(back.terms().len(), 1, "Ψ extra terms for M_{}", alpha);
         }
     }
@@ -540,7 +577,10 @@ mod tests {
         // Φ_(n) should also equal M_(n) since the only coarsening of (n) is itself,
         // and both π({n}) = n and sp({n}) = 1!*n = n.
         let phi3: QSymFunction<Q> = phi_in_monomial_basis(&Composition::new(vec![3]));
-        assert_eq!(phi3.coefficient(&Composition::new(vec![3])), Q::from_integer(1));
+        assert_eq!(
+            phi3.coefficient(&Composition::new(vec![3])),
+            Q::from_integer(1)
+        );
         assert_eq!(phi3.terms().len(), 1);
     }
 
@@ -558,7 +598,10 @@ mod tests {
         //   {(2,1)}:   sp({2,1})=2!*2*1=4. denom=4. coeff = z/4 = 2/4 = 1/2. comp=(3).
         // Φ_(2,1) = M_(2,1) + 1/2 M_(3)
         let phi21: QSymFunction<Q> = phi_in_monomial_basis(&Composition::new(vec![2, 1]));
-        assert_eq!(phi21.coefficient(&Composition::new(vec![2, 1])), Q::from_integer(1));
+        assert_eq!(
+            phi21.coefficient(&Composition::new(vec![2, 1])),
+            Q::from_integer(1)
+        );
         assert_eq!(phi21.coefficient(&Composition::new(vec![3])), Q::new(1, 2));
     }
 
@@ -569,7 +612,10 @@ mod tests {
         //   {(1,2)}:   sp({1,2})=2!*1*2=4. denom=4. coeff = 2/4 = 1/2. comp=(3).
         // Φ_(1,2) = M_(1,2) + 1/2 M_(3)
         let phi12: QSymFunction<Q> = phi_in_monomial_basis(&Composition::new(vec![1, 2]));
-        assert_eq!(phi12.coefficient(&Composition::new(vec![1, 2])), Q::from_integer(1));
+        assert_eq!(
+            phi12.coefficient(&Composition::new(vec![1, 2])),
+            Q::from_integer(1)
+        );
         assert_eq!(phi12.coefficient(&Composition::new(vec![3])), Q::new(1, 2));
     }
 
@@ -579,8 +625,12 @@ mod tests {
             let m: QSymFunction<Q> = QSymFunction::monomial_qsym(alpha.clone());
             let in_phi = monomial_to_phi(&m);
             let back = phi_to_monomial(&in_phi);
-            assert_eq!(back.coefficient(&alpha), Q::from_integer(1),
-                "Φ roundtrip failed for M_{}", alpha);
+            assert_eq!(
+                back.coefficient(&alpha),
+                Q::from_integer(1),
+                "Φ roundtrip failed for M_{}",
+                alpha
+            );
             assert_eq!(back.terms().len(), 1, "Φ extra terms for M_{}", alpha);
         }
     }
@@ -613,8 +663,11 @@ mod tests {
         let omega_psi = psi21.omega_involution();
         let psi12: QSymFunction<Q> = psi_in_monomial_basis(&Composition::new(vec![1, 2]));
         let expected = psi12.scale(&Q::from_integer(-1));
-        assert_eq!(omega_psi.to_monomial_basis(), expected.to_monomial_basis(),
-            "ω(Ψ_(2,1)) should be -Ψ_(1,2)");
+        assert_eq!(
+            omega_psi.to_monomial_basis(),
+            expected.to_monomial_basis(),
+            "ω(Ψ_(2,1)) should be -Ψ_(1,2)"
+        );
     }
 
     #[test]
@@ -626,14 +679,21 @@ mod tests {
 
             let n = alpha.size();
             let ell = alpha.num_parts() as u32;
-            let sign = if (n - ell) % 2 == 0 { Q::from_integer(1) } else { Q::from_integer(-1) };
+            let sign = if (n - ell) % 2 == 0 {
+                Q::from_integer(1)
+            } else {
+                Q::from_integer(-1)
+            };
             let reversed_parts: Vec<u32> = alpha.parts().iter().rev().copied().collect();
             let alpha_r = Composition::new(reversed_parts);
             let psi_rev: QSymFunction<Q> = psi_in_monomial_basis(&alpha_r);
             let expected = psi_rev.scale(&sign).to_monomial_basis();
 
-            assert_eq!(omega_psi, expected,
-                "ω(Ψ_{}) should be ({})Ψ_{}", alpha, sign, alpha_r);
+            assert_eq!(
+                omega_psi, expected,
+                "ω(Ψ_{}) should be ({})Ψ_{}",
+                alpha, sign, alpha_r
+            );
         }
     }
 
@@ -643,8 +703,12 @@ mod tests {
     fn test_psi_normalized_21() {
         // Ψ̃_(2,1) = Ψ_(2,1)/z_(2,1) = (M_(2,1) + 1/3 M_(3)) / 2
         //          = 1/2 M_(2,1) + 1/6 M_(3)
-        let psi_n: QSymFunction<Q> = psi_normalized_in_monomial_basis(&Composition::new(vec![2, 1]));
-        assert_eq!(psi_n.coefficient(&Composition::new(vec![2, 1])), Q::new(1, 2));
+        let psi_n: QSymFunction<Q> =
+            psi_normalized_in_monomial_basis(&Composition::new(vec![2, 1]));
+        assert_eq!(
+            psi_n.coefficient(&Composition::new(vec![2, 1])),
+            Q::new(1, 2)
+        );
         assert_eq!(psi_n.coefficient(&Composition::new(vec![3])), Q::new(1, 6));
     }
 
@@ -654,12 +718,12 @@ mod tests {
         //   Γ(P) = Σ c_α · Ψ̃_α  with c_α ∈ ℤ_{≥0}
         // i.e., the Ψ_α coefficient of Γ(P) times z_α is a non-negative integer.
         let posets: Vec<(usize, Vec<(usize, usize)>)> = vec![
-            (3, vec![(0,1),(1,2)]),             // chain
-            (3, vec![]),                         // antichain
-            (3, vec![(0,2),(1,2)]),              // V-poset
-            (4, vec![(0,1),(1,2),(2,3)]),        // chain 4
-            (4, vec![(0,2),(1,3)]),              // two disjoint edges
-            (4, vec![(0,1),(0,2),(0,3)]),        // star
+            (3, vec![(0, 1), (1, 2)]),         // chain
+            (3, vec![]),                       // antichain
+            (3, vec![(0, 2), (1, 2)]),         // V-poset
+            (4, vec![(0, 1), (1, 2), (2, 3)]), // chain 4
+            (4, vec![(0, 2), (1, 3)]),         // two disjoint edges
+            (4, vec![(0, 1), (0, 2), (0, 3)]), // star
         ];
         for (n, covers) in &posets {
             let gamma: QSymFunction<Q> =
@@ -668,10 +732,20 @@ mod tests {
             for (alpha, coeff) in in_psi.terms() {
                 let z = z_coefficient(alpha.parts());
                 let scaled = coeff.clone() * Q::from_integer(z);
-                assert!(*scaled.denom() == 1,
-                    "poset {:?}: z·coeff of Ψ_{} not integer: {}", covers, alpha, scaled);
-                assert!(*scaled.numer() >= 0,
-                    "poset {:?}: z·coeff of Ψ_{} negative: {}", covers, alpha, scaled);
+                assert!(
+                    *scaled.denom() == 1,
+                    "poset {:?}: z·coeff of Ψ_{} not integer: {}",
+                    covers,
+                    alpha,
+                    scaled
+                );
+                assert!(
+                    *scaled.numer() >= 0,
+                    "poset {:?}: z·coeff of Ψ_{} negative: {}",
+                    covers,
+                    alpha,
+                    scaled
+                );
             }
         }
     }

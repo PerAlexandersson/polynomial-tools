@@ -270,10 +270,18 @@ impl SturmChain {
             return Q::one();
         }
         let lc = p.leading();
-        let lc_abs = if lc.is_negative() { -lc.clone() } else { lc.clone() };
+        let lc_abs = if lc.is_negative() {
+            -lc.clone()
+        } else {
+            lc.clone()
+        };
         let mut bound = Q::one();
         for c in &p.coeffs {
-            let c_abs = if c.is_negative() { -c.clone() } else { c.clone() };
+            let c_abs = if c.is_negative() {
+                -c.clone()
+            } else {
+                c.clone()
+            };
             let ratio = &c_abs / &lc_abs + Q::one();
             if ratio > bound {
                 bound = ratio;

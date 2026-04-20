@@ -205,10 +205,7 @@ mod tests {
     #[test]
     fn test_staircase_321() {
         // R(3,2,1) = 1 + 6t + 6t² + t³  (palindromic!)
-        assert_eq!(
-            non_nesting_rook_polynomial(&[3, 2, 1]),
-            vec![1, 6, 6, 1]
-        );
+        assert_eq!(non_nesting_rook_polynomial(&[3, 2, 1]), vec![1, 6, 6, 1]);
     }
 
     #[test]

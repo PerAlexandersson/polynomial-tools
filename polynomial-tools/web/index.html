@@ -56,7 +56,7 @@ html { margin: 0; padding: 0; background: var(--c-bg-body); }
 
 body {
   margin: 0 auto;
-  max-width: 52rem;
+  max-width: 82rem;
   padding: 1.5rem 1rem;
   font-family: Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif;
   background: var(--c-bg-body);
@@ -194,10 +194,37 @@ textarea:focus { outline: none; border-color: var(--c-link); }
 .tab-results { margin-top: 0.8rem; }
 .recurrence-display { text-align: center; padding: 1rem 0; font-size: 1em; overflow-x: auto; }
 .recurrence-stats { text-align: center; color: var(--c-text-muted); font-size: 0.85rem; margin-bottom: 0.5rem; }
-.recurrence-copy { display: flex; gap: 0.4rem; justify-content: center; margin-bottom: 0.5rem; }
+.recurrence-copy { display: flex; gap: 0.4rem; justify-content: center; flex-wrap: wrap; margin-bottom: 0.5rem; }
 .copy-btn { font-size: 0.75rem; padding: 2px 8px; border: 1px solid var(--c-border); border-radius: 3px; background: var(--c-bg-gray); color: var(--c-text-sub); cursor: pointer; font-family: inherit; }
 .copy-btn:hover { background: var(--c-border); }
 .recurrence-plain { display: none; }
+.recurrence-code-stack { display: grid; gap: 0.8rem; margin-top: 0.8rem; }
+.recurrence-code-card {
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: var(--c-bg-surface);
+  padding: 0.75rem 0.9rem 0.8rem;
+}
+.recurrence-code-card h3 {
+  margin: 0 0 0.35rem;
+  font-family: 'Raleway', system-ui, sans-serif;
+  font-size: 0.82rem;
+  color: var(--c-text-main);
+}
+.recurrence-note {
+  color: var(--c-text-muted);
+  font-size: 0.8rem;
+  margin-bottom: 0.5rem;
+  line-height: 1.45;
+}
+.recurrence-code {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-x: auto;
+  font-family: 'Fira Code', 'Consolas', monospace;
+  font-size: 0.76rem;
+  color: var(--c-text-sub);
+}
 
 /* Recurrence options */
 .options {
@@ -233,8 +260,13 @@ textarea:focus { outline: none; border-color: var(--c-link); }
   position: relative;
   flex-shrink: 0;
 }
-.info:hover { background: var(--c-border); color: var(--c-text-main); }
-.info .tip {
+.info:hover {
+  background: var(--c-border);
+  color: var(--c-text-main);
+  z-index: 200;
+}
+.info .tip,
+.mini .tip {
   display: none;
   position: absolute;
   bottom: calc(100% + 6px);
@@ -251,10 +283,11 @@ textarea:focus { outline: none; border-color: var(--c-link); }
   width: max-content;
   max-width: 22rem;
   line-height: 1.4;
-  z-index: 10;
+  z-index: 1000;
   pointer-events: none;
 }
-.info .tip::after {
+.info .tip::after,
+.mini .tip::after {
   content: '';
   position: absolute;
   top: 100%;
@@ -263,7 +296,43 @@ textarea:focus { outline: none; border-color: var(--c-link); }
   border: 5px solid transparent;
   border-top-color: var(--c-text-main);
 }
-.info:hover .tip { display: block; }
+.mini:hover .tip { display: block; }
+
+.floating-info-tip {
+  display: none;
+  position: fixed;
+  left: 0;
+  top: 0;
+  background: var(--c-text-main);
+  color: var(--c-bg-surface);
+  padding: 0.4rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  font-style: normal;
+  font-weight: 400;
+  white-space: normal;
+  width: max-content;
+  max-width: min(26rem, calc(100vw - 16px));
+  line-height: 1.4;
+  z-index: 20000;
+  pointer-events: none;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+}
+.floating-info-tip::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+}
+.floating-info-tip[data-placement="top"]::after {
+  top: 100%;
+  border-top-color: var(--c-text-main);
+}
+.floating-info-tip[data-placement="bottom"]::after {
+  bottom: 100%;
+  border-bottom-color: var(--c-text-main);
+}
 
 /* Radio group for search mode */
 .mode-group {
@@ -356,13 +425,38 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .sep { color: var(--c-text-muted); }
 
 /* Properties table */
-.prop-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
-.prop-table th, .prop-table td { padding: 0.25rem 0.5rem; text-align: left; vertical-align: middle; }
-.prop-table .hdr th { font-size: 0.75rem; color: var(--c-text-muted); font-weight: 400; border-bottom: 1px solid var(--c-border); cursor: help; }
-.prop-table .idx { color: var(--c-text-muted); width: 2rem; text-align: right; padding-right: 0.6rem; }
+.prop-table-wrap {
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  background: var(--c-bg-surface);
+  position: relative;
+  overflow: visible;
+  isolation: isolate;
+}
+.prop-table-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-radius: inherit;
+}
+.prop-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+.prop-table th, .prop-table td { padding: 0.38rem 0.45rem; text-align: left; vertical-align: middle; border-bottom: 1px solid var(--c-border); }
+.prop-table .hdr th {
+  font-size: 0.74rem;
+  color: var(--c-text-sub);
+  font-weight: 700;
+  cursor: help;
+  font-family: 'Raleway', system-ui, sans-serif;
+  letter-spacing: 0.02em;
+  background: color-mix(in srgb, var(--c-bg-surface) 94%, var(--c-brand-light) 6%);
+  box-shadow: inset 0 -1px 0 var(--c-border);
+  position: relative;
+  overflow: visible;
+  z-index: 2;
+}
+.prop-table .idx { color: var(--c-text-sub); width: 2.2rem; text-align: right; padding-right: 0.6rem; }
 .prop-table .poly { font-family: 'Fira Code', 'Consolas', monospace; }
-.prop-table .icons { text-align: center; width: 7rem; font-size: 0.8rem; font-family: 'Raleway', system-ui, sans-serif; font-weight: 600; }
-.prop-table tr:hover { background: var(--c-bg-gray); }
+.prop-table .icons { text-align: center; width: 7rem; font-size: 0.78rem; font-family: 'Raleway', system-ui, sans-serif; font-weight: 600; white-space: nowrap; }
+.prop-table tr:hover td { background: color-mix(in srgb, var(--c-bg-gray) 80%, var(--c-bg-surface)); }
 
 .icon-rr  { color: var(--c-yes); cursor: help; }
 .icon-ulc { color: hsl(45, 80%, 45%); cursor: help; }
@@ -385,6 +479,278 @@ button.run-small {
   font-weight: 600;
 }
 button.run-small:hover { border-color: var(--c-brand); color: var(--c-brand); }
+
+/* OEIS panel */
+.oeis-section { margin-bottom: 1.2rem; }
+.oeis-section h3 {
+  font-family: 'Raleway', system-ui, sans-serif;
+  font-size: 0.9rem;
+  font-weight: 700;
+  margin: 0 0 0.3rem;
+  color: var(--c-text-main);
+}
+.oeis-seq {
+  font-family: 'Fira Code', 'Consolas', monospace;
+  font-size: 0.8rem;
+  color: var(--c-text-sub);
+  word-break: break-all;
+  margin-bottom: 0.4rem;
+  line-height: 1.5;
+}
+.oeis-link {
+  display: inline-block;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  font-family: 'Raleway', system-ui, sans-serif;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-right: 0.4rem;
+  margin-bottom: 0.3rem;
+}
+.oeis-link:hover { border-color: var(--c-link); text-decoration: none; }
+.oeis-match {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.7rem;
+  background: var(--c-bg-gray);
+  border-radius: 4px;
+  font-size: 0.82rem;
+}
+.oeis-match a { font-weight: 700; }
+.oeis-match .oeis-name { color: var(--c-text-sub); margin-left: 0.3rem; }
+.oeis-results { margin-top: 0.65rem; }
+.oeis-data {
+  margin: 0.35rem 0 0;
+  font-size: 0.74rem;
+  color: var(--c-text-muted);
+}
+.oeis-none { color: var(--c-text-muted); font-size: 0.82rem; font-style: italic; }
+.oeis-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+.oeis-card {
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--c-bg-gray) 45%, var(--c-bg-surface));
+}
+.oeis-note {
+  font-size: 0.8rem;
+  color: var(--c-text-muted);
+  margin-bottom: 0.65rem;
+  line-height: 1.5;
+}
+
+/* Decomposition view */
+.decomp-subtabs {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  margin-bottom: 0;
+}
+.decomp-subtab {
+  padding: 0.45rem 0.9rem 0.5rem;
+  border: 1px solid var(--c-border);
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  background: color-mix(in srgb, var(--c-bg-gray) 72%, var(--c-bg-surface));
+  color: var(--c-text-sub);
+  cursor: pointer;
+  font-family: 'Raleway', system-ui, sans-serif;
+  font-size: 0.78rem;
+  font-weight: 700;
+  position: relative;
+  top: 1px;
+}
+.decomp-subtab.active {
+  border-color: var(--c-border);
+  color: var(--c-text-main);
+  background: var(--c-bg-surface);
+  box-shadow: inset 0 2px 0 color-mix(in srgb, var(--c-link) 70%, transparent);
+}
+.decomp-help {
+  font-size: 0.82rem;
+  color: var(--c-text-muted);
+  margin-bottom: 0;
+  padding: 0.75rem 0.9rem 0.8rem;
+  border: 1px solid var(--c-border);
+  border-bottom: none;
+  border-radius: 0 8px 0 0;
+  background: var(--c-bg-surface);
+  line-height: 1.55;
+}
+.decomp-help strong {
+  display: block;
+  margin-bottom: 0.28rem;
+  color: var(--c-text-sub);
+}
+.decomp-sheet-wrap {
+  border: 1px solid var(--c-border);
+  border-radius: 0 0 8px 8px;
+  background: var(--c-bg-surface);
+  position: relative;
+  overflow: visible;
+  isolation: isolate;
+}
+.decomp-sheet-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-radius: inherit;
+}
+.decomp-sheet {
+  width: 100%;
+  min-width: 70rem;
+  border-collapse: collapse;
+  font-size: 0.77rem;
+}
+.decomp-sheet th,
+.decomp-sheet td {
+  padding: 0.38rem 0.45rem;
+  border-bottom: 1px solid var(--c-border);
+  vertical-align: top;
+}
+.decomp-sheet th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: color-mix(in srgb, var(--c-bg-surface) 94%, var(--c-brand-light) 6%);
+  text-align: left;
+  font-family: 'Raleway', system-ui, sans-serif;
+  font-size: 0.74rem;
+  color: var(--c-text-sub);
+  letter-spacing: 0.02em;
+  overflow: visible;
+  box-shadow: inset 0 -1px 0 var(--c-border);
+}
+.decomp-sheet th .info { z-index: 20; }
+.decomp-sheet th .info .tip {
+  bottom: calc(100% + 8px);
+  z-index: 1200;
+}
+.decomp-sheet tr:hover td {
+  background: color-mix(in srgb, var(--c-bg-gray) 80%, var(--c-bg-surface));
+}
+.decomp-sheet .idx {
+  width: 2.2rem;
+  text-align: right;
+  color: var(--c-text-sub);
+}
+.decomp-sheet .poly {
+  font-family: 'Fira Code', 'Consolas', monospace;
+  white-space: nowrap;
+}
+.decomp-sheet .poly.wide {
+  white-space: normal;
+  min-width: 14rem;
+}
+.decomp-sheet .poly.doublewide {
+  min-width: 18rem;
+}
+.decomp-sheet .compact {
+  white-space: nowrap;
+}
+.decomp-stack {
+  display: grid;
+  gap: 0.28rem;
+}
+.decomp-stack-line {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.45rem;
+  align-items: start;
+}
+.decomp-stack-line.sub {
+  padding-top: 0.28rem;
+  border-top: 1px dashed color-mix(in srgb, var(--c-border) 75%, transparent);
+}
+.decomp-stack-label {
+  color: var(--c-text-muted);
+  white-space: nowrap;
+}
+.decomp-stack-value {
+  min-width: 0;
+}
+.decomp-icons {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.2rem;
+  min-width: 9.5rem;
+  white-space: nowrap;
+}
+.mini {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.9rem;
+  padding: 0.12rem 0.28rem;
+  border-radius: 999px;
+  border: 1px solid var(--c-border);
+  background: var(--c-bg-gray);
+  font-family: 'Raleway', system-ui, sans-serif;
+  font-size: 0.68rem;
+  font-weight: 700;
+  position: relative;
+  cursor: help;
+}
+.mini.yes {
+  color: var(--c-link);
+  border-color: color-mix(in srgb, var(--c-link) 45%, var(--c-border));
+  background: color-mix(in srgb, var(--c-link) 10%, var(--c-bg-surface));
+}
+.mini.no {
+  color: hsl(var(--hue-brand), 75%, 40%);
+  border-color: color-mix(in srgb, hsl(var(--hue-brand), 75%, 40%) 45%, var(--c-border));
+  background: color-mix(in srgb, hsl(var(--hue-brand), 75%, 40%) 10%, var(--c-bg-surface));
+  border-style: dashed;
+}
+.mini.neutral {
+  color: var(--c-text-muted);
+}
+.mini .tip {
+  max-width: 18rem;
+  z-index: 30;
+}
+.coords {
+  font-family: 'Fira Code', 'Consolas', monospace;
+  white-space: normal;
+  min-width: 16rem;
+  word-break: break-word;
+}
+.coords.unavailable {
+  min-width: 0;
+  color: var(--c-text-muted);
+}
+.coords.compact {
+  white-space: nowrap;
+  min-width: 0;
+}
+.decomp-empty {
+  padding: 0.8rem;
+  color: var(--c-text-muted);
+}
+.decomp-copybar {
+  margin-top: 0.8rem;
+  padding: 0.75rem 0.9rem 0.8rem;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: var(--c-bg-surface);
+}
+.decomp-copybar .oeis-actions {
+  margin-top: 0.55rem;
+}
+.sheet-oeis-stack { margin-top: 0.8rem; }
+.sheet-oeis-stack .oeis-section:last-child { margin-bottom: 0; }
+.sheet-oeis-title {
+  font-family: 'Raleway', system-ui, sans-serif;
+  font-size: 0.82rem;
+  font-weight: 700;
+  margin: 0 0 0.35rem;
+  color: var(--c-text-main);
+}
 
 /* Footer */
 footer {
@@ -411,8 +777,12 @@ footer {
   <span class="examples-label">Examples:</span>
   <button class="example" onclick="loadExample('eulerian')">Eulerian</button>
   <button class="example" onclick="loadExample('narayana')">Narayana</button>
+  <button class="example" onclick="loadExample('motzkin')">Motzkin</button>
   <button class="example" onclick="loadExample('derangement')">Derangement exc</button>
   <button class="example" onclick="loadExample('fibonacci')">Fibonacci matching (P<sub>n</sub>)</button>
+  <button class="example" onclick="loadExample('touchard')">Touchard</button>
+  <button class="example" onclick="loadExample('simsun')">Simsun</button>
+  <button class="example" onclick="loadExample('stirling_permutations')">Stirling perm.</button>
 </div>
 <textarea id="input" spellcheck="false" placeholder="Enter polynomials, one per line. Accepted formats:
 
@@ -425,13 +795,24 @@ Lines starting with # are ignored."></textarea>
 
 <div class="tabs">
   <button class="tab active" onclick="switchTab('properties')">Properties</button>
+  <button class="tab" onclick="switchTab('decomposition')">Decomposition</button>
   <button class="tab" onclick="switchTab('recurrence')">Recurrence</button>
+  <button class="tab" onclick="switchTab('oeis')">OEIS</button>
 </div>
 
 <div id="panel-properties" class="tab-panel active">
   <button class="run" onclick="run('properties')">Check properties</button>
-  <button class="run" onclick="runInterlacing()" id="btnInterlace" style="margin-left:0.3rem">Check interlacing</button>
   <div id="results-properties" class="tab-results"></div>
+</div>
+
+<div id="panel-decomposition" class="tab-panel">
+  <button class="run" onclick="run('decomposition')">Analyze decomposition</button>
+  <div id="results-decomposition" class="tab-results"></div>
+</div>
+
+<div id="panel-oeis" class="tab-panel">
+  <button class="run" onclick="run('oeis')">Look up on OEIS</button>
+  <div id="results-oeis" class="tab-results"></div>
 </div>
 
 <div id="panel-recurrence" class="tab-panel">
@@ -474,8 +855,9 @@ Lines starting with # are ignored."></textarea>
   Built with Rust + WebAssembly.
 </footer>
 
-<script src="pkg/polynomial_tools_web.js"></script>
+<script src="pkg/polynomial_tools_web.js?v=20260413a"></script>
 <script>
+const ASSET_VERSION = '20260413a';
 const EXAMPLES = {
   eulerian: {
     label: 'Eulerian polynomials A_n(t) \u2014 descent generating function on S_n',
@@ -519,24 +901,49 @@ const EXAMPLES = {
       '0, 1, 91, 2366, 26026, 143143, 429429, 736164, 736164, 429429, 143143, 26026, 2366, 91, 1',
     ]
   },
+  motzkin: {
+    label: 'Motzkin polynomials M_n(t) \u2014 non-crossing matchings on K_n',
+    lines: [
+      '# Motzkin polynomials: (n+2) M_n(t) = (2n+1) M_{n-1}(t) - (n-1)(1-4t) M_{n-2}(t), with M_1(t)=1 and M_2(t)=1+t.',
+      '# Non-crossing matching polynomial of K_n (A055151). Real-rooted, and M_{n-1} interlaces M_n.',
+      '1',
+      '1, 1',
+      '1, 3',
+      '1, 6, 2',
+      '1, 10, 10',
+      '1, 15, 30, 5',
+      '1, 21, 70, 35',
+      '1, 28, 140, 140, 14',
+      '1, 36, 252, 420, 126',
+      '1, 45, 420, 1050, 630, 42',
+      '1, 55, 660, 2310, 2310, 462',
+      '1, 66, 990, 4620, 6930, 2772, 132',
+      '1, 78, 1430, 8580, 18018, 12012, 1716',
+      '1, 91, 2002, 15015, 42042, 42042, 12012, 429',
+      '1, 105, 2730, 25025, 90090, 126126, 60060, 6435',
+    ]
+  },
   derangement: {
     label: 'Excedance polynomials on derangements d_n(t)',
     lines: [
       '# Excedance on derangements: d_n = t((n-1)d_{n-2} + (n-1)d_{n-1} + (1-t)d\'_{n-1}) (A008290)',
+      '# Coefficients are listed in ascending degree order, so each nonzero row starts with 0.',
       '# Real-rooted, consecutive interlace. See Mantaci-Rakotondrajao (2003).',
+      '0',
       '0, 1',
-      '0, 3, 1',
-      '0, 3, 11, 1',
-      '0, 3, 43, 29, 1',
-      '0, 3, 113, 271, 67, 1',
-      '0, 3, 259, 1523, 1255, 145, 1',
-      '0, 3, 557, 6655, 13009, 4959, 303, 1',
-      '0, 3, 1159, 25379, 97495, 86871, 17855, 621, 1',
-      '0, 3, 2369, 89263, 602149, 1038911, 499245, 60639, 1259, 1',
-      '0, 3, 4795, 298331, 3287227, 9782399, 9058735, 2600003, 198199, 2537, 1',
-      '0, 3, 9653, 964207, 16517449, 78546223, 124474825, 68985391, 12652633, 631279, 5095, 1',
-      '0, 3, 19375, 3046691, 78327631, 564317431, 1414061299, 1338451507, 477348055, 58670431, 1975231, 10213, 1',
-      '0, 3, 38825, 9478687, 356312125, 3741262671, 14020008141, 20885762367, 12746303565, 3079258383, 262640661, 6104271, 20451, 1',
+      '0, 1, 1',
+      '0, 1, 7, 1',
+      '0, 1, 21, 21, 1',
+      '0, 1, 51, 161, 51, 1',
+      '0, 1, 113, 813, 813, 113, 1',
+      '0, 1, 239, 3361, 7631, 3361, 239, 1',
+      '0, 1, 493, 12421, 53833, 53833, 12421, 493, 1',
+      '0, 1, 1003, 42865, 320107, 607009, 320107, 42865, 1003, 1',
+      '0, 1, 2025, 141549, 1704693, 5494017, 5494017, 1704693, 141549, 2025, 1',
+      '0, 1, 4071, 453905, 8422679, 42924113, 72605303, 42924113, 8422679, 453905, 4071, 1',
+      '0, 1, 8165, 1426725, 39474449, 302458313, 802028813, 802028813, 302458313, 39474449, 1426725, 8165, 1',
+      '0, 1, 16355, 4422913, 178065811, 1977056433, 7789852851, 12172272321, 7789852851, 1977056433, 178065811, 4422913, 16355, 1',
+      '0, 1, 32737, 13579309, 780889437, 12218582561, 68767041385, 158753132437, 158753132437, 68767041385, 12218582561, 780889437, 13579309, 32737, 1',
     ]
   },
   fibonacci: {
@@ -557,6 +964,72 @@ const EXAMPLES = {
       '1, 11, 45, 84, 70, 21, 1',
       '1, 12, 55, 120, 126, 56, 7',
       '1, 13, 66, 165, 210, 126, 28, 1',
+    ]
+  },
+  touchard: {
+    label: 'Touchard polynomials T_n(t) \u2014 Bell set partitions by number of blocks',
+    lines: [
+      '# Touchard polynomials: T_{n+1}(t) = t T_n(t) + t T\'_n(t), with T_0(t) = 1.',
+      '# Row sums are Bell numbers. Consecutive polynomials satisfy Prec, hence are real-rooted.',
+      '1',
+      '0, 1',
+      '0, 1, 1',
+      '0, 1, 3, 1',
+      '0, 1, 7, 6, 1',
+      '0, 1, 15, 25, 10, 1',
+      '0, 1, 31, 90, 65, 15, 1',
+      '0, 1, 63, 301, 350, 140, 21, 1',
+      '0, 1, 127, 966, 1701, 1050, 266, 28, 1',
+      '0, 1, 255, 3025, 7770, 6951, 2646, 462, 36, 1',
+      '0, 1, 511, 9330, 34105, 42525, 22827, 5880, 750, 45, 1',
+      '0, 1, 1023, 28501, 145750, 246730, 179487, 63987, 11880, 1155, 55, 1',
+      '0, 1, 2047, 86526, 611501, 1379400, 1323652, 627396, 159027, 22275, 1705, 66, 1',
+      '0, 1, 4095, 261625, 2532530, 7508501, 9321312, 5715424, 1899612, 359502, 39325, 2431, 78, 1',
+      '0, 1, 8191, 788970, 10391745, 40075035, 63436373, 49329280, 20912320, 5135130, 752752, 66066, 3367, 91, 1',
+    ]
+  },
+  simsun: {
+    label: 'Simsun descent polynomials S_n(t)',
+    lines: [
+      '# Simsun descent polynomials: S_{n+1}(t) = (1 + n t) S_n(t) + t(1 - 2t) S\'_n(t), with S_0(t) = 1.',
+      '# Consecutive polynomials satisfy Prec; these are real-rooted simsun descent polynomials.',
+      '1',
+      '1',
+      '1, 1',
+      '1, 4',
+      '1, 11, 4',
+      '1, 26, 34',
+      '1, 57, 180, 34',
+      '1, 120, 768, 496',
+      '1, 247, 2904, 4288, 496',
+      '1, 502, 10194, 28768, 11056',
+      '1, 1013, 34096, 166042, 141584, 11056',
+      '1, 2036, 110392, 868744, 1372088, 349504',
+      '1, 4083, 349500, 4247720, 11204160, 6213288, 349504',
+      '1, 8178, 1089330, 19786880, 81507120, 82096368, 14873104',
+      '1, 16369, 3357948, 88951490, 546043760, 900113808, 350400832, 14873104',
+    ]
+  },
+  stirling_permutations: {
+    label: 'Stirling-permutation descent polynomials P_n(t)',
+    lines: [
+      '# Stirling-permutation descents: P_{n+1}(t) = (2n+1)t P_n(t) + t(1-t) P\'_n(t), with P_0(t) = 1.',
+      '# Consecutive polynomials satisfy Prec/interlacing; row sums are (2n-1)!!.',
+      '1',
+      '0, 1',
+      '0, 1, 2',
+      '0, 1, 8, 6',
+      '0, 1, 22, 58, 24',
+      '0, 1, 52, 328, 444, 120',
+      '0, 1, 114, 1452, 4400, 3708, 720',
+      '0, 1, 240, 5610, 32120, 58140, 33984, 5040',
+      '0, 1, 494, 19950, 195800, 644020, 785304, 341136, 40320',
+      '0, 1, 1004, 67260, 1062500, 5765500, 12440064, 11026296, 3733920, 362880',
+      '0, 1, 2026, 218848, 5326160, 44765000, 155357384, 238904904, 162186912, 44339040, 3628800',
+      '0, 1, 4072, 695038, 25243904, 314369720, 1648384304, 4002695088, 4642163952, 2507481216, 568356480, 39916800',
+      '0, 1, 8166, 2170626, 114876376, 2051482776, 15548960784, 56041398784, 101180433024, 92199790224, 40788301824, 7827719040, 479001600',
+      '0, 1, 16356, 6699696, 507259276, 12669817776, 134323420224, 687720046384, 1818188642304, 2549865473424, 1883079661824, 697929436800, 115336085760, 6227020800',
+      '0, 1, 32738, 20507988, 2189829808, 75016052228, 1084676512416, 7634832149392, 28299910066112, 57494373464592, 64728375139872, 39689578055808, 12550904017920, 1810992556800, 87178291200',
     ]
   },
 };
@@ -585,12 +1058,12 @@ let wasmReady = false;
 let worker = null;
 let recurrenceRunning = false;
 
-let check_properties, check_interlacing_pairs, check_interlacing_pair, find_recurrence;
+let check_properties, check_interlacing_pairs, check_interlacing_pair, find_recurrence, analyze_decompositions;
 
 async function init() {
   try {
-    await wasm_bindgen({ module_or_path: 'pkg/polynomial_tools_web_bg.wasm' });
-    ({ check_properties, check_interlacing_pairs, check_interlacing_pair, find_recurrence } = wasm_bindgen);
+    await wasm_bindgen({ module_or_path: 'pkg/polynomial_tools_web_bg.wasm?v=' + ASSET_VERSION });
+    ({ check_properties, check_interlacing_pairs, check_interlacing_pair, find_recurrence, analyze_decompositions } = wasm_bindgen);
     wasmReady = true;
     setStatus('');
   } catch (e) {
@@ -603,8 +1076,13 @@ function setStatus(msg) {
 }
 
 let activeTab = 'properties';
+const OEIS_PROXY_URL = 'https://arxiv.symmetricfunctions.com/api/oeis-search';
+let oeisLookupToken = 0;
+let oeisInlineRequestToken = 0;
+let oeisInlineSlotSerial = 0;
 
 function setResult(html) {
+  hideFloatingInfoTip();
   document.getElementById('results-' + activeTab).innerHTML = html;
 }
 
@@ -613,12 +1091,46 @@ function getInput() {
 }
 
 function copyRec(btn, kind) {
-  const text = kind === 'latex' ? window._lastRecLatex : window._lastRecPlain;
+  const key = ({
+    plain: '_lastRecPlain',
+    latex: '_lastRecLatex',
+    mathematica: '_lastRecMathematica',
+    sage: '_lastRecSage',
+  })[kind] || '_lastRecPlain';
+  const text = window[key] || '';
   navigator.clipboard.writeText(text).then(() => {
     const orig = btn.textContent;
     btn.textContent = 'Copied!';
     setTimeout(() => btn.textContent = orig, 1500);
   });
+}
+
+function renderRecurrenceCodeCard(title, note, code) {
+  if (!code) return '';
+  return '<div class="recurrence-code-card">' +
+    '<h3>' + esc(title) + '</h3>' +
+    '<div class="recurrence-note">' + esc(note) + '</div>' +
+    '<pre class="recurrence-code">' + esc(code) + '</pre>' +
+    '</div>';
+}
+
+function renderRecurrenceCodeStack(data) {
+  const cards = [];
+  if (data.mathematica) {
+    cards.push(renderRecurrenceCodeCard(
+      'Mathematica',
+      'Defines P[n, t] from the discovered recurrence together with the needed initial values.',
+      data.mathematica
+    ));
+  }
+  if (data.sage) {
+    cards.push(renderRecurrenceCodeCard(
+      'Sage',
+      'Defines P(n) in a polynomial ring over QQ, memoized from the discovered recurrence and initial values.',
+      data.sage
+    ));
+  }
+  return cards.length ? ('<div class="recurrence-code-stack">' + cards.join('') + '</div>') : '';
 }
 
 function span(cls, text) {
@@ -629,7 +1141,20 @@ function esc(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-function run(action) {
+function escAttr(s) {
+  return esc(String(s)).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function katexInline(tex) {
+  try {
+    if (window.katex && typeof window.katex.renderToString === 'function') {
+      return window.katex.renderToString(tex, { displayMode: false, throwOnError: false });
+    }
+  } catch (e) {}
+  return '<span>' + esc(tex) + '</span>';
+}
+
+async function run(action) {
   if (!wasmReady) { setStatus('WASM not loaded yet.'); return; }
   const text = getInput();
   if (!text.trim()) { setStatus('No input.'); return; }
@@ -637,7 +1162,9 @@ function run(action) {
   try {
     switch (action) {
       case 'properties': renderProperties(text); break;
+      case 'decomposition': renderDecompositions(text); break;
       case 'recurrence': startRecurrence(text); break;
+      case 'oeis': await runOeis(); break;
     }
   } catch (e) {
     setResult(span('err', 'Error: ' + e));
@@ -658,45 +1185,72 @@ function abbreviatePoly(full) {
 
 function polyTooltip(full, abbrev) {
   if (full === abbrev) return esc(full);
-  return '<span class="poly-tip" title="' + esc(full) + '">' + esc(abbrev) + '</span>';
+  return '<span class="poly-tip" title="' + escAttr(full) + '">' + esc(abbrev) + '</span>';
 }
 
 function concavityLabel(item) {
   if (item.real_rooted) {
-    return '<span class="icon-rr" title="Real-rooted \u21d2 ultra-log-concave \u21d2 log-concave \u21d2 unimodal">RealRooted</span>';
+    return mini('RR', true, 'Real-rooted => ultra-log-concave => log-concave => unimodal');
   }
   if (item.ultra_log_concave) {
-    return '<span class="icon-ulc" title="Ultra-log-concave \u21d2 log-concave \u21d2 unimodal (but NOT real-rooted)">ULC</span>';
+    return mini('ULC', true, 'Ultra-log-concave => log-concave => unimodal (but not real-rooted)');
   }
   if (item.log_concave) {
-    return '<span class="icon-lc" title="Log-concave \u21d2 unimodal (not ultra-log-concave)">LogConcave</span>';
+    return mini('LC', true, 'Log-concave => unimodal (not ultra-log-concave)');
   }
-  // Check unimodality from coefficients — approximate via sorted check
-  return '<span class="icon-none" title="Not log-concave">\u2014</span>';
+  return mini('—', null, '', '', 'Not log-concave');
 }
 
 function symmetryLabel(item) {
   if (item.gamma_positive && item.gamma_coefficients) {
-    return '<span class="icon-gp" title="\u03b3-positive (implies palindromic). \u03b3 = [' +
-      item.gamma_coefficients.join(', ') + ']">\u03b3-pos</span>';
+    return mini('\u03b3+', true, '\u03b3-positive (implies palindromic). \u03b3 = [' + item.gamma_coefficients.join(', ') + ']');
   }
   if (item.palindromic) {
-    return '<span class="icon-pal" title="Palindromic (but not \u03b3-positive)">palindromic</span>';
+    return mini('pal', true, 'Palindromic (but not \u03b3-positive)');
   }
-  return '<span class="icon-none" title="Not palindromic">\u2014</span>';
+  return mini('—', null, '', '', 'Not palindromic');
 }
 
 let lastPropsData = null;  // stored for interlacing check
-let lastPropsText = null;
+let lastDecompData = null;
+let activeDecompView = 'core';
 
 function renderProperties(text) {
   const t0 = performance.now();
   const data = JSON.parse(check_properties(text));
-  const ms = (performance.now() - t0).toFixed(1);
   lastPropsData = data;
-  lastPropsText = text;
-  renderPropsTable(data, null);
-  setStatus(data.length + ' polynomial(s) checked in ' + ms + ' ms.');
+  const counts = computeInterlacingCounts(data);
+  const ms = (performance.now() - t0).toFixed(1);
+  renderPropsTable(data, counts);
+  setStatus(data.length + ' polynomial(s) checked in ' + ms + ' ms, including interlacing.');
+}
+
+function computeInterlacingCounts(data) {
+  const n = data.length;
+  const counts = new Array(n).fill(null);
+  if (n === 0) return counts;
+  counts[0] = 0;
+
+  for (let i = 1; i < n; i++) {
+    const itemI = data[i];
+    if (itemI.error || !itemI.coefficients) { counts[i] = null; continue; }
+    let count = 0;
+    const degI = itemI.degree;
+    const ci = JSON.stringify(itemI.coefficients);
+
+    for (let j = i - 1; j >= 0; j--) {
+      const itemJ = data[j];
+      if (itemJ.error || !itemJ.coefficients) continue;
+      const degJ = itemJ.degree;
+      if (Math.abs(degI - degJ) > 1) continue;
+      const cj = JSON.stringify(itemJ.coefficients);
+      const result = JSON.parse(check_interlacing_pair(cj, ci));
+      if (result.strict || result.weak) count++;
+    }
+    counts[i] = count;
+  }
+
+  return counts;
 }
 
 function renderPropsTable(data, interlacingCounts) {
@@ -713,16 +1267,15 @@ function renderPropsTable(data, interlacingCounts) {
     const abbrev = abbreviatePoly(full);
     let intCell;
     if (interlacingCounts === null) {
-      intCell = '<td class="icons interlace-pending">\u2014</td>';
+      intCell = '<td class="icons interlace-pending">' + mini('—', null, '', '', 'Run interlacing to populate this column') + '</td>';
     } else {
       const count = interlacingCounts[idx - 1];
       if (count === undefined || count === null) {
-        intCell = '<td class="icons">\u2014</td>';
+        intCell = '<td class="icons">' + mini('—', null, '', '', 'Interlacing data unavailable') + '</td>';
       } else if (count > 0) {
-        intCell = '<td class="icons icon-rr" title="Interlaces ' + count +
-                  ' earlier polynomial(s)">' + count + '</td>';
+        intCell = '<td class="icons">' + mini(String(count), true, 'Interlaces ' + count + ' earlier polynomial(s)') + '</td>';
       } else {
-        intCell = '<td class="icons icon-none">0</td>';
+        intCell = '<td class="icons">' + mini('0', null, '', '', 'Interlaces no earlier polynomials') + '</td>';
       }
     }
     rows.push(
@@ -736,52 +1289,403 @@ function renderPropsTable(data, interlacingCounts) {
     );
     idx++;
   }
-  const intHeader = '<th title="Number of earlier polynomials with |\u0394deg| \u2264 1 that this one interlaces (B\u00e9zout method)">interlaces</th>';
+  const intHeader = '<th>' + headerLabel('interlaces', 'Number of earlier polynomials with |\u0394deg| \u2264 1 that this one interlaces (B\u00e9zout method).') + '</th>';
   const header = '<tr class="hdr"><th></th><th>polynomial</th>' +
-    '<th title="Concavity: RealRooted \u21d2 ULC \u21d2 LogConcave">concavity</th>' +
-    '<th title="Symmetry: \u03b3-pos \u21d2 palindromic">symmetry</th>' +
+    '<th>' + headerLabel('concavity', 'Concavity hierarchy: RealRooted => ULC => LogConcave.') + '</th>' +
+    '<th>' + headerLabel('symmetry', '\u03b3-positive => palindromic.') + '</th>' +
     intHeader + '</tr>';
-  setResult('<table class="prop-table">' + header + rows.join('') + '</table>');
+  setResult('<div class="prop-table-wrap"><div class="prop-table-scroll"><table class="prop-table">' + header + rows.join('') + '</table></div></div>');
 }
 
-function runInterlacing() {
-  if (!wasmReady) { setStatus('WASM not loaded yet.'); return; }
-  const text = getInput();
-  if (!text.trim()) { setStatus('No input.'); return; }
-  // Always (re-)run properties first to ensure data matches current textarea
-  renderProperties(text);
-  setStatus('Computing interlacing (checking all compatible pairs)...');
-  const t0 = performance.now();
+function serializeCoeffRow(coeffs) {
+  return coeffs && coeffs.length ? coeffs.join(', ') : '0';
+}
 
-  const n = lastPropsData.length;
-  const counts = new Array(n).fill(null);
-  counts[0] = 0;
+function propsForRows(rows) {
+  const lines = rows.map(serializeCoeffRow).join('\n');
+  return JSON.parse(check_properties(lines));
+}
 
-  // For each polynomial i, check against all earlier j where |deg(i) - deg(j)| <= 1
-  for (let i = 1; i < n; i++) {
-    const item_i = lastPropsData[i];
-    if (item_i.error || !item_i.coefficients) { counts[i] = null; continue; }
-    let count = 0;
-    const deg_i = item_i.degree;
-    const ci = JSON.stringify(item_i.coefficients);
-
-    for (let j = i - 1; j >= 0; j--) {
-      const item_j = lastPropsData[j];
-      if (item_j.error || !item_j.coefficients) continue;
-      const deg_j = item_j.degree;
-      if (Math.abs(deg_i - deg_j) > 1) continue;
-      const cj = JSON.stringify(item_j.coefficients);
-      // check_interlacing_pair(p, q) tests p ≪ q (p on LEFT).
-      // We want earlier (j) ≪ later (i).
-      const result = JSON.parse(check_interlacing_pair(cj, ci));
-      if (result.strict || result.weak) count++;
+function coeffsToPolyText(coeffs, variable) {
+  if (!coeffs || !coeffs.length) return '0';
+  const terms = [];
+  for (let i = 0; i < coeffs.length; i++) {
+    const c = coeffs[i];
+    if (c === 0) continue;
+    const sign = c < 0 ? '-' : '+';
+    const abs = Math.abs(c);
+    let term = '';
+    if (i === 0) {
+      term = String(abs);
+    } else {
+      const coeffPart = abs === 1 ? '' : String(abs);
+      term = coeffPart + variable + (i === 1 ? '' : '^' + i);
     }
-    counts[i] = count;
+    terms.push((sign === '-' ? '- ' : '+ ') + term);
+  }
+  if (!terms.length) return '0';
+  return terms.map((term, idx) => idx === 0 ? term.replace(/^\+\s/, '') : term).join(' ');
+}
+
+function gammaPolyText(coeffs) {
+  if (!coeffs) return null;
+  return coeffsToPolyText(coeffs, 'z');
+}
+
+function infoTip(text) {
+  return ' <span class="info">i<span class="tip">' + esc(text) + '</span></span>';
+}
+
+function infoTipHtml(html) {
+  return ' <span class="info">i<span class="tip">' + html + '</span></span>';
+}
+
+function headerLabel(label, tip) {
+  return esc(label) + (tip ? infoTip(tip) : '');
+}
+
+function mathHeader(tex, tipHtml) {
+  return katexInline(tex) + (tipHtml ? infoTipHtml(tipHtml) : '');
+}
+
+let floatingInfoTipEl = null;
+let activeInfoAnchor = null;
+
+function ensureFloatingInfoTip() {
+  if (floatingInfoTipEl) return floatingInfoTipEl;
+  floatingInfoTipEl = document.createElement('div');
+  floatingInfoTipEl.className = 'floating-info-tip';
+  floatingInfoTipEl.setAttribute('aria-hidden', 'true');
+  document.body.appendChild(floatingInfoTipEl);
+  return floatingInfoTipEl;
+}
+
+function positionFloatingInfoTip(anchor) {
+  if (!anchor || !floatingInfoTipEl) return;
+
+  const rect = anchor.getBoundingClientRect();
+  const margin = 8;
+
+  floatingInfoTipEl.style.visibility = 'hidden';
+  floatingInfoTipEl.style.display = 'block';
+  floatingInfoTipEl.style.left = '0px';
+  floatingInfoTipEl.style.top = '0px';
+
+  const tipRect = floatingInfoTipEl.getBoundingClientRect();
+  let left = rect.left + rect.width / 2 - tipRect.width / 2;
+  left = Math.max(margin, Math.min(left, window.innerWidth - tipRect.width - margin));
+
+  let top = rect.top - tipRect.height - 10;
+  let placement = 'top';
+  if (top < margin) {
+    top = rect.bottom + 10;
+    placement = 'bottom';
   }
 
+  floatingInfoTipEl.dataset.placement = placement;
+  floatingInfoTipEl.style.left = left + 'px';
+  floatingInfoTipEl.style.top = top + 'px';
+  floatingInfoTipEl.style.visibility = 'visible';
+}
+
+function showFloatingInfoTip(anchor) {
+  const tip = anchor && anchor.querySelector('.tip');
+  if (!tip) return;
+  activeInfoAnchor = anchor;
+  const layer = ensureFloatingInfoTip();
+  layer.innerHTML = tip.innerHTML;
+  positionFloatingInfoTip(anchor);
+}
+
+function hideFloatingInfoTip(anchor) {
+  if (anchor && activeInfoAnchor && anchor !== activeInfoAnchor) return;
+  activeInfoAnchor = null;
+  if (!floatingInfoTipEl) return;
+  floatingInfoTipEl.style.display = 'none';
+  floatingInfoTipEl.innerHTML = '';
+}
+
+function installInfoTooltipLayer() {
+  document.addEventListener('mouseover', event => {
+    const info = event.target.closest('.info');
+    if (!info || info.contains(event.relatedTarget)) return;
+    showFloatingInfoTip(info);
+  }, true);
+
+  document.addEventListener('mouseout', event => {
+    const info = event.target.closest('.info');
+    if (!info || info.contains(event.relatedTarget)) return;
+    hideFloatingInfoTip(info);
+  }, true);
+
+  window.addEventListener('scroll', () => {
+    if (activeInfoAnchor) positionFloatingInfoTip(activeInfoAnchor);
+  }, true);
+
+  window.addEventListener('resize', () => {
+    if (activeInfoAnchor) positionFloatingInfoTip(activeInfoAnchor);
+  });
+}
+
+function polyTextToLatex(text) {
+  return String(text)
+    .replace(/…/g, '\\cdots')
+    .replace(/([A-Za-z])\^(\d+)/g, '$1^{$2}');
+}
+
+function allZeroSeq(values) {
+  return !values || !values.length || values.every(isZeroValue);
+}
+
+function polyTextInner(text) {
+  if (!text) return '\u2014';
+  const abbrev = abbreviatePoly(text);
+  const rendered = katexInline(polyTextToLatex(abbrev));
+  if (text === abbrev) return rendered;
+  return '<span class="poly-tip" title="' + escAttr(text) + '">' + rendered + '</span>';
+}
+
+function polyTextCell(text, extraClass, compact) {
+  const cls = 'poly' + (compact ? '' : ' wide') + (extraClass ? ' ' + extraClass : '');
+  return '<td class="' + cls + '">' + polyTextInner(text) + '</td>';
+}
+
+function stackedPolyCell(mainLabelTex, mainText, subLabelTex, subText, compact) {
+  const cls = 'poly' + (compact ? '' : ' wide doublewide');
+  return '<td class="' + cls + '"><div class="decomp-stack">' +
+    '<div class="decomp-stack-line">' +
+    '<div class="decomp-stack-label">' + katexInline(mainLabelTex) + '</div>' +
+    '<div class="decomp-stack-value">' + polyTextInner(mainText) + '</div>' +
+    '</div>' +
+    '<div class="decomp-stack-line sub">' +
+    '<div class="decomp-stack-label">' + katexInline(subLabelTex) + '</div>' +
+    '<div class="decomp-stack-value">' + polyTextInner(subText) + '</div>' +
+    '</div>' +
+    '</div></td>';
+}
+
+function vectorInner(values, compact) {
+  if (values == null) {
+    return '<div class="coords unavailable' + (compact ? ' compact' : '') + '">\u2014</div>';
+  }
+  const text = values.length ? values.join(', ') : '0';
+  return '<div class="coords' + (compact ? ' compact' : '') + '" title="' + escAttr(text) + '">' + esc(text) + '</div>';
+}
+
+function vectorCell(values, compact) {
+  return '<td>' + vectorInner(values, compact) + '</td>';
+}
+
+function stackedVectorCell(mainLabelTex, mainValues, subLabelTex, subValues, compact) {
+  return '<td><div class="decomp-stack">' +
+    '<div class="decomp-stack-line">' +
+    '<div class="decomp-stack-label">' + katexInline(mainLabelTex) + '</div>' +
+    '<div class="decomp-stack-value">' + vectorInner(mainValues, compact) + '</div>' +
+    '</div>' +
+    '<div class="decomp-stack-line sub">' +
+    '<div class="decomp-stack-label">' + katexInline(subLabelTex) + '</div>' +
+    '<div class="decomp-stack-value">' + vectorInner(subValues, compact) + '</div>' +
+    '</div>' +
+    '</div></td>';
+}
+
+function partialSumTooltip(magic) {
+  if (!magic || !Array.isArray(magic.partial_sum_checks) || !magic.partial_sum_checks.length) {
+    return 'partial-sum data unavailable';
+  }
+  const failAt = magic.partial_sum_checks.findIndex(flag => !flag);
+  if (failAt === -1) {
+    return 'The inequalities L_j <= R_j hold for all checked indices j = 0..' + (magic.partial_sum_checks.length - 1) + '.';
+  }
+  const left = Array.isArray(magic.left_partial_sums) ? magic.left_partial_sums[failAt] : '?';
+  const right = Array.isArray(magic.right_partial_sums) ? magic.right_partial_sums[failAt] : '?';
+  return 'Fails first at j = ' + failAt + ': L_' + failAt + ' = ' + left + ' > R_' + failAt + ' = ' + right + '.';
+}
+
+function mini(code, flag, yesTitle, noTitle, neutralTitle) {
+  let cls = 'neutral';
+  let title = neutralTitle || (code + ': not available');
+  if (flag === true) {
+    cls = 'yes';
+    title = yesTitle;
+  } else if (flag === false) {
+    cls = 'no';
+    title = noTitle;
+  }
+  return '<span class="mini ' + cls + '">' + esc(code) + '<span class="tip">' + esc(title) + '</span></span>';
+}
+
+function iconRow(items) {
+  return '<div class="decomp-icons">' + items.join('') + '</div>';
+}
+
+function mergeDecompositionData(decompRows, inputText) {
+  const inputProps = JSON.parse(check_properties(inputText));
+  const aProps = propsForRows(decompRows.map(item => item.error ? [0] : (item.a.coefficients || [0])));
+  const bProps = propsForRows(decompRows.map(item => item.error ? [0] : (item.b.coefficients || [0])));
+
+  return decompRows.map((item, idx) => {
+    if (item.error) return item;
+    const inputProp = inputProps[idx] || {};
+    const aProp = aProps[idx] || {};
+    const bProp = bProps[idx] || {};
+    return {
+      ...item,
+      gamma_input_coefficients: inputProp.gamma_coefficients || null,
+      gamma_input_text: gammaPolyText(inputProp.gamma_coefficients || null),
+      gamma_a_coefficients: aProp.gamma_coefficients || null,
+      gamma_a_text: gammaPolyText(aProp.gamma_coefficients || null),
+      gamma_a_positive: aProp.gamma_positive,
+      gamma_b_coefficients: bProp.gamma_coefficients || null,
+      gamma_b_text: gammaPolyText(bProp.gamma_coefficients || null),
+      gamma_b_positive: bProp.gamma_positive,
+    };
+  });
+}
+
+function renderDecompositions(text) {
+  const t0 = performance.now();
+  lastDecompData = mergeDecompositionData(JSON.parse(analyze_decompositions(text)), text);
   const ms = (performance.now() - t0).toFixed(1);
-  renderPropsTable(lastPropsData, counts);
-  setStatus('Interlacing checked in ' + ms + ' ms (' + n + ' polynomials).');
+  renderDecompositionView();
+  setStatus(lastDecompData.length + ' polynomial(s) analyzed in ' + ms + ' ms.');
+}
+
+function setDecompView(view) {
+  activeDecompView = view;
+  if (lastDecompData) renderDecompositionView();
+}
+
+function renderDecompositionView() {
+  if (!lastDecompData) {
+    setResult('<div class="decomp-empty">Run the decomposition analysis to populate the sheet.</div>');
+    return;
+  }
+
+  const subtabs = [
+    ['core', 'Symmetric Split'],
+    ['companion', 'R_d Split'],
+    ['magic', 'Magic basis'],
+  ].map(([key, label]) =>
+    '<button class="decomp-subtab' + (activeDecompView === key ? ' active' : '') +
+    '" onclick="setDecompView(\'' + key + '\')">' + esc(label) + '</button>'
+  ).join('');
+
+  const helpHtml = {
+    core: '<strong>Symmetric decomposition</strong>For a polynomial ' + katexInline('p(t)') + ' of degree at most ' + katexInline('d') + ', define ' + katexInline('I_d(p)(t)=t^d p(1/t)') + '. Then there are unique polynomials ' + katexInline('a(t)') + ' and ' + katexInline('b(t)') + ' such that ' + katexInline('p(t)=a(t)+tb(t)') + ', with ' + katexInline('I_d(a)=a') + ' and ' + katexInline('I_{d-1}(b)=b') + '; equivalently ' + katexInline('I_d(p)=a+b') + '. This table lists the coefficient vectors of ' + katexInline('p(t)') + ', ' + katexInline('a(t)') + ', and ' + katexInline('b(t)') + ', with the corresponding gamma-coefficient vectors directly underneath. Reference: Petter Br&auml;nd&eacute;n and Liam Solus, <a href="https://academic.oup.com/imrn/article/2021/10/7764/5425553" target="_blank" rel="noopener">Symmetric decompositions and real-rootedness</a>, <i>International Mathematics Research Notices</i> 2021:10, 7764-7810.',
+    companion: '<strong>Companion ' + katexInline('R_d') + ' decomposition</strong>Starting from the input polynomial ' + katexInline('p(t)=\\sum_{k=0}^d p_k t^k') + ', define the auxiliary polynomial ' + katexInline('f(t)=(1+t)^d p\\!\\left(\\frac{t}{1+t}\\right)=\\sum_{k=0}^d p_k t^k(1+t)^{d-k}') + '. Then define ' + katexInline('R_d(f)(t)=(-1)^d f(-1-t)') + '. This tab shows the decomposition ' + katexInline('f(t)=\\widetilde{a}(t)+t\\widetilde{b}(t)') + ', written as coefficient vectors, where ' + katexInline('R_d(\\widetilde{a})=\\widetilde{a}') + ' and ' + katexInline('R_{d-1}(\\widetilde{b})=\\widetilde{b}') + '.',
+    magic: '<strong>Magic-basis coordinates</strong>This tab records the coordinates ' + katexInline('c_j') + ' in the basis ' + katexInline('t^j(1+t)^{d-j}') + '. The flag ' + katexInline('S\\le') + ' checks the partial-sum inequalities ' + katexInline('L_j=c_0+\\cdots+c_j\\le R_j=c_d+\\cdots+c_{d-j}') + '; hover it to see the first failing index when one occurs.',
+  }[activeDecompView];
+  const clean = lastDecompData.filter(item => !item.error);
+  let header = '';
+  let rows = [];
+  let colspan = 7;
+
+  if (activeDecompView === 'core') {
+    colspan = 5;
+    const compactP = clean.every(item => allZeroSeq(item.coefficients));
+    const compactA = clean.every(item => allZeroSeq(item.a.coefficients));
+    const compactGammaA = clean.every(item => allZeroSeq(item.gamma_a_coefficients));
+    const compactB = clean.every(item => allZeroSeq(item.b.coefficients));
+    const compactGammaB = clean.every(item => allZeroSeq(item.gamma_b_coefficients));
+    const compactAStack = compactA && compactGammaA;
+    const compactBStack = compactB && compactGammaB;
+    header = '<tr>' +
+      '<th></th>' +
+      '<th>' + headerLabel('deg', 'Degree after trimming trailing zeros.') + '</th>' +
+      '<th>' + mathHeader('p(t)', 'Coefficient vector of the input polynomial ' + katexInline('p(t)') + '.') + '</th>' +
+      '<th>' + mathHeader('a(t),\\ \\gamma_a(z)', 'The first line gives the coefficient vector of the unique ' + katexInline('I_d') + '-symmetric part ' + katexInline('a(t)') + ', and the second line gives the gamma-coefficient vector of ' + katexInline('\\gamma_a(z)=\\sum_i \\gamma_i z^i') + '.') + '</th>' +
+      '<th>' + mathHeader('b(t),\\ \\gamma_b(z)', 'The first line gives the coefficient vector of the unique ' + katexInline('I_{d-1}') + '-symmetric companion ' + katexInline('b(t)') + ', and the second line gives the gamma-coefficient vector of ' + katexInline('\\gamma_b(z)=\\sum_i \\gamma_i z^i') + '.') + '</th>' +
+      '<th>' + headerLabel('Properties', 'aRR: a real-rooted. ga+: gamma(a) has nonnegative coefficients. bRR: b real-rooted. gb+: gamma(b) has nonnegative coefficients. b≺a: b interlaces a. AI: alternatingly increasing.') + '</th>' +
+      '</tr>';
+    rows = lastDecompData.map((item, idx) => {
+      if (item.error) {
+        return '<tr><td class="idx">' + (idx + 1) + '</td><td colspan="' + colspan + '" class="err">' + esc(item.error) + '</td></tr>';
+      }
+      return '<tr>' +
+        '<td class="idx">' + (idx + 1) + '</td>' +
+        '<td class="compact">' + item.degree + '</td>' +
+        vectorCell(item.coefficients, compactP) +
+        stackedVectorCell('a(t)', item.a.coefficients, '\\gamma_a(z)', item.gamma_a_coefficients, compactAStack) +
+        stackedVectorCell('b(t)', item.b.coefficients, '\\gamma_b(z)', item.gamma_b_coefficients, compactBStack) +
+        '<td>' + iconRow([
+          mini('aRR', item.a_real_rooted, 'a(t) is real-rooted', 'a(t) is not real-rooted'),
+          mini('ga+', item.gamma_a_positive, 'gamma(a) has nonnegative coefficients', 'gamma(a) has a negative coefficient', 'gamma(a): unavailable'),
+          mini('bRR', item.b_real_rooted, 'b(t) is real-rooted', 'b(t) is not real-rooted'),
+          mini('gb+', item.gamma_b_positive, 'gamma(b) has nonnegative coefficients', 'gamma(b) has a negative coefficient', 'gamma(b): unavailable'),
+          mini('b\u226aa', item.b_interlaces_a, 'b interlaces a', 'b does not interlace a', 'b versus a: unavailable'),
+          mini('AI', item.alternatingly_increasing, 'alternatingly increasing', 'not alternatingly increasing'),
+        ]) + '</td>' +
+        '</tr>';
+    });
+  } else if (activeDecompView === 'companion') {
+    colspan = 6;
+    const compactF = clean.every(item => allZeroSeq(item.f_polynomial.coefficients));
+    const compactR = clean.every(item => allZeroSeq(item.r_transform_of_f.coefficients));
+    const compactRA = clean.every(item => allZeroSeq(item.r_a.coefficients));
+    const compactRB = clean.every(item => allZeroSeq(item.r_b.coefficients));
+    header = '<tr>' +
+      '<th></th>' +
+      '<th>' + headerLabel('deg', 'Degree after trimming trailing zeros.') + '</th>' +
+      '<th>' + mathHeader('f(t)', 'The auxiliary polynomial attached to the input ' + katexInline('p(t)') + ', namely ' + katexInline('f(t)=(1+t)^d p\\!\\left(\\frac{t}{1+t}\\right)=\\sum_{k=0}^d p_k t^k(1+t)^{d-k}') + '.') + '</th>' +
+      '<th>' + mathHeader('R_d(f)', 'Coefficient vector of ' + katexInline('R_d(f)(t)=(-1)^d f(-1-t)') + '.') + '</th>' +
+      '<th>' + mathHeader('\\widetilde{a}(t)', 'Coefficient vector of the unique ' + katexInline('R_d') + '-symmetric part in ' + katexInline('f(t)=\\widetilde{a}(t)+t\\widetilde{b}(t)') + ', so ' + katexInline('R_d(\\widetilde{a})=\\widetilde{a}') + '.') + '</th>' +
+      '<th>' + mathHeader('\\widetilde{b}(t)', 'Coefficient vector of the unique companion part in ' + katexInline('f(t)=\\widetilde{a}(t)+t\\widetilde{b}(t)') + ', so ' + katexInline('R_{d-1}(\\widetilde{b})=\\widetilde{b}') + '.') + '</th>' +
+      '<th>' + headerLabel('Properties', 'R≺f: R_d(f) interlaces f. M+: all magic-basis coordinates are nonnegative. S≤: all left partial sums are at most the corresponding right partial sums.') + '</th>' +
+      '</tr>';
+    rows = lastDecompData.map((item, idx) => {
+      if (item.error) {
+        return '<tr><td class="idx">' + (idx + 1) + '</td><td colspan="' + colspan + '" class="err">' + esc(item.error) + '</td></tr>';
+      }
+      return '<tr>' +
+        '<td class="idx">' + (idx + 1) + '</td>' +
+        '<td class="compact">' + item.degree + '</td>' +
+        vectorCell(item.f_polynomial.coefficients, compactF) +
+        vectorCell(item.r_transform_of_f.coefficients, compactR) +
+        vectorCell(item.r_a.coefficients, compactRA) +
+        vectorCell(item.r_b.coefficients, compactRB) +
+        '<td>' + iconRow([
+          mini('R\u226af', item.r_interlaces_f, 'R_d(f) interlaces f', 'R_d(f) does not interlace f', 'R_d(f) versus f: unavailable'),
+          mini('M+', item.magic.all_nonnegative, 'all magic-basis coordinates are nonnegative', 'some magic-basis coordinates are negative'),
+          mini('S\u2264', item.magic.left_leq_right, partialSumTooltip(item.magic), partialSumTooltip(item.magic), 'partial-sum data unavailable'),
+        ]) + '</td>' +
+        '</tr>';
+    });
+  } else {
+    colspan = 4;
+    const compactP = clean.every(item => allZeroSeq(item.coefficients));
+    const compactCoords = clean.every(item => allZeroSeq(item.magic.coordinates));
+    header = '<tr>' +
+      '<th></th>' +
+      '<th>' + headerLabel('deg', 'Degree after trimming trailing zeros.') + '</th>' +
+      '<th>' + mathHeader('p(t)', 'Coefficient vector of the input polynomial ' + katexInline('p(t)') + '.') + '</th>' +
+      '<th>' + mathHeader('c_j', 'Coordinates ' + katexInline('c_j') + ' in the basis ' + katexInline('t^j(1+t)^{d-j}') + '.') + '</th>' +
+      '<th>' + headerLabel('Properties', 'M+: all magic-basis coordinates are nonnegative. S≤: the partial-sum inequalities L_j ≤ R_j hold; hover to see the first failing index when they do not. AI: alternatingly increasing.') + '</th>' +
+      '</tr>';
+    rows = lastDecompData.map((item, idx) => {
+      if (item.error) {
+        return '<tr><td class="idx">' + (idx + 1) + '</td><td colspan="' + colspan + '" class="err">' + esc(item.error) + '</td></tr>';
+      }
+      return '<tr>' +
+        '<td class="idx">' + (idx + 1) + '</td>' +
+        '<td class="compact">' + item.degree + '</td>' +
+        vectorCell(item.coefficients, compactP) +
+        vectorCell(item.magic.coordinates, compactCoords) +
+        '<td>' + iconRow([
+          mini('M+', item.magic.all_nonnegative, 'all magic-basis coordinates are nonnegative', 'some magic-basis coordinates are negative'),
+          mini('S\u2264', item.magic.left_leq_right, partialSumTooltip(item.magic), partialSumTooltip(item.magic), 'partial-sum data unavailable'),
+          mini('AI', item.alternatingly_increasing, 'alternatingly increasing', 'not alternatingly increasing'),
+        ]) + '</td>' +
+        '</tr>';
+    });
+  }
+
+  const html = '<div class="decomp-subtabs">' + subtabs + '</div>' +
+    '<div class="decomp-help">' + helpHtml + '</div>' +
+    '<div class="decomp-sheet-wrap"><div class="decomp-sheet-scroll"><table class="decomp-sheet">' + header + rows.join('') + '</table></div></div>' +
+    renderDecompCopyBar(activeDecompView, lastDecompData) +
+    renderSheetOeisHelpers(activeDecompView, lastDecompData);
+  setResult(html);
 }
 
 // --- Recurrence via Web Worker ---
@@ -789,8 +1693,8 @@ function runInterlacing() {
 function createWorker() {
   const base = new URL('.', location.href).href;
   const code = `
-    importScripts('${base}pkg/polynomial_tools_web.js');
-    wasm_bindgen({ module_or_path: '${base}pkg/polynomial_tools_web_bg.wasm' }).then(() => {
+    importScripts('${base}pkg/polynomial_tools_web.js?v=${ASSET_VERSION}');
+    wasm_bindgen({ module_or_path: '${base}pkg/polynomial_tools_web_bg.wasm?v=${ASSET_VERSION}' }).then(() => {
       postMessage({type: 'ready'});
     });
     onmessage = function(e) {
@@ -851,15 +1755,20 @@ function startRecurrence(text) {
         const copyEl = '<div class="recurrence-copy">' +
           '<button class="copy-btn" onclick="copyRec(this,\'plain\')">Copy plaintext</button>' +
           '<button class="copy-btn" onclick="copyRec(this,\'latex\')">Copy LaTeX</button>' +
+          (data.mathematica ? '<button class="copy-btn" onclick="copyRec(this,\'mathematica\')">Copy Mathematica</button>' : '') +
+          (data.sage ? '<button class="copy-btn" onclick="copyRec(this,\'sage\')">Copy Sage</button>' : '') +
           '</div>';
         const statsEl = '<div class="recurrence-stats">' +
                         esc(data.unknowns + ' unknowns, ' +
                         data.equations + ' equations, ' +
                         data.candidates_tried + ' candidates tried') + '</div>';
-        setResult(latexEl + copyEl + statsEl);
+        const codeEl = renderRecurrenceCodeStack(data);
+        setResult(latexEl + copyEl + statsEl + codeEl);
         // Store for copy
         window._lastRecPlain = data.recurrence;
         window._lastRecLatex = data.latex;
+        window._lastRecMathematica = data.mathematica || '';
+        window._lastRecSage = data.sage || '';
         // Render KaTeX (may load async)
         try {
           katex.render(data.latex, document.getElementById('recurrence-katex'), {displayMode: true, throwOnError: false});
@@ -892,6 +1801,517 @@ function cancelRecurrence() {
   setStatus('Cancelled.');
 }
 
+// --- OEIS lookup ---
+
+function isZeroValue(value) {
+  return String(value) === '0';
+}
+
+function stripLeadingZeros(seq) {
+  let i = 0;
+  while (i < seq.length && isZeroValue(seq[i])) i++;
+  if (i >= seq.length) return seq.length ? [0] : [];
+  return seq.slice(i);
+}
+
+function firstDifferences(seq) {
+  const allIntegers = seq.every(value => /^-?\d+$/.test(String(value).trim()));
+  if (allIntegers) {
+    const out = [];
+    for (let i = 1; i < seq.length; i++) {
+      out.push((BigInt(String(seq[i]).trim()) - BigInt(String(seq[i - 1]).trim())).toString());
+    }
+    return out;
+  }
+  const allFiniteNumbers = seq.every(value => Number.isFinite(Number(value)));
+  if (!allFiniteNumbers) return [];
+  const out = [];
+  for (let i = 1; i < seq.length; i++) out.push(seq[i] - seq[i - 1]);
+  return out;
+}
+
+function parseSeqData(raw) {
+  return String(raw || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
+function oeisSearchHref(seq) {
+  return 'https://oeis.org/search?q=' + encodeURIComponent(seq.join(',')) + '&language=english';
+}
+
+function flattenRows(rows) {
+  return rows.flatMap(row => row && row.length ? row : [0]);
+}
+
+function rowSumsOfRows(rows) {
+  const sums = [];
+  for (const row of rows) {
+    const safeRow = row && row.length ? row : [0];
+    let sum = 0n;
+    for (const value of safeRow) {
+      const term = String(value).trim();
+      if (!/^-?\d+$/.test(term)) return null;
+      sum += BigInt(term);
+    }
+    sums.push(sum.toString());
+  }
+  return sums;
+}
+
+function copyData(btn) {
+  const text = btn.dataset.copy || '';
+  const htmlLabel = btn.dataset.labelHtml || '';
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = htmlLabel ? btn.innerHTML : btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => {
+      if (htmlLabel) {
+        btn.innerHTML = htmlLabel;
+      } else {
+        btn.textContent = orig;
+      }
+    }, 1500);
+  });
+}
+
+function queryLink(label, seq) {
+  if (!seq.length) return '';
+  return '<a class="oeis-link" href="' + oeisSearchHref(seq) + '" target="_blank" rel="noopener" title="' +
+    escAttr(seq.join(', ')) + '">' + esc(label) + '</a>';
+}
+
+function queryButton(label, seq, slotId, queryLabel, queryLabelHtml) {
+  if (!seq.length || !slotId) return '';
+  return '<button class="run-small" data-oeis-seq="' + escAttr(seq.join(',')) +
+    '" data-oeis-slot="' + escAttr(slotId) +
+    '" data-oeis-label="' + escAttr(queryLabel || label) +
+    '" data-oeis-label-html="' + escAttr(queryLabelHtml || '') +
+    '" onclick="runOeisInlineQuery(this)">' + esc(label) + '</button>';
+}
+
+function columnCopyButton(labelTex, rows, options) {
+  const usableRows = rows.filter(row => row != null);
+  if (!usableRows.length) return '';
+  const text = usableRows.map(serializeCoeffRow).join('\n');
+  const labelHtml = 'Copy ' + katexInline(labelTex);
+  const skipped = rows.length - usableRows.length;
+  const baseTitle = (options && options.title) || ('Copy ' + usableRows.length + ' coefficient row(s) as newline-separated input.');
+  const title = skipped > 0 ? (baseTitle + ' Unavailable rows are skipped.') : baseTitle;
+  return '<button class="run-small" data-copy="' + escAttr(text) +
+    '" data-label-html="' + escAttr(labelHtml) +
+    '" onclick="copyData(this)" title="' + escAttr(title) + '">' + labelHtml + '</button>';
+}
+
+function renderDecompCopyBar(view, data) {
+  const clean = data.filter(item => !item.error);
+  if (!clean.length) return '';
+
+  const omitted = data.length - clean.length;
+  const buttons = [];
+
+  if (view === 'core') {
+    buttons.push(columnCopyButton('p(t)', clean.map(item => item.coefficients)));
+    buttons.push(columnCopyButton('a(t)', clean.map(item => item.a.coefficients)));
+    buttons.push(columnCopyButton('\\gamma_a(z)', clean.map(item => item.gamma_a_coefficients)));
+    buttons.push(columnCopyButton('b(t)', clean.map(item => item.b.coefficients)));
+    buttons.push(columnCopyButton('\\gamma_b(z)', clean.map(item => item.gamma_b_coefficients)));
+  } else if (view === 'companion') {
+    buttons.push(columnCopyButton('f(t)', clean.map(item => item.f_polynomial.coefficients)));
+    buttons.push(columnCopyButton('R_d(f)', clean.map(item => item.r_transform_of_f.coefficients)));
+    buttons.push(columnCopyButton('\\widetilde{a}(t)', clean.map(item => item.r_a.coefficients)));
+    buttons.push(columnCopyButton('\\widetilde{b}(t)', clean.map(item => item.r_b.coefficients)));
+  } else {
+    buttons.push(columnCopyButton('p(t)', clean.map(item => item.coefficients)));
+    buttons.push(columnCopyButton('c_j', clean.map(item => item.magic.coordinates)));
+  }
+
+  const note = 'Copy a displayed column as newline-separated coefficient vectors; you can paste the result back into the main input box.' +
+    (omitted ? ' Rows with analysis errors are skipped.' : '');
+  return '<div class="decomp-copybar">' +
+    '<div class="oeis-note">' + note + '</div>' +
+    '<div class="oeis-actions">' + buttons.filter(Boolean).join('') + '</div>' +
+    '</div>';
+}
+
+function oeisDataPreview(data) {
+  const terms = String(data || '').split(',').map(s => s.trim()).filter(Boolean);
+  if (!terms.length) return '';
+  const preview = terms.slice(0, 18).join(', ');
+  return preview + (terms.length > 18 ? ', ...' : '');
+}
+
+function renderOeisMatches(payload) {
+  const results = Array.isArray(payload && payload.results) ? payload.results : [];
+  if (!results.length) {
+    return '<div class="oeis-none">No automatic match returned for this query yet. Try the OEIS link above.</div>';
+  }
+
+  let html = '';
+  for (const item of results) {
+    const id = item.id || (item.number != null ? ('A' + String(item.number).padStart(6, '0')) : 'OEIS');
+    const href = item.id ? ('https://oeis.org/' + encodeURIComponent(item.id)) : null;
+    html += '<div class="oeis-match">';
+    html += href
+      ? '<a href="' + href + '" target="_blank" rel="noopener">' + esc(id) + '</a>'
+      : '<strong>' + esc(id) + '</strong>';
+    if (item.name) {
+      html += '<span class="oeis-name">' + esc(item.name) + '</span>';
+    }
+    const preview = oeisDataPreview(item.data);
+    if (preview) {
+      html += '<div class="oeis-seq oeis-data">' + esc(preview) + '</div>';
+    }
+    html += '</div>';
+  }
+  if (payload.count > results.length) {
+    html += '<div class="oeis-none">Showing the first ' + results.length + ' of ' + payload.count + ' OEIS matches.</div>';
+  }
+  return html;
+}
+
+function renderOeisMatchesWithContext(seq, label, labelHtml, payload) {
+  let html = '<div class="oeis-note">Showing matches for <strong>' + (labelHtml || esc(label)) +
+    '</strong>. <a href="' + oeisSearchHref(seq) + '" target="_blank" rel="noopener">Open this query on OEIS</a>.</div>';
+  html += renderOeisMatches(payload);
+  return html;
+}
+
+async function fetchOeisMatches(seq, slotId, token) {
+  const slot = document.getElementById(slotId);
+  if (!slot || !seq.length) return { ok: false, skipped: true };
+
+  slot.innerHTML = '<div class="oeis-none">Looking up OEIS...</div>';
+
+  try {
+    const resp = await fetch(
+      OEIS_PROXY_URL + '?q=' + encodeURIComponent(seq.join(',')) + '&limit=3',
+      { method: 'GET', mode: 'cors' }
+    );
+    const payload = await resp.json();
+
+    if (token !== oeisLookupToken) return { ok: false, stale: true };
+    if (!resp.ok || !payload.ok) {
+      throw new Error((payload && payload.error) || ('HTTP ' + resp.status));
+    }
+
+    slot.innerHTML = renderOeisMatches(payload);
+    return { ok: true, matches: (payload.results || []).length, total: payload.count || 0 };
+  } catch (e) {
+    if (token !== oeisLookupToken) return { ok: false, stale: true };
+    slot.innerHTML = '<div class="oeis-none">Automatic lookup is unavailable right now. Use the OEIS link above.</div>';
+    return { ok: false, error: e };
+  }
+}
+
+async function runOeisInlineQuery(btn) {
+  const slotId = btn.dataset.oeisSlot || '';
+  const seq = parseSeqData(btn.dataset.oeisSeq);
+  const label = btn.dataset.oeisLabel || btn.textContent || 'OEIS query';
+  const labelHtml = btn.dataset.oeisLabelHtml || esc(label);
+  const slot = document.getElementById(slotId);
+  if (!slot || !seq.length) return;
+
+  const token = String(++oeisInlineRequestToken);
+  slot.dataset.inlineToken = token;
+  slot.innerHTML = '<div class="oeis-none">Looking up OEIS for ' + labelHtml + '...</div>';
+
+  try {
+    const resp = await fetch(
+      OEIS_PROXY_URL + '?q=' + encodeURIComponent(seq.join(',')) + '&limit=3',
+      { method: 'GET', mode: 'cors' }
+    );
+    const payload = await resp.json();
+
+    if (slot.dataset.inlineToken !== token) return;
+    if (!resp.ok || !payload.ok) {
+      throw new Error((payload && payload.error) || ('HTTP ' + resp.status));
+    }
+
+    slot.innerHTML = renderOeisMatchesWithContext(seq, label, labelHtml, payload);
+  } catch (e) {
+    if (slot.dataset.inlineToken !== token) return;
+    slot.innerHTML = '<div class="oeis-none">Automatic lookup is unavailable right now. <a href="' +
+      oeisSearchHref(seq) + '" target="_blank" rel="noopener">Open this query on OEIS</a>.</div>';
+  }
+}
+
+function renderOeisSection(title, seq, options) {
+  if (!seq.length) return '';
+
+  const previewLimit = options.previewLimit || 30;
+  const actions = [];
+  const trimmed = stripLeadingZeros(seq);
+  const diffs = firstDifferences(seq);
+  const slotId = options.matchId || options.slotId || '';
+  const primaryButtonLabel = options.primaryButtonLabel || 'Load matches';
+  const primaryQueryLabel = options.primaryQueryLabel || title;
+  const primaryQueryLabelHtml = options.primaryQueryLabelHtml || '';
+  const hasInlineSlot = Boolean(slotId);
+
+  if (hasInlineSlot && !options.autoFetch) {
+    actions.push(queryButton(primaryButtonLabel, seq, slotId, primaryQueryLabel, primaryQueryLabelHtml));
+  } else if (!hasInlineSlot) {
+    actions.push(queryLink('Search OEIS', seq));
+  }
+  if (trimmed.length && trimmed.length < seq.length) {
+    actions.push(hasInlineSlot
+      ? queryButton(
+          'Drop leading 0s',
+          trimmed,
+          slotId,
+          primaryQueryLabel + ' with leading zeros removed',
+          (primaryQueryLabelHtml || esc(primaryQueryLabel)) + ' with leading zeros removed'
+        )
+      : queryLink('Drop leading 0s', trimmed));
+  }
+  if (diffs.length >= 6) {
+    actions.push(hasInlineSlot
+      ? queryButton(
+          'First differences',
+          diffs,
+          slotId,
+          'first differences of ' + primaryQueryLabel,
+          'first differences of ' + (primaryQueryLabelHtml || esc(primaryQueryLabel))
+        )
+      : queryLink('First differences', diffs));
+  }
+  if (Array.isArray(options.extraQueries)) {
+    for (const query of options.extraQueries) {
+      if (!query || !query.seq || !query.seq.length) continue;
+      actions.push(hasInlineSlot
+        ? queryButton(
+            query.label,
+            query.seq,
+            slotId,
+            query.queryLabel || (primaryQueryLabel + ': ' + query.label),
+            query.queryLabelHtml || ''
+          )
+        : queryLink(query.label, query.seq));
+    }
+  }
+  actions.push(queryLink('Open on OEIS', seq));
+  actions.push('<button class="run-small" data-copy="' + escAttr(seq.join(', ')) + '" onclick="copyData(this)">Copy terms</button>');
+
+  let html = '<div class="oeis-section oeis-card">';
+  html += '<h3>' + (options.titleHtml || esc(title)) + '</h3>';
+  if (options.noteHtml || options.note) {
+    html += '<div class="oeis-note">' + (options.noteHtml || esc(options.note)) + '</div>';
+  }
+  html += '<div class="oeis-seq">' + esc(seq.slice(0, previewLimit).join(', ')) +
+    (seq.length > previewLimit ? ', \u2026' : '') + '</div>';
+  html += '<div class="oeis-actions">' + actions.join('') + '</div>';
+  if (slotId) {
+    const initial = options.initialResultsHtml ||
+      (options.autoFetch
+        ? '<div class="oeis-none">Looking up OEIS...</div>'
+        : '<div class="oeis-none">Use a query button above to load OEIS matches here.</div>');
+    html += '<div id="' + escAttr(slotId) + '" class="oeis-results">' + initial + '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function renderSheetOeisGroup(title, rows, options) {
+  if (!rows.length) return '';
+
+  const triangle = flattenRows(rows);
+  const trimmedTriangle = rows.flatMap(stripLeadingZeros);
+  const rowSums = rowSumsOfRows(rows);
+
+  if (rowSums) {
+    const extraQueries = [{
+      label: 'Triangle',
+      seq: triangle,
+      queryLabel: title + ': triangle read by rows',
+      queryLabelHtml: (options.titleHtml || esc(title)) + ': triangle read by rows',
+    }];
+    if (trimmedTriangle.join(',') !== triangle.join(',')) {
+      extraQueries.push({
+        label: 'Triangle, strip 0s',
+        seq: trimmedTriangle,
+        queryLabel: title + ': triangle after stripping initial zeros in each row',
+        queryLabelHtml: (options.titleHtml || esc(title)) + ': triangle after stripping initial zeros in each row',
+      });
+    }
+    return renderOeisSection(title, rowSums, {
+      titleHtml: options.titleHtml,
+      noteHtml: options.noteHtml,
+      note: options.note || ('Row sums of the displayed ' + title + '. Use the triangle actions for the full row-by-row data.'),
+      previewLimit: options.previewLimit || 24,
+      slotId: options.slotId,
+      primaryButtonLabel: options.primaryButtonLabel || 'Row sums',
+      primaryQueryLabel: title + ': row sums',
+      primaryQueryLabelHtml: (options.titleHtml || esc(title)) + ': row sums',
+      extraQueries,
+    });
+  }
+
+  return renderOeisSection(title, triangle, {
+    titleHtml: options.titleHtml,
+    noteHtml: options.fallbackNoteHtml,
+    note: options.fallbackNote || ('Triangle by rows for the displayed ' + title + '.'),
+    previewLimit: options.previewLimit || 42,
+    slotId: options.slotId,
+    primaryButtonLabel: options.primaryButtonLabel || 'Triangle',
+    primaryQueryLabel: title + ': triangle read by rows',
+    primaryQueryLabelHtml: (options.titleHtml || esc(title)) + ': triangle read by rows',
+  });
+}
+
+function renderSheetOeisHelpers(view, data) {
+  const clean = data.filter(item => !item.error);
+  if (!clean.length) return '';
+
+  const groups = [];
+  const slotBase = 'sheet-oeis-' + (++oeisInlineSlotSerial);
+  if (view === 'core') {
+    groups.push(renderSheetOeisGroup('p(t)', clean.map(item => item.coefficients), {
+      titleHtml: katexInline('p(t)'),
+      noteHtml: 'Row sums of the input polynomials ' + katexInline('p(t)') + '. Triangle actions search the full coefficient triangle.',
+      slotId: slotBase + '-0',
+    }));
+    groups.push(renderSheetOeisGroup('a(t)', clean.map(item => item.a.coefficients), {
+      titleHtml: katexInline('a(t)'),
+      noteHtml: 'Row sums of the symmetric parts ' + katexInline('a(t)') + '. Triangle actions search the displayed triangle.',
+      slotId: slotBase + '-1',
+    }));
+    groups.push(renderSheetOeisGroup('gamma(a)', clean.map(item => item.gamma_a_coefficients || [0]), {
+      titleHtml: katexInline('\\gamma_a(z)'),
+      noteHtml: 'Row sums of the gamma-coefficient rows for ' + katexInline('\\gamma_a(z)') + '. Triangle actions search the displayed triangle.',
+      slotId: slotBase + '-2',
+    }));
+    groups.push(renderSheetOeisGroup('b(t)', clean.map(item => item.b.coefficients), {
+      titleHtml: katexInline('b(t)'),
+      noteHtml: 'Row sums of the companion parts ' + katexInline('b(t)') + '. Triangle actions search the displayed triangle.',
+      slotId: slotBase + '-3',
+    }));
+    groups.push(renderSheetOeisGroup('gamma(b)', clean.map(item => item.gamma_b_coefficients || [0]), {
+      titleHtml: katexInline('\\gamma_b(z)'),
+      noteHtml: 'Row sums of the gamma-coefficient rows for ' + katexInline('\\gamma_b(z)') + '. Triangle actions search the displayed triangle.',
+      slotId: slotBase + '-4',
+    }));
+  } else if (view === 'companion') {
+    groups.push(renderSheetOeisGroup('f(t)', clean.map(item => item.f_polynomial.coefficients), {
+      titleHtml: katexInline('f(t)'),
+      noteHtml: 'Row sums of the auxiliary polynomials ' + katexInline('f(t)') + '. Triangle actions search the displayed triangle.',
+      slotId: slotBase + '-0',
+    }));
+    groups.push(renderSheetOeisGroup('R_d(f)', clean.map(item => item.r_transform_of_f.coefficients), {
+      titleHtml: katexInline('R_d(f)'),
+      noteHtml: 'Row sums of ' + katexInline('R_d(f)') + '. Triangle actions search the displayed triangle.',
+      slotId: slotBase + '-1',
+    }));
+    groups.push(renderSheetOeisGroup('a~(t)', clean.map(item => item.r_a.coefficients), {
+      titleHtml: katexInline('\\widetilde{a}(t)'),
+      noteHtml: 'Row sums of the companion symmetric parts ' + katexInline('\\widetilde{a}(t)') + '. Triangle actions search the displayed triangle.',
+      slotId: slotBase + '-2',
+    }));
+    groups.push(renderSheetOeisGroup('b~(t)', clean.map(item => item.r_b.coefficients), {
+      titleHtml: katexInline('\\widetilde{b}(t)'),
+      noteHtml: 'Row sums of the companion parts ' + katexInline('\\widetilde{b}(t)') + '. Triangle actions search the displayed triangle.',
+      slotId: slotBase + '-3',
+    }));
+  } else {
+    groups.push(renderSheetOeisGroup('magic coords', clean.map(item => item.magic.coordinates), {
+      titleHtml: katexInline('c_j'),
+      noteHtml: 'Row sums of the displayed coordinate rows when they are integral. Triangle actions search the full coordinate triangle for ' + katexInline('c_j') + '.',
+      fallbackNoteHtml: 'Triangle by rows for the basis coordinates ' + katexInline('c_j') + '.',
+      slotId: slotBase + '-0',
+    }));
+  }
+
+  return '<div class="oeis-note">OEIS helpers for the displayed data above. These use the same full-width card layout as the main OEIS tab; the main sequence is the row-sum sequence when available, and the triangle actions search the full displayed object row by row.</div>' +
+    '<div class="sheet-oeis-stack">' + groups.join('') + '</div>';
+}
+
+async function runOeis() {
+  if (!wasmReady) { setStatus('WASM not loaded yet.'); return; }
+  const text = getInput();
+  if (!text.trim()) { setStatus('No input.'); return; }
+
+  const data = JSON.parse(check_properties(text));
+  const polys = data.filter(d => !d.error && d.coefficients);
+  if (polys.length === 0) { setResult('<span class="err">No valid polynomials found.</span>'); return; }
+
+  // Row sums: evaluate each polynomial at t=1 (sum of coefficients)
+  const rowSums = polys.map(d => d.coefficients.reduce((a, b) => a + b, 0));
+
+  // Full triangle: read coefficients row by row
+  const triangle = polys.flatMap(d => d.coefficients);
+  let html = '';
+
+  // Alternating row sums: evaluate each at t=-1
+  const altRowSums = polys.map(d =>
+    d.coefficients.reduce((a, c, i) => a + c * (i % 2 === 0 ? 1 : -1), 0)
+  );
+
+  const token = ++oeisLookupToken;
+  const sections = [
+    {
+      title: 'Row sums (evaluate at t = 1)',
+      titleHtml: 'Row sums (evaluate at ' + katexInline('t=1') + ')',
+      seq: rowSums,
+      note: 'Often the fastest way to identify a polynomial family.',
+      previewLimit: 24,
+    },
+    {
+      title: 'Alternating row sums (evaluate at t = -1)',
+      titleHtml: 'Alternating row sums (evaluate at ' + katexInline('t=-1') + ')',
+      seq: altRowSums,
+      note: 'Useful when the family has an especially clean signed specialization.',
+      previewLimit: 24,
+    },
+    {
+      title: 'Triangle read by rows',
+      seq: triangle,
+      note: 'Flatten the coefficient triangle row by row.',
+      previewLimit: 42,
+    },
+  ];
+
+  html += '<div class="oeis-note">Automatic matches below are fetched through the OEIS proxy at <code>arxiv.symmetricfunctions.com</code>. The buttons still open OEIS directly with the full query.</div>';
+  html += renderOeisSection(sections[0].title, sections[0].seq, {
+    titleHtml: sections[0].titleHtml,
+    note: sections[0].note,
+    previewLimit: sections[0].previewLimit,
+    matchId: 'oeis-match-' + token + '-0',
+    autoFetch: true,
+  });
+  html += renderOeisSection(sections[1].title, sections[1].seq, {
+    titleHtml: sections[1].titleHtml,
+    note: sections[1].note,
+    previewLimit: sections[1].previewLimit,
+    matchId: 'oeis-match-' + token + '-1',
+    autoFetch: true,
+  });
+  html += renderOeisSection(sections[2].title, sections[2].seq, {
+    note: sections[2].note,
+    previewLimit: sections[2].previewLimit,
+    matchId: 'oeis-match-' + token + '-2',
+    autoFetch: true,
+  });
+
+  setResult(html);
+  setStatus('Looking up OEIS matches for ' + sections.length + ' derived sequence(s)...');
+
+  const lookups = await Promise.all(sections.map((section, idx) =>
+    fetchOeisMatches(section.seq, 'oeis-match-' + token + '-' + idx, token)
+  ));
+
+  if (token !== oeisLookupToken) return;
+
+  const withMatches = lookups.filter(item => item && item.ok && item.matches > 0).length;
+  const failed = lookups.filter(item => item && item.error).length;
+  if (failed) {
+    setStatus('Fetched OEIS matches for ' + withMatches + ' of ' + sections.length + ' derived sequence(s); some proxy lookups failed, but direct OEIS links remain available.');
+  } else {
+    setStatus('Fetched OEIS matches for ' + withMatches + ' of ' + sections.length + ' derived sequence(s).');
+  }
+}
+
+installInfoTooltipLayer();
 init();
 </script>
 </body>

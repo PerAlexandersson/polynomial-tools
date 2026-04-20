@@ -13,7 +13,7 @@ rust/
   combinatoric-core/          ← Graphs, posets, chromatic; re-exports sym-poly
   combpoly/                   ← Permutation statistics + combpoly CLI
   kostka/                     ← Public crate: Kostka/LR coefficients, GT polytopes
-  experiments/                ← 44 research exploration binaries
+  experiments/                ← temporary working directory for research binaries
 ```
 
 ## Operational guidance
@@ -120,8 +120,12 @@ Public crate. Kostka coefficients (DP), LR coefficients (GT polytope),
 Ehrhart polynomials and h*-vectors of Gelfand-Tsetlin polytopes. Has CLI.
 
 ### experiments/
-44 research exploration binaries (peak_*, cayley_*, backtrack_*, pf_*, stembridge_*, etc.).
+Temporary working directory for research exploration binaries.
 Depends on combpoly and polynomial-tools. Flat layout with prefix-based grouping.
+
+Notes:
+- This folder is disposable and may be gitignored.
+- Do not assume binaries here are stable, curated, or meant for long-term tracking.
 
 ## Naming conventions
 

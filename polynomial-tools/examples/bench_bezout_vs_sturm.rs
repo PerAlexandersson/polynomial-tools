@@ -32,8 +32,8 @@ fn eulerian_polynomials(max_n: usize) -> Vec<Vec<i64>> {
         let dp_len = dp.len();
         let mut term2 = vec![0i64; dp_len + 2];
         for k in 0..dp_len {
-            term2[k + 1] += dp[k];     // t * dp
-            term2[k + 2] -= dp[k];     // -t^2 * dp
+            term2[k + 1] += dp[k]; // t * dp
+            term2[k + 2] -= dp[k]; // -t^2 * dp
         }
 
         // Sum
@@ -59,7 +59,10 @@ fn main() {
     let polys = eulerian_polynomials(max_n);
 
     println!("=== Real-rootedness: Sturm vs Bézout ===");
-    println!("{:>4} {:>8} {:>12} {:>12}", "n", "deg", "Sturm (μs)", "Bézout (μs)");
+    println!(
+        "{:>4} {:>8} {:>12} {:>12}",
+        "n", "deg", "Sturm (μs)", "Bézout (μs)"
+    );
     println!("{}", "-".repeat(42));
 
     for (i, p) in polys.iter().enumerate() {
@@ -68,7 +71,13 @@ fn main() {
             continue;
         }
 
-        let iters = if n < 10 { 100 } else if n < 20 { 10 } else { 3 };
+        let iters = if n < 10 {
+            100
+        } else if n < 20 {
+            10
+        } else {
+            3
+        };
 
         let t0 = Instant::now();
         for _ in 0..iters {
@@ -89,13 +98,20 @@ fn main() {
             deg,
             sturm_us,
             bezout_us,
-            if bezout_us < sturm_us { "← Bézout" } else { "← Sturm" }
+            if bezout_us < sturm_us {
+                "← Bézout"
+            } else {
+                "← Sturm"
+            }
         );
     }
 
     println!();
     println!("=== Interlacing: Sturm vs Bézout (consecutive Eulerian polynomials) ===");
-    println!("{:>4} {:>8} {:>12} {:>12}", "n", "deg", "Sturm (μs)", "Bézout (μs)");
+    println!(
+        "{:>4} {:>8} {:>12} {:>12}",
+        "n", "deg", "Sturm (μs)", "Bézout (μs)"
+    );
     println!("{}", "-".repeat(42));
 
     for i in 1..polys.len() {
@@ -103,10 +119,16 @@ fn main() {
         if n < 4 {
             continue;
         }
-        let f = &polys[i];   // A_{n}(t), degree n-1
+        let f = &polys[i]; // A_{n}(t), degree n-1
         let g = &polys[i - 1]; // A_{n-1}(t), degree n-2
 
-        let iters = if n < 10 { 100 } else if n < 20 { 10 } else { 3 };
+        let iters = if n < 10 {
+            100
+        } else if n < 20 {
+            10
+        } else {
+            3
+        };
 
         let t0 = Instant::now();
         for _ in 0..iters {
@@ -128,7 +150,11 @@ fn main() {
             deg,
             sturm_us,
             bezout_us,
-            if bezout_us < sturm_us { "← Bézout" } else { "← Sturm" },
+            if bezout_us < sturm_us {
+                "← Bézout"
+            } else {
+                "← Sturm"
+            },
             result
         );
     }

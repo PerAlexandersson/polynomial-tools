@@ -7,6 +7,7 @@
 
 use std::collections::BTreeMap;
 
+use combinatoric_core::ordered_set_partitions;
 use sym_poly_core::{Composition, Ring};
 
 use crate::basis::QSymBasis;
@@ -15,10 +16,7 @@ use crate::qsym_function::QSymFunction;
 /// Chromatic quasisymmetric function X_G in the monomial QSym basis.
 ///
 /// Takes raw graph data (number of vertices, edge list).
-pub fn chromatic_qsym<C: Ring>(
-    n: usize,
-    edges: &[(usize, usize)],
-) -> QSymFunction<C> {
+pub fn chromatic_qsym<C: Ring>(n: usize, edges: &[(usize, usize)]) -> QSymFunction<C> {
     if n == 0 {
         return QSymFunction::basis_element(QSymBasis::Monomial, Composition::empty());
     }
@@ -31,110 +29,33 @@ pub fn chromatic_qsym<C: Ring>(
 
     let mut terms: BTreeMap<Composition, C> = BTreeMap::new();
 
-    // Enumerate set partitions using standard RGS (rgs[0]=0)
-    // For each proper partition, contribute all permutations of class orderings.
-    let mut rgs = vec![0usize; n];
-    let mut max_class = vec![0usize; n]; // max_class[i] = max(rgs[0..=i])
-
-    loop {
-        process_partition(n, &rgs, &adj, &mut terms);
-
-        // Advance to next RGS
-        if !next_rgs(&mut rgs, &mut max_class, n) {
-            break;
-        }
+    for partition in ordered_set_partitions(n) {
+        process_ordered_partition(&partition.into_blocks(), &adj, &mut terms);
     }
 
     QSymFunction::from_terms(QSymBasis::Monomial, terms)
 }
 
-/// Check if coloring is proper. If so, record contributions for all
-/// permutations of class orderings.
-fn process_partition<C: Ring>(
-    n: usize,
-    rgs: &[usize],
+/// Check if the ordered partition is proper. If so, record its block-size
+/// composition.
+fn process_ordered_partition<C: Ring>(
+    blocks: &[Vec<usize>],
     adj: &[Vec<bool>],
     terms: &mut BTreeMap<Composition, C>,
 ) {
-    // Check properness
-    for u in 0..n {
-        for v in u + 1..n {
-            if adj[u][v] && rgs[u] == rgs[v] {
-                return;
+    for block in blocks {
+        for i in 0..block.len() {
+            for j in i + 1..block.len() {
+                if adj[block[i]][block[j]] {
+                    return;
+                }
             }
         }
     }
 
-    // Compute class sizes in RGS order (= order of first occurrence)
-    let num_classes = rgs.iter().max().unwrap_or(&0) + 1;
-    let mut sizes = vec![0u32; num_classes];
-    for &c in rgs {
-        sizes[c] += 1;
-    }
-
-    // For each of the k! orderings of classes, record the size composition.
-    // Classes are distinguishable (by their vertex sets), so even classes with
-    // equal sizes give distinct orderings that contribute independently to M_α.
-    let k = sizes.len();
-    let class_perms = all_index_permutations(k);
-    for perm in &class_perms {
-        let comp_parts: Vec<u32> = perm.iter().map(|&i| sizes[i]).collect();
-        let comp = Composition::new(comp_parts);
-        let entry = terms.entry(comp).or_insert_with(C::zero);
-        *entry = entry.clone() + C::one();
-    }
-}
-
-/// Generate all permutations of {0, ..., k-1}.
-fn all_index_permutations(k: usize) -> Vec<Vec<usize>> {
-    if k == 0 {
-        return vec![vec![]];
-    }
-    let mut result = Vec::new();
-    let mut perm: Vec<usize> = (0..k).collect();
-    loop {
-        result.push(perm.clone());
-        // Next permutation in lexicographic order
-        let mut i = k - 1;
-        while i > 0 && perm[i - 1] >= perm[i] {
-            i -= 1;
-        }
-        if i == 0 {
-            break;
-        }
-        let mut j = k - 1;
-        while perm[j] <= perm[i - 1] {
-            j -= 1;
-        }
-        perm.swap(i - 1, j);
-        perm[i..].reverse();
-    }
-    result
-}
-
-/// Advance to next standard restricted growth string.
-/// Returns false when exhausted.
-fn next_rgs(rgs: &mut [usize], max_class: &mut [usize], n: usize) -> bool {
-    // Find rightmost position that can be incremented.
-    // rgs[0] is always 0 (standard RGS constraint), so never increment it.
-    let mut i = n - 1;
-    loop {
-        if i == 0 {
-            return false; // rgs[0] must stay 0
-        }
-        let max_prev = max_class[i - 1];
-        if rgs[i] < max_prev + 1 {
-            rgs[i] += 1;
-            max_class[i] = max_prev.max(rgs[i]);
-            // Reset positions to the right
-            for j in i + 1..n {
-                rgs[j] = 0;
-                max_class[j] = max_class[j - 1];
-            }
-            return true;
-        }
-        i -= 1;
-    }
+    let comp = Composition::new(blocks.iter().map(|block| block.len() as u32).collect());
+    let entry = terms.entry(comp).or_insert_with(C::zero);
+    *entry = entry.clone() + C::one();
 }
 
 #[cfg(test)]

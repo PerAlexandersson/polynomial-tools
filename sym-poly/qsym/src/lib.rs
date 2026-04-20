@@ -20,15 +20,20 @@
 //! - [`power_sum`]: normalized Ψ̃ = Ψ/z and Φ̃ = Φ/z utilities
 
 pub mod basis;
-pub mod qsym_function;
-pub mod transition;
-pub mod power_sum;
-pub mod sym_qsym;
-pub mod p_partition;
 pub mod chromatic_qsym;
+pub mod p_partition;
+pub mod power_sum;
+pub mod qsym_function;
+pub mod schur_qsym;
+pub mod sym_qsym;
+pub mod transition;
 
 pub use basis::QSymBasis;
-pub use qsym_function::QSymFunction;
-pub use sym_qsym::{sym_to_qsym, qsym_to_sym};
-pub use p_partition::p_partition_generating_function;
 pub use chromatic_qsym::chromatic_qsym;
+pub use p_partition::p_partition_generating_function;
+pub use qsym_function::QSymFunction;
+pub use schur_qsym::{
+    composition_to_descent_set, descent_set_to_composition, dual_immaculate, fundamental_slide,
+    qsym_schur, row_strict_dual_immaculate, CompositionTableau, ImmaculateTableau,
+};
+pub use sym_qsym::{qsym_to_sym, sym_to_qsym};

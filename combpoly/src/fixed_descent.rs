@@ -195,8 +195,7 @@ pub fn valid_insertion_positions_for_target_descent_set(
             positions.push(insertion_position);
         }
     }
-    if n >= 1 && (n == 1 || !target_descent_set_contains_position(target_descent_set_mask, n - 1))
-    {
+    if n >= 1 && (n == 1 || !target_descent_set_contains_position(target_descent_set_mask, n - 1)) {
         positions.push(n);
     }
     positions
@@ -242,8 +241,10 @@ pub fn base_source_descent_set_for_target_descent_set_and_insertion_position(
 
     if insertion_position == 1 {
         for target_descent_position in 2..n {
-            if target_descent_set_contains_position(target_descent_set_mask, target_descent_position)
-            {
+            if target_descent_set_contains_position(
+                target_descent_set_mask,
+                target_descent_position,
+            ) {
                 source_descent_set_mask |= 1 << (target_descent_position - 2);
             }
         }
@@ -453,8 +454,9 @@ pub fn long_swaps_after_inserting_new_maximum(
     insertion_position: u8,
 ) -> usize {
     let new_maximum_value = source_permutation.len() as u8;
-    let position_of_previous_maximum = one_indexed_position_of_value(source_permutation, new_maximum_value)
-        .expect("source permutation must contain n-1");
+    let position_of_previous_maximum =
+        one_indexed_position_of_value(source_permutation, new_maximum_value)
+            .expect("source permutation must contain n-1");
     modified_source_swaps_for_insertion_position(source_permutation, insertion_position)
         + usize::from(insertion_creates_new_long_swap_with_previous_maximum(
             insertion_position,
@@ -511,8 +513,9 @@ pub fn q_refined_modified_source_distribution_from_grouped_source_permutations(
         source_permutations_grouped_by_descent_set_bitmask.get(&base_source_descent_set_mask)
     {
         for source_permutation in source_class {
-            let previous_maximum_position = one_indexed_position_of_value(source_permutation, n - 1)
-                .expect("source permutation must contain n-1");
+            let previous_maximum_position =
+                one_indexed_position_of_value(source_permutation, n - 1)
+                    .expect("source permutation must contain n-1");
             let modified_source_swaps = modified_source_swaps_for_insertion_position(
                 source_permutation,
                 insertion_position,
@@ -716,7 +719,8 @@ mod tests {
                         }
 
                         if descent_set_bitmask(&target_permutation) == target_descent_set_mask {
-                            observed_source_descent_sets.push(descent_set_bitmask(&source_permutation));
+                            observed_source_descent_sets
+                                .push(descent_set_bitmask(&source_permutation));
                         }
                     }
 
@@ -764,8 +768,7 @@ mod tests {
     #[test]
     fn q_refined_distribution_reconstructs_output_polynomial() {
         for n in 3..=7 {
-            let grouped_source_permutations =
-                permutations_grouped_by_descent_set_bitmask(n - 1);
+            let grouped_source_permutations = permutations_grouped_by_descent_set_bitmask(n - 1);
             for target_descent_set_mask in 0u64..(1 << (n - 1)) {
                 for insertion_position in
                     valid_insertion_positions_for_target_descent_set(target_descent_set_mask, n)

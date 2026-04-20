@@ -87,7 +87,11 @@ fn monomial_to_fundamental<C: Ring>(f: &QSymFunction<C>) -> QSymFunction<C> {
         for beta in alpha.composition_refinements() {
             let ell_beta = beta.num_parts();
             let sign_exp = ell_beta - ell_alpha;
-            let sign = if sign_exp % 2 == 0 { C::one() } else { C::minus_one() };
+            let sign = if sign_exp % 2 == 0 {
+                C::one()
+            } else {
+                C::minus_one()
+            };
             let entry = result_terms.entry(beta).or_insert_with(C::zero);
             *entry = entry.clone() + coeff.clone() * sign;
         }

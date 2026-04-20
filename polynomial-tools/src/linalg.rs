@@ -36,6 +36,7 @@ struct EliminationResult {
     /// Number of zero pivots encountered (rank deficiency).
     zero_pivots: usize,
     /// Indices of rows where the pivot was zero (for semi-definiteness).
+    #[allow(dead_code)]
     zero_pivot_rows: Vec<usize>,
 }
 

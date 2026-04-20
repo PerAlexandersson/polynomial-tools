@@ -79,7 +79,12 @@ fn enumerate_linear_extensions(
     let mut results = Vec::new();
     let mut current = Vec::new();
     backtrack_extensions(
-        n, children, &mut in_degree, &mut available, &mut current, &mut results,
+        n,
+        children,
+        &mut in_degree,
+        &mut available,
+        &mut current,
+        &mut results,
     );
     results
 }

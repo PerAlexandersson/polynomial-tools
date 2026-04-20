@@ -5,6 +5,7 @@ edition = "2021"
 description = "Quasisymmetric functions: monomial, fundamental, power sum, Young quasisymmetric Schur bases"
 
 [dependencies]
+combinatoric-core = { path = "../../combinatoric-core" }
 sym-poly-core = { path = "../core" }
 sym-poly-sym = { path = "../sym" }
 num-bigint = "0.4"

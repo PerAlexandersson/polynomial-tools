@@ -1,9 +1,9 @@
 //! Partially ordered sets (posets) on vertex set {0, 1, ..., n-1}.
 //!
 //! A [`Poset`] is stored as a Hasse diagram (cover relations). It supports
-//! enumeration of linear extensions, order-preserving maps (backtracking and
-//! frontier DP), order polytope Ehrhart polynomials and h*-vectors, and
-//! P-Eulerian polynomials.
+//! enumeration of linear extensions, chain polynomials, order-preserving maps
+//! (backtracking and frontier DP), order polytope Ehrhart polynomials and
+//! h*-vectors, and P-Eulerian polynomials.
 //!
 //! # Order-preserving map counting
 //!
@@ -32,6 +32,7 @@
 //! // Diamond poset: 0 < 1, 0 < 2, 1 < 3, 2 < 3
 //! let diamond = Poset::new(4, &[(0, 1), (0, 2), (1, 3), (2, 3)]);
 //! assert_eq!(diamond.num_linear_extensions(), 2);
+//! assert_eq!(diamond.chain_polynomial(), vec![1, 4, 5, 2]);
 //! assert_eq!(diamond.p_eulerian_polynomial(), vec![1, 1]);
 //!
 //! // Order-preserving maps: Ω(diamond, 5) = 105
@@ -251,6 +252,59 @@ impl Poset {
     /// Number of linear extensions.
     pub fn num_linear_extensions(&self) -> usize {
         self.linear_extensions().len()
+    }
+
+    // -- Chain polynomial ---------------------------------------------------
+
+    /// The chain polynomial of the poset.
+    ///
+    /// This is the f-polynomial of the order complex:
+    ///
+    /// ```text
+    /// f_P(x) = sum_{i >= 0} c_i x^i,
+    /// ```
+    ///
+    /// where `c_i` is the number of `i`-element chains in `P`. In particular,
+    /// the constant term is always `1`, corresponding to the empty chain.
+    ///
+    /// Returns coefficients in ascending degree order.
+    pub fn chain_polynomial(&self) -> Vec<i64> {
+        if self.n == 0 {
+            return vec![1];
+        }
+
+        let reach = self.reachability_matrix();
+        let topo = self.topological_order();
+        let mut chains_ending_at = vec![vec![0i128; self.n + 1]; self.n];
+
+        for (j, &v) in topo.iter().enumerate() {
+            chains_ending_at[v][1] = 1;
+            for &u in &topo[..j] {
+                if !reach[u][v] {
+                    continue;
+                }
+                for len in 1..self.n {
+                    chains_ending_at[v][len + 1] += chains_ending_at[u][len];
+                }
+            }
+        }
+
+        let mut coeffs = vec![0i128; self.n + 1];
+        coeffs[0] = 1;
+        for chains in &chains_ending_at {
+            for len in 1..=self.n {
+                coeffs[len] += chains[len];
+            }
+        }
+
+        while coeffs.len() > 1 && *coeffs.last().unwrap() == 0 {
+            coeffs.pop();
+        }
+
+        coeffs
+            .into_iter()
+            .map(|c| i64::try_from(c).expect("chain polynomial coefficient too large for i64"))
+            .collect()
     }
 
     // -- Order-preserving maps ----------------------------------------------
@@ -711,21 +765,7 @@ impl Poset {
     /// and is removed.
     pub fn to_hasse_diagram(&self) -> Self {
         // Compute transitive closure via reachability
-        let mut reach = vec![vec![false; self.n]; self.n];
-        // Topological order
-        let topo = self.topological_order();
-
-        // Process in reverse topological order
-        for &v in topo.iter().rev() {
-            for &c in &self.children[v] {
-                reach[v][c] = true;
-                for u in 0..self.n {
-                    if reach[c][u] {
-                        reach[v][u] = true;
-                    }
-                }
-            }
-        }
+        let reach = self.reachability_matrix();
 
         // An edge (a, b) is a cover iff there is no c with a < c < b
         let hasse_covers: Vec<_> = self
@@ -755,11 +795,7 @@ impl Poset {
         order
     }
 
-    // -- Comparability graph ------------------------------------------------
-
-    /// The comparability graph: vertices are poset elements, edges connect
-    /// comparable pairs (a < b or b < a in the transitive closure).
-    pub fn comparability_graph(&self) -> crate::graph::Graph {
+    fn reachability_matrix(&self) -> Vec<Vec<bool>> {
         let mut reach = vec![vec![false; self.n]; self.n];
         let topo = self.topological_order();
 
@@ -773,6 +809,16 @@ impl Poset {
                 }
             }
         }
+
+        reach
+    }
+
+    // -- Comparability graph ------------------------------------------------
+
+    /// The comparability graph: vertices are poset elements, edges connect
+    /// comparable pairs (a < b or b < a in the transitive closure).
+    pub fn comparability_graph(&self) -> crate::graph::Graph {
+        let reach = self.reachability_matrix();
 
         let mut edges = Vec::new();
         for i in 0..self.n {
@@ -919,6 +965,31 @@ mod tests {
         // Fence 4: 0<1, 2<1, 2<3 → 5 linear extensions
         let p = Poset::new(4, &[(0, 1), (2, 1), (2, 3)]);
         assert_eq!(p.num_linear_extensions(), 5);
+    }
+
+    // -- Chain polynomial tests --
+
+    #[test]
+    fn test_chain_chain_polynomial() {
+        assert_eq!(Poset::chain(3).chain_polynomial(), vec![1, 3, 3, 1]);
+    }
+
+    #[test]
+    fn test_antichain_chain_polynomial() {
+        assert_eq!(Poset::antichain(3).chain_polynomial(), vec![1, 3]);
+    }
+
+    #[test]
+    fn test_diamond_chain_polynomial() {
+        let p = Poset::new(4, &[(0, 1), (0, 2), (1, 3), (2, 3)]);
+        assert_eq!(p.chain_polynomial(), vec![1, 4, 5, 2]);
+    }
+
+    #[test]
+    fn test_fence_chain_polynomial_independent_of_labeling() {
+        let p = Poset::fence(4);
+        let q = p.natural_relabeling();
+        assert_eq!(p.chain_polynomial(), q.chain_polynomial());
     }
 
     // -- Order-preserving map tests (Mathematica-verified) --
