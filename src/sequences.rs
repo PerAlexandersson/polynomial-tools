@@ -304,11 +304,11 @@ mod tests {
     #[test]
     fn test_eulerian_values() {
         let polys = eulerian_polynomials(5);
-        assert_eq!(polys[0], vec![1]);                    // A_1 = 1
-        assert_eq!(polys[1], vec![1, 1]);                  // A_2 = 1 + t
-        assert_eq!(polys[2], vec![1, 4, 1]);               // A_3 = 1 + 4t + t^2
-        assert_eq!(polys[3], vec![1, 11, 11, 1]);          // A_4
-        assert_eq!(polys[4], vec![1, 26, 66, 26, 1]);      // A_5
+        assert_eq!(polys[0], vec![1]); // A_1 = 1
+        assert_eq!(polys[1], vec![1, 1]); // A_2 = 1 + t
+        assert_eq!(polys[2], vec![1, 4, 1]); // A_3 = 1 + 4t + t^2
+        assert_eq!(polys[3], vec![1, 11, 11, 1]); // A_4
+        assert_eq!(polys[4], vec![1, 26, 66, 26, 1]); // A_5
     }
 
     #[test]
@@ -322,18 +322,24 @@ mod tests {
         // Consecutive interlacing (degree diff = 1)
         for i in 1..polys.len() {
             let result = check_interlacing(&polys[i - 1], &polys[i]);
-            assert_eq!(result, Some(true), "A_{} and A_{} don't interlace", i + 1, i);
+            assert_eq!(
+                result,
+                Some(true),
+                "A_{} and A_{} don't interlace",
+                i + 1,
+                i
+            );
         }
     }
 
     #[test]
     fn test_narayana_values() {
         let polys = narayana_polynomials(5);
-        assert_eq!(polys[0], vec![1]);                    // N_1 = 1
-        assert_eq!(polys[1], vec![1, 1]);                  // N_2 = 1 + t
-        assert_eq!(polys[2], vec![1, 3, 1]);               // N_3 = 1 + 3t + t^2
-        assert_eq!(polys[3], vec![1, 6, 6, 1]);            // N_4
-        assert_eq!(polys[4], vec![1, 10, 20, 10, 1]);      // N_5
+        assert_eq!(polys[0], vec![1]); // N_1 = 1
+        assert_eq!(polys[1], vec![1, 1]); // N_2 = 1 + t
+        assert_eq!(polys[2], vec![1, 3, 1]); // N_3 = 1 + 3t + t^2
+        assert_eq!(polys[3], vec![1, 6, 6, 1]); // N_4
+        assert_eq!(polys[4], vec![1, 10, 20, 10, 1]); // N_5
     }
 
     #[test]
@@ -355,14 +361,14 @@ mod tests {
     #[test]
     fn test_type_b_eulerian_values() {
         let polys = type_b_eulerian_polynomials(4);
-        assert_eq!(polys[0], vec![1]);                     // B_0 = 1
-        assert_eq!(polys[1], vec![1, 1]);                   // B_1 = 1 + t
-        assert_eq!(polys[2], vec![1, 6, 1]);                // B_2 = 1 + 6t + t^2
-        assert_eq!(polys[3], vec![1, 23, 23, 1]);           // B_3
-        // Row sums: (2n)! / 2^n = 1, 1, 3, 15, 105, ...
-        // Actually B_n(1) = number of elements in hyperoctahedral group with...
-        // Actually sum of type B Eulerian numbers for B_n is 2^n n! / ... let me just verify
-        // B_0(1)=1, B_1(1)=2, B_2(1)=8, B_3(1)=48
+        assert_eq!(polys[0], vec![1]); // B_0 = 1
+        assert_eq!(polys[1], vec![1, 1]); // B_1 = 1 + t
+        assert_eq!(polys[2], vec![1, 6, 1]); // B_2 = 1 + 6t + t^2
+        assert_eq!(polys[3], vec![1, 23, 23, 1]); // B_3
+                                                  // Row sums: (2n)! / 2^n = 1, 1, 3, 15, 105, ...
+                                                  // Actually B_n(1) = number of elements in hyperoctahedral group with...
+                                                  // Actually sum of type B Eulerian numbers for B_n is 2^n n! / ... let me just verify
+                                                  // B_0(1)=1, B_1(1)=2, B_2(1)=8, B_3(1)=48
         assert_eq!(polys[0].iter().sum::<i64>(), 1);
         assert_eq!(polys[1].iter().sum::<i64>(), 2);
         assert_eq!(polys[2].iter().sum::<i64>(), 8);
@@ -382,11 +388,11 @@ mod tests {
     #[test]
     fn test_chebyshev_t_values() {
         let polys = chebyshev_polynomials_t(5);
-        assert_eq!(polys[0], vec![1]);                     // T_0 = 1
-        assert_eq!(polys[1], vec![0, 1]);                   // T_1 = t
-        assert_eq!(polys[2], vec![-1, 0, 2]);               // T_2 = 2t^2 - 1
-        assert_eq!(polys[3], vec![0, -3, 0, 4]);            // T_3 = 4t^3 - 3t
-        assert_eq!(polys[4], vec![1, 0, -8, 0, 8]);         // T_4 = 8t^4 - 8t^2 + 1
+        assert_eq!(polys[0], vec![1]); // T_0 = 1
+        assert_eq!(polys[1], vec![0, 1]); // T_1 = t
+        assert_eq!(polys[2], vec![-1, 0, 2]); // T_2 = 2t^2 - 1
+        assert_eq!(polys[3], vec![0, -3, 0, 4]); // T_3 = 4t^3 - 3t
+        assert_eq!(polys[4], vec![1, 0, -8, 0, 8]); // T_4 = 8t^4 - 8t^2 + 1
     }
 
     #[test]
@@ -404,11 +410,11 @@ mod tests {
     #[test]
     fn test_hermite_values() {
         let polys = hermite_polynomials(5);
-        assert_eq!(polys[0], vec![1]);                     // He_0 = 1
-        assert_eq!(polys[1], vec![0, 1]);                   // He_1 = t
-        assert_eq!(polys[2], vec![-1, 0, 1]);               // He_2 = t^2 - 1
-        assert_eq!(polys[3], vec![0, -3, 0, 1]);            // He_3 = t^3 - 3t
-        assert_eq!(polys[4], vec![3, 0, -6, 0, 1]);         // He_4 = t^4 - 6t^2 + 3
+        assert_eq!(polys[0], vec![1]); // He_0 = 1
+        assert_eq!(polys[1], vec![0, 1]); // He_1 = t
+        assert_eq!(polys[2], vec![-1, 0, 1]); // He_2 = t^2 - 1
+        assert_eq!(polys[3], vec![0, -3, 0, 1]); // He_3 = t^3 - 3t
+        assert_eq!(polys[4], vec![3, 0, -6, 0, 1]); // He_4 = t^4 - 6t^2 + 3
     }
 
     #[test]
@@ -426,7 +432,13 @@ mod tests {
         let u_polys = chebyshev_polynomials_u(10);
         for n in 2..t_polys.len() {
             let result = check_interlacing(&u_polys[n - 1], &t_polys[n]);
-            assert_eq!(result, Some(true), "T_{} and U_{} don't interlace", n, n - 1);
+            assert_eq!(
+                result,
+                Some(true),
+                "T_{} and U_{} don't interlace",
+                n,
+                n - 1
+            );
         }
     }
 
@@ -436,7 +448,13 @@ mod tests {
         let polys = hermite_polynomials(10);
         for i in 2..polys.len() {
             let result = check_interlacing(&polys[i - 1], &polys[i]);
-            assert_eq!(result, Some(true), "He_{} and He_{} don't interlace", i, i - 1);
+            assert_eq!(
+                result,
+                Some(true),
+                "He_{} and He_{} don't interlace",
+                i,
+                i - 1
+            );
         }
     }
 }

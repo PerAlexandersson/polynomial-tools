@@ -8,7 +8,15 @@ use std::ops::{Add, Mul, Neg, Sub};
 
 /// Trait for polynomial coefficients. Any commutative ring with identity.
 pub trait CoeffRing:
-    Clone + Eq + fmt::Debug + fmt::Display + Add<Output = Self> + Sub<Output = Self> + Mul<Output = Self> + Neg<Output = Self> + Sized
+    Clone
+    + Eq
+    + fmt::Debug
+    + fmt::Display
+    + Add<Output = Self>
+    + Sub<Output = Self>
+    + Mul<Output = Self>
+    + Neg<Output = Self>
+    + Sized
 {
     /// The additive identity (0).
     fn zero() -> Self;
@@ -23,31 +31,63 @@ pub trait CoeffRing:
 // -- CoeffRing impls for standard types --
 
 impl CoeffRing for i64 {
-    fn zero() -> Self { 0 }
-    fn one() -> Self { 1 }
-    fn is_zero(&self) -> bool { *self == 0 }
-    fn from_i64(n: i64) -> Self { n }
+    fn zero() -> Self {
+        0
+    }
+    fn one() -> Self {
+        1
+    }
+    fn is_zero(&self) -> bool {
+        *self == 0
+    }
+    fn from_i64(n: i64) -> Self {
+        n
+    }
 }
 
 impl CoeffRing for num_bigint::BigInt {
-    fn zero() -> Self { num_bigint::BigInt::from(0) }
-    fn one() -> Self { num_bigint::BigInt::from(1) }
-    fn is_zero(&self) -> bool { *self == num_bigint::BigInt::from(0) }
-    fn from_i64(n: i64) -> Self { num_bigint::BigInt::from(n) }
+    fn zero() -> Self {
+        num_bigint::BigInt::from(0)
+    }
+    fn one() -> Self {
+        num_bigint::BigInt::from(1)
+    }
+    fn is_zero(&self) -> bool {
+        *self == num_bigint::BigInt::from(0)
+    }
+    fn from_i64(n: i64) -> Self {
+        num_bigint::BigInt::from(n)
+    }
 }
 
 impl CoeffRing for num_rational::Ratio<num_bigint::BigInt> {
-    fn zero() -> Self { num_rational::Ratio::from_integer(num_bigint::BigInt::from(0)) }
-    fn one() -> Self { num_rational::Ratio::from_integer(num_bigint::BigInt::from(1)) }
-    fn is_zero(&self) -> bool { self.numer() == &num_bigint::BigInt::from(0) }
-    fn from_i64(n: i64) -> Self { num_rational::Ratio::from_integer(num_bigint::BigInt::from(n)) }
+    fn zero() -> Self {
+        num_rational::Ratio::from_integer(num_bigint::BigInt::from(0))
+    }
+    fn one() -> Self {
+        num_rational::Ratio::from_integer(num_bigint::BigInt::from(1))
+    }
+    fn is_zero(&self) -> bool {
+        self.numer() == &num_bigint::BigInt::from(0)
+    }
+    fn from_i64(n: i64) -> Self {
+        num_rational::Ratio::from_integer(num_bigint::BigInt::from(n))
+    }
 }
 
 impl CoeffRing for num_rational::Ratio<i64> {
-    fn zero() -> Self { num_rational::Ratio::new(0, 1) }
-    fn one() -> Self { num_rational::Ratio::new(1, 1) }
-    fn is_zero(&self) -> bool { *self.numer() == 0 }
-    fn from_i64(n: i64) -> Self { num_rational::Ratio::from_integer(n) }
+    fn zero() -> Self {
+        num_rational::Ratio::new(0, 1)
+    }
+    fn one() -> Self {
+        num_rational::Ratio::new(1, 1)
+    }
+    fn is_zero(&self) -> bool {
+        *self.numer() == 0
+    }
+    fn from_i64(n: i64) -> Self {
+        num_rational::Ratio::from_integer(n)
+    }
 }
 
 // -- FieldRing trait and impls --
@@ -62,11 +102,15 @@ pub trait FieldRing: CoeffRing {
 }
 
 impl FieldRing for num_rational::Ratio<num_bigint::BigInt> {
-    fn field_div(self, other: Self) -> Self { self / other }
+    fn field_div(self, other: Self) -> Self {
+        self / other
+    }
 }
 
 impl FieldRing for num_rational::Ratio<i64> {
-    fn field_div(self, other: Self) -> Self { self / other }
+    fn field_div(self, other: Self) -> Self {
+        self / other
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -98,12 +142,16 @@ impl<C: CoeffRing> Polynomial<C> {
 
     /// The constant polynomial 1.
     pub fn one() -> Self {
-        Polynomial { coeffs: vec![C::one()] }
+        Polynomial {
+            coeffs: vec![C::one()],
+        }
     }
 
     /// The variable t (= 0 + 1*t).
     pub fn variable() -> Self {
-        Polynomial { coeffs: vec![C::zero(), C::one()] }
+        Polynomial {
+            coeffs: vec![C::zero(), C::one()],
+        }
     }
 
     /// A constant polynomial.
@@ -245,6 +293,28 @@ impl<C: CoeffRing> Polynomial<C> {
         Self::new(coeffs)
     }
 
+    /// Reciprocal polynomial with respect to a prescribed degree bound.
+    ///
+    /// For a polynomial of degree at most `n`, this returns
+    ///
+    /// ```text
+    /// I_n(p)(t) = t^n p(1/t).
+    /// ```
+    ///
+    /// Returns `None` if `self` has degree greater than `n`.
+    pub fn reverse_with_degree(&self, n: usize) -> Option<Self> {
+        match self.degree() {
+            Some(d) if d > n => return None,
+            _ => {}
+        }
+
+        let mut coeffs = vec![C::zero(); n + 1];
+        for i in 0..=n {
+            coeffs[i] = self.coeff(n - i);
+        }
+        Some(Self::new(coeffs))
+    }
+
     /// Dilate: return p(c*t), replacing t with c*t.
     ///
     /// The coefficient of t^k becomes `coeffs[k] * c^k`.
@@ -253,11 +323,66 @@ impl<C: CoeffRing> Polynomial<C> {
             return Self::zero();
         }
         let mut power = C::one();
-        let coeffs: Vec<C> = self.coeffs.iter().map(|a| {
-            let result = a.clone() * power.clone();
-            power = power.clone() * c.clone();
-            result
-        }).collect();
+        let coeffs: Vec<C> = self
+            .coeffs
+            .iter()
+            .map(|a| {
+                let result = a.clone() * power.clone();
+                power = power.clone() * c.clone();
+                result
+            })
+            .collect();
+        Self::new(coeffs)
+    }
+
+    /// The even Hermite--Biehler part `E`, defined by
+    ///
+    /// ```text
+    /// p(t) = E(t^2) + t O(t^2).
+    /// ```
+    ///
+    /// This returns the polynomial `E`.
+    pub fn even_part(&self) -> Self {
+        Self::new(self.coeffs.iter().step_by(2).cloned().collect())
+    }
+
+    /// The odd Hermite--Biehler part `O`, defined by
+    ///
+    /// ```text
+    /// p(t) = E(t^2) + t O(t^2).
+    /// ```
+    ///
+    /// This returns the polynomial `O`.
+    pub fn odd_part(&self) -> Self {
+        Self::new(self.coeffs.iter().skip(1).step_by(2).cloned().collect())
+    }
+
+    /// Return the Hermite--Biehler decomposition `(E, O)` where
+    ///
+    /// ```text
+    /// p(t) = E(t^2) + t O(t^2).
+    /// ```
+    pub fn hermite_biehler_decomposition(&self) -> (Self, Self) {
+        (self.even_part(), self.odd_part())
+    }
+
+    /// Reconstruct a polynomial from its even and odd Hermite--Biehler parts.
+    ///
+    /// If `p(t) = E(t^2) + t O(t^2)`, then
+    /// `Polynomial::from_even_odd_parts(&E, &O) = p`.
+    pub fn from_even_odd_parts(even: &Self, odd: &Self) -> Self {
+        if even.is_zero() && odd.is_zero() {
+            return Self::zero();
+        }
+
+        let len = even.coeffs.len().saturating_mul(2).max(odd.coeffs.len() * 2 + 1);
+        let mut coeffs = vec![C::zero(); len];
+        for (i, c) in even.coeffs.iter().enumerate() {
+            coeffs[2 * i] = c.clone();
+        }
+        for (i, c) in odd.coeffs.iter().enumerate() {
+            coeffs[2 * i + 1] = c.clone();
+        }
         Self::new(coeffs)
     }
 
@@ -273,6 +398,66 @@ impl<C: CoeffRing> Polynomial<C> {
             }
         }
         true
+    }
+
+    /// Stapledon decomposition with respect to a degree bound `n`.
+    ///
+    /// For a polynomial `p(t)` of degree at most `n`, this returns the unique pair
+    /// `(a(t), b(t))` such that
+    ///
+    /// ```text
+    /// p(t) = a(t) + t b(t),
+    /// ```
+    ///
+    /// where `a(t)` is symmetric with center `n/2` and `b(t)` is symmetric with
+    /// center `(n-1)/2`.
+    ///
+    /// Returns `None` if `self` has degree greater than `n`.
+    pub fn stapledon_decomposition(&self, n: usize) -> Option<(Self, Self)> {
+        let reciprocal = self.reverse_with_degree(n)?;
+
+        let mut a_numerator = vec![C::zero(); n + 2];
+        a_numerator[0] = self.coeff(0);
+        for i in 1..=n {
+            a_numerator[i] = self.coeff(i) - reciprocal.coeff(i - 1);
+        }
+        a_numerator[n + 1] = -self.coeff(0);
+
+        let a = Self::exact_divide_by_one_minus_x(&a_numerator);
+        let b = Self::exact_divide_by_one_minus_x(
+            &(0..=n)
+                .map(|i| reciprocal.coeff(i) - self.coeff(i))
+                .collect::<Vec<_>>(),
+        );
+
+        Some((a, b))
+    }
+
+    fn exact_divide_by_one_minus_x(numerator: &[C]) -> Self {
+        if numerator.len() <= 1 {
+            return Self::zero();
+        }
+
+        let mut quotient = Vec::with_capacity(numerator.len() - 1);
+        let mut running = numerator[0].clone();
+        quotient.push(running.clone());
+
+        for coeff in numerator
+            .iter()
+            .skip(1)
+            .take(numerator.len().saturating_sub(2))
+        {
+            running = running + coeff.clone();
+            quotient.push(running.clone());
+        }
+
+        debug_assert_eq!(
+            numerator.last().unwrap().clone() + running,
+            C::zero(),
+            "numerator should be divisible by 1 - t",
+        );
+
+        Self::new(quotient)
     }
 
     fn strip_trailing_zeros(&mut self) {
@@ -296,9 +481,7 @@ impl<C: CoeffRing> Add for Polynomial<C> {
     type Output = Self;
     fn add(self, rhs: Self) -> Self {
         let len = self.coeffs.len().max(rhs.coeffs.len());
-        let coeffs: Vec<C> = (0..len)
-            .map(|i| self.coeff(i) + rhs.coeff(i))
-            .collect();
+        let coeffs: Vec<C> = (0..len).map(|i| self.coeff(i) + rhs.coeff(i)).collect();
         Self::new(coeffs)
     }
 }
@@ -307,9 +490,7 @@ impl<C: CoeffRing> Sub for Polynomial<C> {
     type Output = Self;
     fn sub(self, rhs: Self) -> Self {
         let len = self.coeffs.len().max(rhs.coeffs.len());
-        let coeffs: Vec<C> = (0..len)
-            .map(|i| self.coeff(i) - rhs.coeff(i))
-            .collect();
+        let coeffs: Vec<C> = (0..len).map(|i| self.coeff(i) - rhs.coeff(i)).collect();
         Self::new(coeffs)
     }
 }
@@ -344,10 +525,18 @@ impl<C: CoeffRing> Mul for Polynomial<C> {
 // Implement CoeffRing for Polynomial<C> so polynomials can be used as
 // symmetric function coefficients (e.g. for Hall-Littlewood).
 impl<C: CoeffRing> CoeffRing for Polynomial<C> {
-    fn zero() -> Self { Polynomial::zero() }
-    fn one() -> Self { Polynomial::one() }
-    fn is_zero(&self) -> bool { self.coeffs.is_empty() }
-    fn from_i64(n: i64) -> Self { Polynomial::constant(C::from_i64(n)) }
+    fn zero() -> Self {
+        Polynomial::zero()
+    }
+    fn one() -> Self {
+        Polynomial::one()
+    }
+    fn is_zero(&self) -> bool {
+        self.coeffs.is_empty()
+    }
+    fn from_i64(n: i64) -> Self {
+        Polynomial::constant(C::from_i64(n))
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -367,7 +556,11 @@ impl<C: FieldRing> Polynomial<C> {
         let dd = divisor.degree().unwrap();
         let mut rem = self.coeffs.clone();
         let lc_d = divisor.leading_coefficient().unwrap();
-        let max_quot_deg = if self.coeffs.len() > dd { self.coeffs.len() - 1 - dd } else { return (Self::zero(), self.clone()); };
+        let max_quot_deg = if self.coeffs.len() > dd {
+            self.coeffs.len() - 1 - dd
+        } else {
+            return (Self::zero(), self.clone());
+        };
         let mut quot = vec![C::zero(); max_quot_deg + 1];
 
         while rem.len() > dd {
@@ -405,6 +598,50 @@ impl<C: FieldRing> Polynomial<C> {
         a.make_monic()
     }
 
+    /// Return the squarefree part `p / gcd(p, p')`.
+    ///
+    /// This removes repeated roots while preserving the overall scaling of `p`.
+    /// For nonzero constants, this returns the constant itself.
+    pub fn squarefree_part(&self) -> Self {
+        if self.is_zero() {
+            return Self::zero();
+        }
+        let dp = self.derivative();
+        if dp.is_zero() {
+            return self.clone();
+        }
+        let g = self.gcd(&dp);
+        if g.degree() == Some(0) || g.is_zero() {
+            self.clone()
+        } else {
+            self.exact_div(&g)
+        }
+    }
+
+    /// Alias for [`Self::squarefree_part`].
+    pub fn make_squarefree(&self) -> Self {
+        self.squarefree_part()
+    }
+
+    /// Check whether all roots are simple.
+    ///
+    /// Returns `false` for the zero polynomial, and `true` for nonzero constants.
+    pub fn has_simple_roots(&self) -> bool {
+        if self.is_zero() {
+            return false;
+        }
+        let dp = self.derivative();
+        if dp.is_zero() {
+            return true;
+        }
+        self.gcd(&dp).degree() == Some(0)
+    }
+
+    /// Check whether the polynomial has a repeated root.
+    pub fn has_repeated_roots(&self) -> bool {
+        !self.is_zero() && !self.has_simple_roots()
+    }
+
     /// Exact division: `self / divisor`, assuming the division is exact.
     ///
     /// Panics if `divisor` does not divide `self` exactly.
@@ -425,9 +662,10 @@ impl<C: FieldRing> Polynomial<C> {
                     return self.clone();
                 }
                 Self::new(
-                    self.coeffs.iter()
+                    self.coeffs
+                        .iter()
                         .map(|c| c.clone().field_div(lc.clone()))
-                        .collect()
+                        .collect(),
                 )
             }
         }
@@ -538,7 +776,7 @@ mod tests {
     #[test]
     fn test_basic_ops() {
         let p = Polynomial::<i64>::from_i64_coeffs(&[1, 2, 1]); // 1 + 2t + t^2
-        let q = Polynomial::<i64>::from_i64_coeffs(&[1, 1]);     // 1 + t
+        let q = Polynomial::<i64>::from_i64_coeffs(&[1, 1]); // 1 + t
         assert_eq!(p.degree(), Some(2));
         assert_eq!(q.degree(), Some(1));
         assert_eq!(p.coeff(0), 1);
@@ -637,6 +875,16 @@ mod tests {
     }
 
     #[test]
+    fn test_reverse_with_degree() {
+        let p = Polynomial::<i64>::from_i64_coeffs(&[1, 2, 3]);
+        assert_eq!(
+            p.reverse_with_degree(4),
+            Some(Polynomial::from_i64_coeffs(&[0, 0, 3, 2, 1])),
+        );
+        assert_eq!(p.reverse_with_degree(1), None);
+    }
+
+    #[test]
     fn test_dilate() {
         // (1 + t) dilated by 2 -> 1 + 2t
         let p = Polynomial::<i64>::from_i64_coeffs(&[1, 1]);
@@ -648,12 +896,57 @@ mod tests {
     }
 
     #[test]
+    fn test_hermite_biehler_decomposition() {
+        let p = Polynomial::<i64>::from_i64_coeffs(&[1, 2, 3, 4, 5]);
+        let (even, odd) = p.hermite_biehler_decomposition();
+        assert_eq!(even, Polynomial::from_i64_coeffs(&[1, 3, 5]));
+        assert_eq!(odd, Polynomial::from_i64_coeffs(&[2, 4]));
+        assert_eq!(Polynomial::from_even_odd_parts(&even, &odd), p);
+    }
+
+    #[test]
+    fn test_hermite_biehler_decomposition_zero_and_odd_only() {
+        let z = Polynomial::<i64>::zero();
+        let (even, odd) = z.hermite_biehler_decomposition();
+        assert_eq!(even, Polynomial::zero());
+        assert_eq!(odd, Polynomial::zero());
+
+        let p = Polynomial::<i64>::from_i64_coeffs(&[0, 2, 0, 4]);
+        let (even, odd) = p.hermite_biehler_decomposition();
+        assert_eq!(even, Polynomial::zero());
+        assert_eq!(odd, Polynomial::from_i64_coeffs(&[2, 4]));
+        assert_eq!(Polynomial::from_even_odd_parts(&even, &odd), p);
+    }
+
+    #[test]
     fn test_is_palindromic() {
         assert!(Polynomial::<i64>::from_i64_coeffs(&[1, 2, 1]).is_palindromic());
         assert!(Polynomial::<i64>::from_i64_coeffs(&[1, 11, 11, 1]).is_palindromic());
         assert!(Polynomial::<i64>::from_i64_coeffs(&[1]).is_palindromic());
         assert!(Polynomial::<i64>::zero().is_palindromic());
         assert!(!Polynomial::<i64>::from_i64_coeffs(&[1, 2, 3]).is_palindromic());
+    }
+
+    #[test]
+    fn test_stapledon_decomposition() {
+        let p = Polynomial::<i64>::from_i64_coeffs(&[1, 2, 3]);
+        let (a, b) = p.stapledon_decomposition(2).unwrap();
+        assert_eq!(a, Polynomial::from_i64_coeffs(&[1, 0, 1]));
+        assert_eq!(b, Polynomial::from_i64_coeffs(&[2, 2]));
+    }
+
+    #[test]
+    fn test_stapledon_decomposition_zero_and_palindromic() {
+        let zero = Polynomial::<i64>::zero();
+        assert_eq!(
+            zero.stapledon_decomposition(4),
+            Some((Polynomial::zero(), Polynomial::zero())),
+        );
+
+        let p = Polynomial::<i64>::from_i64_coeffs(&[1, 3, 3, 1]);
+        let (a, b) = p.stapledon_decomposition(3).unwrap();
+        assert_eq!(a, p);
+        assert_eq!(b, Polynomial::zero());
     }
 
     // -- FieldRing tests (using Ratio<i64>) --
@@ -684,8 +977,8 @@ mod tests {
     #[test]
     fn test_gcd() {
         // gcd((t-1)(t-2), (t-1)(t-3)) = (t-1) (monic)
-        let f = q_poly(&[2, -3, 1]);  // (t-1)(t-2)
-        let g = q_poly(&[3, -4, 1]);  // (t-1)(t-3)
+        let f = q_poly(&[2, -3, 1]); // (t-1)(t-2)
+        let g = q_poly(&[3, -4, 1]); // (t-1)(t-3)
         let d = f.gcd(&g);
         assert_eq!(d, q_poly(&[-1, 1])); // t - 1
     }
@@ -719,6 +1012,31 @@ mod tests {
         // already monic
         let p = q_poly(&[-1, 1]);
         assert_eq!(p.make_monic(), p);
+    }
+
+    #[test]
+    fn test_squarefree_part_and_simple_roots() {
+        let repeated = q_poly(&[1, 2, 1]); // (1+t)^2
+        assert!(!repeated.has_simple_roots());
+        assert!(repeated.has_repeated_roots());
+        assert_eq!(repeated.squarefree_part(), q_poly(&[1, 1]));
+        assert_eq!(repeated.make_squarefree(), q_poly(&[1, 1]));
+
+        let simple = q_poly(&[1, 0, -1]); // 1 - t^2
+        assert!(simple.has_simple_roots());
+        assert!(!simple.has_repeated_roots());
+        assert_eq!(simple.squarefree_part(), simple);
+    }
+
+    #[test]
+    fn test_squarefree_part_zero_and_constant() {
+        let zero = Polynomial::<Q>::zero();
+        assert!(!zero.has_simple_roots());
+        assert_eq!(zero.squarefree_part(), zero);
+
+        let constant = q_poly(&[7]);
+        assert!(constant.has_simple_roots());
+        assert_eq!(constant.squarefree_part(), constant);
     }
 
     #[test]

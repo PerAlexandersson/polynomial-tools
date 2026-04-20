@@ -77,10 +77,8 @@ fn has_variable(s: &str) -> bool {
 
 /// Detect which single variable is used (the only ASCII letter in the string).
 fn detect_variable(s: &str) -> Result<char, String> {
-    let vars: std::collections::HashSet<char> = s
-        .chars()
-        .filter(|c| c.is_ascii_alphabetic())
-        .collect();
+    let vars: std::collections::HashSet<char> =
+        s.chars().filter(|c| c.is_ascii_alphabetic()).collect();
 
     match vars.len() {
         0 => Err("no variable found".to_string()),
@@ -192,16 +190,14 @@ fn parse_term(term: &str, var: char) -> Result<(i64, usize), String> {
                 1
             } else {
                 // Strip ^ or **
-                let exp_str = after_var
-                    .trim_start_matches("**")
-                    .trim_start_matches('^');
+                let exp_str = after_var.trim_start_matches("**").trim_start_matches('^');
 
                 if exp_str.is_empty() {
                     1
                 } else {
-                    exp_str.parse::<usize>().map_err(|e| {
-                        format!("cannot parse exponent '{}': {}", exp_str, e)
-                    })?
+                    exp_str
+                        .parse::<usize>()
+                        .map_err(|e| format!("cannot parse exponent '{}': {}", exp_str, e))?
                 }
             };
 
@@ -257,10 +253,7 @@ mod tests {
 
     #[test]
     fn test_expanded_negative() {
-        assert_eq!(
-            parse_polynomial("t^3 - 3t + 2").unwrap(),
-            vec![2, -3, 0, 1]
-        );
+        assert_eq!(parse_polynomial("t^3 - 3t + 2").unwrap(), vec![2, -3, 0, 1]);
     }
 
     #[test]
@@ -272,34 +265,22 @@ mod tests {
 
     #[test]
     fn test_expanded_star_multiply() {
-        assert_eq!(
-            parse_polynomial("3*t^2 + 2*t + 1").unwrap(),
-            vec![1, 2, 3]
-        );
+        assert_eq!(parse_polynomial("3*t^2 + 2*t + 1").unwrap(), vec![1, 2, 3]);
     }
 
     #[test]
     fn test_expanded_double_star() {
-        assert_eq!(
-            parse_polynomial("t**3 - 1").unwrap(),
-            vec![-1, 0, 0, 1]
-        );
+        assert_eq!(parse_polynomial("t**3 - 1").unwrap(), vec![-1, 0, 0, 1]);
     }
 
     #[test]
     fn test_expanded_variable_x() {
-        assert_eq!(
-            parse_polynomial("x^2 + 2x + 1").unwrap(),
-            vec![1, 2, 1]
-        );
+        assert_eq!(parse_polynomial("x^2 + 2x + 1").unwrap(), vec![1, 2, 1]);
     }
 
     #[test]
     fn test_expanded_variable_n() {
-        assert_eq!(
-            parse_polynomial("n^3 + n").unwrap(),
-            vec![0, 1, 0, 1]
-        );
+        assert_eq!(parse_polynomial("n^3 + n").unwrap(), vec![0, 1, 0, 1]);
     }
 
     #[test]
@@ -330,13 +311,7 @@ mod tests {
         assert_eq!(parse_polynomial("1 11 11 1").unwrap(), expected);
         assert_eq!(parse_polynomial("[1, 11, 11, 1]").unwrap(), expected);
         assert_eq!(parse_polynomial("{1, 11, 11, 1}").unwrap(), expected);
-        assert_eq!(
-            parse_polynomial("1 + 11t + 11t^2 + t^3").unwrap(),
-            expected
-        );
-        assert_eq!(
-            parse_polynomial("t^3 + 11t^2 + 11t + 1").unwrap(),
-            expected
-        );
+        assert_eq!(parse_polynomial("1 + 11t + 11t^2 + t^3").unwrap(), expected);
+        assert_eq!(parse_polynomial("t^3 + 11t^2 + 11t + 1").unwrap(), expected);
     }
 }

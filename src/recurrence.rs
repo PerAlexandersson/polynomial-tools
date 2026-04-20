@@ -169,7 +169,7 @@ pub fn find_polynomial_recurrence(
     // 1) Denominator unknowns d[i][j], skipping (0,0) which is the fixed constant 1.
     let denom_start: usize = 0;
     let denom_w = opts.denom_var_deg + 1; // width in j
-    // Total slots minus 1 for the fixed constant-1 at (0,0).
+                                          // Total slots minus 1 for the fixed constant-1 at (0,0).
     let num_denom_vars = (opts.denom_idx_deg + 1) * denom_w - 1;
 
     let denom_col = |i: usize, j: usize| -> usize {
@@ -198,9 +198,7 @@ pub fn find_polynomial_recurrence(
         (opts.inhomo_idx_deg + 1) * inhomo_w
     };
 
-    let inhomo_col = |i: usize, j: usize| -> usize {
-        inhomo_start + i * inhomo_w + j
-    };
+    let inhomo_col = |i: usize, j: usize| -> usize { inhomo_start + i * inhomo_w + j };
 
     let num_vars = inhomo_start + num_inhomo_vars;
     if num_vars == 0 {
@@ -212,7 +210,11 @@ pub fn find_polynomial_recurrence(
     let max_j = opts
         .var_deg
         .max(opts.denom_var_deg)
-        .max(if opts.homogeneous { 0 } else { opts.inhomo_var_deg });
+        .max(if opts.homogeneous {
+            0
+        } else {
+            opts.inhomo_var_deg
+        });
     let max_t_deg = max_j + max_poly_deg;
     let eqs_per_nn = max_t_deg + 1;
 
@@ -270,8 +272,8 @@ pub fn find_polynomial_recurrence(
                             if rc == 0 {
                                 continue;
                             }
-                            let val =
-                                BigRational::from(BigInt::from(-rc)) * BigRational::from(ni.clone());
+                            let val = BigRational::from(BigInt::from(-rc))
+                                * BigRational::from(ni.clone());
                             matrix[row][coeff_col(r, d, i, j)] = val;
                         }
                     }
@@ -282,7 +284,8 @@ pub fn find_polynomial_recurrence(
             if !opts.homogeneous {
                 for i in 0..=opts.inhomo_idx_deg {
                     if l <= opts.inhomo_var_deg {
-                        let val = BigRational::from(-num_traits::pow::pow(BigInt::from(nn as i64), i));
+                        let val =
+                            BigRational::from(-num_traits::pow::pow(BigInt::from(nn as i64), i));
                         matrix[row][inhomo_col(i, l)] += val;
                     }
                 }
@@ -385,12 +388,15 @@ fn extract_bivar(
     max_j: usize,
 ) -> BivarPoly {
     let coeffs: Vec<Vec<BigRational>> = (0..=max_i)
-        .map(|i| (0..=max_j).map(|j| solution[col_fn(i, j)].clone()).collect())
+        .map(|i| {
+            (0..=max_j)
+                .map(|j| solution[col_fn(i, j)].clone())
+                .collect()
+        })
         .collect();
     // Trim trailing zero rows/cols if desired (we keep them for now).
     BivarPoly { coeffs }
 }
-
 
 // ---------------------------------------------------------------------------
 // BivarPoly helpers
@@ -399,7 +405,9 @@ fn extract_bivar(
 impl BivarPoly {
     /// True when all coefficients are zero.
     pub fn is_zero(&self) -> bool {
-        self.coeffs.iter().all(|row| row.iter().all(|c| c.is_zero()))
+        self.coeffs
+            .iter()
+            .all(|row| row.iter().all(|c| c.is_zero()))
     }
 
     /// True when the polynomial equals the constant 1.
@@ -582,7 +590,283 @@ fn fmt_poly_ref_latex(offset: usize, deriv_order: usize) -> String {
     }
 }
 
+#[derive(Copy, Clone)]
+enum CodeStyle {
+    Mathematica,
+    Sage,
+}
+
+fn fmt_rational_code(style: CodeStyle, r: &BigRational) -> String {
+    match style {
+        CodeStyle::Mathematica => {
+            if r.denom() == &BigInt::one() {
+                format!("{}", r.numer())
+            } else {
+                format!("{}/{}", r.numer(), r.denom())
+            }
+        }
+        CodeStyle::Sage => {
+            if r.denom() == &BigInt::one() {
+                format!("{}", r.numer())
+            } else if r.numer() < &BigInt::zero() {
+                format!("-QQ({})/{}", -r.numer().clone(), r.denom())
+            } else {
+                format!("QQ({})/{}", r.numer(), r.denom())
+            }
+        }
+    }
+}
+
+fn fmt_power_code(style: CodeStyle, var: &str, pow: usize) -> Option<String> {
+    match pow {
+        0 => None,
+        1 => Some(var.to_string()),
+        _ => Some(match style {
+            CodeStyle::Mathematica => format!("{var}^{pow}"),
+            CodeStyle::Sage => format!("{var}**{pow}"),
+        }),
+    }
+}
+
+fn fmt_monomial_code_abs(
+    style: CodeStyle,
+    coeff_abs: &BigRational,
+    n_pow: usize,
+    t_pow: usize,
+) -> String {
+    let has_vars = n_pow > 0 || t_pow > 0;
+    let mut factors = Vec::new();
+
+    if !(coeff_abs.is_one() && has_vars) {
+        let coeff_text = fmt_rational_code(style, coeff_abs);
+        let needs_wrap = has_vars && coeff_text.contains('/');
+        factors.push(if needs_wrap {
+            format!("({coeff_text})")
+        } else {
+            coeff_text
+        });
+    }
+
+    if let Some(n_term) = fmt_power_code(style, "n", n_pow) {
+        factors.push(n_term);
+    }
+    if let Some(t_term) = fmt_power_code(style, "t", t_pow) {
+        factors.push(t_term);
+    }
+
+    if factors.is_empty() {
+        "1".to_string()
+    } else {
+        factors.join("*")
+    }
+}
+
+fn join_signed_terms(terms: &[(bool, String)]) -> String {
+    if terms.is_empty() {
+        return "0".to_string();
+    }
+
+    let mut result = String::new();
+    for (idx, (negative, body)) in terms.iter().enumerate() {
+        if idx == 0 {
+            if *negative {
+                result.push('-');
+            }
+            result.push_str(body);
+        } else if *negative {
+            result.push_str(" - ");
+            result.push_str(body);
+        } else {
+            result.push_str(" + ");
+            result.push_str(body);
+        }
+    }
+    result
+}
+
+fn wrap_if_sum(expr: &str) -> String {
+    if expr.contains(" + ") || expr.contains(" - ") {
+        format!("({expr})")
+    } else {
+        expr.to_string()
+    }
+}
+
+fn fmt_univariate_poly_mathematica(coeffs: &[i64]) -> String {
+    let mut terms = Vec::new();
+    for (pow, &coeff) in coeffs.iter().enumerate() {
+        if coeff == 0 {
+            continue;
+        }
+        let negative = coeff < 0;
+        let abs_coeff = coeff.abs();
+        let body = match pow {
+            0 => abs_coeff.to_string(),
+            1 => {
+                if abs_coeff == 1 {
+                    "t".to_string()
+                } else {
+                    format!("{abs_coeff}*t")
+                }
+            }
+            _ => {
+                if abs_coeff == 1 {
+                    format!("t^{pow}")
+                } else {
+                    format!("{abs_coeff}*t^{pow}")
+                }
+            }
+        };
+        terms.push((negative, body));
+    }
+    join_signed_terms(&terms)
+}
+
 impl Recurrence {
+    fn max_offset(&self) -> usize {
+        self.terms.iter().map(|term| term.offset).max().unwrap_or(0)
+    }
+
+    fn term_to_mathematica_code(&self, term: &RecurrenceTerm) -> String {
+        let coeff = term.coeff.to_mathematica_code();
+        let idx = if term.offset == 0 {
+            "n".to_string()
+        } else {
+            format!("n - {}", term.offset)
+        };
+        let pref = match term.deriv_order {
+            0 => format!("P[{idx}, t]"),
+            1 => format!("D[P[{idx}, t], t]"),
+            d => format!("D[P[{idx}, t], {{t, {d}}}]"),
+        };
+
+        if term.coeff.is_one() {
+            pref
+        } else if coeff == "-1" {
+            format!("-{pref}")
+        } else {
+            format!("{}*{pref}", wrap_if_sum(&coeff))
+        }
+    }
+
+    fn term_to_sage_code(&self, term: &RecurrenceTerm) -> String {
+        let coeff = term.coeff.to_sage_code();
+        let idx = if term.offset == 0 {
+            "n".to_string()
+        } else {
+            format!("n - {}", term.offset)
+        };
+        let pref = match term.deriv_order {
+            0 => format!("P({idx})"),
+            1 => format!("P({idx}).derivative(t)"),
+            d => format!("P({idx}).derivative(t, {d})"),
+        };
+
+        if term.coeff.is_one() {
+            pref
+        } else if coeff == "-1" {
+            format!("-{pref}")
+        } else {
+            format!("{}*{pref}", wrap_if_sum(&coeff))
+        }
+    }
+
+    fn rhs_to_mathematica_code(&self) -> String {
+        let mut pieces: Vec<String> = self
+            .terms
+            .iter()
+            .map(|term| self.term_to_mathematica_code(term))
+            .collect();
+        if let Some(ref inh) = self.inhomogeneous {
+            pieces.push(inh.to_mathematica_code());
+        }
+        let rhs = if pieces.is_empty() {
+            "0".to_string()
+        } else {
+            pieces.join(" + ")
+        };
+        if let Some(ref denom) = self.denominator {
+            format!(
+                "Expand[Together[({})/({})]]",
+                rhs,
+                denom.to_mathematica_code()
+            )
+        } else {
+            format!("Expand[{rhs}]")
+        }
+    }
+
+    fn rhs_to_sage_code(&self) -> String {
+        let mut pieces: Vec<String> = self
+            .terms
+            .iter()
+            .map(|term| self.term_to_sage_code(term))
+            .collect();
+        if let Some(ref inh) = self.inhomogeneous {
+            pieces.push(inh.to_sage_code());
+        }
+        let rhs = if pieces.is_empty() {
+            "0".to_string()
+        } else {
+            pieces.join(" + ")
+        };
+        if let Some(ref denom) = self.denominator {
+            format!("R(K({rhs}) / K({}))", denom.to_sage_code())
+        } else {
+            format!("R({rhs})")
+        }
+    }
+
+    pub fn to_mathematica_definition(&self, initial_polys: &[Vec<i64>]) -> String {
+        let base_count = self.max_offset().min(initial_polys.len());
+        let start_n = base_count + 1;
+        let mut lines = vec!["ClearAll[P];".to_string()];
+        for (idx, coeffs) in initial_polys.iter().take(base_count).enumerate() {
+            lines.push(format!(
+                "P[{}, t_] := {};",
+                idx + 1,
+                fmt_univariate_poly_mathematica(coeffs)
+            ));
+        }
+        lines.push(format!(
+            "P[n_Integer /; n >= {start_n}, t_] := P[n, t] = {};",
+            self.rhs_to_mathematica_code()
+        ));
+        lines.push(String::new());
+        lines.push("(* Example: Table[P[n, t], {n, 1, 10}] *)".to_string());
+        lines.join("\n")
+    }
+
+    pub fn to_sage_definition(&self, initial_polys: &[Vec<i64>]) -> String {
+        let base_count = self.max_offset().min(initial_polys.len());
+        let mut lines = vec![
+            "R.<t> = PolynomialRing(QQ)".to_string(),
+            "K = R.fraction_field()".to_string(),
+            "_P_cache = {".to_string(),
+        ];
+        for (idx, coeffs) in initial_polys.iter().take(base_count).enumerate() {
+            let coeff_list = coeffs
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
+            lines.push(format!("    {}: R([{}]),", idx + 1, coeff_list));
+        }
+        lines.push("}".to_string());
+        lines.push(String::new());
+        lines.push("def P(n):".to_string());
+        lines.push("    if n < 1:".to_string());
+        lines.push("        raise ValueError(\"n must be a positive integer\")".to_string());
+        lines.push("    if n in _P_cache:".to_string());
+        lines.push("        return _P_cache[n]".to_string());
+        lines.push(format!("    value = {}", self.rhs_to_sage_code()));
+        lines.push("    _P_cache[n] = value".to_string());
+        lines.push("    return value".to_string());
+        lines.push(String::new());
+        lines.push("# Example: [P(n) for n in range(1, 11)]".to_string());
+        lines.join("\n")
+    }
+
     /// Format the recurrence as a LaTeX expression.
     pub fn to_latex(&self) -> String {
         let mut s = String::new();
@@ -636,6 +920,37 @@ impl Recurrence {
         }
 
         s
+    }
+}
+
+impl BivarPoly {
+    fn to_code(&self, style: CodeStyle) -> String {
+        let mut terms: Vec<(bool, String)> = Vec::new();
+        let max_j = self.coeffs.first().map_or(0, |r| r.len().saturating_sub(1));
+        let max_i = self.coeffs.len().saturating_sub(1);
+        for j in 0..=max_j {
+            for i in 0..=max_i {
+                let c = &self.coeffs[i][j];
+                if c.is_zero() {
+                    continue;
+                }
+                let negative = c < &BigRational::zero();
+                let coeff_abs = if negative { -c.clone() } else { c.clone() };
+                terms.push((
+                    negative,
+                    fmt_monomial_code_abs(style, &coeff_abs, i, j),
+                ));
+            }
+        }
+        join_signed_terms(&terms)
+    }
+
+    pub fn to_mathematica_code(&self) -> String {
+        self.to_code(CodeStyle::Mathematica)
+    }
+
+    pub fn to_sage_code(&self) -> String {
+        self.to_code(CodeStyle::Sage)
     }
 }
 
@@ -735,7 +1050,11 @@ pub fn count_equations(polys: &[Vec<i64>], opts: &RecurrenceOptions) -> usize {
     let max_j = opts
         .var_deg
         .max(opts.denom_var_deg)
-        .max(if opts.homogeneous { 0 } else { opts.inhomo_var_deg });
+        .max(if opts.homogeneous {
+            0
+        } else {
+            opts.inhomo_var_deg
+        });
     let eqs_per_nn = max_j + max_poly_deg + 1;
     (m - opts.rec_len) * eqs_per_nn
 }
@@ -862,8 +1181,11 @@ fn generate_candidates(m: usize, search: &AdaptiveSearchOptions) -> Vec<Recurren
                     });
 
                     if search.try_inhomogeneous {
-                        for inhomo_idx_deg in search.min_inhomo_idx_deg..=search.max_inhomo_idx_deg {
-                            for inhomo_var_deg in search.min_inhomo_var_deg..=search.max_inhomo_var_deg {
+                        for inhomo_idx_deg in search.min_inhomo_idx_deg..=search.max_inhomo_idx_deg
+                        {
+                            for inhomo_var_deg in
+                                search.min_inhomo_var_deg..=search.max_inhomo_var_deg
+                            {
                                 candidates.push(RecurrenceOptions {
                                     rec_len,
                                     var_deg,
@@ -1169,6 +1491,59 @@ mod tests {
     }
 
     #[test]
+    fn mathematica_definition_contains_initial_values_and_rule() {
+        let polys: Vec<Vec<i64>> = vec![
+            vec![1],
+            vec![1],
+            vec![2],
+            vec![3],
+            vec![5],
+            vec![8],
+            vec![13],
+        ];
+        let opts = RecurrenceOptions {
+            var_deg: 0,
+            idx_deg: 0,
+            diff_deg: 0,
+            rec_len: 2,
+            homogeneous: true,
+            ..Default::default()
+        };
+        let rec = find_polynomial_recurrence(&polys, &opts).expect("should find recurrence");
+        let code = rec.to_mathematica_definition(&polys);
+        assert!(code.contains("P[1, t_] := 1;"));
+        assert!(code.contains("P[2, t_] := 1;"));
+        assert!(code.contains("P[n_Integer /; n >= 3, t_] := P[n, t] = Expand[P[n - 1, t] + P[n - 2, t]];"));
+    }
+
+    #[test]
+    fn sage_definition_contains_derivative_rule() {
+        let polys: Vec<Vec<i64>> = vec![
+            vec![1],
+            vec![1],
+            vec![1, 1],
+            vec![1, 4, 1],
+            vec![1, 11, 11, 1],
+            vec![1, 26, 66, 26, 1],
+        ];
+        let opts = RecurrenceOptions {
+            var_deg: 2,
+            idx_deg: 1,
+            diff_deg: 1,
+            rec_len: 1,
+            homogeneous: true,
+            ..Default::default()
+        };
+        let rec = find_polynomial_recurrence(&polys, &opts).expect("should find recurrence");
+        let code = rec.to_sage_definition(&polys);
+        assert!(code.contains("R.<t> = PolynomialRing(QQ)"));
+        assert!(code.contains("_P_cache = {"));
+        assert!(code.contains("1: R([1]),"));
+        assert!(code.contains("value = R("));
+        assert!(code.contains("P(n - 1).derivative(t)"));
+    }
+
+    #[test]
     fn geometric_sequence() {
         // P_n = 2^{n-1}: P_n = 2 P_{n-1}
         let polys: Vec<Vec<i64>> = vec![
@@ -1220,16 +1595,8 @@ mod tests {
 
     #[test]
     fn adaptive_geometric() {
-        let polys: Vec<Vec<i64>> = vec![
-            vec![1],
-            vec![2],
-            vec![4],
-            vec![8],
-            vec![16],
-            vec![32],
-        ];
-        let result =
-            find_recurrence_adaptive(&polys, &AdaptiveSearchOptions::default()).unwrap();
+        let polys: Vec<Vec<i64>> = vec![vec![1], vec![2], vec![4], vec![8], vec![16], vec![32]];
+        let result = find_recurrence_adaptive(&polys, &AdaptiveSearchOptions::default()).unwrap();
         assert_eq!(format!("{}", result.recurrence), "P(n) = 2 P(n-1)");
     }
 
@@ -1341,8 +1708,7 @@ mod tests {
             vec![8],
             vec![13],
         ];
-        let result =
-            find_recurrence_adaptive(&polys, &AdaptiveSearchOptions::default()).unwrap();
+        let result = find_recurrence_adaptive(&polys, &AdaptiveSearchOptions::default()).unwrap();
         assert_eq!(format!("{}", result.recurrence), "P(n) = P(n-1) + P(n-2)");
         assert_eq!(result.opts.rec_len, 2);
         assert_eq!(result.opts.diff_deg, 0);
@@ -1351,8 +1717,7 @@ mod tests {
     #[test]
     fn adaptive_factorial() {
         let polys: Vec<Vec<i64>> = vec![vec![1], vec![2], vec![6], vec![24], vec![120]];
-        let result =
-            find_recurrence_adaptive(&polys, &AdaptiveSearchOptions::default()).unwrap();
+        let result = find_recurrence_adaptive(&polys, &AdaptiveSearchOptions::default()).unwrap();
         assert_eq!(format!("{}", result.recurrence), "P(n) = n P(n-1)");
         assert_eq!(result.opts.rec_len, 1);
         assert_eq!(result.opts.idx_deg, 1);
@@ -1367,8 +1732,7 @@ mod tests {
             vec![1, 3, 3, 1],
             vec![1, 4, 6, 4, 1],
         ];
-        let result =
-            find_recurrence_adaptive(&polys, &AdaptiveSearchOptions::default()).unwrap();
+        let result = find_recurrence_adaptive(&polys, &AdaptiveSearchOptions::default()).unwrap();
         assert_eq!(format!("{}", result.recurrence), "P(n) = (1 + t) P(n-1)");
         assert_eq!(result.opts.rec_len, 1);
     }
@@ -1382,8 +1746,7 @@ mod tests {
             vec![0, -3, 0, 4],
             vec![1, 0, -8, 0, 8],
         ];
-        let result =
-            find_recurrence_adaptive(&polys, &AdaptiveSearchOptions::default()).unwrap();
+        let result = find_recurrence_adaptive(&polys, &AdaptiveSearchOptions::default()).unwrap();
         assert_eq!(
             format!("{}", result.recurrence),
             "P(n) = 2t P(n-1) - P(n-2)"
@@ -1403,8 +1766,7 @@ mod tests {
             vec![1, 11, 11, 1],
             vec![1, 26, 66, 26, 1],
         ];
-        let result =
-            find_recurrence_adaptive(&polys, &AdaptiveSearchOptions::default()).unwrap();
+        let result = find_recurrence_adaptive(&polys, &AdaptiveSearchOptions::default()).unwrap();
         assert_eq!(result.opts.diff_deg, 0);
         assert_eq!(result.opts.rec_len, 3);
 

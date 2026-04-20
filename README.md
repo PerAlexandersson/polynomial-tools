@@ -8,12 +8,40 @@ arithmetic.
 
 ## Installation
 
+From the current workspace root:
+
 ```sh
-cd polynomial-tools
-cargo build --release
+cargo build --release -p polynomial-tools
 ```
 
 The CLI binary is at `target/release/polytool`.
+
+In a future standalone `polynomial-tools` repository, the equivalent command is:
+
+```sh
+cargo build --release
+```
+
+To build the MCP server from the workspace root:
+
+```sh
+cargo build --release -p polynomial-tools-mcp
+```
+
+The MCP binary is at `target/release/polytool-mcp`.
+
+To install the MCP server into a user bin directory and print a client
+configuration snippet:
+
+```sh
+./polynomial-tools/mcp/install.sh
+```
+
+In a future standalone `polynomial-tools` repository, run:
+
+```sh
+./mcp/install.sh
+```
 
 ## CLI usage
 
@@ -232,6 +260,92 @@ assert_eq!(gamma, vec![1, 8]);
 // Resultant and discriminant
 let disc = discriminant(&[1, 0, -3, 1]);
 ```
+
+## MCP server
+
+The repository also contains a local Model Context Protocol server in
+`mcp/`. It exposes the exact polynomial routines to MCP clients over stdio.
+
+Build it from the workspace root:
+
+```sh
+cargo build --release -p polynomial-tools-mcp
+```
+
+Install it locally:
+
+```sh
+./polynomial-tools/mcp/install.sh
+```
+
+Check the installed binary:
+
+```sh
+polytool-mcp --help
+polytool-mcp --version
+```
+
+Example MCP client configuration:
+
+```json
+{
+  "mcpServers": {
+    "polynomial-tools": {
+      "command": "/absolute/path/to/rust/target/release/polytool-mcp"
+    }
+  }
+}
+```
+
+The MCP server is tools-only: no resources, prompts, HTTP server, sampling, or
+filesystem access. It returns structured JSON and also includes the same compact
+JSON as text content for client compatibility.
+
+Available MCP tools:
+
+- `parse_polynomials`
+- `polynomial_properties`
+- `check_interlacing_pair`
+- `check_interlacing_sequence`
+- `real_roots`
+- `find_recurrence`
+- `resultant`
+- `discriminant`
+- `ehrhart_hstar`
+- `analyze_decomposition`
+- `generate_sequence`
+
+See [`mcp/README.md`](mcp/README.md) for request schemas, examples, and
+development notes.
+
+## Development
+
+Run the core tests:
+
+```sh
+cargo test -p polynomial-tools
+```
+
+Run the MCP server tests:
+
+```sh
+cargo test -p polynomial-tools-mcp
+```
+
+Run the web wrapper tests:
+
+```sh
+cargo test -p polynomial-tools-web
+```
+
+If this directory is split out into its own Git repository, keep the core crate,
+`mcp/`, and `web/` under one workspace manifest, and keep `Cargo.lock` if
+reproducible binary builds are important.
+
+## Support
+
+Report issues in the Git repository, or contact Per Alexandersson
+(@PerAlexandersson, <per.w.alexandersson@gmail.com>).
 
 ## Algorithm notes
 

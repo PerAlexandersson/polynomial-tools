@@ -51,9 +51,11 @@
 //! are needed.
 
 use crate::sturm::SturmChain;
+use crate::Polynomial;
 use num_bigint::BigInt;
+use num_integer::Integer;
 use num_rational::Ratio;
-use num_traits::Signed;
+use num_traits::{Signed, ToPrimitive, Zero};
 
 type Q = Ratio<BigInt>;
 
@@ -257,6 +259,84 @@ pub fn is_gamma_positive(coeffs: &[i64]) -> bool {
     }
 }
 
+/// Remove all initial zeros, i.e. divide out the largest power of `t`.
+pub fn strip_initial_zeros(coeffs: &[i64]) -> &[i64] {
+    let start = match coeffs.iter().position(|&c| c != 0) {
+        Some(start) => start,
+        None => return &[],
+    };
+    &coeffs[start..]
+}
+
+/// Check palindromicity after dividing out all factors of `t`.
+pub fn is_palindromic_ignoring_initial_zeros(coeffs: &[i64]) -> bool {
+    is_palindromic(strip_initial_zeros(coeffs))
+}
+
+/// Compute gamma-coefficients after dividing out all factors of `t`.
+pub fn gamma_coefficients_ignoring_initial_zeros(coeffs: &[i64]) -> Option<Vec<i64>> {
+    gamma_coefficients(strip_initial_zeros(coeffs))
+}
+
+/// Check gamma-positivity after dividing out all factors of `t`.
+pub fn is_gamma_positive_ignoring_initial_zeros(coeffs: &[i64]) -> bool {
+    is_gamma_positive(strip_initial_zeros(coeffs))
+}
+
+/// Compute the Stapledon decomposition with respect to a degree bound `n`.
+///
+/// For a polynomial `p(x)` of degree at most `n`, there is a unique decomposition
+///
+/// ```text
+/// p(x) = a(x) + x b(x),
+/// ```
+///
+/// where `a(x)` is symmetric with center `n/2` and `b(x)` is symmetric with center
+/// `(n-1)/2`. This returns the coefficient vectors of `(a(x), b(x))` in ascending
+/// degree order, or `None` if `deg(p) > n`.
+pub fn stapledon_decomposition(coeffs: &[i64], n: usize) -> Option<(Vec<i64>, Vec<i64>)> {
+    crate::polynomial::Polynomial::<i64>::from_i64_coeffs(coeffs)
+        .stapledon_decomposition(n)
+        .map(|(a, b)| (a.coeffs().to_vec(), b.coeffs().to_vec()))
+}
+
+/// Return the Hermite--Biehler decomposition `(E, O)` where
+///
+/// ```text
+/// p(t) = E(t^2) + t O(t^2).
+/// ```
+pub fn hermite_biehler_parts(coeffs: &[i64]) -> (Vec<i64>, Vec<i64>) {
+    let p = Polynomial::<i64>::from_i64_coeffs(coeffs);
+    let (even, odd) = p.hermite_biehler_decomposition();
+    (even.coeffs().to_vec(), odd.coeffs().to_vec())
+}
+
+/// Check whether a polynomial has only simple roots.
+///
+/// Returns `false` for the zero polynomial and `true` for nonzero constants.
+pub fn has_simple_roots(coeffs: &[i64]) -> bool {
+    let p = Polynomial::<Q>::new(
+        coeffs
+            .iter()
+            .map(|&c| Q::from_integer(BigInt::from(c)))
+            .collect(),
+    );
+    p.has_simple_roots()
+}
+
+/// Check whether a BigInt-coefficient polynomial has only simple roots.
+///
+/// Returns `false` for the zero polynomial and `true` for nonzero constants.
+pub fn has_simple_roots_bigint_coeffs(coeffs: &[BigInt]) -> bool {
+    let p = Polynomial::<Q>::new(
+        coeffs
+            .iter()
+            .map(|c| Q::from_integer(c.clone()))
+            .collect(),
+    );
+    p.has_simple_roots()
+}
+
 /// Find all real roots of a polynomial as rational interval midpoints.
 ///
 /// Returns `None` if the polynomial is not real-rooted.
@@ -311,8 +391,10 @@ pub fn check_interlacing_sturm(f: &[i64], g: &[i64]) -> Option<bool> {
         return Some(false);
     }
 
-    let mut rf: Vec<_> = rf; rf.sort();
-    let mut rg: Vec<_> = rg; rg.sort();
+    let mut rf: Vec<_> = rf;
+    rf.sort();
+    let mut rg: Vec<_> = rg;
+    rg.sort();
 
     // Check rg[0] < rf[0] < rg[1] < rf[1] < ... < rg[d]
     for i in 0..rf.len() {
@@ -374,7 +456,7 @@ pub fn bezout_matrix(f: &[i64], g: &[i64]) -> Option<Vec<Vec<i64>>> {
                 continue;
             }
             for m in 0..=(k - l - 1) {
-                let xi = l + m;     // power of x
+                let xi = l + m; // power of x
                 let yj = k - 1 - m; // power of y
                 if xi < d && yj < d {
                     b[xi][yj] += c;
@@ -411,14 +493,20 @@ fn bezout_matrix_bigint_coeffs(f: &[BigInt], g: &[BigInt]) -> Option<Vec<Vec<Big
     let df = {
         let mut d = None;
         for i in (0..f.len()).rev() {
-            if f[i] != zero_big { d = Some(i); break; }
+            if f[i] != zero_big {
+                d = Some(i);
+                break;
+            }
         }
         d
     }?;
     let dg = {
         let mut d = None;
         for i in (0..g.len()).rev() {
-            if g[i] != zero_big { d = Some(i); break; }
+            if g[i] != zero_big {
+                d = Some(i);
+                break;
+            }
         }
         d
     }?;
@@ -492,7 +580,7 @@ pub fn check_interlacing(f: &[i64], g: &[i64]) -> Option<bool> {
     }
 
     match (df, dg) {
-        (Some(df), Some(dg)) if dg == df + 1 => {},
+        (Some(df), Some(dg)) if dg == df + 1 => {}
         _ => return None,
     };
 
@@ -603,7 +691,10 @@ pub fn check_weak_interlacing(p: &[i64], q: &[i64]) -> Option<bool> {
 /// Core weak interlacing check for deg(g) = deg(f) + 1.
 fn check_weak_interlacing_impl(f: &[i64], g: &[i64]) -> Option<bool> {
     let to_q = |coeffs: &[i64]| -> Vec<Q> {
-        coeffs.iter().map(|&c| Q::from_integer(BigInt::from(c))).collect()
+        coeffs
+            .iter()
+            .map(|&c| Q::from_integer(BigInt::from(c)))
+            .collect()
     };
 
     let pq = to_q(f);
@@ -663,8 +754,12 @@ fn poly_gcd_q(a: &[Q], b: &[Q]) -> Vec<Q> {
     let mut r1: Vec<Q> = b.to_vec();
 
     // Trim trailing zeros
-    while r0.last().map_or(false, |c| *c == zero) { r0.pop(); }
-    while r1.last().map_or(false, |c| *c == zero) { r1.pop(); }
+    while r0.last().map_or(false, |c| *c == zero) {
+        r0.pop();
+    }
+    while r1.last().map_or(false, |c| *c == zero) {
+        r1.pop();
+    }
 
     while !r1.is_empty() && r1.iter().any(|c| *c != zero) {
         let rem = poly_rem_q(&r0, &r1);
@@ -682,8 +777,12 @@ fn poly_gcd_q(a: &[Q], b: &[Q]) -> Vec<Q> {
         }
     }
     // Trim
-    while r0.last().map_or(false, |c| *c == zero) { r0.pop(); }
-    if r0.is_empty() { r0.push(zero); }
+    while r0.last().map_or(false, |c| *c == zero) {
+        r0.pop();
+    }
+    if r0.is_empty() {
+        r0.push(zero);
+    }
     r0
 }
 
@@ -716,7 +815,9 @@ fn poly_rem_q(a: &[Q], b: &[Q]) -> Vec<Q> {
             rem.pop();
         }
     }
-    if rem.is_empty() { rem.push(zero); }
+    if rem.is_empty() {
+        rem.push(zero);
+    }
     rem
 }
 
@@ -733,7 +834,11 @@ fn poly_exact_div_q(a: &[Q], b: &[Q]) -> Vec<Q> {
     let mut quot = vec![zero.clone(); dq + 1];
 
     for i in (0..=dq).rev() {
-        let lc_rem = if i + db < rem.len() { rem[i + db].clone() } else { zero.clone() };
+        let lc_rem = if i + db < rem.len() {
+            rem[i + db].clone()
+        } else {
+            zero.clone()
+        };
         if lc_rem == zero {
             continue;
         }
@@ -745,8 +850,12 @@ fn poly_exact_div_q(a: &[Q], b: &[Q]) -> Vec<Q> {
             }
         }
     }
-    while quot.last().map_or(false, |c| *c == zero) { quot.pop(); }
-    if quot.is_empty() { quot.push(zero); }
+    while quot.last().map_or(false, |c| *c == zero) {
+        quot.pop();
+    }
+    if quot.is_empty() {
+        quot.push(zero);
+    }
     quot
 }
 
@@ -755,12 +864,14 @@ fn q_poly_to_i64(p: &[Q]) -> Vec<i64> {
     use num_integer::Integer;
     let zero = Q::from_integer(BigInt::from(0));
     // LCM of all denominators
-    let lcm = p.iter()
+    let lcm = p
+        .iter()
         .filter(|c| **c != zero)
         .fold(BigInt::from(1), |acc, c| acc.lcm(c.denom()));
 
     let lcm_q = Q::from_integer(lcm);
-    let result: Vec<i64> = p.iter()
+    let result: Vec<i64> = p
+        .iter()
         .map(|c| {
             let scaled = c * &lcm_q;
             // Should be an integer now
@@ -837,16 +948,74 @@ pub fn is_real_rooted(coeffs: &[i64]) -> bool {
         is_positive_semidefinite_bigint(&mat)
     } else {
         // Convert back to i64 for the existing path
-        let fp_i64: Vec<i64> = fp.iter().map(|b| {
-            use num_traits::ToPrimitive;
-            b.to_i64().unwrap()
-        }).collect();
+        let fp_i64: Vec<i64> = fp
+            .iter()
+            .map(|b| {
+                use num_traits::ToPrimitive;
+                b.to_i64().unwrap()
+            })
+            .collect();
         let mat = match bezout_matrix_bigint(coeffs, &fp_i64) {
             Some(m) => m,
             None => return false,
         };
         is_positive_semidefinite_bigint(&mat)
     }
+}
+
+/// Check if a polynomial with `BigInt` coefficients is real-rooted using the
+/// same Bézout-matrix criterion as [`is_real_rooted`].
+///
+/// Coefficients are given in ascending degree order.
+pub fn is_real_rooted_bigint_coeffs(coeffs: &[BigInt]) -> bool {
+    let d = match poly_degree_trimmed_bigint(coeffs) {
+        Some(d) => d,
+        None => return true,
+    };
+    if d <= 1 {
+        return true;
+    }
+
+    let mut gcd = BigInt::zero();
+    for c in coeffs.iter().take(d + 1) {
+        if !c.is_zero() {
+            gcd = if gcd.is_zero() {
+                c.abs()
+            } else {
+                gcd.gcd(&c.abs())
+            };
+        }
+    }
+    if !gcd.is_zero() {
+        let reduced: Vec<BigInt> = coeffs.iter().take(d + 1).map(|c| c / &gcd).collect();
+        if reduced.iter().all(|c| c.to_i64().is_some()) {
+            let reduced_i64: Vec<i64> = reduced
+                .iter()
+                .map(|c| c.to_i64().expect("checked above"))
+                .collect();
+            return is_real_rooted(&reduced_i64);
+        }
+    }
+
+    let mut fp: Vec<BigInt> = Vec::with_capacity(d);
+    for k in 0..d {
+        fp.push(&coeffs[k + 1] * BigInt::from((k + 1) as u64));
+    }
+
+    let lc_f = coeffs[d].clone();
+    let lc_fp = fp.last().cloned().unwrap_or_else(|| BigInt::from(0));
+    let zero_big = BigInt::from(0);
+    if (lc_f > zero_big) != (lc_fp > zero_big) {
+        for c in &mut fp {
+            *c = -c.clone();
+        }
+    }
+
+    let mat = match bezout_matrix_bigint_coeffs(coeffs, &fp) {
+        Some(m) => m,
+        None => return false,
+    };
+    is_positive_semidefinite_bigint(&mat)
 }
 
 // ---------------------------------------------------------------------------
@@ -949,7 +1118,11 @@ pub fn discriminant(f: &[i64]) -> BigInt {
     let res = resultant(f, &fp);
     let lc = BigInt::from(coeff_i64(f, n));
     let sign_exp = n * (n - 1) / 2;
-    let sign = if sign_exp % 2 == 0 { BigInt::from(1) } else { BigInt::from(-1) };
+    let sign = if sign_exp % 2 == 0 {
+        BigInt::from(1)
+    } else {
+        BigInt::from(-1)
+    };
 
     sign * res / lc
 }
@@ -1090,7 +1263,8 @@ pub fn ehrhart_to_hstar(ehrhart_coeffs: &[Q]) -> Vec<i64> {
 /// This is useful when the Ehrhart polynomial is stored in integer-denominator form.
 pub fn ehrhart_to_hstar_with_denom(numerator_coeffs: &[i64], denom: i64) -> Vec<i64> {
     let denom_q = Q::from_integer(BigInt::from(denom));
-    let coeffs: Vec<Q> = numerator_coeffs.iter()
+    let coeffs: Vec<Q> = numerator_coeffs
+        .iter()
         .map(|&c| Q::from_integer(BigInt::from(c)) / denom_q.clone())
         .collect();
     ehrhart_to_hstar(&coeffs)
@@ -1098,6 +1272,10 @@ pub fn ehrhart_to_hstar_with_denom(numerator_coeffs: &[i64], denom: i64) -> Vec<
 
 fn poly_degree_trimmed(coeffs: &[i64]) -> Option<usize> {
     coeffs.iter().rposition(|&c| c != 0)
+}
+
+fn poly_degree_trimmed_bigint(coeffs: &[BigInt]) -> Option<usize> {
+    coeffs.iter().rposition(|c| *c != BigInt::from(0))
 }
 
 fn coeff_i64(coeffs: &[i64], k: usize) -> i64 {
@@ -1151,6 +1329,27 @@ mod tests {
     }
 
     #[test]
+    fn test_hermite_biehler_parts() {
+        let (even, odd) = hermite_biehler_parts(&[1, 2, 3, 4, 5]);
+        assert_eq!(even, vec![1, 3, 5]);
+        assert_eq!(odd, vec![2, 4]);
+    }
+
+    #[test]
+    fn test_has_simple_roots_helpers() {
+        assert!(!has_simple_roots(&[1, 2, 1])); // (1+t)^2
+        assert!(has_simple_roots(&[1, 0, -1])); // 1 - t^2
+        assert!(has_simple_roots(&[7])); // constant
+        assert!(!has_simple_roots(&[0])); // zero
+
+        let repeated: Vec<BigInt> = [1_i64, 2, 1].into_iter().map(BigInt::from).collect();
+        assert!(!has_simple_roots_bigint_coeffs(&repeated));
+
+        let simple: Vec<BigInt> = [1_i64, 0, -1].into_iter().map(BigInt::from).collect();
+        assert!(has_simple_roots_bigint_coeffs(&simple));
+    }
+
+    #[test]
     fn test_real_roots() {
         // (t-1)(t-2) = 2 - 3t + t^2
         let roots = real_roots(&[2, -3, 1]).unwrap();
@@ -1169,7 +1368,10 @@ mod tests {
         assert_eq!(check_interlacing_sturm(&[3, -4, 1], &[-2, 1]), Some(false));
 
         // Same-degree: not interlacing (requires deg diff = 1)
-        assert_eq!(check_interlacing_sturm(&[-1, 0, 1], &[-4, 0, 1]), Some(false));
+        assert_eq!(
+            check_interlacing_sturm(&[-1, 0, 1], &[-4, 0, 1]),
+            Some(false)
+        );
 
         // Not real-rooted: t^2+1 → None
         assert_eq!(check_interlacing_sturm(&[1, 1], &[1, 0, 1]), None);
@@ -1206,16 +1408,10 @@ mod tests {
     #[test]
     fn test_bezout_interlacing() {
         // (t-2) ≪ (t-1)(t-3): interlacing, roots 1 < 2 < 3
-        assert_eq!(
-            check_interlacing_bezout(&[-2, 1], &[3, -4, 1]),
-            Some(true)
-        );
+        assert_eq!(check_interlacing_bezout(&[-2, 1], &[3, -4, 1]), Some(true));
 
         // (t-4) ≪ (t-1)(t-3): NOT interlacing (4 not between 1 and 3)
-        assert_eq!(
-            check_interlacing_bezout(&[-4, 1], &[3, -4, 1]),
-            Some(false)
-        );
+        assert_eq!(check_interlacing_bezout(&[-4, 1], &[3, -4, 1]), Some(false));
     }
 
     #[test]
@@ -1241,6 +1437,22 @@ mod tests {
         assert!(!is_real_rooted_bezout(&[1, 0, 1])); // t^2 + 1
         assert!(is_real_rooted_bezout(&[1])); // constant
         assert!(is_real_rooted_bezout(&[1, 1])); // linear
+    }
+
+    #[test]
+    fn test_bezout_real_rooted_bigint_coeffs() {
+        let rr: Vec<BigInt> = [1_i64, 3, 3, 1].into_iter().map(BigInt::from).collect();
+        assert!(is_real_rooted_bigint_coeffs(&rr));
+
+        let not_rr: Vec<BigInt> = [1_i64, 0, 1].into_iter().map(BigInt::from).collect();
+        assert!(!is_real_rooted_bigint_coeffs(&not_rr));
+
+        let huge_scale = BigInt::from(10u64).pow(40);
+        let scaled: Vec<BigInt> = [1_i64, 2, 1]
+            .into_iter()
+            .map(|c| BigInt::from(c) * &huge_scale)
+            .collect();
+        assert!(is_real_rooted_bigint_coeffs(&scaled));
     }
 
     #[test]
@@ -1271,15 +1483,12 @@ mod tests {
         // Same-degree interlacing that DOES hold:
         // f = (t-1)(t-3), roots {1,3}; g = (t-2)(t-4), roots {2,4}
         // Roots alternate: 1 < 2 < 3 < 4.
-        assert_eq!(
-            check_weak_interlacing(&[3, -4, 1], &[8, -6, 1]),
-            Some(true)
-        );
+        assert_eq!(check_weak_interlacing(&[3, -4, 1], &[8, -6, 1]), Some(true));
 
-        // Both orderings should work (interlacing is symmetric for same degree):
+        // The check is directed, so reversing the order changes the answer.
         assert_eq!(
             check_weak_interlacing(&[8, -6, 1], &[3, -4, 1]),
-            Some(true)
+            Some(false)
         );
 
         // Same-degree, NOT interlacing: f = (t-1)(t-4), g = (t-2)(t-3)
@@ -1291,10 +1500,7 @@ mod tests {
 
         // Same-degree, positive coefficients (fast path via *t):
         // f = 1+t, g = 1+2t. Roots: -1 < -1/2. Alternating.
-        assert_eq!(
-            check_weak_interlacing(&[1, 1], &[1, 2]),
-            Some(true)
-        );
+        assert_eq!(check_weak_interlacing(&[1, 1], &[1, 2]), Some(true));
     }
 
     #[test]
@@ -1334,16 +1540,8 @@ mod tests {
         for (coeffs, expected) in cases {
             let sturm = is_real_rooted_sturm(coeffs);
             let bezout = is_real_rooted(coeffs);
-            assert_eq!(
-                sturm, expected,
-                "Sturm disagrees on {:?}",
-                coeffs
-            );
-            assert_eq!(
-                bezout, expected,
-                "Bézout disagrees on {:?}",
-                coeffs
-            );
+            assert_eq!(sturm, expected, "Sturm disagrees on {:?}", coeffs);
+            assert_eq!(bezout, expected, "Bézout disagrees on {:?}", coeffs);
         }
     }
 
@@ -1356,9 +1554,12 @@ mod tests {
         assert!(is_palindromic(&[1, 4, 6, 4, 1]));
         assert!(is_palindromic(&[1]));
         assert!(is_palindromic(&[]));
+        assert!(!is_palindromic(&[0, 1, 1]));
+        assert!(!is_palindromic(&[0, 0, 1, 2, 1]));
         assert!(!is_palindromic(&[1, 2, 3]));
         // Trailing zeros trimmed: [1, 2, 1, 0] is palindromic
         assert!(is_palindromic(&[1, 2, 1, 0]));
+        assert!(!is_palindromic(&[0, 1, 2, 1, 0]));
     }
 
     #[test]
@@ -1378,6 +1579,8 @@ mod tests {
         // Zero/constant
         assert_eq!(gamma_coefficients(&[]), Some(vec![]));
         assert_eq!(gamma_coefficients(&[5]), Some(vec![5]));
+        assert_eq!(gamma_coefficients(&[0, 1, 1]), None);
+        assert_eq!(gamma_coefficients(&[0, 0, 1, 3, 3, 1]), None);
 
         // [1,2,2,1] degree 3: gamma_0=1, gamma_1=2-3=-1
         assert_eq!(gamma_coefficients(&[1, 2, 2, 1]), Some(vec![1, -1]));
@@ -1388,10 +1591,54 @@ mod tests {
         assert!(is_gamma_positive(&[1, 3, 3, 1]));
         assert!(is_gamma_positive(&[1, 11, 11, 1]));
         assert!(is_gamma_positive(&[1, 4, 6, 4, 1]));
+        assert!(!is_gamma_positive(&[0, 1, 1]));
         // [1,2,2,1] has gamma_1 = -1, NOT gamma-positive
         assert!(!is_gamma_positive(&[1, 2, 2, 1]));
         // Non-palindromic: not gamma-positive
         assert!(!is_gamma_positive(&[1, 2, 3]));
+    }
+
+    #[test]
+    fn test_strip_initial_zero_wrappers() {
+        assert_eq!(strip_initial_zeros(&[]), &[]);
+        assert_eq!(strip_initial_zeros(&[0, 0, 1, 2, 1]), &[1, 2, 1]);
+        assert!(is_palindromic_ignoring_initial_zeros(&[0, 1, 1]));
+        assert!(is_palindromic_ignoring_initial_zeros(&[0, 0, 1, 2, 1]));
+        assert_eq!(
+            gamma_coefficients_ignoring_initial_zeros(&[0, 1, 1]),
+            Some(vec![1])
+        );
+        assert_eq!(
+            gamma_coefficients_ignoring_initial_zeros(&[0, 0, 1, 3, 3, 1]),
+            Some(vec![1, 0])
+        );
+        assert!(is_gamma_positive_ignoring_initial_zeros(&[0, 1, 1]));
+    }
+
+    #[test]
+    fn test_stapledon_decomposition_basic() {
+        let (a, b) = stapledon_decomposition(&[1, 2, 3], 2).unwrap();
+        assert_eq!(a, vec![1, 0, 1]);
+        assert_eq!(b, vec![2, 2]);
+    }
+
+    #[test]
+    fn test_stapledon_decomposition_palindromic() {
+        let (a, b) = stapledon_decomposition(&[1, 11, 11, 1], 3).unwrap();
+        assert_eq!(a, vec![1, 11, 11, 1]);
+        assert_eq!(b, Vec::<i64>::new());
+    }
+
+    #[test]
+    fn test_stapledon_decomposition_with_larger_bound() {
+        let (a, b) = stapledon_decomposition(&[1, 4, 1], 4).unwrap();
+        assert_eq!(a, vec![1, 5, 6, 5, 1]);
+        assert_eq!(b, vec![-1, -5, -5, -1]);
+    }
+
+    #[test]
+    fn test_stapledon_decomposition_rejects_large_degree() {
+        assert_eq!(stapledon_decomposition(&[1, 2, 3], 1), None);
     }
 
     // -- Resultant / discriminant tests --
@@ -1462,9 +1709,9 @@ mod tests {
         // 2-simplex: h* = [1, 0, 0], L(t) = C(t+2,2) = (t+1)(t+2)/2 = 1 + 3t/2 + t^2/2
         let ehrhart = hstar_to_ehrhart(&[1, 0, 0]);
         assert_eq!(ehrhart.len(), 3);
-        assert_eq!(ehrhart[0], q(1, 1));  // 1
-        assert_eq!(ehrhart[1], q(3, 2));  // 3/2
-        assert_eq!(ehrhart[2], q(1, 2));  // 1/2
+        assert_eq!(ehrhart[0], q(1, 1)); // 1
+        assert_eq!(ehrhart[1], q(3, 2)); // 3/2
+        assert_eq!(ehrhart[2], q(1, 2)); // 1/2
     }
 
     #[test]
