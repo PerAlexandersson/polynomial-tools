@@ -48,6 +48,8 @@ struct TermOptions {
     include_a: bool,
     include_s: bool,
     include_t: bool,
+    terminal_hull: bool,
+    observed_completion: bool,
 }
 
 impl TermOptions {
@@ -57,26 +59,50 @@ impl TermOptions {
                 include_a: true,
                 include_s: false,
                 include_t: true,
+                terminal_hull: false,
+                observed_completion: false,
             },
             "no_t" => Self {
                 include_a: true,
                 include_s: true,
                 include_t: false,
+                terminal_hull: false,
+                observed_completion: false,
             },
             "q_only" => Self {
                 include_a: false,
                 include_s: true,
                 include_t: true,
+                terminal_hull: false,
+                observed_completion: false,
             },
             "a_only" => Self {
                 include_a: true,
                 include_s: false,
                 include_t: false,
+                terminal_hull: false,
+                observed_completion: false,
+            },
+            "terminal_hull" | "hull" => Self {
+                include_a: true,
+                include_s: true,
+                include_t: true,
+                terminal_hull: true,
+                observed_completion: false,
+            },
+            "observed_completion" | "observed" => Self {
+                include_a: true,
+                include_s: true,
+                include_t: true,
+                terminal_hull: false,
+                observed_completion: true,
             },
             _ => Self {
                 include_a: true,
                 include_s: true,
                 include_t: true,
+                terminal_hull: false,
+                observed_completion: false,
             },
         }
     }
@@ -286,6 +312,44 @@ struct Summary {
     first_no_shared: Option<String>,
     first_no_swap: Option<String>,
     first_closure_failure: Option<String>,
+    missing_crossed_terms: BTreeMap<String, usize>,
+}
+
+fn component_name(component: &Component) -> &'static str {
+    match component {
+        Component::ABase { .. } => "A_base",
+        Component::ATail { .. } => "A_tail",
+        Component::UBase { .. } => "U_base",
+        Component::UEnd { .. } => "U_end",
+        Component::UReservoir { .. } => "U_reservoir",
+        Component::LReservoir { .. } => "L_reservoir",
+        Component::LWindow { .. } => "L_window",
+    }
+}
+
+fn word_shape_summary(word: &Word) -> String {
+    let selects = word.events.iter().filter(|event| event.is_select()).count();
+    let reservoirs = word
+        .events
+        .iter()
+        .filter(|event| matches!(event, RowEvent::Reservoir { .. }))
+        .count();
+    let skips = word
+        .events
+        .iter()
+        .filter(|event| matches!(event, RowEvent::Skip { .. }))
+        .count();
+    let terminal_skips = word
+        .events
+        .iter()
+        .filter(|event| matches!(event, RowEvent::TerminalSkip { .. }))
+        .count();
+    format!(
+        "{} param={:?} offset={} selects={selects} reservoirs={reservoirs} skips={skips} terminal_skips={terminal_skips}",
+        component_name(&word.component),
+        word.param,
+        word.offset
+    )
 }
 
 fn physical_bound(strip: usize, bound: usize) -> usize {
@@ -703,6 +767,106 @@ fn factorized_words(
     kind: QKind,
     terms: TermOptions,
 ) -> Vec<Word> {
+    if terms.observed_completion {
+        let mut out = Vec::new();
+
+        let mut a_base = gen_strip_words(
+            eta,
+            h,
+            c + 1,
+            Component::ABase { strip: c + 1 },
+            Param::None,
+            0,
+        );
+        for mut word in a_base.drain(..) {
+            word.param = Param::None;
+            word.offset = 0;
+            out.push(word.clone());
+            word.param = Param::S;
+            word.offset = 1;
+            out.push(word.clone());
+            word.param = Param::T;
+            word.offset = 0;
+            out.push(word);
+        }
+
+        for strip in (c + 2)..=(p + 1) {
+            let mut a_tail =
+                gen_strip_words(eta, h, strip, Component::ATail { strip }, Param::None, 0);
+            for mut word in a_tail.drain(..) {
+                word.param = Param::None;
+                word.offset = 1;
+                out.push(word.clone());
+                word.param = Param::S;
+                word.offset = 1;
+                out.push(word.clone());
+                word.param = Param::T;
+                word.offset = 0;
+                out.push(word);
+            }
+        }
+
+        for mut word in q_components(eta, c, p, h, kind) {
+            word.param = Param::T;
+            word.offset = 0;
+            out.push(word.clone());
+            word.param = Param::S;
+            word.offset = 1;
+            out.push(word.clone());
+            word.param = Param::None;
+            word.offset = 1;
+            out.push(word);
+        }
+
+        return out;
+    }
+
+    if terms.terminal_hull {
+        let mut base_families = gen_strip_words(
+            eta,
+            h,
+            c + 1,
+            Component::ABase { strip: c + 1 },
+            Param::None,
+            0,
+        );
+        for strip in (c + 2)..=(p + 1) {
+            base_families.extend(gen_strip_words(
+                eta,
+                h,
+                strip,
+                Component::ATail { strip },
+                Param::None,
+                0,
+            ));
+        }
+        base_families.extend(q_components(eta, c, p, h, kind));
+
+        let mut out = Vec::new();
+        for word in base_families {
+            let mut unmarked = word.clone();
+            unmarked.param = Param::None;
+            unmarked.offset = 0;
+            out.push(unmarked);
+
+            let mut shifted = word.clone();
+            shifted.param = Param::None;
+            shifted.offset = 1;
+            out.push(shifted);
+
+            let mut t_marked = word.clone();
+            t_marked.param = Param::T;
+            t_marked.offset = 0;
+            out.push(t_marked);
+
+            let mut s_shifted = word;
+            s_shifted.param = Param::S;
+            s_shifted.offset = 1;
+            out.push(s_shifted);
+        }
+        return out;
+    }
+
     let mut out = Vec::new();
     if terms.include_a {
         out.extend(gen_strip_words(
@@ -1138,11 +1302,23 @@ fn check_packet(
                                 if first_closure_failure.is_none() {
                                     first_closure_failure = Some((
                                         candidate.clone(),
-                                        cross_left,
-                                        cross_right,
+                                        cross_left.clone(),
+                                        cross_right.clone(),
                                         left_loose_present,
                                         right_loose_present,
                                     ));
+                                }
+                                if !left_loose_present {
+                                    *summary
+                                        .missing_crossed_terms
+                                        .entry(word_shape_summary(&cross_left))
+                                        .or_insert(0) += 1;
+                                }
+                                if !right_loose_present {
+                                    *summary
+                                        .missing_crossed_terms
+                                        .entry(word_shape_summary(&cross_right))
+                                        .or_insert(0) += 1;
                                 }
                             }
 
@@ -1272,5 +1448,13 @@ fn main() {
     }
     if let Some(failure) = summary.first_closure_failure {
         println!("\nfirst closure issue:\n{failure}");
+    }
+    if !summary.missing_crossed_terms.is_empty() {
+        let mut missing: Vec<_> = summary.missing_crossed_terms.iter().collect();
+        missing.sort_by_key(|(_, count)| std::cmp::Reverse(**count));
+        println!("\nmost frequent missing crossed term shapes:");
+        for (shape, count) in missing.into_iter().take(12) {
+            println!("  {count:>5}  {shape}");
+        }
     }
 }
