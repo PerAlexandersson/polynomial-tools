@@ -10,10 +10,15 @@ pub mod basis;
 pub mod chromatic;
 pub mod kostka;
 pub mod llt;
+pub mod shifted_lr;
 pub mod symmetric_function;
 pub mod transition;
 
 pub use basis::Basis;
 pub use chromatic::{chromatic_symmetric, first_bad_edge_symmetric};
 pub use llt::{graph_llt_symmetric, unicellular_llt, unit_interval_edges};
+pub use shifted_lr::{
+    shifted_littlewood_richardson_coefficient, shifted_littlewood_richardson_stats,
+    shifted_schur_evaluation, ShiftedLrError, ShiftedLrStats,
+};
 pub use symmetric_function::SymmetricFunction;
