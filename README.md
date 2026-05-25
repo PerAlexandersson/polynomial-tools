@@ -376,6 +376,7 @@ JSON as text content for client compatibility.
 Available MCP tools:
 
 - `parse_polynomials`
+- `check_polynomial_family`
 - `polynomial_properties`
 - `check_interlacing_pair`
 - `check_interlacing_sequence`
