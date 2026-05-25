@@ -37,8 +37,8 @@
 //! [`check_weak_interlacing`] divides out the gcd and explicitly verifies that
 //! the gcd is real-rooted.
 //!
-//! This reduces interlacing to a single matrix positive-definiteness check (Gaussian
-//! elimination with exact rational pivots), avoiding root isolation entirely.
+//! This reduces interlacing to a single exact matrix definiteness check,
+//! avoiding root isolation entirely.
 //!
 //! ## Bézout matrix for real-rootedness
 //!
@@ -837,10 +837,10 @@ fn poly_gcd_q(a: &[Q], b: &[Q]) -> Vec<Q> {
     let mut r1: Vec<Q> = b.to_vec();
 
     // Trim trailing zeros
-    while r0.last().map_or(false, |c| *c == zero) {
+    while r0.last().is_some_and(|c| *c == zero) {
         r0.pop();
     }
-    while r1.last().map_or(false, |c| *c == zero) {
+    while r1.last().is_some_and(|c| *c == zero) {
         r1.pop();
     }
 
@@ -860,7 +860,7 @@ fn poly_gcd_q(a: &[Q], b: &[Q]) -> Vec<Q> {
         }
     }
     // Trim
-    while r0.last().map_or(false, |c| *c == zero) {
+    while r0.last().is_some_and(|c| *c == zero) {
         r0.pop();
     }
     if r0.is_empty() {
@@ -894,7 +894,7 @@ fn poly_rem_q(a: &[Q], b: &[Q]) -> Vec<Q> {
             rem[shift + i] = rem[shift + i].clone() - factor.clone() * c.clone();
         }
         // The leading term should now be zero; pop it
-        while rem.last().map_or(false, |c| *c == zero) {
+        while rem.last().is_some_and(|c| *c == zero) {
             rem.pop();
         }
     }
@@ -933,7 +933,7 @@ fn poly_exact_div_q(a: &[Q], b: &[Q]) -> Vec<Q> {
             }
         }
     }
-    while quot.last().map_or(false, |c| *c == zero) {
+    while quot.last().is_some_and(|c| *c == zero) {
         quot.pop();
     }
     if quot.is_empty() {
@@ -1313,7 +1313,7 @@ pub fn hstar_to_ehrhart(hstar: &[i64]) -> Vec<Q> {
     // Compute d! for normalization
     let mut d_fact = Q::from_integer(BigInt::from(1));
     for j in 2..=d {
-        d_fact = d_fact * Q::from_integer(BigInt::from(j as i64));
+        d_fact *= Q::from_integer(BigInt::from(j as i64));
     }
 
     for (i, &hi) in hstar.iter().enumerate() {
@@ -1349,7 +1349,7 @@ pub fn hstar_to_ehrhart(hstar: &[i64]) -> Vec<Q> {
     }
 
     // Trim trailing zeros
-    while result.last().map_or(false, |c| *c == zero) {
+    while result.last().is_some_and(|c| *c == zero) {
         result.pop();
     }
     result
@@ -1382,8 +1382,8 @@ pub fn ehrhart_to_hstar(ehrhart_coeffs: &[Q]) -> Vec<i64> {
         let mut val = zero.clone();
         let mut t_pow = Q::from_integer(BigInt::from(1));
         for c in ehrhart_coeffs.iter() {
-            val = val + c.clone() * t_pow.clone();
-            t_pow = t_pow * t_q.clone();
+            val += c.clone() * t_pow.clone();
+            t_pow *= t_q.clone();
         }
         values.push(val);
     }
@@ -1404,7 +1404,7 @@ pub fn ehrhart_to_hstar(ehrhart_coeffs: &[Q]) -> Vec<i64> {
             } else {
                 -binom[k].clone()
             };
-            val = val + Q::from_integer(signed_binom) * values[i - k].clone();
+            val += Q::from_integer(signed_binom) * values[i - k].clone();
         }
         // Should be an exact integer
         assert!(

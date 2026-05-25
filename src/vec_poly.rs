@@ -25,12 +25,7 @@ pub fn is_zero(p: &[i64]) -> bool {
 
 /// Degree of the polynomial, or `None` if zero.
 pub fn degree(p: &[i64]) -> Option<usize> {
-    for i in (0..p.len()).rev() {
-        if p[i] != 0 {
-            return Some(i);
-        }
-    }
-    None
+    p.iter().rposition(|&c| c != 0)
 }
 
 /// Add two polynomials.

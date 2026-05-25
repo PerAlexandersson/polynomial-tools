@@ -13,6 +13,8 @@
 //! checks TNN for *all* minors in O(n²m) time by performing adjacent-row
 //! subtraction and verifying that no entry becomes negative.
 
+#![allow(clippy::needless_range_loop)]
+
 use crate::Polynomial;
 use num_bigint::BigInt;
 use num_rational::Ratio;

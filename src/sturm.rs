@@ -16,7 +16,7 @@ struct QPoly {
 
 impl QPoly {
     fn new(mut coeffs: Vec<Q>) -> Self {
-        while coeffs.last().map_or(false, |c| c.is_zero()) {
+        while coeffs.last().is_some_and(|c| c.is_zero()) {
             coeffs.pop();
         }
         QPoly { coeffs }
@@ -96,7 +96,7 @@ impl QPoly {
             rem.pop(); // remove leading zero
         }
         // Strip trailing zeros
-        while rem.last().map_or(false, |c| c.is_zero()) {
+        while rem.last().is_some_and(|c| c.is_zero()) {
             rem.pop();
         }
         QPoly::new(rem)

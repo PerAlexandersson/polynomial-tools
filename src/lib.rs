@@ -13,7 +13,7 @@
 //! use polynomial_tools::*;
 //!
 //! // Eulerian polynomial A_4(t) = 1 + 11t + 11t^2 + t^3
-//! assert!(is_real_rooted(&[1, 11, 11, 1]));     // Bézout matrix (default, fast)
+//! assert!(is_real_rooted(&[1, 11, 11, 1]));     // exact default path
 //! assert!(is_palindromic(&[1, 11, 11, 1]));
 //! assert!(is_gamma_positive(&[1, 11, 11, 1]));   // gamma = [1, 8]
 //!

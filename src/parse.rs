@@ -39,7 +39,7 @@ pub fn parse_polynomials(input: &str) -> Vec<Result<Vec<i64>, String>> {
             let t = l.trim();
             !t.is_empty() && !t.starts_with('#')
         })
-        .map(|l| parse_polynomial(l))
+        .map(parse_polynomial)
         .collect()
 }
 

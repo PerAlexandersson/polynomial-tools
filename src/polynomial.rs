@@ -309,8 +309,8 @@ impl<C: CoeffRing> Polynomial<C> {
         }
 
         let mut coeffs = vec![C::zero(); n + 1];
-        for i in 0..=n {
-            coeffs[i] = self.coeff(n - i);
+        for (i, coeff) in coeffs.iter_mut().enumerate() {
+            *coeff = self.coeff(n - i);
         }
         Some(Self::new(coeffs))
     }
@@ -422,8 +422,8 @@ impl<C: CoeffRing> Polynomial<C> {
 
         let mut a_numerator = vec![C::zero(); n + 2];
         a_numerator[0] = self.coeff(0);
-        for i in 1..=n {
-            a_numerator[i] = self.coeff(i) - reciprocal.coeff(i - 1);
+        for (i, coeff) in a_numerator.iter_mut().enumerate().take(n + 1).skip(1) {
+            *coeff = self.coeff(i) - reciprocal.coeff(i - 1);
         }
         a_numerator[n + 1] = -self.coeff(0);
 
@@ -465,7 +465,7 @@ impl<C: CoeffRing> Polynomial<C> {
     }
 
     fn strip_trailing_zeros(&mut self) {
-        while self.coeffs.last().map_or(false, |c| c.is_zero()) {
+        while self.coeffs.last().is_some_and(|c| c.is_zero()) {
             self.coeffs.pop();
         }
     }
