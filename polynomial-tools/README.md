@@ -349,19 +349,24 @@ Report issues in the Git repository, or contact Per Alexandersson
 
 ## Algorithm notes
 
-### Bézout matrix vs. Sturm chains
+### Real-rootedness algorithms
 
-The default real-rootedness and interlacing checks use the **Bézout matrix**
-(Fisk, Cor. 9.145). For polynomials f (degree d) and g (degree d−1),
-the Bézout matrix B(f,g) is the d×d symmetric matrix with (i,j) entry
-equal to the coefficient of x^i y^j in `(f(x)g(y) - f(y)g(x)) / (x-y)`.
+The default real-rootedness check first uses the primitive integer PRS path
+from `root_count` for one-signed coefficient polynomials.  This is the common
+combinatorial case: after removing powers of `t`, a one-signed polynomial has
+only non-positive roots iff `f(-t)` has the right number of positive roots.
+The PRS code counts roots of the square-free part exactly over `BigInt`.
+
+Mixed-sign real-rootedness and all interlacing checks use the **Bézout matrix**
+(Fisk, Cor. 9.145). For polynomials f (degree d) and g (degree d−1), the
+Bézout matrix B(f,g) is the d×d symmetric matrix with (i,j) entry equal to the
+coefficient of x^i y^j in `(f(x)g(y) - f(y)g(x)) / (x-y)`.
 
 **Theorem:** f and g are both real-rooted and g strictly interlaces f
 if and only if B(f,g) is positive definite.
 
-This reduces interlacing to a single Gaussian elimination (exact, over ℚ),
-avoiding root isolation entirely. It is 100–400× faster than Sturm chains
-at degree 15+.
+This reduces interlacing to a single exact matrix definiteness check, avoiding
+root isolation entirely. It is 100–400× faster than Sturm chains at degree 15+.
 
 For **same-degree** polynomials, `check_weak_interlacing` reduces to the
 deg+1 case by extending one polynomial with a root far to the right

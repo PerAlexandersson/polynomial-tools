@@ -11,6 +11,11 @@
 //! all coefficients have one sign, roots can only be non-positive; after
 //! removing powers of `t`, real-rootedness of `f(t)` is equivalent to all roots
 //! of `f(-t)` being positive.
+//!
+//! Public functions in this module count distinct roots of the square-free
+//! part.  Real-rootedness tests compare that count with the square-free degree,
+//! so repeated real roots are handled without needing multiplicities from the
+//! Sturm sequence.
 
 use num_bigint::BigInt;
 use num_integer::Integer;
@@ -345,12 +350,17 @@ fn make_nonnegative(mut coeffs: Vec<BigInt>) -> Vec<BigInt> {
     coeffs
 }
 
-/// Degree of the square-free part of a BigInt polynomial.
+/// Degree of the square-free part of a `BigInt` polynomial.
+///
+/// The zero polynomial and nonzero constants both return `0`.
 pub fn squarefree_degree_bigint_coeffs(coeffs: &[BigInt]) -> usize {
     degree(&squarefree_part_bigint(coeffs)).unwrap_or(0)
 }
 
 /// Count distinct real roots using a primitive pseudo-remainder Sturm sequence.
+///
+/// The input may have repeated roots; internally we replace it by its
+/// square-free part before counting.
 pub fn count_real_roots_prs_bigint_coeffs(coeffs: &[BigInt]) -> usize {
     let chain = sturm_chain_squarefree(coeffs);
     if chain.is_empty() {
@@ -360,6 +370,8 @@ pub fn count_real_roots_prs_bigint_coeffs(coeffs: &[BigInt]) -> usize {
 }
 
 /// Count distinct positive roots using a primitive pseudo-remainder Sturm sequence.
+///
+/// The count is over the open interval `(0, +infinity)`.
 pub fn count_positive_roots_prs_bigint_coeffs(coeffs: &[BigInt]) -> usize {
     let chain = sturm_chain_squarefree(coeffs);
     if chain.is_empty() {
@@ -398,6 +410,10 @@ pub fn satisfies_newton_inequalities_bigint(coeffs: &[BigInt]) -> bool {
 }
 
 /// Exact real-rootedness via primitive integer Sturm/PRS root counting.
+///
+/// This is a general method: it works for mixed-sign coefficients as well as
+/// one-signed combinatorial polynomials.  It is often useful as a fallback when
+/// Bézout matrices become large.
 pub fn is_real_rooted_prs_bigint_coeffs(coeffs: &[BigInt]) -> bool {
     let p = trim_slice(coeffs);
     let d = match degree(&p) {
@@ -439,6 +455,11 @@ pub fn is_real_rooted_one_signed_bigint_coeffs(coeffs: &[BigInt]) -> Option<bool
 }
 
 /// Exact real-rootedness with a fast one-signed path and PRS fallback.
+///
+/// This avoids constructing Bézout/PSD matrices entirely.  The public
+/// `real_rootedness::is_real_rooted_bigint_coeffs` function currently uses the
+/// one-signed part of this path and keeps Bézout as the mixed-sign fallback,
+/// because Bézout also supports the interlacing routines.
 pub fn is_real_rooted_fast_bigint_coeffs(coeffs: &[BigInt]) -> bool {
     if let Some(rr) = is_real_rooted_one_signed_bigint_coeffs(coeffs) {
         rr

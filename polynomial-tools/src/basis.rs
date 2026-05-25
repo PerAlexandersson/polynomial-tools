@@ -309,17 +309,18 @@ fn solve_square_linear_system<C: FieldRing>(a: &[Vec<C>], b: &[C]) -> Option<Vec
         }
 
         let pivot_value = aug[col][col].clone();
-        for j in col..=n {
-            aug[col][j] = aug[col][j].clone().field_div(pivot_value.clone());
+        for entry in aug[col].iter_mut().take(n + 1).skip(col) {
+            *entry = entry.clone().field_div(pivot_value.clone());
         }
+        let pivot_row = aug[col].clone();
 
-        for row in 0..n {
-            if row == col || aug[row][col].is_zero() {
+        for (row, row_entries) in aug.iter_mut().enumerate().take(n) {
+            if row == col || row_entries[col].is_zero() {
                 continue;
             }
-            let factor = aug[row][col].clone();
-            for j in col..=n {
-                aug[row][j] = aug[row][j].clone() - factor.clone() * aug[col][j].clone();
+            let factor = row_entries[col].clone();
+            for (j, pivot_entry) in pivot_row.iter().enumerate().take(n + 1).skip(col) {
+                row_entries[j] = row_entries[j].clone() - factor.clone() * pivot_entry.clone();
             }
         }
     }
