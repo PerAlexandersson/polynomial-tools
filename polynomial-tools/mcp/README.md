@@ -200,6 +200,53 @@ Example arguments:
 Returns `items`, each with `index`, `ok`, and either normalized polynomial data
 or an `error`.
 
+### `check_polynomial_family`
+
+Run the common research checks in one exact batch.  The tool accepts either
+explicit polynomials, text input, or one of the built-in standard sequences.
+It reports polynomial properties, consecutive interlacing data, optional finite
+`Lace(A)` total-nonnegativity checks, and optional recurrence search.  It also
+returns a Markdown summary suitable for a project note or `HANDOFF.md`.
+
+Example with a generated sequence:
+
+```json
+{
+  "sequence": "eulerian",
+  "max_n": 6,
+  "options": {
+    "require_real_rooted": true,
+    "require_gamma_positive": true,
+    "check_consecutive_interlacing": true
+  }
+}
+```
+
+Example with the Athanasiadis--Wagner pairwise-but-not-fully-interlacing
+triple:
+
+```json
+{
+  "polynomials": [
+    { "coefficients": [2, 1] },
+    { "coefficients": [8, 6, 1] },
+    { "coefficients": [3, 4, 1] }
+  ],
+  "lace": {
+    "block_rows": 1,
+    "block_cols": 3,
+    "max_minor_size": 3,
+    "include_matrix": true
+  }
+}
+```
+
+The `all_required_checks_passed` field uses conservative defaults:
+real-rootedness is required, while gamma-positivity, log-concavity,
+palindromicity, and consecutive interlacing are reported but only required
+when their `require_*` flags are set.  A requested `lace` check is required to
+be TNN, and a requested recurrence search is required to find a recurrence.
+
 ### `polynomial_properties`
 
 Compute standard properties for each input polynomial:

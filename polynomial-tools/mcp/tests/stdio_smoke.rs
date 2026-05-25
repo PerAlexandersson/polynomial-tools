@@ -77,6 +77,7 @@ fn lists_tools_and_calls_properties() {
         .filter_map(|tool| tool["name"].as_str())
         .collect();
     assert!(tool_names.contains(&"polynomial_properties"));
+    assert!(tool_names.contains(&"check_polynomial_family"));
     assert!(tool_names.contains(&"find_recurrence"));
 
     send(
@@ -97,6 +98,33 @@ fn lists_tools_and_calls_properties() {
     let structured = &result["result"]["structuredContent"];
     assert_eq!(structured["items"][0]["real_rooted"], true);
     assert_eq!(structured["items"][0]["gamma_coefficients"], json!([1, 8]));
+
+    send(
+        &mut stdin,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "tools/call",
+            "params": {
+                "name": "check_polynomial_family",
+                "arguments": {
+                    "sequence": "eulerian",
+                    "max_n": 4,
+                    "options": {
+                        "require_real_rooted": true,
+                        "require_gamma_positive": true
+                    }
+                }
+            }
+        }),
+    );
+    let family = read_response(&mut stdout, 4);
+    let structured = &family["result"]["structuredContent"];
+    assert_eq!(structured["all_required_checks_passed"], true);
+    assert!(structured["markdown"]
+        .as_str()
+        .expect("markdown")
+        .contains("Polynomial family check"));
 
     drop(stdin);
     let _ = child.kill();

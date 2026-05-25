@@ -33,6 +33,41 @@ pub struct PolynomialBatchInput {
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub struct FamilyCheckOptions {
+    pub require_real_rooted: Option<bool>,
+    pub require_simple_roots: Option<bool>,
+    pub require_palindromic: Option<bool>,
+    pub require_gamma_positive: Option<bool>,
+    pub require_log_concave: Option<bool>,
+    pub require_ultra_log_concave: Option<bool>,
+    pub check_consecutive_interlacing: Option<bool>,
+    pub require_consecutive_weak_interlacing: Option<bool>,
+    pub find_recurrence: Option<bool>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct LaceCheckRequest {
+    pub block_rows: Option<usize>,
+    pub block_cols: Option<usize>,
+    pub max_minor_size: Option<usize>,
+    pub include_matrix: Option<bool>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CheckPolynomialFamilyRequest {
+    pub polynomials: Option<Vec<PolynomialInput>>,
+    pub text: Option<String>,
+    pub sequence: Option<SequenceKind>,
+    pub max_n: Option<usize>,
+    pub options: Option<FamilyCheckOptions>,
+    pub recurrence_options: Option<RecurrenceSearchOptionsInput>,
+    pub lace: Option<LaceCheckRequest>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct InterlacingPairRequest {
     pub p: PolynomialInput,
     pub q: PolynomialInput,
@@ -320,7 +355,59 @@ pub struct GenerateSequenceResponse {
     pub polynomials: Vec<NormalizedPolynomial>,
 }
 
+#[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
+pub struct FamilyPolynomialReport {
+    pub index: usize,
+    #[serde(flatten)]
+    pub polynomial: NormalizedPolynomial,
+    pub real_rooted: bool,
+    pub simple_roots: bool,
+    pub palindromic: bool,
+    pub gamma_positive: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gamma_coefficients: Option<Vec<i64>>,
+    pub log_concave: bool,
+    pub ultra_log_concave: bool,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
+pub struct LaceCheckResponse {
+    pub block_rows: usize,
+    pub block_cols: usize,
+    pub max_minor_size: usize,
+    pub rows: usize,
+    pub columns: usize,
+    pub tnn: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub matrix: Option<Vec<Vec<i64>>>,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
+pub struct CheckPolynomialFamilyResponse {
+    pub source: String,
+    pub item_count: usize,
+    pub all_required_checks_passed: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub first_failure: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub parse_errors: Vec<ParsePolynomialItem>,
+    pub items: Vec<FamilyPolynomialReport>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub consecutive_pairs: Vec<InterlacingPairItem>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lace: Option<LaceCheckResponse>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recurrence: Option<FindRecurrenceResponse>,
+    pub markdown: String,
+}
+
 type ParsedBatch = Vec<Result<NormalizedPolynomial, String>>;
+type FamilySourceParse = (
+    String,
+    Result<Vec<NormalizedPolynomial>, Vec<ParsePolynomialItem>>,
+);
 
 fn invalid_params(message: impl Into<String>) -> McpError {
     McpError::invalid_params(message.into(), None)
@@ -461,6 +548,366 @@ fn interlacing_result(p: NormalizedPolynomial, q: NormalizedPolynomial) -> Inter
     }
 }
 
+fn family_report(index: usize, polynomial: NormalizedPolynomial) -> FamilyPolynomialReport {
+    let coefficients = &polynomial.coefficients;
+    FamilyPolynomialReport {
+        index,
+        real_rooted: is_real_rooted(coefficients),
+        simple_roots: has_simple_roots(coefficients),
+        palindromic: is_palindromic_ignoring_initial_zeros(coefficients),
+        gamma_positive: is_gamma_positive_ignoring_initial_zeros(coefficients),
+        gamma_coefficients: gamma_coefficients_ignoring_initial_zeros(coefficients),
+        log_concave: is_log_concave(coefficients),
+        ultra_log_concave: is_ultra_log_concave(coefficients),
+        polynomial,
+    }
+}
+
+fn family_source_and_polynomials(
+    input: &CheckPolynomialFamilyRequest,
+) -> Result<FamilySourceParse, McpError> {
+    let explicit_sources = usize::from(input.polynomials.is_some())
+        + usize::from(input.text.is_some())
+        + usize::from(input.sequence.is_some());
+    if explicit_sources != 1 {
+        return Err(invalid_params(
+            "expected exactly one source: `polynomials`, `text`, or `sequence`",
+        ));
+    }
+
+    if let Some(sequence) = input.sequence.clone() {
+        let max_n = input
+            .max_n
+            .ok_or_else(|| invalid_params("`max_n` is required with `sequence`"))?;
+        let polynomials = generated_sequence_polynomials(&sequence, max_n)
+            .into_iter()
+            .map(normalize_polynomial)
+            .collect();
+        return Ok((
+            format!("sequence:{sequence:?}, max_n={max_n}"),
+            Ok(polynomials),
+        ));
+    }
+
+    if input.max_n.is_some() {
+        return Err(invalid_params(
+            "`max_n` is only valid when `sequence` is provided",
+        ));
+    }
+
+    let batch = parse_batch(&PolynomialBatchInput {
+        polynomials: input.polynomials.clone(),
+        text: input.text.clone(),
+    })?;
+    let source = if input.text.is_some() {
+        "text".to_string()
+    } else {
+        "polynomials".to_string()
+    };
+    Ok((source, collect_polynomials_or_errors(batch)))
+}
+
+fn generated_sequence_polynomials(sequence: &SequenceKind, max_n: usize) -> Vec<Vec<i64>> {
+    match sequence {
+        SequenceKind::Eulerian => eulerian_polynomials(max_n),
+        SequenceKind::Narayana => narayana_polynomials(max_n),
+        SequenceKind::TypeBEulerian => type_b_eulerian_polynomials(max_n),
+        SequenceKind::ChebyshevT => chebyshev_polynomials_t(max_n),
+        SequenceKind::ChebyshevU => chebyshev_polynomials_u(max_n),
+        SequenceKind::Hermite => hermite_polynomials(max_n),
+    }
+}
+
+fn check_family_lace(
+    polynomials: &[NormalizedPolynomial],
+    request: &LaceCheckRequest,
+) -> LaceCheckResponse {
+    let coefficients: Vec<Vec<i64>> = polynomials.iter().map(|p| p.coefficients.clone()).collect();
+    let max_degree = polynomials.iter().map(|p| p.degree).max().unwrap_or(0);
+    let block_rows = request
+        .block_rows
+        .unwrap_or_else(|| polynomials.len().max(1));
+    let block_cols = request
+        .block_cols
+        .unwrap_or_else(|| block_rows + max_degree + 1);
+
+    match lace_matrix_sequence_i64(&coefficients, block_rows, block_cols) {
+        Ok(matrix) => {
+            let rows = matrix.len();
+            let columns = matrix.first().map(Vec::len).unwrap_or(0);
+            let max_minor_size = request
+                .max_minor_size
+                .unwrap_or_else(|| rows.min(columns).min(4));
+            let check = check_lace_sequence_total_nonnegative_i64(
+                &coefficients,
+                block_rows,
+                block_cols,
+                max_minor_size,
+            );
+            LaceCheckResponse {
+                block_rows,
+                block_cols,
+                max_minor_size,
+                rows,
+                columns,
+                tnn: check.is_ok(),
+                error: check.err(),
+                matrix: request.include_matrix.unwrap_or(false).then_some(matrix),
+            }
+        }
+        Err(error) => LaceCheckResponse {
+            block_rows,
+            block_cols,
+            max_minor_size: request.max_minor_size.unwrap_or(0),
+            rows: 0,
+            columns: 0,
+            tnn: false,
+            error: Some(error.to_string()),
+            matrix: None,
+        },
+    }
+}
+
+fn family_recurrence_response(
+    coefficients: &[Vec<i64>],
+    options: Option<RecurrenceSearchOptionsInput>,
+) -> FindRecurrenceResponse {
+    if coefficients.len() < 3 {
+        return FindRecurrenceResponse {
+            found: false,
+            recurrence: None,
+            latex: None,
+            mathematica: None,
+            sage: None,
+            unknowns: None,
+            equations: None,
+            candidates_tried: None,
+            error: Some("need at least 3 polynomials".to_string()),
+            parse_errors: Vec::new(),
+        };
+    }
+
+    let search = apply_recurrence_options(options);
+    match find_recurrence_adaptive(coefficients, &search) {
+        Some(result) => FindRecurrenceResponse {
+            found: true,
+            recurrence: Some(format!("{}", result.recurrence)),
+            latex: Some(result.recurrence.to_latex()),
+            mathematica: Some(result.recurrence.to_mathematica_definition(coefficients)),
+            sage: Some(result.recurrence.to_sage_definition(coefficients)),
+            unknowns: Some(result.num_unknowns),
+            equations: Some(result.num_equations),
+            candidates_tried: Some(result.candidates_tried),
+            error: None,
+            parse_errors: Vec::new(),
+        },
+        None => FindRecurrenceResponse {
+            found: false,
+            recurrence: None,
+            latex: None,
+            mathematica: None,
+            sage: None,
+            unknowns: None,
+            equations: None,
+            candidates_tried: None,
+            error: Some("no recurrence found within the search bounds".to_string()),
+            parse_errors: Vec::new(),
+        },
+    }
+}
+
+fn first_family_failure(
+    items: &[FamilyPolynomialReport],
+    pairs: &[InterlacingPairItem],
+    lace: Option<&LaceCheckResponse>,
+    recurrence: Option<&FindRecurrenceResponse>,
+    options: Option<&FamilyCheckOptions>,
+) -> Option<String> {
+    let require_real_rooted = options.and_then(|o| o.require_real_rooted).unwrap_or(true);
+    let require_simple_roots = options
+        .and_then(|o| o.require_simple_roots)
+        .unwrap_or(false);
+    let require_palindromic = options.and_then(|o| o.require_palindromic).unwrap_or(false);
+    let require_gamma_positive = options
+        .and_then(|o| o.require_gamma_positive)
+        .unwrap_or(false);
+    let require_log_concave = options.and_then(|o| o.require_log_concave).unwrap_or(false);
+    let require_ultra_log_concave = options
+        .and_then(|o| o.require_ultra_log_concave)
+        .unwrap_or(false);
+    let require_interlacing = options
+        .and_then(|o| o.require_consecutive_weak_interlacing)
+        .unwrap_or(false);
+
+    for item in items {
+        if require_real_rooted && !item.real_rooted {
+            return Some(format!("polynomial {} is not real-rooted", item.index));
+        }
+        if require_simple_roots && !item.simple_roots {
+            return Some(format!(
+                "polynomial {} does not have simple roots",
+                item.index
+            ));
+        }
+        if require_palindromic && !item.palindromic {
+            return Some(format!("polynomial {} is not palindromic", item.index));
+        }
+        if require_gamma_positive && !item.gamma_positive {
+            return Some(format!("polynomial {} is not gamma-positive", item.index));
+        }
+        if require_log_concave && !item.log_concave {
+            return Some(format!("polynomial {} is not log-concave", item.index));
+        }
+        if require_ultra_log_concave && !item.ultra_log_concave {
+            return Some(format!(
+                "polynomial {} is not ultra-log-concave",
+                item.index
+            ));
+        }
+    }
+
+    if require_interlacing {
+        for pair in pairs {
+            if pair.result.as_ref().and_then(|r| r.weak) != Some(true) {
+                return Some(format!(
+                    "consecutive pair {}-{} is not weakly interlacing",
+                    pair.left_index, pair.right_index
+                ));
+            }
+        }
+    }
+
+    if let Some(lace) = lace {
+        if !lace.tnn {
+            return Some(format!(
+                "finite Lace truncation is not TNN up to minors of size {}",
+                lace.max_minor_size
+            ));
+        }
+    }
+
+    if let Some(recurrence) = recurrence {
+        if !recurrence.found {
+            return Some("recurrence search did not find a recurrence".to_string());
+        }
+    }
+
+    None
+}
+
+fn yes_no(value: bool) -> &'static str {
+    if value {
+        "yes"
+    } else {
+        "no"
+    }
+}
+
+fn opt_yes_no(value: Option<bool>) -> &'static str {
+    match value {
+        Some(true) => "yes",
+        Some(false) => "no",
+        None => "n/a",
+    }
+}
+
+fn family_markdown(
+    source: &str,
+    all_required_checks_passed: bool,
+    first_failure: Option<&str>,
+    items: &[FamilyPolynomialReport],
+    pairs: &[InterlacingPairItem],
+    lace: Option<&LaceCheckResponse>,
+    recurrence: Option<&FindRecurrenceResponse>,
+) -> String {
+    let mut out = String::new();
+    out.push_str("# Polynomial family check\n\n");
+    out.push_str(&format!("- Source: `{source}`\n"));
+    out.push_str(&format!("- Polynomials: {}\n", items.len()));
+    out.push_str(&format!(
+        "- Required checks: {}\n",
+        if all_required_checks_passed {
+            "passed"
+        } else {
+            "failed"
+        }
+    ));
+    if let Some(first_failure) = first_failure {
+        out.push_str(&format!("- First failure: {first_failure}\n"));
+    }
+
+    out.push_str("\n## Polynomial properties\n\n");
+    out.push_str("| i | polynomial | degree | RR | gamma+ | LC | ULC | pal |\n");
+    out.push_str("|---:|---|---:|:---:|:---:|:---:|:---:|:---:|\n");
+    for item in items {
+        out.push_str(&format!(
+            "| {} | `{}` | {} | {} | {} | {} | {} | {} |\n",
+            item.index,
+            item.polynomial.polynomial,
+            item.polynomial.degree,
+            yes_no(item.real_rooted),
+            yes_no(item.gamma_positive),
+            yes_no(item.log_concave),
+            yes_no(item.ultra_log_concave),
+            yes_no(item.palindromic)
+        ));
+    }
+
+    if !pairs.is_empty() {
+        out.push_str("\n## Consecutive interlacing\n\n");
+        out.push_str("| pair | weak | strict | status |\n");
+        out.push_str("|---:|:---:|:---:|---|\n");
+        for pair in pairs {
+            if let Some(result) = &pair.result {
+                out.push_str(&format!(
+                    "| {}-{} | {} | {} | `{}` |\n",
+                    pair.left_index,
+                    pair.right_index,
+                    opt_yes_no(result.weak),
+                    opt_yes_no(result.strict),
+                    result.status
+                ));
+            } else {
+                out.push_str(&format!(
+                    "| {}-{} | n/a | n/a | `{}` |\n",
+                    pair.left_index,
+                    pair.right_index,
+                    pair.error.as_deref().unwrap_or("parse error")
+                ));
+            }
+        }
+    }
+
+    if let Some(lace) = lace {
+        out.push_str("\n## Finite Lace check\n\n");
+        out.push_str(&format!(
+            "- Truncation: block rows `{}`, block cols `{}`; matrix size `{} x {}`.\n",
+            lace.block_rows, lace.block_cols, lace.rows, lace.columns
+        ));
+        out.push_str(&format!(
+            "- Checked minors up to size `{}`: {}.\n",
+            lace.max_minor_size,
+            if lace.tnn { "TNN" } else { "not TNN" }
+        ));
+        if let Some(error) = &lace.error {
+            out.push_str(&format!("- Failure: `{error}`\n"));
+        }
+    }
+
+    if let Some(recurrence) = recurrence {
+        out.push_str("\n## Recurrence search\n\n");
+        if let Some(found) = &recurrence.recurrence {
+            out.push_str(&format!("- Found: `{found}`\n"));
+        } else if let Some(error) = &recurrence.error {
+            out.push_str(&format!("- Not found: {error}\n"));
+        } else {
+            out.push_str("- Not found.\n");
+        }
+    }
+
+    out
+}
+
 fn displayed(coefficients: &[i64]) -> DisplayedPolynomial {
     DisplayedPolynomial {
         polynomial: format_poly(coefficients),
@@ -568,6 +1015,118 @@ impl PolynomialToolsServer {
         let batch = parse_batch(&input)?;
         Ok(Json(ParsePolynomialsResponse {
             items: parse_items(&batch),
+        }))
+    }
+
+    #[tool(
+        description = "Check a polynomial family in one exact batch: properties, consecutive interlacing, optional finite Lace TNN, and optional recurrence search."
+    )]
+    pub fn check_polynomial_family(
+        &self,
+        Parameters(input): Parameters<CheckPolynomialFamilyRequest>,
+    ) -> Result<Json<CheckPolynomialFamilyResponse>, McpError> {
+        let (source, polynomials) = family_source_and_polynomials(&input)?;
+        let polynomials = match polynomials {
+            Ok(polynomials) => polynomials,
+            Err(parse_errors) => {
+                let first_failure = Some("one or more polynomials failed to parse".to_string());
+                let mut markdown = String::new();
+                markdown.push_str("# Polynomial family check\n\n");
+                markdown.push_str(&format!("- Source: `{source}`\n"));
+                markdown.push_str("- Required checks: failed\n");
+                markdown.push_str("- First failure: one or more polynomials failed to parse\n\n");
+                markdown.push_str("## Parse errors\n\n");
+                for item in &parse_errors {
+                    markdown.push_str(&format!(
+                        "- polynomial {}: {}\n",
+                        item.index,
+                        item.error.as_deref().unwrap_or("parse error")
+                    ));
+                }
+                return Ok(Json(CheckPolynomialFamilyResponse {
+                    source,
+                    item_count: 0,
+                    all_required_checks_passed: false,
+                    first_failure,
+                    parse_errors,
+                    items: Vec::new(),
+                    consecutive_pairs: Vec::new(),
+                    lace: None,
+                    recurrence: None,
+                    markdown,
+                }));
+            }
+        };
+
+        let options = input.options.as_ref();
+        let check_consecutive_interlacing = options
+            .and_then(|o| o.check_consecutive_interlacing)
+            .unwrap_or(true);
+        let find_recurrence = options.and_then(|o| o.find_recurrence).unwrap_or(false);
+
+        let items: Vec<_> = polynomials
+            .iter()
+            .cloned()
+            .enumerate()
+            .map(|(index, polynomial)| family_report(index, polynomial))
+            .collect();
+
+        let consecutive_pairs = if check_consecutive_interlacing {
+            polynomials
+                .windows(2)
+                .enumerate()
+                .map(|(pair_index, pair)| InterlacingPairItem {
+                    pair_index,
+                    left_index: pair_index,
+                    right_index: pair_index + 1,
+                    ok: true,
+                    result: Some(interlacing_result(pair[0].clone(), pair[1].clone())),
+                    error: None,
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        let lace = input
+            .lace
+            .as_ref()
+            .map(|request| check_family_lace(&polynomials, request));
+
+        let coefficients: Vec<Vec<i64>> =
+            polynomials.iter().map(|p| p.coefficients.clone()).collect();
+        let recurrence = find_recurrence
+            .then(|| family_recurrence_response(&coefficients, input.recurrence_options.clone()));
+
+        let first_failure = first_family_failure(
+            &items,
+            &consecutive_pairs,
+            lace.as_ref(),
+            recurrence.as_ref(),
+            options,
+        );
+        let all_required_checks_passed = first_failure.is_none();
+        let markdown = family_markdown(
+            &source,
+            all_required_checks_passed,
+            first_failure.as_deref(),
+            &items,
+            &consecutive_pairs,
+            lace.as_ref(),
+            recurrence.as_ref(),
+        );
+
+        Ok(Json(CheckPolynomialFamilyResponse {
+            source,
+            item_count: items.len(),
+            all_required_checks_passed,
+            first_failure,
+            parse_errors: Vec::new(),
+            items,
+            consecutive_pairs,
+            lace,
+            recurrence,
+            markdown,
         }))
     }
 
@@ -977,17 +1536,10 @@ impl PolynomialToolsServer {
         &self,
         Parameters(input): Parameters<GenerateSequenceRequest>,
     ) -> Result<Json<GenerateSequenceResponse>, McpError> {
-        let polynomials = match input.sequence {
-            SequenceKind::Eulerian => eulerian_polynomials(input.max_n),
-            SequenceKind::Narayana => narayana_polynomials(input.max_n),
-            SequenceKind::TypeBEulerian => type_b_eulerian_polynomials(input.max_n),
-            SequenceKind::ChebyshevT => chebyshev_polynomials_t(input.max_n),
-            SequenceKind::ChebyshevU => chebyshev_polynomials_u(input.max_n),
-            SequenceKind::Hermite => hermite_polynomials(input.max_n),
-        }
-        .into_iter()
-        .map(normalize_polynomial)
-        .collect();
+        let polynomials = generated_sequence_polynomials(&input.sequence, input.max_n)
+            .into_iter()
+            .map(normalize_polynomial)
+            .collect();
 
         Ok(Json(GenerateSequenceResponse {
             sequence: input.sequence,
@@ -1211,6 +1763,86 @@ mod tests {
             }))
             .unwrap();
         assert!(eulerian_result.found);
+    }
+
+    #[test]
+    fn family_check_reports_properties_and_recurrence() {
+        let server = PolynomialToolsServer::new();
+        let Json(response) = server
+            .check_polynomial_family(Parameters(CheckPolynomialFamilyRequest {
+                polynomials: Some(vec![
+                    coeffs(&[1]),
+                    coeffs(&[2]),
+                    coeffs(&[4]),
+                    coeffs(&[8]),
+                    coeffs(&[16]),
+                ]),
+                text: None,
+                sequence: None,
+                max_n: None,
+                options: Some(FamilyCheckOptions {
+                    require_real_rooted: Some(true),
+                    require_simple_roots: None,
+                    require_palindromic: None,
+                    require_gamma_positive: None,
+                    require_log_concave: None,
+                    require_ultra_log_concave: None,
+                    check_consecutive_interlacing: Some(false),
+                    require_consecutive_weak_interlacing: None,
+                    find_recurrence: Some(true),
+                }),
+                recurrence_options: None,
+                lace: None,
+            }))
+            .unwrap();
+
+        assert!(response.all_required_checks_passed);
+        assert_eq!(response.item_count, 5);
+        assert_eq!(
+            response
+                .recurrence
+                .as_ref()
+                .and_then(|r| r.recurrence.as_deref()),
+            Some("P(n) = 2 P(n-1)")
+        );
+        assert!(response.markdown.contains("Polynomial properties"));
+    }
+
+    #[test]
+    fn family_check_can_require_finite_lace_tnn() {
+        let server = PolynomialToolsServer::new();
+        let Json(response) = server
+            .check_polynomial_family(Parameters(CheckPolynomialFamilyRequest {
+                polynomials: Some(vec![
+                    coeffs(&[2, 1]),
+                    coeffs(&[8, 6, 1]),
+                    coeffs(&[3, 4, 1]),
+                ]),
+                text: None,
+                sequence: None,
+                max_n: None,
+                options: None,
+                recurrence_options: None,
+                lace: Some(LaceCheckRequest {
+                    block_rows: Some(1),
+                    block_cols: Some(3),
+                    max_minor_size: Some(3),
+                    include_matrix: Some(true),
+                }),
+            }))
+            .unwrap();
+
+        assert!(!response.all_required_checks_passed);
+        assert_eq!(
+            response.first_failure.as_deref(),
+            Some("finite Lace truncation is not TNN up to minors of size 3")
+        );
+        assert_eq!(response.lace.as_ref().map(|l| l.tnn), Some(false));
+        assert!(response
+            .lace
+            .as_ref()
+            .and_then(|l| l.error.as_deref())
+            .is_some_and(|error| error.contains("det = -1")));
     }
 
     #[test]
