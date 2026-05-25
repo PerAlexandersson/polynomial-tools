@@ -3,8 +3,8 @@
 Dense univariate polynomial toolkit for combinatorial research. Provides
 real-rootedness testing (Bézout matrices), interlacing, log-concavity,
 gamma-positivity, resultants, Ehrhart/h\*-vector conversion, recurrence
-search for polynomial sequences, and standard sequences — all with exact
-arithmetic.
+search for polynomial sequences, finite Athanasiadis--Wagner interlacing
+matrices, and standard sequences — all with exact arithmetic.
 
 ## Installation
 
@@ -231,6 +231,35 @@ assert_eq!(check_weak_interlacing(&[3, -4, 1], &[8, -6, 1]), Some(true));
 assert_eq!(check_weak_interlacing(&[4, -5, 1], &[6, -5, 1]), Some(false));
 ```
 
+### Athanasiadis--Wagner interlacing matrices
+
+```rust
+use polynomial_tools::*;
+
+// A column vector of polynomials P, Q, R in ascending coefficient order.
+let polys = vec![
+    vec![2, 1],       // 2 + t
+    vec![8, 6, 1],    // (2+t)(4+t)
+    vec![3, 4, 1],    // (1+t)(3+t)
+];
+
+// One finite truncation of the infinite Lace(A) matrix.
+let lace = lace_matrix_sequence_i64(&polys, 1, 3).unwrap();
+assert_eq!(lace, vec![vec![2, 1, 0], vec![8, 6, 1], vec![3, 4, 1]]);
+
+// This is Athanasiadis--Wagner's pairwise-but-not-fully-interlacing example:
+// the 3 x 3 determinant is negative.
+assert!(check_lace_sequence_total_nonnegative_i64(&polys, 1, 3, 3).is_err());
+```
+
+For a `p x q` polynomial matrix `A`, `lace_matrix_i64(A, r, c)` returns the
+`p r` by `q c` truncation whose `(p rb+i, q cb+j)` entry is the coefficient
+of `x^(cb-rb)` in `A_ij(x)`.  This follows Definition 3.5 of
+Athanasiadis--Wagner, *Veronese sections and interlacing matrices of formal
+power series*.  A finite TNN check is computational evidence for the infinite
+matrix, not a proof of full interlacing unless a separate finite criterion
+applies.
+
 ### Polynomial arithmetic
 
 ```rust
@@ -418,3 +447,18 @@ positive (all roots negative), multiplying by t suffices, skipping the
 Cauchy bound computation.
 
 See `doc/bezout-interlacing.md` for the Mathematica reference implementation.
+
+### Interlacing matrices
+
+Athanasiadis--Wagner's interlacing matrix construction packages a polynomial
+sequence or polynomial matrix into an infinite block Toeplitz matrix `Lace(A)`.
+For a column vector, total nonnegativity of this infinite matrix is called
+full interlacing and implies pairwise interlacing of the entries.  The converse
+fails, so this gives a stronger finite-experiment target than checking
+ordinary pairwise interlacing.
+
+The crate implements finite truncations through `lace_matrix_i64`,
+`lace_matrix_bigint`, and the sequence wrappers
+`lace_matrix_sequence_i64` / `lace_matrix_sequence_bigint`.  Exact finite TNN
+checks are available with `check_lace_total_nonnegative_i64` and the faster
+Neville-elimination wrappers.

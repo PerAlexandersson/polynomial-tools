@@ -59,12 +59,15 @@
 //!   alternatingly increasing checks, and Brandén--Solus-style magic-basis analysis
 //! - [`brenti_sequence`] — Brenti-style planar strip digraph certificates for
 //!   row real-rootedness via PF sequences
+//! - [`interlacing_matrix`] — Finite Athanasiadis--Wagner `Lace(A)`
+//!   interlacing-matrix truncations and exact finite TNN checks
 //! - [`tnn_network`] — Constructive planar-network certificates for
 //!   lower-unitriangular totally nonnegative matrices and monic polynomial sequences
 
 pub mod basis;
 pub mod brenti_sequence;
 pub mod decomposition;
+pub mod interlacing_matrix;
 pub mod linalg;
 pub mod polynomial;
 pub mod sturm;
@@ -98,6 +101,13 @@ pub use decomposition::{
     analyze_symmetric_decomposition_i64, f_polynomial, f_polynomial_i64,
     is_alternatingly_increasing, r_decomposition, r_decomposition_i64, r_transform,
     r_transform_i64, SymmetricDecompositionAnalysis,
+};
+pub use interlacing_matrix::{
+    check_lace_sequence_total_nonnegative_i64, check_lace_tnn_neville_bigint,
+    check_lace_tnn_neville_i64, check_lace_total_nonnegative_i64,
+    is_lace_sequence_totally_nonnegative_i64, is_lace_totally_nonnegative_i64, lace_matrix,
+    lace_matrix_bigint, lace_matrix_i64, lace_matrix_sequence, lace_matrix_sequence_bigint,
+    lace_matrix_sequence_i64, InterlacingMatrixError,
 };
 pub use parse::{parse_polynomial, parse_polynomials};
 pub use polynomial::{CoeffRing, FieldRing, Polynomial};
