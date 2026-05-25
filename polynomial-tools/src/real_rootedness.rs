@@ -5,21 +5,37 @@
 //!
 //! # Default algorithm: Bézout matrices
 //!
-//! The primary functions [`is_real_rooted`] and [`check_interlacing`] use Bézout matrices,
-//! which are dramatically faster than Sturm chains (100–400× for interlacing at degree 15+).
+//! The default real-rootedness functions first use the primitive integer PRS
+//! path in [`crate::root_count`] when the coefficients are one-signed (the
+//! common positive-coefficient combinatorial case), then fall back to Bézout
+//! matrices.  Interlacing still uses Bézout matrices, which are dramatically
+//! faster than the older rational Sturm chains (100–400× at degree 15+).
 //!
 //! ## Bézout matrix for interlacing
 //!
-//! Given polynomials f (degree d) and g (degree d−1), both with positive leading coefficients,
-//! the **Bézout matrix** B(f, g) is the d×d symmetric matrix whose (i, j) entry is the
-//! coefficient of x^i y^j in the bivariate polynomial
+//! Given polynomials f (degree d) and g (degree d−1), both with positive leading
+//! coefficients, the **Bézout matrix** B(f, g) is the d×d symmetric matrix
+//! whose (i, j) entry is the coefficient of x^i y^j in the bivariate polynomial
 //!
 //! ```text
 //! (f(x)g(y) - f(y)g(x)) / (x - y).
 //! ```
 //!
-//! **Theorem (Bézout/Hermite; Fisk, Cor. 9.145):** If f and g have positive leading
-//! coefficients, then g strictly interlaces f if and only if B(f, g) is positive definite.
+//! There are two standard oriented versions.
+//!
+//! - If `deg(f) = deg(g) + 1`, then `g` interlaces `f` iff `B(f, g)` is
+//!   positive semidefinite; in the coprime/strict case this is positive
+//!   definite. See Kummer--Naldi--Plaumann, Thm. 2.13, citing
+//!   Krein--Naimark, §2.2.
+//! - If `deg(f) = deg(g)`, the same-degree alternation criterion uses the
+//!   same Bézoutian with the orientation fixed by the argument order. Fisk,
+//!   §9.21, Cor. 9.145 gives the positive definite/no-common-root form.
+//!
+//! In semidefinite/common-root cases, the common factor must be handled
+//! separately: a positive semidefinite Bézoutian does not by itself certify
+//! that a shared factor has only real roots. This is why
+//! [`check_weak_interlacing`] divides out the gcd and explicitly verifies that
+//! the gcd is real-rooted.
 //!
 //! This reduces interlacing to a single matrix positive-definiteness check (Gaussian
 //! elimination with exact rational pivots), avoiding root isolation entirely.
@@ -37,8 +53,8 @@
 //! - **Shared roots**: divides out gcd(f, g) over ℚ, verifies the GCD is real-rooted,
 //!   then checks strict interlacing of the reduced polynomials.
 //! - **Same degree**: `check_weak_interlacing(f, g)` tests f ≪ g (f on the LEFT)
-//!   by extending g with a root far to the right (via the Cauchy bound), reducing
-//!   to the deg+1 case. If all coefficients of g are positive (all roots negative),
+//!   by extending f with a root far to the right (via the Cauchy bound), reducing
+//!   to the deg+1 case. If all coefficients of f are positive (all roots negative),
 //!   multiplying by t suffices.
 //! - **Directed**: `check_weak_interlacing(f, g)` tests `f ≪ g` (f interlaces g
 //!   from the left). This is **not symmetric**: `f ≪ g` and `g ≪ f` are different
@@ -49,6 +65,18 @@
 //! The original Sturm-chain implementations are available as [`is_real_rooted_sturm`],
 //! [`check_interlacing_sturm`], and [`real_roots`] for cases where actual root locations
 //! are needed.
+//!
+//! References:
+//!
+//! - S. Fisk, *Polynomials, roots, and interlacing*, arXiv:math/0612833,
+//!   §9.21, Cor. 9.145.
+//! - M. Kummer, S. Naldi, and D. Plaumann, *Spectrahedral representations of
+//!   plane hyperbolic curves*, arXiv:1807.10901, Thm. 2.13.
+//! - M. G. Krein and M. A. Naimark, *The method of symmetric and Hermitian
+//!   forms in the theory of the separation of the roots of algebraic
+//!   equations*, Linear and Multilinear Algebra 10 (1981), §2.2.
+//! - MathOverflow discussion of the common-factor caveat:
+//!   https://mathoverflow.net/questions/403708/bezout-matrices-and-interlacing-roots
 
 use crate::sturm::SturmChain;
 use crate::Polynomial;
@@ -120,17 +148,39 @@ pub fn format_poly_var(coeffs: &[i64], var: &str) -> String {
 ///
 /// Returns true for the zero polynomial and for constant/linear polynomials.
 pub fn is_real_rooted_sturm(coeffs: &[i64]) -> bool {
-    let start = coeffs.iter().position(|&c| c != 0).unwrap_or(0);
-    let end = coeffs.iter().rposition(|&c| c != 0).unwrap_or(0);
-    if start > end {
+    let Some(start) = coeffs.iter().position(|&c| c != 0) else {
         return true;
-    }
+    };
+    let end = coeffs
+        .iter()
+        .rposition(|&c| c != 0)
+        .expect("nonzero coefficient must have a last position");
     let trimmed = &coeffs[start..=end];
     if trimmed.len() <= 2 {
         return true;
     }
 
     let sc = SturmChain::from_i64_coeffs(trimmed);
+    let sf_degree = sc.square_free_degree();
+    sc.count_real_roots() == sf_degree
+}
+
+/// Check if a `BigInt`-coefficient polynomial is real-rooted using Sturm
+/// chains with exact rational arithmetic.
+pub fn is_real_rooted_sturm_bigint_coeffs(coeffs: &[BigInt]) -> bool {
+    let Some(start) = coeffs.iter().position(|c| !c.is_zero()) else {
+        return true;
+    };
+    let end = coeffs
+        .iter()
+        .rposition(|c| !c.is_zero())
+        .expect("nonzero coefficient must have a last position");
+    let trimmed = &coeffs[start..=end];
+    if trimmed.len() <= 2 {
+        return true;
+    }
+
+    let sc = SturmChain::from_bigint_coeffs(trimmed);
     let sf_degree = sc.square_free_degree();
     sc.count_real_roots() == sf_degree
 }
@@ -144,7 +194,9 @@ pub fn is_log_concave(coeffs: &[i64]) -> bool {
         return true;
     }
     for i in 1..coeffs.len() - 1 {
-        if coeffs[i] * coeffs[i] < coeffs[i - 1] * coeffs[i + 1] {
+        let lhs = i128::from(coeffs[i]) * i128::from(coeffs[i]);
+        let rhs = i128::from(coeffs[i - 1]) * i128::from(coeffs[i + 1]);
+        if lhs < rhs {
             return false;
         }
     }
@@ -165,13 +217,13 @@ pub fn is_ultra_log_concave(coeffs: &[i64]) -> bool {
     if d <= 1 {
         return true;
     }
-    let mut binom = vec![1i128; d + 1];
+    let mut binom = vec![BigInt::from(1); d + 1];
     for k in 1..=d {
-        binom[k] = binom[k - 1] * (d - k + 1) as i128 / k as i128;
+        binom[k] = &binom[k - 1] * BigInt::from(d - k + 1) / BigInt::from(k);
     }
     for k in 1..d {
-        let lhs = (coeffs[k] as i128) * (coeffs[k] as i128) * binom[k - 1] * binom[k + 1];
-        let rhs = (coeffs[k - 1] as i128) * (coeffs[k + 1] as i128) * binom[k] * binom[k];
+        let lhs = BigInt::from(coeffs[k]).pow(2) * &binom[k - 1] * &binom[k + 1];
+        let rhs = BigInt::from(coeffs[k - 1]) * BigInt::from(coeffs[k + 1]) * &binom[k] * &binom[k];
         if lhs < rhs {
             return false;
         }
@@ -243,7 +295,12 @@ pub fn gamma_coefficients(coeffs: &[i64]) -> Option<Vec<i64>> {
         gamma[i] = val;
     }
 
-    Some(gamma.into_iter().map(|g| g as i64).collect())
+    Some(
+        gamma
+            .into_iter()
+            .map(|g| i64::try_from(g).expect("gamma coefficient too large for i64"))
+            .collect(),
+    )
 }
 
 /// Check if a polynomial is gamma-positive.
@@ -328,12 +385,7 @@ pub fn has_simple_roots(coeffs: &[i64]) -> bool {
 ///
 /// Returns `false` for the zero polynomial and `true` for nonzero constants.
 pub fn has_simple_roots_bigint_coeffs(coeffs: &[BigInt]) -> bool {
-    let p = Polynomial::<Q>::new(
-        coeffs
-            .iter()
-            .map(|c| Q::from_integer(c.clone()))
-            .collect(),
-    );
+    let p = Polynomial::<Q>::new(coeffs.iter().map(|c| Q::from_integer(c.clone())).collect());
     p.has_simple_roots()
 }
 
@@ -411,6 +463,12 @@ pub fn check_interlacing_sturm(f: &[i64], g: &[i64]) -> Option<bool> {
 // ---------------------------------------------------------------------------
 
 /// Compute the Bézout matrix B(f, g) where deg(f) = deg(g) + 1.
+///
+/// This is the degree-difference-one Bézoutian used in the interlacing
+/// criterion of Kummer--Naldi--Plaumann, Thm. 2.13, after Krein--Naimark,
+/// §2.2.  Same-degree interlacing is handled by [`check_weak_interlacing`]
+/// via a degree-extension reduction; see Fisk, §9.21, Cor. 9.145 for the
+/// same-degree positive definite form.
 ///
 /// The (i, j) entry (0-indexed) is the coefficient of x^i y^j in
 ///
@@ -554,7 +612,9 @@ fn is_positive_semidefinite_bigint(mat: &[Vec<BigInt>]) -> bool {
 /// and g has degree d. The caller must pass f (smaller degree) first.
 ///
 /// Two real-rooted polynomials with deg(g) = deg(f) + 1 strictly interlace
-/// if and only if the Bézout matrix B(g, f) is positive definite (Fisk, Cor. 9.145).
+/// if and only if the Bézout matrix B(g, f) is positive definite. This is the
+/// coprime/strict form of the degree-difference-one criterion in
+/// Kummer--Naldi--Plaumann, Thm. 2.13, citing Krein--Naimark, §2.2.
 ///
 /// This is 100–400× faster than Sturm chains at degree 15+ because it avoids
 /// root isolation entirely — just one exact Gaussian elimination on a d×d matrix.
@@ -598,10 +658,15 @@ fn cauchy_root_bound(coeffs: &[i64]) -> i64 {
         Some(d) if d > 0 => d,
         _ => return 2,
     };
-    let lc = coeffs[deg].abs();
-    let max_other = coeffs[..deg].iter().map(|c| c.abs()).max().unwrap_or(0);
+    let lc = u128::from(coeffs[deg].unsigned_abs());
+    let max_other = coeffs[..deg]
+        .iter()
+        .map(|c| u128::from(c.unsigned_abs()))
+        .max()
+        .unwrap_or(0);
     // ceil(1 + max_other / lc)
-    1 + (max_other + lc - 1) / lc
+    let bound = 1 + max_other.div_ceil(lc);
+    i64::try_from(bound).unwrap_or(i64::MAX)
 }
 
 /// Multiply polynomial by (t + r) in i64 coefficients.
@@ -610,8 +675,15 @@ fn poly_mul_linear_factor(coeffs: &[i64], r: i64) -> Vec<i64> {
     let n = coeffs.len();
     let mut result = vec![0i64; n + 1];
     for i in 0..n {
-        result[i] += r * coeffs[i];
-        result[i + 1] += coeffs[i];
+        let scaled = r
+            .checked_mul(coeffs[i])
+            .expect("linear factor multiplication overflow");
+        result[i] = result[i]
+            .checked_add(scaled)
+            .expect("linear factor multiplication overflow");
+        result[i + 1] = result[i + 1]
+            .checked_add(coeffs[i])
+            .expect("linear factor multiplication overflow");
     }
     result
 }
@@ -636,10 +708,15 @@ fn poly_mul_linear_factor(coeffs: &[i64], r: i64) -> Vec<i64> {
 /// Handles:
 /// - **deg(q) = deg(p) + 1**: divides out gcd(p,q) if nontrivial (verifying
 ///   the shared roots are real), then checks strict interlacing of the reduced pair.
-/// - **deg(p) = deg(q)** (same degree): extends q with a root far to the right
-///   (via the Cauchy bound), giving q_ext of degree deg(q)+1, then checks p ≪ q_ext.
-///   **Fast path**: if all coefficients of q are positive (all roots negative),
+/// - **deg(p) = deg(q)** (same degree): extends p with a root far to the right
+///   (via the Cauchy bound), giving p_ext of degree deg(p)+1, then checks q ≪ p_ext.
+///   **Fast path**: if all coefficients of p are positive (all roots negative),
 ///   multiplying by t (root at 0) suffices.
+///
+/// References: Kummer--Naldi--Plaumann, Thm. 2.13 for the
+/// degree-difference-one Bézoutian criterion; Fisk, §9.21, Cor. 9.145 for the
+/// same-degree oriented alternation criterion. The explicit gcd real-rootedness
+/// check below guards the semidefinite/common-factor caveat.
 ///
 /// Returns `Some(true)` if `p ≪ q`, `Some(false)` if not, or `None`
 /// if the degree relationship is invalid (deg(p) > deg(q) or deg(q) > deg(p) + 1).
@@ -673,7 +750,10 @@ pub fn check_weak_interlacing(p: &[i64], q: &[i64]) -> Option<bool> {
         } else {
             let bound_p = cauchy_root_bound(p);
             let bound_q = cauchy_root_bound(q);
-            let r = bound_p.max(bound_q) + 1;
+            let r = bound_p
+                .max(bound_q)
+                .checked_add(1)
+                .expect("Cauchy bound too large for i64 interlacing reduction");
             poly_mul_linear_factor(p, -r)
         };
         return check_weak_interlacing_impl(q, &p_ext);
@@ -708,7 +788,10 @@ fn check_weak_interlacing_impl(f: &[i64], g: &[i64]) -> Option<bool> {
         return check_interlacing(f, g);
     }
 
-    // The shared roots (given by the GCD) must themselves be real.
+    // The shared roots (given by the GCD) must themselves be real. PSD of the
+    // Bézoutian does not certify this: e.g. f=t(t^2+1), g=t^2+1 has a non-real
+    // common factor, so the original pair cannot weakly interlace even though
+    // the reduced pair is harmless.
     let gcd_i64 = q_poly_to_i64(&gcd);
     if !is_real_rooted(&gcd_i64) {
         return Some(false);
@@ -890,20 +973,45 @@ fn q_poly_to_i64(p: &[Q]) -> Vec<i64> {
     result
 }
 
-/// Check if a polynomial is real-rooted using the Bézout matrix.
+/// Check if a polynomial is real-rooted.
 ///
-/// A polynomial f of degree d is real-rooted if and only if its derivative f'
-/// interlaces it. This function computes B(f, f') and checks positive
-/// semi-definiteness (semi- rather than strict because repeated roots make
-/// the matrix singular).
+/// One-signed coefficient polynomials use the primitive integer PRS path from
+/// [`crate::root_count`].  Other polynomials use the Bézout criterion: a
+/// polynomial f of degree d is real-rooted if and only if its derivative f'
+/// interlaces it, so we compute B(f, f') and check positive semi-definiteness
+/// (semi- rather than strict because repeated roots make the matrix singular).
 ///
 /// The leading coefficients of f and f' are aligned to the same sign before
 /// computing B, since the positive-definiteness criterion assumes both leading
 /// coefficients are positive.
 ///
-/// This is ~3× faster than Sturm chains across all degrees, and the gap grows
-/// with degree.
+/// Use [`is_real_rooted_bezout`] to force the Bézout path for benchmarking.
 pub fn is_real_rooted(coeffs: &[i64]) -> bool {
+    let d = match poly_degree_trimmed(coeffs) {
+        Some(d) => d,
+        None => return true,
+    };
+    if d <= 1 {
+        return true;
+    }
+
+    let one_signed =
+        coeffs.iter().take(d + 1).all(|&c| c >= 0) || coeffs.iter().take(d + 1).all(|&c| c <= 0);
+    if one_signed {
+        let big: Vec<BigInt> = coeffs
+            .iter()
+            .take(d + 1)
+            .map(|&c| BigInt::from(c))
+            .collect();
+        if let Some(rr) = crate::root_count::is_real_rooted_one_signed_bigint_coeffs(&big) {
+            return rr;
+        }
+    }
+
+    is_real_rooted_bezout_i64_impl(coeffs)
+}
+
+fn is_real_rooted_bezout_i64_impl(coeffs: &[i64]) -> bool {
     let d = match poly_degree_trimmed(coeffs) {
         Some(d) => d,
         None => return true,
@@ -963,11 +1071,34 @@ pub fn is_real_rooted(coeffs: &[i64]) -> bool {
     }
 }
 
-/// Check if a polynomial with `BigInt` coefficients is real-rooted using the
-/// same Bézout-matrix criterion as [`is_real_rooted`].
+/// Check if a polynomial with `BigInt` coefficients is real-rooted.
+///
+/// This uses the primitive integer PRS path for one-signed coefficient
+/// polynomials and falls back to the Bézout-matrix criterion otherwise.
 ///
 /// Coefficients are given in ascending degree order.
 pub fn is_real_rooted_bigint_coeffs(coeffs: &[BigInt]) -> bool {
+    let d = match poly_degree_trimmed_bigint(coeffs) {
+        Some(d) => d,
+        None => return true,
+    };
+    if d <= 1 {
+        return true;
+    }
+
+    if let Some(rr) = crate::root_count::is_real_rooted_one_signed_bigint_coeffs(coeffs) {
+        return rr;
+    }
+
+    is_real_rooted_bezout_bigint_coeffs(coeffs)
+}
+
+/// Check if a polynomial with `BigInt` coefficients is real-rooted using the
+/// same Bézout-matrix criterion as [`is_real_rooted`].
+///
+/// This is the old exact BigInt implementation and is kept public for
+/// benchmarking and cases where the matrix certificate itself is desired.
+pub fn is_real_rooted_bezout_bigint_coeffs(coeffs: &[BigInt]) -> bool {
     let d = match poly_degree_trimmed_bigint(coeffs) {
         Some(d) => d,
         None => return true,
@@ -993,7 +1124,7 @@ pub fn is_real_rooted_bigint_coeffs(coeffs: &[BigInt]) -> bool {
                 .iter()
                 .map(|c| c.to_i64().expect("checked above"))
                 .collect();
-            return is_real_rooted(&reduced_i64);
+            return is_real_rooted_bezout(&reduced_i64);
         }
     }
 
@@ -1022,9 +1153,9 @@ pub fn is_real_rooted_bigint_coeffs(coeffs: &[BigInt]) -> bool {
 // Aliases for explicit algorithm selection
 // ---------------------------------------------------------------------------
 
-/// Alias for [`is_real_rooted`] — Bézout matrix method (the default).
+/// Explicit Bézout-matrix real-rootedness check for `i64` coefficients.
 pub fn is_real_rooted_bezout(coeffs: &[i64]) -> bool {
-    is_real_rooted(coeffs)
+    is_real_rooted_bezout_i64_impl(coeffs)
 }
 
 /// Alias for [`check_interlacing`] — Bézout matrix method (the default).
@@ -1071,6 +1202,26 @@ pub fn sylvester_matrix(f: &[i64], g: &[i64]) -> Option<Vec<Vec<BigInt>>> {
     Some(mat)
 }
 
+fn sylvester_matrix_bigint_coeffs(f: &[BigInt], g: &[BigInt]) -> Option<Vec<Vec<BigInt>>> {
+    let n = poly_degree_trimmed_bigint(f)?;
+    let m = poly_degree_trimmed_bigint(g)?;
+    let size = n + m;
+    let zero = BigInt::from(0);
+    let mut mat = vec![vec![zero; size]; size];
+
+    for i in 0..m {
+        for k in 0..=n {
+            mat[i][i + k] = f[n - k].clone();
+        }
+    }
+    for i in 0..n {
+        for k in 0..=m {
+            mat[m + i][i + k] = g[m - k].clone();
+        }
+    }
+    Some(mat)
+}
+
 fn determinant_bigint(mat: &[Vec<BigInt>]) -> BigInt {
     crate::linalg::determinant(mat)
 }
@@ -1109,14 +1260,17 @@ pub fn discriminant(f: &[i64]) -> BigInt {
         return BigInt::from(1);
     }
 
-    // Derivative
-    let mut fp: Vec<i64> = Vec::with_capacity(n);
+    let f_big: Vec<BigInt> = f.iter().map(|&c| BigInt::from(c)).collect();
+    let mut fp: Vec<BigInt> = Vec::with_capacity(n);
     for k in 0..n {
-        fp.push((k as i64 + 1) * coeff_i64(f, k + 1));
+        fp.push(BigInt::from(k + 1) * &f_big[k + 1]);
     }
 
-    let res = resultant(f, &fp);
-    let lc = BigInt::from(coeff_i64(f, n));
+    let res = match sylvester_matrix_bigint_coeffs(&f_big, &fp) {
+        Some(mat) => determinant_bigint(&mat),
+        None => BigInt::from(0),
+    };
+    let lc = f_big[n].clone();
     let sign_exp = n * (n - 1) / 2;
     let sign = if sign_exp % 2 == 0 {
         BigInt::from(1)
@@ -1235,9 +1389,9 @@ pub fn ehrhart_to_hstar(ehrhart_coeffs: &[Q]) -> Vec<i64> {
     }
 
     // Binomial coefficients C(d+1, k) for k = 0, ..., d+1
-    let mut binom = vec![1i64; d + 2];
+    let mut binom = vec![BigInt::from(1); d + 2];
     for k in 1..=d + 1 {
-        binom[k] = binom[k - 1] * (d + 1 - k + 1) as i64 / k as i64;
+        binom[k] = &binom[k - 1] * BigInt::from(d + 1 - k + 1) / BigInt::from(k);
     }
 
     // h*_i = sum_{k=0}^{i} (-1)^k * C(d+1, k) * L(i-k)
@@ -1245,10 +1399,19 @@ pub fn ehrhart_to_hstar(ehrhart_coeffs: &[Q]) -> Vec<i64> {
     for i in 0..=d {
         let mut val = zero.clone();
         for k in 0..=i {
-            let sign = if k % 2 == 0 { 1i64 } else { -1i64 };
-            val = val + Q::from_integer(BigInt::from(sign * binom[k])) * values[i - k].clone();
+            let signed_binom = if k % 2 == 0 {
+                binom[k].clone()
+            } else {
+                -binom[k].clone()
+            };
+            val = val + Q::from_integer(signed_binom) * values[i - k].clone();
         }
         // Should be an exact integer
+        assert!(
+            val.denom() == &BigInt::from(1),
+            "h*-vector entry is not an integer: {}",
+            val
+        );
         let n = val.to_integer();
         hstar.push(i64::try_from(&n).expect("h*-vector entry too large for i64"));
     }
@@ -1316,10 +1479,29 @@ mod tests {
     }
 
     #[test]
+    fn test_sturm_zero_polynomial_edge_cases() {
+        assert!(is_real_rooted_sturm(&[]));
+        assert!(is_real_rooted_sturm(&[0, 0, 0]));
+
+        let empty: Vec<BigInt> = Vec::new();
+        assert!(is_real_rooted_sturm_bigint_coeffs(&empty));
+        assert!(is_real_rooted_sturm_bigint_coeffs(&[
+            BigInt::from(0),
+            BigInt::from(0),
+        ]));
+    }
+
+    #[test]
     fn test_log_concave() {
         assert!(is_log_concave(&[1, 2, 1]));
         assert!(is_log_concave(&[1, 3, 3, 1]));
         assert!(!is_log_concave(&[1, 1, 3]));
+    }
+
+    #[test]
+    fn test_log_concave_uses_wide_products() {
+        assert!(is_log_concave(&[i64::MAX, i64::MAX, i64::MAX]));
+        assert!(!is_log_concave(&[i64::MAX, 0, i64::MAX]));
     }
 
     #[test]
@@ -1675,6 +1857,16 @@ mod tests {
 
         // disc(t^2 + 1) = -4 (no real roots, negative discriminant)
         assert_eq!(discriminant(&[1, 0, 1]), BigInt::from(-4));
+    }
+
+    #[test]
+    fn test_discriminant_derivative_uses_bigint() {
+        // f(t) = i64::MAX * t^2 + 1 has derivative 2*i64::MAX*t,
+        // which does not fit in i64.
+        assert_eq!(
+            discriminant(&[1, 0, i64::MAX]),
+            BigInt::from(-4) * BigInt::from(i64::MAX)
+        );
     }
 
     #[test]

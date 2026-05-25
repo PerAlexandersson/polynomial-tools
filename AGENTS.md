@@ -145,7 +145,7 @@ interlacing algorithm, ready to add to the symmetric functions package.
 
 ## Non-nesting rook polynomial paper
 
-Paper: `~/Dropbox/AI-projects/documents/Real-rooted-non-nesting-rooks/non-nesting-rooks.tex`
+Paper: `~/Dropbox/AI-projects/projects/Real-rooted-non-nesting-rooks/non-nesting-rooks.tex`
 Overleaf companion: `Rook-Eulerian-Polynomials-and-permutation-ideals/`
 
 ### Status (2026-04-07)

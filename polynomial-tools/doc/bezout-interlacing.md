@@ -8,11 +8,22 @@ Given polynomials f (degree d) and g (degree d-1), the **Bézout matrix** B(f,g)
 B[i,j] = coefficient of x^i y^j in (f(x)g(y) - f(y)g(x)) / (x - y)
 ```
 
-**Theorem (Fisk, Cor. 9.145):** If f and g have positive leading coefficients, then g strictly interlaces f if and only if B(f,g) is positive definite.
+There are two standard oriented versions of the criterion.
+
+- If `deg(f) = deg(g) + 1`, then `g` interlaces `f` iff `B(f,g)` is
+  positive semidefinite; in the coprime/strict case this is positive definite.
+  See Kummer--Naldi--Plaumann, Theorem 2.13, citing Krein--Naimark, Section 2.2.
+- If `deg(f) = deg(g)`, the same-degree alternation criterion uses the
+  same Bezoutian with the orientation fixed by the argument order. Fisk,
+  Section 9.21, Corollary 9.145 gives the positive definite/no-common-root
+  form.
 
 For real-rootedness: f is real-rooted iff B(f, f') is positive semi-definite (semi-definite because repeated roots make B singular).
 
-When f and g share roots, B(f,g) is singular. Divide out gcd(f,g) first, then check strict interlacing of the reduced polynomials.
+When f and g share roots, B(f,g) is singular. Divide out gcd(f,g) first,
+verify that the gcd is real-rooted, then check strict interlacing of the
+reduced polynomials.  The gcd check matters: positive semidefiniteness of the
+Bezoutian alone does not certify that a common factor has only real roots.
 
 ## Mathematica code
 
@@ -54,6 +65,8 @@ CheckInterlacingBezout[f_, g_, t_] := Module[
 CheckWeakInterlacingBezout[f_, g_, t_] := Module[
   {d, fred, gred},
   d = PolynomialGCD[f, g, t];
+  (* Production code should also verify that d is real-rooted.  The Rust
+     implementation does this before checking the reduced pair. *)
   fred = Cancel[f / d];
   gred = Cancel[g / d];
   (* If both reduce to constants, all roots shared: trivially interlacing *)
@@ -106,3 +119,13 @@ BezoutMatrix[(t - 1)(t - 3)(t - 5) // Expand, (t - 2)(t - 4) // Expand, t] // Ma
 - Mathematica's `PositiveDefiniteMatrixQ` / `PositiveSemidefiniteMatrixQ` work with exact rationals, so this is fully rigorous.
 - The Bézout matrix approach is much faster than root isolation for checking interlacing — it avoids computing roots entirely.
 - For numerical (approximate) coefficients, use `PositiveDefiniteMatrixQ` with a tolerance, or convert to exact rationals first via `Rationalize[..., 0]`.
+- References:
+  - S. Fisk, *Polynomials, roots, and interlacing*, arXiv:math/0612833,
+    Section 9.21, Corollary 9.145.
+  - M. Kummer, S. Naldi, and D. Plaumann, *Spectrahedral representations of
+    plane hyperbolic curves*, arXiv:1807.10901, Theorem 2.13.
+  - M. G. Krein and M. A. Naimark, *The method of symmetric and Hermitian
+    forms in the theory of the separation of the roots of algebraic
+    equations*, Linear and Multilinear Algebra 10 (1981), Section 2.2.
+  - MathOverflow discussion of the common-factor caveat:
+    https://mathoverflow.net/questions/403708/bezout-matrices-and-interlacing-roots

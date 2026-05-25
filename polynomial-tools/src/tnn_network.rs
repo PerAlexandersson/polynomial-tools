@@ -119,7 +119,10 @@ impl fmt::Display for NetworkError {
         match self {
             Self::EmptyMatrix => write!(f, "matrix must contain at least one row"),
             Self::EmptyPolynomialSequence => {
-                write!(f, "polynomial sequence must contain at least one polynomial")
+                write!(
+                    f,
+                    "polynomial sequence must contain at least one polynomial"
+                )
             }
             Self::UnsupportedStartingDegree { found } => write!(
                 f,
@@ -149,11 +152,9 @@ impl fmt::Display for NetworkError {
                 "row {} should have length {}, found {}",
                 row, expected, found
             ),
-            Self::NegativeEntry { row, col, value } => write!(
-                f,
-                "matrix entry ({},{}) = {} is negative",
-                row, col, value
-            ),
+            Self::NegativeEntry { row, col, value } => {
+                write!(f, "matrix entry ({},{}) = {} is negative", row, col, value)
+            }
             Self::NonUnitDiagonal { row, value } => write!(
                 f,
                 "diagonal entry ({},{}) should be 1, found {}",
@@ -171,7 +172,10 @@ impl fmt::Display for NetworkError {
                 row, col, value
             ),
             Self::ReconstructionMismatch => {
-                write!(f, "reconstructed network does not evaluate back to the input matrix")
+                write!(
+                    f,
+                    "reconstructed network does not evaluate back to the input matrix"
+                )
             }
         }
     }
@@ -380,7 +384,7 @@ fn reconstruct_lambda_from_q_rows(
 
     let mut mu = Vec::with_capacity(num_rows - 1);
     for n in 0..(num_rows - 1) {
-        if n + 1 <= first_zero {
+        if n < first_zero {
             mu.push(rows[n + 1][0].clone() / rows[n][0].clone());
         } else {
             mu.push(BigRational::zero());
@@ -391,8 +395,7 @@ fn reconstruct_lambda_from_q_rows(
     for n in 0..(num_rows - 1) {
         let mut row = Vec::with_capacity(n + 1);
         for k in 0..=n {
-            let entry =
-                rows[n + 1][k + 1].clone() - mu[n].clone() * qcoeff(&rows[n], k + 1);
+            let entry = rows[n + 1][k + 1].clone() - mu[n].clone() * qcoeff(&rows[n], k + 1);
             if entry < BigRational::zero() {
                 return Err(NetworkError::NegativeReducedEntry {
                     row: n,
@@ -468,18 +471,18 @@ mod tests {
 
     #[test]
     fn test_coefficient_matrix_from_monic_polynomials_starting_at_zero() {
-        let polys = vec![
-            bi_poly(&[1]),
-            bi_poly(&[1, 1]),
-            bi_poly(&[1, 3, 1]),
-        ];
+        let polys = vec![bi_poly(&[1]), bi_poly(&[1, 1]), bi_poly(&[1, 3, 1])];
         let rows = coefficient_matrix_from_monic_polynomials(&polys).unwrap();
         assert_eq!(rows, bi_rows(&[&[1], &[1, 1], &[1, 3, 1]]));
     }
 
     #[test]
     fn test_coefficient_matrix_from_monic_polynomials_prepends_p0() {
-        let polys = vec![bi_poly(&[1, 1]), bi_poly(&[1, 2, 1]), bi_poly(&[1, 3, 3, 1])];
+        let polys = vec![
+            bi_poly(&[1, 1]),
+            bi_poly(&[1, 2, 1]),
+            bi_poly(&[1, 3, 3, 1]),
+        ];
         let rows = coefficient_matrix_from_monic_polynomials(&polys).unwrap();
         assert_eq!(rows, bi_rows(&[&[1], &[1, 1], &[1, 2, 1], &[1, 3, 3, 1]]));
     }
@@ -487,11 +490,7 @@ mod tests {
     #[test]
     fn test_evaluate_pascal_network() {
         let network = CanonicalPlanarNetwork {
-            lambda: vec![
-                vec![br(1)],
-                vec![br(1), br(1)],
-                vec![br(1), br(1), br(1)],
-            ],
+            lambda: vec![vec![br(1)], vec![br(1), br(1)], vec![br(1), br(1), br(1)]],
         };
         let matrix = evaluate_path_matrix(&network);
         assert_eq!(
@@ -511,11 +510,7 @@ mod tests {
         let network = reconstruct_canonical_tnn_network(&rows).unwrap();
         assert_eq!(
             network.lambda,
-            vec![
-                vec![br(1)],
-                vec![br(1), br(1)],
-                vec![br(1), br(1), br(1)],
-            ]
+            vec![vec![br(1)], vec![br(1), br(1)], vec![br(1), br(1), br(1)],]
         );
         assert!(verify_path_matrix_certificate(&rows, &network));
     }
@@ -547,7 +542,11 @@ mod tests {
 
     #[test]
     fn test_build_certificate_from_polynomials() {
-        let polys = vec![bi_poly(&[1, 1]), bi_poly(&[1, 2, 1]), bi_poly(&[1, 3, 3, 1])];
+        let polys = vec![
+            bi_poly(&[1, 1]),
+            bi_poly(&[1, 2, 1]),
+            bi_poly(&[1, 3, 3, 1]),
+        ];
         let proof = build_tnn_certificate_from_monic_polynomials(&polys).unwrap();
         assert!(proof.verify());
         assert_eq!(

@@ -233,30 +233,21 @@ mod tests {
     #[test]
     fn test_permanent_2x2_identity() {
         // [[1, 0], [0, 1]] -> perm = 1*1 + 0*0 = 1
-        let mat = vec![
-            vec![vec![1], vec![0]],
-            vec![vec![0], vec![1]],
-        ];
+        let mat = vec![vec![vec![1], vec![0]], vec![vec![0], vec![1]]];
         assert_eq!(permanent(&mat), vec![1]);
     }
 
     #[test]
     fn test_permanent_2x2_all_ones() {
         // [[1, 1], [1, 1]] -> perm = 1*1 + 1*1 = 2
-        let mat = vec![
-            vec![vec![1], vec![1]],
-            vec![vec![1], vec![1]],
-        ];
+        let mat = vec![vec![vec![1], vec![1]], vec![vec![1], vec![1]]];
         assert_eq!(permanent(&mat), vec![2]);
     }
 
     #[test]
     fn test_permanent_2x2_with_t() {
         // [[1, t], [t, 1]] -> perm = 1*1 + t*t = 1 + t^2
-        let mat = vec![
-            vec![vec![1], vec![0, 1]],
-            vec![vec![0, 1], vec![1]],
-        ];
+        let mat = vec![vec![vec![1], vec![0, 1]], vec![vec![0, 1], vec![1]]];
         assert_eq!(permanent(&mat), vec![1, 0, 1]);
     }
 

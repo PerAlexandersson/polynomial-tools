@@ -1,8 +1,8 @@
 //! Linear algebra over exact rationals (BigInt/BigRational).
 //!
-//! Provides Gaussian elimination, positive definiteness checks, determinants,
-//! linear system solving, and total non-negativity (TNN) checking — all with
-//! exact arithmetic over ℚ.
+//! Provides fraction-free Bareiss elimination, Gaussian elimination, positive
+//! definiteness checks, determinants, linear system solving, and total
+//! non-negativity (TNN) checking.
 //!
 //! # Total non-negativity
 //!
@@ -13,6 +13,7 @@
 //! checks TNN for *all* minors in O(n²m) time by performing adjacent-row
 //! subtraction and verifying that no entry becomes negative.
 
+use crate::Polynomial;
 use num_bigint::BigInt;
 use num_rational::Ratio;
 use num_traits::{One, Zero};
@@ -42,10 +43,9 @@ struct EliminationResult {
 
 /// Gaussian elimination with partial pivoting over ℚ.
 ///
-/// Operates in-place on the given matrix. For positive-definiteness checks,
-/// set `pivot_strategy` to `PivotStrategy::Diagonal` (no row swaps, checks
-/// diagonal pivots only). For determinants and solving, use `PivotStrategy::Partial`.
-fn gaussian_elimination(mat: &[Vec<Q>], strategy: PivotStrategy) -> EliminationResult {
+/// Operates in-place on the given matrix. Used for determinants; positive
+/// definiteness uses the fraction-free Bareiss/Sylvester path below.
+fn gaussian_elimination(mat: &[Vec<Q>]) -> EliminationResult {
     let n = mat.len();
     let ncols = if n > 0 { mat[0].len() } else { 0 };
     let mut a: Vec<Vec<Q>> = mat.to_vec();
@@ -55,30 +55,19 @@ fn gaussian_elimination(mat: &[Vec<Q>], strategy: PivotStrategy) -> EliminationR
 
     for k in 0..n.min(ncols) {
         if a[k][k].is_zero() {
-            match strategy {
-                PivotStrategy::Diagonal => {
-                    // No row swaps; record zero pivot
-                    zero_pivots += 1;
-                    zero_pivot_rows.push(k);
-                    continue;
+            let mut found = false;
+            for i in (k + 1)..n {
+                if !a[i][k].is_zero() {
+                    a.swap(k, i);
+                    sign = -sign;
+                    found = true;
+                    break;
                 }
-                PivotStrategy::Partial => {
-                    // Find a non-zero entry below
-                    let mut found = false;
-                    for i in (k + 1)..n {
-                        if !a[i][k].is_zero() {
-                            a.swap(k, i);
-                            sign = -sign;
-                            found = true;
-                            break;
-                        }
-                    }
-                    if !found {
-                        zero_pivots += 1;
-                        zero_pivot_rows.push(k);
-                        continue;
-                    }
-                }
+            }
+            if !found {
+                zero_pivots += 1;
+                zero_pivot_rows.push(k);
+                continue;
             }
         }
 
@@ -104,35 +93,19 @@ fn gaussian_elimination(mat: &[Vec<Q>], strategy: PivotStrategy) -> EliminationR
     }
 }
 
-#[derive(Clone, Copy)]
-enum PivotStrategy {
-    /// No row swaps; checks diagonal entries in order. Used for definiteness checks.
-    Diagonal,
-    /// Partial pivoting with row swaps. Used for determinants and solving.
-    Partial,
-}
-
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
 /// Check if a symmetric BigInt matrix is positive definite.
 ///
-/// Uses Gaussian elimination without pivoting: a symmetric matrix is positive
-/// definite iff all diagonal pivots during elimination are strictly positive.
+/// Uses fraction-free Bareiss leading principal minors and Sylvester's
+/// criterion.  This keeps the computation in exact integers and avoids
+/// rational pivot growth in the common Bézout-matrix path.
 pub fn is_positive_definite(mat: &[Vec<BigInt>]) -> bool {
-    let qmat = bigint_to_q(mat);
-    let result = gaussian_elimination(&qmat, PivotStrategy::Diagonal);
-    if result.zero_pivots > 0 {
-        return false;
-    }
-    // All pivots must be strictly positive
-    for k in 0..result.matrix.len() {
-        if result.matrix[k][k] <= Q::zero() {
-            return false;
-        }
-    }
-    true
+    bareiss_leading_principal_minors_bigint(mat)
+        .map(|minors| minors.into_iter().all(|minor| minor > BigInt::zero()))
+        .unwrap_or(false)
 }
 
 /// Check if a symmetric BigInt matrix is positive semi-definite.
@@ -180,7 +153,7 @@ pub fn determinant(mat: &[Vec<BigInt>]) -> BigInt {
         return BigInt::one();
     }
     let qmat = bigint_to_q(mat);
-    let result = gaussian_elimination(&qmat, PivotStrategy::Partial);
+    let result = gaussian_elimination(&qmat);
 
     if result.zero_pivots > 0 {
         return BigInt::zero();
@@ -191,6 +164,195 @@ pub fn determinant(mat: &[Vec<BigInt>]) -> BigInt {
         det *= result.matrix[k][k].clone();
     }
     det.to_integer()
+}
+
+/// Compute the leading principal determinants by fraction-free Bareiss
+/// elimination over `BigInt`, without row swaps.
+///
+/// If every Bareiss pivot is nonzero, the `k`th returned value is the
+/// determinant of the leading `(k+1) x (k+1)` principal submatrix.  This is
+/// the exact integer version of the fixed-order elimination used in
+/// Sylvester's criterion.
+///
+/// Returns `None` if the matrix is not square, a nonfinal required pivot is
+/// zero, or an exact Bareiss division unexpectedly fails.  A nonfinal zero
+/// pivot does not imply that the whole matrix is singular; it only means this
+/// no-pivot leading-principal computation cannot continue.
+pub fn bareiss_leading_principal_minors_bigint(mat: &[Vec<BigInt>]) -> Option<Vec<BigInt>> {
+    let n = mat.len();
+    if mat.iter().any(|row| row.len() != n) {
+        return None;
+    }
+    if n == 0 {
+        return Some(Vec::new());
+    }
+
+    let mut a = mat.to_vec();
+    let mut denom = BigInt::one();
+    let mut minors = Vec::with_capacity(n);
+
+    for k in 0..n {
+        let pivot = a[k][k].clone();
+        if pivot.is_zero() {
+            if k == n - 1 {
+                minors.push(pivot);
+                break;
+            }
+            return None;
+        }
+        minors.push(pivot.clone());
+        if k == n - 1 {
+            break;
+        }
+
+        let mut next_entries = Vec::with_capacity((n - k - 1) * (n - k - 1));
+        for i in (k + 1)..n {
+            for j in (k + 1)..n {
+                let numerator = &a[i][j] * &pivot - &a[i][k] * &a[k][j];
+                if &numerator % &denom != BigInt::zero() {
+                    return None;
+                }
+                next_entries.push((i, j, numerator / &denom));
+            }
+        }
+        for (i, j, value) in next_entries {
+            a[i][j] = value;
+        }
+        denom = pivot;
+    }
+
+    Some(minors)
+}
+
+/// Compute a determinant by no-pivot fraction-free Bareiss elimination.
+///
+/// This returns `None` in the same cases as
+/// [`bareiss_leading_principal_minors_bigint`].  Use [`determinant`] when a
+/// row-swapping determinant routine is needed.
+pub fn bareiss_determinant_bigint(mat: &[Vec<BigInt>]) -> Option<BigInt> {
+    if mat.is_empty() {
+        return Some(BigInt::one());
+    }
+    bareiss_leading_principal_minors_bigint(mat).and_then(|mut minors| minors.pop())
+}
+
+/// Compute the leading principal determinants by fraction-free Bareiss
+/// elimination over matrices with entries in `Z[t]`.
+///
+/// The entries are [`Polynomial<BigInt>`] in ascending degree order.  All
+/// divisions are checked as exact polynomial divisions over `Z[t]`.  This is
+/// useful when a Bézout or Sylvester matrix depends polynomially on a parameter
+/// and one wants exact leading principal minors without passing through
+/// rational functions.
+///
+/// Returns `None` if the matrix is not square, a nonfinal required pivot is
+/// zero, or an exact polynomial division fails.
+pub fn bareiss_leading_principal_minors_polynomial_bigint(
+    mat: &[Vec<Polynomial<BigInt>>],
+) -> Option<Vec<Polynomial<BigInt>>> {
+    let n = mat.len();
+    if mat.iter().any(|row| row.len() != n) {
+        return None;
+    }
+    if n == 0 {
+        return Some(Vec::new());
+    }
+
+    let mut a = mat.to_vec();
+    let mut denom = Polynomial::<BigInt>::one();
+    let mut minors = Vec::with_capacity(n);
+
+    for k in 0..n {
+        let pivot = a[k][k].clone();
+        if pivot.is_zero() {
+            if k == n - 1 {
+                minors.push(pivot);
+                break;
+            }
+            return None;
+        }
+        minors.push(pivot.clone());
+        if k == n - 1 {
+            break;
+        }
+
+        let mut next_entries = Vec::with_capacity((n - k - 1) * (n - k - 1));
+        for i in (k + 1)..n {
+            for j in (k + 1)..n {
+                let numerator = a[i][j].clone() * pivot.clone() - a[i][k].clone() * a[k][j].clone();
+                let value = exact_div_polynomial_bigint(&numerator, &denom)?;
+                next_entries.push((i, j, value));
+            }
+        }
+        for (i, j, value) in next_entries {
+            a[i][j] = value;
+        }
+        denom = pivot;
+    }
+
+    Some(minors)
+}
+
+/// Compute a determinant in `Z[t]` by no-pivot fraction-free Bareiss
+/// elimination.
+///
+/// Use this when the fixed pivot order is part of the certificate.  The return
+/// value is `None` under the same conditions as
+/// [`bareiss_leading_principal_minors_polynomial_bigint`].
+pub fn bareiss_determinant_polynomial_bigint(
+    mat: &[Vec<Polynomial<BigInt>>],
+) -> Option<Polynomial<BigInt>> {
+    if mat.is_empty() {
+        return Some(Polynomial::one());
+    }
+    bareiss_leading_principal_minors_polynomial_bigint(mat).and_then(|mut minors| minors.pop())
+}
+
+fn exact_div_polynomial_bigint(
+    numerator: &Polynomial<BigInt>,
+    denominator: &Polynomial<BigInt>,
+) -> Option<Polynomial<BigInt>> {
+    if denominator.is_zero() {
+        return None;
+    }
+    if numerator.is_zero() {
+        return Some(Polynomial::zero());
+    }
+
+    let den = denominator.coeffs();
+    let den_degree = den.len() - 1;
+    let den_lc = den.last().expect("nonzero denominator");
+    let mut rem = numerator.coeffs().to_vec();
+
+    if rem.len() < den.len() {
+        return if rem.iter().all(BigInt::is_zero) {
+            Some(Polynomial::zero())
+        } else {
+            None
+        };
+    }
+
+    let mut quotient = vec![BigInt::zero(); rem.len() - den_degree];
+    trim_bigint_coeffs(&mut rem);
+    while rem.len() >= den.len() && !rem.is_empty() {
+        let shift = rem.len() - den.len();
+        let rem_lc = rem.last().expect("nonempty remainder").clone();
+        if (&rem_lc % den_lc) != BigInt::zero() {
+            return None;
+        }
+        let q = rem_lc / den_lc;
+        quotient[shift] = q.clone();
+        for (i, c) in den.iter().enumerate() {
+            rem[shift + i] -= &q * c;
+        }
+        trim_bigint_coeffs(&mut rem);
+    }
+
+    if rem.is_empty() {
+        Some(Polynomial::new(quotient))
+    } else {
+        None
+    }
 }
 
 /// Solve Ax = b via Gaussian elimination with full pivoting over ℚ.
@@ -537,6 +699,12 @@ fn bigint_to_q(mat: &[Vec<BigInt>]) -> Vec<Vec<Q>> {
         .collect()
 }
 
+fn trim_bigint_coeffs(coeffs: &mut Vec<BigInt>) {
+    while coeffs.last().is_some_and(BigInt::is_zero) {
+        coeffs.pop();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -549,6 +717,10 @@ mod tests {
         rows.iter()
             .map(|row| row.iter().map(|&v| bi(v)).collect())
             .collect()
+    }
+
+    fn poly(coeffs: &[i64]) -> Polynomial<BigInt> {
+        Polynomial::from_i64_coeffs(coeffs)
     }
 
     // -----------------------------------------------------------------------
@@ -590,6 +762,84 @@ mod tests {
     fn test_determinant_identity() {
         let m = bi_mat(&[&[1, 0, 0], &[0, 1, 0], &[0, 0, 1]]);
         assert_eq!(determinant(&m), bi(1));
+    }
+
+    #[test]
+    fn test_bareiss_leading_principal_minors_bigint() {
+        let m = bi_mat(&[&[2, 1], &[1, 2]]);
+        assert_eq!(
+            bareiss_leading_principal_minors_bigint(&m),
+            Some(vec![bi(2), bi(3)])
+        );
+        assert_eq!(bareiss_determinant_bigint(&m), Some(bi(3)));
+    }
+
+    #[test]
+    fn test_bareiss_bigint_no_pivot_zero_pivot() {
+        let m = bi_mat(&[&[0, 1], &[1, 0]]);
+        assert_eq!(determinant(&m), bi(-1));
+        assert_eq!(bareiss_leading_principal_minors_bigint(&m), None);
+    }
+
+    #[test]
+    fn test_bareiss_bigint_final_zero_pivot() {
+        let m = bi_mat(&[&[1, 1], &[1, 1]]);
+        assert_eq!(
+            bareiss_leading_principal_minors_bigint(&m),
+            Some(vec![bi(1), bi(0)])
+        );
+        assert_eq!(bareiss_determinant_bigint(&m), Some(bi(0)));
+    }
+
+    #[test]
+    fn test_bareiss_polynomial_bigint_2x2() {
+        // [[1+z, z], [z, 1+z]] has leading minors 1+z and 1+2z.
+        let m = vec![
+            vec![poly(&[1, 1]), poly(&[0, 1])],
+            vec![poly(&[0, 1]), poly(&[1, 1])],
+        ];
+        assert_eq!(
+            bareiss_leading_principal_minors_polynomial_bigint(&m),
+            Some(vec![poly(&[1, 1]), poly(&[1, 2])])
+        );
+        assert_eq!(
+            bareiss_determinant_polynomial_bigint(&m),
+            Some(poly(&[1, 2]))
+        );
+    }
+
+    #[test]
+    fn test_bareiss_polynomial_bigint_final_zero_pivot() {
+        let m = vec![
+            vec![poly(&[1, 1]), poly(&[1, 1])],
+            vec![poly(&[1, 1]), poly(&[1, 1])],
+        ];
+        assert_eq!(
+            bareiss_leading_principal_minors_polynomial_bigint(&m),
+            Some(vec![poly(&[1, 1]), Polynomial::zero()])
+        );
+        assert_eq!(
+            bareiss_determinant_polynomial_bigint(&m),
+            Some(Polynomial::zero())
+        );
+    }
+
+    #[test]
+    fn test_bareiss_polynomial_bigint_nonconstant_exact_division() {
+        // The final stage divides by the nonconstant first pivot 1+z.
+        let m = vec![
+            vec![poly(&[1, 1]), poly(&[0, 1]), Polynomial::zero()],
+            vec![poly(&[0, 1]), poly(&[1, 1]), Polynomial::zero()],
+            vec![Polynomial::zero(), Polynomial::zero(), poly(&[1, 1])],
+        ];
+        assert_eq!(
+            bareiss_leading_principal_minors_polynomial_bigint(&m),
+            Some(vec![poly(&[1, 1]), poly(&[1, 2]), poly(&[1, 3, 2])])
+        );
+        assert_eq!(
+            bareiss_determinant_polynomial_bigint(&m),
+            Some(poly(&[1, 3, 2]))
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -665,10 +915,7 @@ mod tests {
 
     #[test]
     fn test_solve_identity() {
-        let a = vec![
-            vec![Q::one(), Q::zero()],
-            vec![Q::zero(), Q::one()],
-        ];
+        let a = vec![vec![Q::one(), Q::zero()], vec![Q::zero(), Q::one()]];
         let b = vec![Q::from_integer(bi(3)), Q::from_integer(bi(5))];
         let x = solve_linear_system(&a, &b).unwrap();
         assert_eq!(x[0], Q::from_integer(bi(3)));
@@ -691,10 +938,7 @@ mod tests {
     #[test]
     fn test_solve_inconsistent() {
         // x + y = 1, x + y = 2 -> no solution
-        let a = vec![
-            vec![Q::one(), Q::one()],
-            vec![Q::one(), Q::one()],
-        ];
+        let a = vec![vec![Q::one(), Q::one()], vec![Q::one(), Q::one()]];
         let b = vec![Q::one(), Q::from_integer(bi(2))];
         assert!(solve_linear_system(&a, &b).is_none());
     }
@@ -740,22 +984,14 @@ mod tests {
     fn test_tnn_path_matrix() {
         // Path matrix for P3: entry (i,j) = 1 if i <= j, 0 otherwise
         // These are always TNN
-        let m = vec![
-            vec![1, 1, 1],
-            vec![0, 1, 1],
-            vec![0, 0, 1],
-        ];
+        let m = vec![vec![1, 1, 1], vec![0, 1, 1], vec![0, 0, 1]];
         assert!(is_tnn(&m));
     }
 
     #[test]
     fn test_tnn_neville_vs_brute() {
         // Verify Neville and brute-force agree on a 3x3 matrix
-        let m = vec![
-            vec![1, 1, 0],
-            vec![0, 1, 1],
-            vec![0, 0, 1],
-        ];
+        let m = vec![vec![1, 1, 0], vec![0, 1, 1], vec![0, 0, 1]];
         let neville = check_tnn_neville(&m).is_ok();
         let brute = check_total_positivity(&m, 3, false).is_ok();
         assert_eq!(neville, brute);
@@ -763,10 +999,7 @@ mod tests {
 
     #[test]
     fn test_tnn_bigint() {
-        let m = vec![
-            vec![bi(1), bi(1)],
-            vec![bi(0), bi(1)],
-        ];
+        let m = vec![vec![bi(1), bi(1)], vec![bi(0), bi(1)]];
         assert!(check_tnn_neville_bigint(&m).is_ok());
     }
 }

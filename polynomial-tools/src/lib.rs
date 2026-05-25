@@ -36,14 +36,17 @@
 //!
 //! - [`polynomial`] — `Polynomial<C>` with `CoeffRing`/`FieldRing` traits, arithmetic,
 //!   derivative, evaluate, shift, reverse, dilate, GCD, division, Lagrange interpolation
-//! - [`linalg`] — Exact linear algebra over ℚ: Gaussian elimination, positive
-//!   definiteness/semi-definiteness, determinants, linear system solving,
-//!   total non-negativity via Neville elimination
+//! - [`linalg`] — Exact linear algebra: fraction-free Bareiss elimination,
+//!   Gaussian elimination over ℚ, positive definiteness/semi-definiteness,
+//!   determinants, linear system solving, total non-negativity via Neville
+//!   elimination
 //! - [`real_rootedness`] — Bézout matrix (default) and Sturm chain real-rootedness,
 //!   strict/weak interlacing (including same-degree via Cauchy bound reduction),
 //!   log-concavity, ultra-log-concavity, palindromic check, gamma-positivity,
 //!   Stapledon decomposition, resultant, discriminant, Ehrhart ↔ h*-vector,
 //!   display utilities
+//! - [`root_count`] — primitive integer PRS root counting and a fast exact
+//!   real-rootedness path for one-signed/positive coefficient polynomials
 //! - [`sturm`] — Sturm chains for exact root isolation (used internally)
 //! - [`recurrence`] — Adaptive recurrence search for polynomial sequences
 //! - [`sequences`] — Standard sequences: Eulerian, Narayana, type B Eulerian,
@@ -69,6 +72,8 @@ pub mod tnn_network;
 pub mod vec_poly;
 
 pub use linalg::{
+    bareiss_determinant_bigint, bareiss_determinant_polynomial_bigint,
+    bareiss_leading_principal_minors_bigint, bareiss_leading_principal_minors_polynomial_bigint,
     check_tnn_neville, check_tnn_neville_bigint, check_total_positivity, determinant,
     is_positive_definite, is_positive_semidefinite, is_tnn, is_totally_nonnegative,
 };
@@ -76,6 +81,7 @@ pub use linalg::{
 pub mod parse;
 pub mod real_rootedness;
 pub mod recurrence;
+pub mod root_count;
 pub mod sequences;
 
 pub use basis::{
@@ -84,6 +90,10 @@ pub use basis::{
     is_magic_positive_i64, magic_basis, magic_basis_coordinates_bigint,
     magic_basis_coordinates_i64, BasisError, MagicBasisAnalysis,
 };
+pub use brenti_sequence::{
+    build_brenti_sequence_certificate, BrentiEdge, BrentiError, BrentiSequenceCertificate,
+    BrentiStripDigraph,
+};
 pub use decomposition::{
     analyze_symmetric_decomposition_i64, f_polynomial, f_polynomial_i64,
     is_alternatingly_increasing, r_decomposition, r_decomposition_i64, r_transform,
@@ -91,10 +101,6 @@ pub use decomposition::{
 };
 pub use parse::{parse_polynomial, parse_polynomials};
 pub use polynomial::{CoeffRing, FieldRing, Polynomial};
-pub use brenti_sequence::{
-    build_brenti_sequence_certificate, BrentiEdge, BrentiError, BrentiSequenceCertificate,
-    BrentiStripDigraph,
-};
 pub use real_rootedness::{
     // Bézout matrix directly
     bezout_matrix,
@@ -109,32 +115,41 @@ pub use real_rootedness::{
     format_poly_var,
     gamma_coefficients,
     gamma_coefficients_ignoring_initial_zeros,
+    // Concavity and symmetry
+    has_simple_roots,
+    has_simple_roots_bigint_coeffs,
     hermite_biehler_parts,
     // Ehrhart polynomial <-> h*-vector
     hstar_to_ehrhart,
     is_gamma_positive,
     is_gamma_positive_ignoring_initial_zeros,
-    // Concavity and symmetry
-    has_simple_roots,
-    has_simple_roots_bigint_coeffs,
     is_log_concave,
     is_palindromic,
     is_palindromic_ignoring_initial_zeros,
-    // Default (Bézout-based) methods
+    // Default methods and explicit Bézout path
     is_real_rooted,
+    is_real_rooted_bezout_bigint_coeffs,
     is_real_rooted_bigint_coeffs,
     // Sturm-chain methods (slower, but can isolate roots)
     is_real_rooted_sturm,
+    is_real_rooted_sturm_bigint_coeffs,
     is_ultra_log_concave,
     real_roots,
     // Resultant and discriminant
     resultant,
-    strip_initial_zeros,
     stapledon_decomposition,
+    strip_initial_zeros,
     sylvester_matrix,
 };
 pub use real_rootedness::{
     check_interlacing_bezout, check_weak_interlacing_bezout, is_real_rooted_bezout,
+};
+pub use root_count::{
+    bigint_coeffs_to_i64, count_positive_roots_prs_bigint_coeffs,
+    count_real_roots_prs_bigint_coeffs, is_real_rooted_fast_bigint_coeffs, is_real_rooted_fast_i64,
+    is_real_rooted_one_signed_bigint_coeffs, is_real_rooted_prs_bigint_coeffs,
+    primitive_sturm_max_coefficient_bits, satisfies_newton_inequalities_bigint,
+    squarefree_degree_bigint_coeffs,
 };
 pub use tnn_network::{
     build_tnn_certificate_from_monic_polynomials, coefficient_matrix_from_monic_polynomials,
