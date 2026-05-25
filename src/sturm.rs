@@ -190,6 +190,16 @@ impl SturmChain {
         Self::build(p)
     }
 
+    /// Build a Sturm chain from a polynomial with `BigInt` coefficients
+    /// in ascending order.
+    ///
+    /// The polynomial is automatically made square-free.
+    pub fn from_bigint_coeffs(coeffs: &[BigInt]) -> Self {
+        let qcoeffs: Vec<Q> = coeffs.iter().map(|c| Q::from_integer(c.clone())).collect();
+        let p = QPoly::new(qcoeffs).square_free();
+        Self::build(p)
+    }
+
     fn build(p: QPoly) -> Self {
         if p.is_zero() || p.degree() <= Some(0) {
             return SturmChain { chain: vec![p] };

@@ -936,10 +936,7 @@ impl BivarPoly {
                 }
                 let negative = c < &BigRational::zero();
                 let coeff_abs = if negative { -c.clone() } else { c.clone() };
-                terms.push((
-                    negative,
-                    fmt_monomial_code_abs(style, &coeff_abs, i, j),
-                ));
+                terms.push((negative, fmt_monomial_code_abs(style, &coeff_abs, i, j)));
             }
         }
         join_signed_terms(&terms)
@@ -1513,7 +1510,9 @@ mod tests {
         let code = rec.to_mathematica_definition(&polys);
         assert!(code.contains("P[1, t_] := 1;"));
         assert!(code.contains("P[2, t_] := 1;"));
-        assert!(code.contains("P[n_Integer /; n >= 3, t_] := P[n, t] = Expand[P[n - 1, t] + P[n - 2, t]];"));
+        assert!(code.contains(
+            "P[n_Integer /; n >= 3, t_] := P[n, t] = Expand[P[n - 1, t] + P[n - 2, t]];"
+        ));
     }
 
     #[test]

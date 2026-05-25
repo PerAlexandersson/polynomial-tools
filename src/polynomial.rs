@@ -375,7 +375,11 @@ impl<C: CoeffRing> Polynomial<C> {
             return Self::zero();
         }
 
-        let len = even.coeffs.len().saturating_mul(2).max(odd.coeffs.len() * 2 + 1);
+        let len = even
+            .coeffs
+            .len()
+            .saturating_mul(2)
+            .max(odd.coeffs.len() * 2 + 1);
         let mut coeffs = vec![C::zero(); len];
         for (i, c) in even.coeffs.iter().enumerate() {
             coeffs[2 * i] = c.clone();

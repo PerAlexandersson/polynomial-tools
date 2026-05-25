@@ -63,8 +63,8 @@ pub fn f_polynomial<C: CoeffRing>(h: &Polynomial<C>, degree: usize) -> Option<Po
         if coeff.is_zero() {
             continue;
         }
-        let term =
-            Polynomial::<C>::monomial(C::one(), k) * poly_pow(&one_plus_x, degree.saturating_sub(k));
+        let term = Polynomial::<C>::monomial(C::one(), k)
+            * poly_pow(&one_plus_x, degree.saturating_sub(k));
         result = result + term.scale(&coeff);
     }
 
@@ -169,7 +169,8 @@ pub fn analyze_symmetric_decomposition_i64(
 
     let f = f_polynomial(&p, degree).expect("actual degree should always be a valid bound");
     let r_of_f = r_transform(&f, degree).expect("actual degree should always be a valid bound");
-    let (r_a, r_b) = r_decomposition(&f, degree).expect("actual degree should always be a valid bound");
+    let (r_a, r_b) =
+        r_decomposition(&f, degree).expect("actual degree should always be a valid bound");
 
     let magic = analyze_magic_basis_i64(p.coeffs(), degree)?;
 
@@ -234,7 +235,9 @@ mod tests {
 
     #[test]
     fn test_alternatingly_increasing_examples() {
-        assert!(is_alternatingly_increasing(&[1, 1018, 10678, 14498, 2933, 32]));
+        assert!(is_alternatingly_increasing(&[
+            1, 1018, 10678, 14498, 2933, 32
+        ]));
         assert!(is_alternatingly_increasing(&[1, 3, 1]));
         assert!(!is_alternatingly_increasing(&[1, 2, 3]));
     }

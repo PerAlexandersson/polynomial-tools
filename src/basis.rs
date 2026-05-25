@@ -135,9 +135,7 @@ pub fn coordinates_in_basis_bigint(
 pub fn magic_basis<C: CoeffRing>(degree: usize) -> Vec<Polynomial<C>> {
     let one_plus_t = Polynomial::from_i64_coeffs(&[1, 1]);
     (0..=degree)
-        .map(|i| {
-            poly_pow(&Polynomial::variable(), i) * poly_pow(&one_plus_t, degree - i)
-        })
+        .map(|i| poly_pow(&Polynomial::variable(), i) * poly_pow(&one_plus_t, degree - i))
         .collect()
 }
 
@@ -172,10 +170,7 @@ pub fn is_magic_positive_i64(coeffs: &[i64], degree: usize) -> Result<bool, Basi
 
 /// Check whether a `BigInt`-coefficient polynomial is magic positive with
 /// respect to the degree bound `degree`.
-pub fn is_magic_positive_bigint(
-    coeffs: &[BigInt],
-    degree: usize,
-) -> Result<bool, BasisError> {
+pub fn is_magic_positive_bigint(coeffs: &[BigInt], degree: usize) -> Result<bool, BasisError> {
     let zero = BigRational::from_integer(BigInt::from(0));
     Ok(magic_basis_coordinates_bigint(coeffs, degree)?
         .iter()
@@ -375,7 +370,10 @@ mod tests {
     #[test]
     fn test_magic_basis_coordinates_nonpositive_example() {
         let coords = magic_basis_coordinates_i64(&[1, 3, 1], 2).unwrap();
-        assert_eq!(coords, vec![br(1), br(1), BigRational::from_integer(bi(-1))]);
+        assert_eq!(
+            coords,
+            vec![br(1), br(1), BigRational::from_integer(bi(-1))]
+        );
         assert!(!is_magic_positive_i64(&[1, 3, 1], 2).unwrap());
     }
 

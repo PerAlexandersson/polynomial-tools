@@ -58,12 +58,12 @@ fn main() {
     let max_n = 30;
     let polys = eulerian_polynomials(max_n);
 
-    println!("=== Real-rootedness: Sturm vs Bézout ===");
+    println!("=== Real-rootedness: Sturm vs explicit Bézout vs default ===");
     println!(
-        "{:>4} {:>8} {:>12} {:>12}",
-        "n", "deg", "Sturm (μs)", "Bézout (μs)"
+        "{:>4} {:>8} {:>12} {:>12} {:>12}",
+        "n", "deg", "Sturm (μs)", "Bézout (μs)", "Default (μs)"
     );
-    println!("{}", "-".repeat(42));
+    println!("{}", "-".repeat(57));
 
     for (i, p) in polys.iter().enumerate() {
         let n = i + 1;
@@ -87,19 +87,28 @@ fn main() {
 
         let t0 = Instant::now();
         for _ in 0..iters {
-            let _ = is_real_rooted(p);
+            let _ = is_real_rooted_bezout(p);
         }
         let bezout_us = t0.elapsed().as_micros() as f64 / iters as f64;
 
+        let t0 = Instant::now();
+        for _ in 0..iters {
+            let _ = is_real_rooted(p);
+        }
+        let default_us = t0.elapsed().as_micros() as f64 / iters as f64;
+
         let deg = p.len() - 1;
         println!(
-            "{:>4} {:>8} {:>12.1} {:>12.1}  {}",
+            "{:>4} {:>8} {:>12.1} {:>12.1} {:>12.1}  {}",
             n,
             deg,
             sturm_us,
             bezout_us,
-            if bezout_us < sturm_us {
-                "← Bézout"
+            default_us,
+            if default_us < bezout_us && default_us < sturm_us {
+                "← default"
+            } else if bezout_us < sturm_us {
+                "← explicit Bézout"
             } else {
                 "← Sturm"
             }

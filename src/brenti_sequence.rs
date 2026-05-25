@@ -14,7 +14,7 @@
 //! theorem applies: every row of the path matrix is a Pólya frequency sequence,
 //! hence every row polynomial has only real nonpositive zeros.
 
-use crate::{Polynomial, tnn_network::BigRational};
+use crate::{tnn_network::BigRational, Polynomial};
 use num_bigint::BigInt;
 use num_traits::{One, Zero};
 use std::fmt;
