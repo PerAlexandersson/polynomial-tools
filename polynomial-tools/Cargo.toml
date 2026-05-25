@@ -5,6 +5,10 @@ edition = "2021"
 license = "MIT"
 authors = ["Per Alexandersson <per.w.alexandersson@gmail.com>"]
 description = "Univariate polynomial toolkit: real-rootedness (Bézout), interlacing, gamma-positivity, resultant, Ehrhart/h*-vectors, recurrence search, standard sequences"
+readme = "README.md"
+documentation = "https://docs.rs/polynomial-tools"
+keywords = ["polynomials", "real-rootedness", "interlacing", "combinatorics"]
+categories = ["mathematics", "science"]
 
 [dependencies]
 num-bigint = "0.4"
