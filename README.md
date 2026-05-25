@@ -22,6 +22,41 @@ In a future standalone `polynomial-tools` repository, the equivalent command is:
 cargo build --release
 ```
 
+## Using as a crate
+
+The library crate is usable today from another Rust project by depending on
+this directory:
+
+```toml
+[dependencies]
+polynomial-tools = { path = "/home/paxinum/Dropbox/AI-projects/rust/polynomial-tools" }
+```
+
+From a public Git repository containing this Rust workspace, Cargo can also
+depend on the package by name:
+
+```toml
+[dependencies]
+polynomial-tools = { git = "https://github.com/USER/REPO.git", package = "polynomial-tools" }
+```
+
+After publishing to crates.io, the dependency would be:
+
+```toml
+[dependencies]
+polynomial-tools = "0.1"
+```
+
+The public API is re-exported from `polynomial_tools`, so a downstream crate
+can write:
+
+```rust
+use polynomial_tools::{check_weak_interlacing, is_real_rooted};
+
+assert!(is_real_rooted(&[1, 11, 11, 1]));
+assert_eq!(check_weak_interlacing(&[2, -3, 1], &[-1, 1]), Some(true));
+```
+
 To build the MCP server from the workspace root:
 
 ```sh
