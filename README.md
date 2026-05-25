@@ -40,6 +40,14 @@ depend on the package by name:
 polynomial-tools = { git = "https://github.com/USER/REPO.git", package = "polynomial-tools" }
 ```
 
+If this directory is pushed as its own standalone GitHub repository, the
+dependency can instead be:
+
+```toml
+[dependencies]
+polynomial-tools = { git = "https://github.com/USER/polynomial-tools.git" }
+```
+
 After publishing to crates.io, the dependency would be:
 
 ```toml
