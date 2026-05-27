@@ -3,6 +3,7 @@
 pub mod catalan;
 pub mod cayley;
 pub mod fixed_descent;
+pub mod lattice_path_matroid;
 pub mod order;
 pub mod parking;
 pub mod permutation;

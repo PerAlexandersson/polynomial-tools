@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 /// Enumerate Dyck paths (as area sequences) and compute peak-nesting statistics.
 ///
 /// An area sequence is a list (a_1, ..., a_n) with a_i < i and a_{i+1} <= a_i + 1.
@@ -7,6 +9,10 @@ pub fn for_each_area_sequence<F>(n: usize, mut visitor: F)
 where
     F: FnMut(&[u8]),
 {
+    assert!(
+        n <= u8::MAX as usize + 1,
+        "area sequences use u8 entries, so n must be at most 256"
+    );
     let mut current = Vec::with_capacity(n);
     generate_area_sequences_with(n, &mut current, &mut visitor);
 }
@@ -43,6 +49,56 @@ pub fn all_area_sequences(n: usize) -> Vec<Vec<u8>> {
     result
 }
 
+/// A skew Ferrers shape `lambda / mu`.
+///
+/// In this module it is mostly used for the Dyck area diagram: a Dyck path of
+/// semilength `n` gives a skew shape inside the staircase `delta_{n-1}`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SkewShape {
+    pub lambda: Vec<usize>,
+    pub mu: Vec<usize>,
+}
+
+impl SkewShape {
+    pub fn new(lambda: Vec<usize>, mu: Vec<usize>) -> Option<Self> {
+        if !is_partition(&lambda) || !is_partition(&mu) {
+            return None;
+        }
+        let mut padded_mu = mu.clone();
+        padded_mu.resize(lambda.len(), 0);
+        if padded_mu
+            .iter()
+            .zip(lambda.iter())
+            .any(|(&inner, &outer)| inner > outer)
+        {
+            return None;
+        }
+
+        Some(Self {
+            lambda: trim_trailing_zeros(lambda),
+            mu: trim_trailing_zeros(mu),
+        })
+    }
+}
+
+fn is_partition(parts: &[usize]) -> bool {
+    parts.windows(2).all(|w| w[0] >= w[1])
+}
+
+fn trim_trailing_zeros(mut parts: Vec<usize>) -> Vec<usize> {
+    while parts.last().copied() == Some(0) {
+        parts.pop();
+    }
+    parts
+}
+
+/// Check whether `a` is a valid Dyck area sequence.
+pub fn is_area_sequence(a: &[u8]) -> bool {
+    a.iter().enumerate().all(|(i, &v)| v as usize <= i)
+        && a.windows(2)
+            .all(|w| usize::from(w[1]) <= usize::from(w[0]) + 1)
+}
+
 /// Convert an area sequence to its Dyck word in the alphabet `{N,E}`.
 pub fn area_sequence_to_dyck_word(a: &[u8]) -> String {
     let n = a.len();
@@ -62,6 +118,346 @@ pub fn area_sequence_to_dyck_word(a: &[u8]) -> String {
     }
 
     word
+}
+
+/// Convert a Dyck word in the alphabet `{N,E}` to its area sequence.
+///
+/// Returns `None` if the word is not a Dyck word.
+pub fn dyck_word_to_area_sequence(word: &str) -> Option<Vec<u8>> {
+    let mut area = Vec::new();
+    let mut north_seen = 0usize;
+    let mut east_seen = 0usize;
+
+    for ch in word.chars() {
+        match ch {
+            'N' => {
+                let value = north_seen.checked_sub(east_seen)?;
+                let value = u8::try_from(value).ok()?;
+                area.push(value);
+                north_seen += 1;
+            }
+            'E' => {
+                east_seen += 1;
+                if east_seen > north_seen {
+                    return None;
+                }
+            }
+            _ => return None,
+        }
+    }
+
+    if north_seen == east_seen {
+        Some(area)
+    } else {
+        None
+    }
+}
+
+/// Convert a Dyck path to its area skew shape inside the staircase.
+///
+/// For an area sequence `(a_1,\dots,a_n)`, the bottom-to-top row `i` has
+/// `a_i` boxes inside the staircase row of length `i-1`.
+pub fn area_sequence_to_dyck_skew_shape(a: &[u8]) -> Option<SkewShape> {
+    if !is_area_sequence(a) {
+        return None;
+    }
+
+    let n = a.len();
+    let lambda: Vec<usize> = (0..n).rev().collect();
+    let mu: Vec<usize> = (0..n)
+        .map(|top_row| {
+            let bottom_row = n - top_row;
+            let outer = bottom_row - 1;
+            outer - a[bottom_row - 1] as usize
+        })
+        .collect();
+
+    SkewShape::new(lambda, mu)
+}
+
+/// Inverse of [`area_sequence_to_dyck_skew_shape`] for a fixed semilength.
+///
+/// The semilength is needed because the empty skew shape represents both the
+/// empty Dyck path and the unique Dyck path of semilength one.
+pub fn dyck_skew_shape_to_area_sequence(shape: &SkewShape, semilength: usize) -> Option<Vec<u8>> {
+    let expected_lambda: Vec<usize> = (0..semilength).rev().collect();
+    if shape.lambda != trim_trailing_zeros(expected_lambda.clone()) {
+        return None;
+    }
+
+    let mut mu = shape.mu.clone();
+    mu.resize(expected_lambda.len(), 0);
+    if !is_partition(&mu) || mu.iter().zip(expected_lambda.iter()).any(|(&m, &l)| m > l) {
+        return None;
+    }
+
+    let mut area = Vec::with_capacity(semilength);
+    for bottom_row in 1..=semilength {
+        let outer = bottom_row - 1;
+        let top_row = semilength - bottom_row;
+        let inner = mu[top_row];
+        let value = u8::try_from(outer - inner).ok()?;
+        area.push(value);
+    }
+
+    is_area_sequence(&area).then_some(area)
+}
+
+/// Convert a Dyck area skew shape back to its Dyck word.
+pub fn dyck_skew_shape_to_dyck_word(shape: &SkewShape, semilength: usize) -> Option<String> {
+    let area = dyck_skew_shape_to_area_sequence(shape, semilength)?;
+    Some(area_sequence_to_dyck_word(&area))
+}
+
+/// Boundary map from a Dyck word to a Grassmannian 321-avoiding permutation.
+///
+/// If the North-step labels are `N(P)` and the East-step labels are `E(P)`,
+/// the image is the permutation `N(P), E(P)`. This is the convention used in
+/// the Stembridge notes for turning Dyck paths into size-`2n` permutations.
+pub fn dyck_word_to_av321_permutation(word: &str) -> Option<Vec<usize>> {
+    dyck_word_to_area_sequence(word)?;
+    boundary_word_to_grassmannian_permutation(word)
+}
+
+/// Boundary map from any `{N,E}` word to a Grassmannian 321-avoiding permutation.
+///
+/// This sends the word to "North-step labels, then East-step labels".  The two
+/// blocks are increasing, so the resulting permutation is automatically
+/// 321-avoiding.  When the word is Dyck, use [`dyck_word_to_av321_permutation`]
+/// for the checked Catalan bijection.
+pub fn boundary_word_to_grassmannian_permutation(word: &str) -> Option<Vec<usize>> {
+    if !word.chars().all(|ch| matches!(ch, 'N' | 'E')) {
+        return None;
+    }
+
+    let mut north_steps = Vec::new();
+    let mut east_steps = Vec::new();
+    for (idx, ch) in word.chars().enumerate() {
+        let label = idx + 1;
+        match ch {
+            'N' => north_steps.push(label),
+            'E' => east_steps.push(label),
+            _ => return None,
+        }
+    }
+
+    north_steps.extend(east_steps);
+    Some(north_steps)
+}
+
+/// Boundary map from an area sequence to a Grassmannian 321-avoiding permutation.
+pub fn area_sequence_to_av321_permutation(a: &[u8]) -> Option<Vec<usize>> {
+    if !is_area_sequence(a) {
+        return None;
+    }
+    dyck_word_to_av321_permutation(&area_sequence_to_dyck_word(a))
+}
+
+/// Convert a Dyck area skew shape to its boundary Grassmannian 321-avoiding permutation.
+pub fn dyck_skew_shape_to_av321_permutation(
+    shape: &SkewShape,
+    semilength: usize,
+) -> Option<Vec<usize>> {
+    let word = dyck_skew_shape_to_dyck_word(shape, semilength)?;
+    dyck_word_to_av321_permutation(&word)
+}
+
+/// Inverse boundary map from a Grassmannian 321-avoiding permutation to a Dyck word.
+///
+/// This is the inverse of [`dyck_word_to_av321_permutation`]. The permutation
+/// must have even size `2n`, and both blocks `w_1<...<w_n` and
+/// `w_{n+1}<...<w_{2n}` must be increasing.
+pub fn av321_permutation_to_dyck_word(perm: &[usize]) -> Option<String> {
+    if perm.len() % 2 != 0 {
+        return None;
+    }
+    let total = perm.len();
+    let n = total / 2;
+
+    grassmannian_permutation_to_boundary_word(perm, n).and_then(|word| {
+        dyck_word_to_area_sequence(&word)?;
+        Some(word)
+    })
+}
+
+/// Inverse boundary map for a Grassmannian permutation and a chosen first-block size.
+pub fn grassmannian_permutation_to_boundary_word(
+    perm: &[usize],
+    north_steps_count: usize,
+) -> Option<String> {
+    if north_steps_count > perm.len() {
+        return None;
+    }
+    let total = perm.len();
+
+    if !is_permutation_of_initial_segment(perm) {
+        return None;
+    }
+    if !perm[..north_steps_count].windows(2).all(|w| w[0] < w[1])
+        || !perm[north_steps_count..].windows(2).all(|w| w[0] < w[1])
+    {
+        return None;
+    }
+
+    let north_steps: BTreeSet<usize> = perm[..north_steps_count].iter().copied().collect();
+    let word: String = (1..=total)
+        .map(|label| {
+            if north_steps.contains(&label) {
+                'N'
+            } else {
+                'E'
+            }
+        })
+        .collect();
+
+    Some(word)
+}
+
+/// Inverse boundary map from a Grassmannian 321-avoiding permutation to an area sequence.
+pub fn av321_permutation_to_area_sequence(perm: &[usize]) -> Option<Vec<u8>> {
+    let word = av321_permutation_to_dyck_word(perm)?;
+    dyck_word_to_area_sequence(&word)
+}
+
+/// Convert a boundary Grassmannian 321-avoiding permutation to its Dyck area skew shape.
+pub fn av321_permutation_to_dyck_skew_shape(perm: &[usize]) -> Option<SkewShape> {
+    let area = av321_permutation_to_area_sequence(perm)?;
+    area_sequence_to_dyck_skew_shape(&area)
+}
+
+fn is_permutation_of_initial_segment(perm: &[usize]) -> bool {
+    let mut seen = vec![false; perm.len() + 1];
+    for &value in perm {
+        if value == 0 || value > perm.len() || seen[value] {
+            return false;
+        }
+        seen[value] = true;
+    }
+    true
+}
+
+/// Check 321-avoidance directly.
+pub fn is_321_avoiding(perm: &[usize]) -> bool {
+    for i in 0..perm.len() {
+        for j in (i + 1)..perm.len() {
+            if perm[i] <= perm[j] {
+                continue;
+            }
+            for k in (j + 1)..perm.len() {
+                if perm[j] > perm[k] {
+                    return false;
+                }
+            }
+        }
+    }
+    true
+}
+
+/// North-step labels of the upper boundary of a straight Ferrers shape.
+///
+/// Rows are indexed from top to bottom and the shape is contained in its
+/// minimal `r x c` rectangle, where `r=lambda.len()` and `c=lambda[0]`.
+pub fn straight_shape_upper_boundary_north_steps(lambda: &[usize]) -> Option<Vec<usize>> {
+    if lambda.is_empty() {
+        return Some(Vec::new());
+    }
+    if !is_partition(lambda) || lambda.iter().any(|&part| part == 0) {
+        return None;
+    }
+
+    let c = lambda[0];
+    Some(
+        lambda
+            .iter()
+            .enumerate()
+            .map(|(i, &part)| i + 1 + c - part)
+            .collect(),
+    )
+}
+
+/// The North-step labels selected by the straight-shape spine specialization.
+///
+/// In the North-step convention used by the LGV determinant, these are the
+/// complementary labels to the upper-boundary North steps.
+pub fn straight_shape_spine_north_step_labels(lambda: &[usize]) -> Option<Vec<usize>> {
+    let upper: BTreeSet<_> = straight_shape_upper_boundary_north_steps(lambda)?
+        .into_iter()
+        .collect();
+    let total = lambda.len() + lambda.first().copied().unwrap_or(0);
+    Some((1..=total).filter(|label| !upper.contains(label)).collect())
+}
+
+/// Boundary word of a straight Ferrers shape in the North-step convention.
+pub fn straight_shape_to_boundary_word(lambda: &[usize]) -> Option<String> {
+    let upper: BTreeSet<_> = straight_shape_upper_boundary_north_steps(lambda)?
+        .into_iter()
+        .collect();
+    let total = lambda.len() + lambda.first().copied().unwrap_or(0);
+    Some(
+        (1..=total)
+            .map(|label| if upper.contains(&label) { 'N' } else { 'E' })
+            .collect(),
+    )
+}
+
+/// Boundary permutation of a straight shape: upper-boundary North labels followed by East labels.
+pub fn straight_shape_to_av321_permutation(lambda: &[usize]) -> Option<Vec<usize>> {
+    let word = straight_shape_to_boundary_word(lambda)?;
+    boundary_word_to_grassmannian_permutation(&word)
+}
+
+/// Inverse of [`straight_shape_to_boundary_word`] for a fixed number of rows.
+pub fn boundary_word_to_straight_shape(word: &str) -> Option<Vec<usize>> {
+    let mut north_steps = Vec::new();
+    let mut east_count = 0usize;
+    for (idx, ch) in word.chars().enumerate() {
+        match ch {
+            'N' => north_steps.push(idx + 1),
+            'E' => east_count += 1,
+            _ => return None,
+        }
+    }
+
+    let c = east_count;
+    let lambda: Vec<usize> = north_steps
+        .iter()
+        .enumerate()
+        .map(|(i, &label)| i + 1 + c - label)
+        .collect();
+
+    if lambda.is_empty() || (is_partition(&lambda) && lambda.iter().all(|&part| part > 0)) {
+        Some(lambda)
+    } else {
+        None
+    }
+}
+
+/// Count the spine-specialization weight of a path by its North-step labels.
+pub fn straight_shape_spine_weight(lambda: &[usize], north_steps: &[usize]) -> Option<usize> {
+    straight_shape_upper_boundary_north_steps(lambda)?;
+    let r = lambda.len();
+    let c = lambda.first().copied().unwrap_or(0);
+    if north_steps.len() != r || !north_steps.windows(2).all(|w| w[0] < w[1]) {
+        return None;
+    }
+
+    for (i, &label) in north_steps.iter().enumerate() {
+        let lower = i + 1 + c - lambda[i];
+        let upper = i + 1 + c;
+        if label < lower || label > upper {
+            return None;
+        }
+    }
+
+    let spine: BTreeSet<_> = straight_shape_spine_north_step_labels(lambda)?
+        .into_iter()
+        .collect();
+    Some(
+        north_steps
+            .iter()
+            .filter(|label| spine.contains(label))
+            .count(),
+    )
 }
 
 /// Compute the peak-cliques of an area sequence.
@@ -339,6 +735,109 @@ mod tests {
     fn test_area_sequence_to_dyck_word() {
         let a = vec![0, 1, 1, 2, 1];
         assert_eq!(area_sequence_to_dyck_word(&a), "NNENNEENEE");
+    }
+
+    #[test]
+    fn test_dyck_word_area_sequence_roundtrip() {
+        for n in 0..=7 {
+            for a in all_area_sequences(n) {
+                let word = area_sequence_to_dyck_word(&a);
+                assert_eq!(dyck_word_to_area_sequence(&word), Some(a));
+            }
+        }
+
+        assert_eq!(dyck_word_to_area_sequence("EN"), None);
+        assert_eq!(dyck_word_to_area_sequence("NNE"), None);
+        assert_eq!(dyck_word_to_area_sequence("NEXE"), None);
+    }
+
+    #[test]
+    fn test_area_sequence_validator_uses_wide_successor() {
+        let mut a: Vec<u8> = (0..=u8::MAX).collect();
+        a.push(0);
+        assert!(is_area_sequence(&a));
+    }
+
+    #[test]
+    #[should_panic(expected = "n must be at most 256")]
+    fn test_area_sequence_enumerator_rejects_unrepresentable_length() {
+        for_each_area_sequence(u8::MAX as usize + 2, |_| {});
+    }
+
+    #[test]
+    fn test_dyck_skew_shape_roundtrip() {
+        let a = vec![0, 1, 1, 2, 1];
+        let shape = area_sequence_to_dyck_skew_shape(&a).unwrap();
+        assert_eq!(
+            shape,
+            SkewShape {
+                lambda: vec![4, 3, 2, 1],
+                mu: vec![3, 1, 1],
+            }
+        );
+        assert_eq!(dyck_skew_shape_to_area_sequence(&shape, a.len()), Some(a));
+        assert_eq!(
+            dyck_skew_shape_to_dyck_word(&shape, 5),
+            Some("NNENNEENEE".into())
+        );
+        assert_eq!(
+            dyck_skew_shape_to_av321_permutation(&shape, 5),
+            Some(vec![1, 2, 4, 5, 8, 3, 6, 7, 9, 10])
+        );
+
+        for n in 0..=7 {
+            for a in all_area_sequences(n) {
+                let shape = area_sequence_to_dyck_skew_shape(&a).unwrap();
+                assert_eq!(dyck_skew_shape_to_area_sequence(&shape, n), Some(a));
+            }
+        }
+    }
+
+    #[test]
+    fn test_dyck_boundary_permutation_roundtrip() {
+        let a = vec![0, 1, 1, 2, 1];
+        let perm = area_sequence_to_av321_permutation(&a).unwrap();
+        assert_eq!(perm, vec![1, 2, 4, 5, 8, 3, 6, 7, 9, 10]);
+        assert!(is_321_avoiding(&perm));
+        assert_eq!(av321_permutation_to_area_sequence(&perm), Some(a.clone()));
+        assert_eq!(
+            av321_permutation_to_dyck_skew_shape(&perm),
+            area_sequence_to_dyck_skew_shape(&a)
+        );
+
+        for n in 0..=7 {
+            for a in all_area_sequences(n) {
+                let perm = area_sequence_to_av321_permutation(&a).unwrap();
+                assert!(is_321_avoiding(&perm));
+                assert_eq!(av321_permutation_to_area_sequence(&perm), Some(a));
+            }
+        }
+    }
+
+    #[test]
+    fn test_straight_shape_boundary_and_spine_labels() {
+        let lambda = vec![3, 2];
+        assert_eq!(
+            straight_shape_upper_boundary_north_steps(&lambda),
+            Some(vec![1, 3])
+        );
+        assert_eq!(
+            straight_shape_spine_north_step_labels(&lambda),
+            Some(vec![2, 4, 5])
+        );
+        assert_eq!(
+            straight_shape_to_boundary_word(&lambda),
+            Some("NENEE".into())
+        );
+        assert_eq!(
+            straight_shape_to_av321_permutation(&lambda),
+            Some(vec![1, 3, 2, 4, 5])
+        );
+        assert_eq!(boundary_word_to_straight_shape("NENEE"), Some(lambda));
+
+        assert_eq!(straight_shape_spine_weight(&[3, 2], &[1, 3]), Some(0));
+        assert_eq!(straight_shape_spine_weight(&[3, 2], &[1, 4]), Some(1));
+        assert_eq!(straight_shape_spine_weight(&[3, 2], &[2, 4]), Some(2));
     }
 
     #[test]

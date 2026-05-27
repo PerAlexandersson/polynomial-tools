@@ -85,6 +85,36 @@ combpoly recurrence --perms --max-n 9 --stat des \
   --auto --denom-idx-deg 1
 ```
 
+### `lpm-hstar-table` -- Lattice-path matroid h*-tables from Dyck paths
+
+Enumerate Dyck area sequences of a fixed semilength, build the lattice-path
+matroid from the peak intervals, and compute the exact base-polytope
+`h*`-vector by Ehrhart inversion using the alcoved cyclic-interval
+inequalities and Ehrhart--Macdonald reciprocity.  Weak and strict lattice-point
+counts use interval-sum prefix bounds; the slower all-subset rank-inequality
+backend remains in the library as a correctness oracle for small tables.  For
+library use, `lpm_hstar_from_area_sequence` computes the `h*`-vector directly
+from an area sequence without enumerating bases.  Basis counts in the table are
+computed by the LGV determinant for the peak-interval presentation, not by
+listing bases.
+
+```bash
+# Complete area-sequence <-> h* table for semilength 4
+combpoly lpm-hstar-table --semilength 4 --real-rooted
+
+# CSV output for spreadsheet/comparison work
+combpoly lpm-hstar-table --semilength 5 --format csv --real-rooted
+
+# Complete table for every semilength up to 5
+combpoly lpm-hstar-table --max-semilength 5 --format csv --real-rooted
+
+# Include the full basis list
+combpoly lpm-hstar-table --semilength 4 --bases --format json
+
+# Inspect the cyclic-interval hyperplanes for one area sequence
+combpoly lpm-hyperplanes --area 0,1,1,2
+```
+
 ## Object sources
 
 | Flag | Description |
