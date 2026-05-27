@@ -25,6 +25,7 @@ pub mod indexed_variables;
 pub mod key_polynomial;
 pub mod kohnert;
 pub mod lorentzian;
+pub mod modular_groebner;
 pub mod monomial_order;
 pub mod multipoly;
 pub mod multipoly_function;
@@ -71,6 +72,16 @@ pub use lorentzian::{
     is_lorentzian, is_lorentzian_bool, is_m_convex, is_normalized_lorentzian,
     is_normalized_lorentzian_bool, is_strictly_lorentzian, is_strictly_normalized_lorentzian,
     support_is_m_convex, LorentzianResult,
+};
+pub use modular_groebner::{
+    crt_lift_prime_field_basis_pair, crt_lift_prime_field_polynomial_pair,
+    groebner_leading_monomials, modular_groebner_basis_i64_mod_prime,
+    modular_groebner_basis_rational_i64_mod_prime, modular_leading_monomials_match_i64,
+    modular_leading_monomials_match_rational_i64, rational_reconstruct_prime_field_basis_pair,
+    rational_reconstruct_prime_field_polynomial_pair, reduce_i64_polynomial_mod_prime,
+    reduce_i64_polynomials_mod_prime, reduce_rational_i64_mod_prime,
+    reduce_rational_i64_polynomial_mod_prime, reduce_rational_i64_polynomials_mod_prime,
+    ModularGroebnerError,
 };
 pub use monomial_order::{
     leading_term, monomial_divides, monomial_quotient, LeadingTerm, MonomialOrder,
