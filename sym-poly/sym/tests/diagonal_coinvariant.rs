@@ -117,6 +117,12 @@ fn diagonal_coinvariant_s3_dimension_benchmark() {
         .action_matrices_by_multidegree_and_cycle_type()
         .expect("diagonal quotient should carry the diagonal S_3 action");
     let frobenius = multigraded_frobenius_from_trace_matrices(&matrices);
+    let trivial_shape = p(&[3]);
+    for (degree, frobenius_degree) in &frobenius {
+        let schur = frobenius_degree.to_schur_basis();
+        let expected = if degree == &vec![0, 0] { q(1) } else { q(0) };
+        assert_eq!(schur.coefficient(&trivial_shape), expected);
+    }
     let degree_00 = frobenius[&vec![0, 0]].to_schur_basis();
 
     assert_eq!(degree_00.coefficient(&p(&[3])), q(1));
