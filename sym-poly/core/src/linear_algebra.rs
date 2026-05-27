@@ -256,6 +256,40 @@ impl<C: Field> QuotientSpace<C> {
     }
 }
 
+/// Matrix induced on a quotient space by an ambient linear action.
+///
+/// Matrices use the column convention: column `j` is the coordinate vector of
+/// the image of basis vector `j`. The quotient basis is represented by the
+/// ambient free-coordinate unit vectors determined by [`QuotientSpace`].
+pub fn quotient_action_matrix<C: Field>(
+    quotient: &QuotientSpace<C>,
+    ambient_action: &[Vec<C>],
+) -> Matrix<C> {
+    assert_eq!(
+        ambient_action.len(),
+        quotient.ambient_dimension,
+        "ambient action has the wrong number of rows"
+    );
+    let ambient_cols = rectangular_num_cols(ambient_action);
+    assert_eq!(
+        ambient_cols, quotient.ambient_dimension,
+        "ambient action has the wrong number of columns"
+    );
+
+    let dim = quotient.dimension();
+    let mut result = zero_matrix::<C>(dim, dim);
+    for (quotient_col, &ambient_col) in quotient.free_columns.iter().enumerate() {
+        let mut lift = vec![C::zero(); quotient.ambient_dimension];
+        lift[ambient_col] = C::one();
+        let image = matrix_vector_multiply(ambient_action, &lift);
+        let coords = quotient.quotient_coordinates(&image);
+        for row in 0..dim {
+            result[row][quotient_col] = coords[row].clone();
+        }
+    }
+    result
+}
+
 fn rectangular_num_cols<C>(matrix: &[Vec<C>]) -> usize {
     let Some(first_row) = matrix.first() else {
         return 0;
@@ -384,9 +418,8 @@ mod tests {
     fn test_transposition_trace_on_one_dimensional_quotient() {
         let quotient = QuotientSpace::from_relations(2, &[qv(&[1, 1])]);
         let basis_lift = qv(&[0, 1]);
-        let swapped = qv(&[1, 0]);
-        let image_coordinates = quotient.quotient_coordinates(&swapped);
-        let action_matrix = vec![image_coordinates];
+        let swap_matrix = qm(&[&[0, 1], &[1, 0]]);
+        let action_matrix = quotient_action_matrix(&quotient, &swap_matrix);
 
         assert_eq!(quotient.quotient_coordinates(&basis_lift), qv(&[1]));
         assert_eq!(action_matrix, qm(&[&[-1]]));

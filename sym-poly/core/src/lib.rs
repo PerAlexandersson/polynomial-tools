@@ -11,6 +11,7 @@
 //! - [`FormalSum`] for generic linear combinations of basis elements
 //! - [`matrix`] utilities for transition matrix computation
 //! - [`linear_algebra`] utilities for exact row reduction and quotient spaces
+//! - [`sn_action`] utilities for small exact `S_n`-module computations
 //! - [`TransitionCache`] for per-algebra cached transition matrices
 
 pub mod composition {
@@ -28,6 +29,7 @@ pub mod polynomial;
 pub mod ring {
     pub use combinatoric_core::ring::*;
 }
+pub mod sn_action;
 pub mod ssaf;
 pub mod tableau;
 pub mod transition_cache;
