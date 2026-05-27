@@ -1,0 +1,13 @@
+[package]
+name = "flagged-lorentzian"
+version = "0.1.0"
+edition = "2021"
+description = "Reusable tools for the flagged skew Schur Lorentzian conjecture"
+
+[dependencies]
+sym-poly-core = { path = "../sym-poly/core" }
+
+[[bin]]
+name = "descent_fiber_scan"
+path = "src/bin/descent_fiber_scan.rs"
+test = false
