@@ -11,6 +11,7 @@ pub mod chromatic;
 pub mod frobenius;
 pub mod kostka;
 pub mod llt;
+pub mod macdonald;
 pub mod shifted_lr;
 pub mod symmetric_function;
 pub mod transition;
@@ -22,6 +23,12 @@ pub use frobenius::{
     graded_frobenius_from_character_values, graded_frobenius_from_trace_matrices,
 };
 pub use llt::{graph_llt_symmetric, unicellular_llt, unit_interval_edges};
+pub use macdonald::{
+    delta_eigenvalue, delta_modified_macdonald, delta_prime_eigenvalue,
+    delta_prime_modified_macdonald, macdonald_b_alphabet, macdonald_b_eigenvalue, nabla_eigenvalue,
+    nabla_modified_macdonald, qt_coefficient, qt_constant, qt_monomial, ModifiedMacdonaldExpansion,
+    QtPolynomial,
+};
 pub use shifted_lr::{
     shifted_littlewood_richardson_coefficient, shifted_littlewood_richardson_stats,
     shifted_schur_evaluation, ShiftedLrError, ShiftedLrStats,
