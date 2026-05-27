@@ -4,6 +4,8 @@
 //! - [`MultiPoly<C>`] — sparse multivariate polynomials
 //! - [`MultiPolyFunction<C>`] — polynomials in nonsymmetric bases (key, atom, slide)
 //! - [`MultiPolyBasis`] — basis enum (Monomial, Key, Atom, MonSlide, FundSlide)
+//! - [`monomial_order`] — monomial orders and leading terms
+//! - [`division`] — multivariate division and normal forms
 //! - [`operators`] — simple, Demazure, and t-deformed operators (∂_i, π_i, θ_i)
 //! - [`key_polynomial`] — Demazure characters via π operators
 //! - [`atom_polynomial`] — Demazure atoms via θ operators
@@ -14,9 +16,11 @@
 
 pub mod atom_polynomial;
 pub mod basis;
+pub mod division;
 pub mod key_polynomial;
 pub mod kohnert;
 pub mod lorentzian;
+pub mod monomial_order;
 pub mod multipoly;
 pub mod multipoly_function;
 pub mod nonsymmetric_macdonald;
@@ -27,6 +31,7 @@ pub mod transition;
 
 pub use atom_polynomial::{atom_polynomial, t_atom_polynomial};
 pub use basis::MultiPolyBasis;
+pub use division::{divide_by_polynomials, multiply_by_monomial, normal_form, DivisionResult};
 pub use key_polynomial::{key_polynomial, t_key_polynomial};
 pub use kohnert::{
     canonical_labeling, cells_in_col, column_pairing, diagram_from_labeling, diagram_weight,
@@ -38,6 +43,9 @@ pub use lorentzian::{
     is_lorentzian, is_lorentzian_bool, is_m_convex, is_normalized_lorentzian,
     is_normalized_lorentzian_bool, is_strictly_lorentzian, is_strictly_normalized_lorentzian,
     support_is_m_convex, LorentzianResult,
+};
+pub use monomial_order::{
+    leading_term, monomial_divides, monomial_quotient, LeadingTerm, MonomialOrder,
 };
 pub use multipoly::MultiPoly;
 pub use multipoly_function::MultiPolyFunction;
