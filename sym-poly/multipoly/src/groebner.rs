@@ -300,6 +300,7 @@ fn remove_leading_monomial_multiples<C: Ring>(basis: &mut Vec<MultiPoly<C>>, ord
 mod tests {
     use super::*;
     use num_rational::Ratio;
+    use sym_poly_core::{qt_rational_monomial, QtRationalFunction, Ring};
 
     type Q = Ratio<i64>;
 
@@ -391,6 +392,20 @@ mod tests {
         let f = mono(&[2, 0], 1) + mono(&[0, 2], 1);
 
         assert_eq!(gb.normal_form(&f), constant(2));
+    }
+
+    #[test]
+    fn test_groebner_basis_over_qt_rational_functions() {
+        type K = QtRationalFunction<Q>;
+
+        let parameter = qt_rational_monomial::<Q>(1, 0);
+        let generator =
+            MultiPoly::monomial(1, vec![1], parameter.clone()) - MultiPoly::constant(1, K::one());
+        let gb = GroebnerBasis::new(vec![generator], MonomialOrder::Lex);
+        let normal = gb.normal_form(&MultiPoly::var(1, 0));
+
+        assert_eq!(normal, MultiPoly::constant(1, K::one() / parameter.clone()));
+        assert_eq!(gb.stats.pairs_processed, 0);
     }
 
     #[test]

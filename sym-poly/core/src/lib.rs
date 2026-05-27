@@ -12,6 +12,7 @@
 //! - [`matrix`] utilities for transition matrix computation
 //! - [`linear_algebra`] utilities for exact row reduction and quotient spaces
 //! - [`sn_action`] utilities for small exact `S_n`-module computations
+//! - [`RationalFunction`] and [`QtRationalFunction`] for `Q(q,t)` coefficient fields
 //! - [`TransitionCache`] for per-algebra cached transition matrices
 
 pub mod composition {
@@ -26,6 +27,7 @@ pub mod partition {
     pub use combinatoric_core::partition::*;
 }
 pub mod polynomial;
+pub mod rational_function;
 pub mod ring {
     pub use combinatoric_core::ring::*;
 }
@@ -39,6 +41,10 @@ pub use field::Field;
 pub use formal_sum::FormalSum;
 pub use index::BasisIndex;
 pub use polynomial::UnivariatePolynomial;
+pub use rational_function::{
+    qt_coefficient, qt_constant, qt_monomial, qt_polynomial_constant, qt_rational_monomial,
+    qt_unit_monomial, QtPolynomial, QtRationalFunction, RationalFunction,
+};
 pub use ssaf::Ssaf;
 pub use tableau::{SkewTableau, StandardSkewTableauxIter, StandardTableauxIter, Tableau};
 pub use transition_cache::TransitionCache;

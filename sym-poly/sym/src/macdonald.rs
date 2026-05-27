@@ -8,14 +8,17 @@
 use std::collections::BTreeMap;
 
 use num_rational::Ratio;
-use sym_poly_core::{Partition, Ring, UnivariatePolynomial};
+use sym_poly_core::{
+    qt_coefficient as core_qt_coefficient, qt_constant as core_qt_constant, qt_unit_monomial,
+    Partition, QtPolynomial as CoreQtPolynomial, Ring,
+};
 
 use crate::SymmetricFunction;
 
 pub type Rational = Ratio<i64>;
 
 /// Polynomials in `q,t`, represented as polynomials in `t` with coefficients in `q`.
-pub type QtPolynomial = UnivariatePolynomial<UnivariatePolynomial<Rational>>;
+pub type QtPolynomial = CoreQtPolynomial<Rational>;
 
 /// A finite expansion in the modified Macdonald basis `Htilde_mu`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -79,16 +82,15 @@ impl ModifiedMacdonaldExpansion {
 }
 
 pub fn qt_constant(value: i64) -> QtPolynomial {
-    <QtPolynomial as Ring>::from_i64(value)
+    core_qt_constant(value)
 }
 
 pub fn qt_monomial(q_degree: usize, t_degree: usize) -> QtPolynomial {
-    let q_part = UnivariatePolynomial::monomial(q_degree, Rational::from_integer(1));
-    UnivariatePolynomial::monomial(t_degree, q_part)
+    qt_unit_monomial(q_degree, t_degree)
 }
 
 pub fn qt_coefficient(polynomial: &QtPolynomial, q_degree: usize, t_degree: usize) -> Rational {
-    polynomial.coeff(t_degree).coeff(q_degree)
+    core_qt_coefficient(polynomial, q_degree, t_degree)
 }
 
 /// The alphabet `B_mu = sum_{c in mu} q^{a'(c)} t^{l'(c)}` as monomial values.
