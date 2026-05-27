@@ -1,5 +1,7 @@
 //! Multivariate polynomial division and normal forms.
 
+use std::collections::{BTreeMap, BTreeSet, HashSet};
+
 use sym_poly_core::{Field, Ring};
 
 use crate::monomial_order::{leading_term, monomial_quotient, LeadingTerm, MonomialOrder};
@@ -151,6 +153,174 @@ pub fn normal_form_with_leading_terms<C: Field>(
     remainder
 }
 
+/// Compute several normal forms using one F4-style symbolic preprocessing and
+/// matrix reduction step.
+///
+/// This constructs the reducer multiples forced by the current batch of
+/// polynomials, stores them as rows with fixed symbolic pivots, and reduces
+/// every input row through the same pivot list. For Buchberger computations
+/// this gives a shared preprocessing step for a batch of S-polynomials, while
+/// scalar reduction remains available for comparisons through
+/// [`normal_form_with_leading_terms`].
+pub fn matrix_normal_forms_with_leading_terms<C: Field>(
+    polynomials: &[MultiPoly<C>],
+    divisors: &[MultiPoly<C>],
+    divisor_leading_terms: &[LeadingTerm<C>],
+    order: MonomialOrder,
+) -> Vec<MultiPoly<C>> {
+    if polynomials.is_empty() {
+        return Vec::new();
+    }
+    assert_eq!(
+        divisors.len(),
+        divisor_leading_terms.len(),
+        "divisor and leading-term lists have different lengths"
+    );
+    let num_vars = polynomials[0].num_vars();
+    assert!(
+        polynomials
+            .iter()
+            .all(|polynomial| polynomial.num_vars() == num_vars),
+        "all polynomials must have the same number of variables"
+    );
+    assert!(
+        divisors
+            .iter()
+            .all(|divisor| divisor.num_vars() == num_vars),
+        "all divisors must have the same number of variables as the polynomials"
+    );
+    if divisors.is_empty() {
+        return polynomials.to_vec();
+    }
+
+    let (monomials, reducer_rows) =
+        symbolic_reduction_rows(polynomials, divisors, divisor_leading_terms, order);
+    if monomials.is_empty() || reducer_rows.is_empty() {
+        return polynomials.to_vec();
+    }
+
+    let column_index: BTreeMap<_, _> = monomials
+        .iter()
+        .cloned()
+        .enumerate()
+        .map(|(i, monomial)| (monomial, i))
+        .collect();
+    let reducer_matrix: Vec<_> = reducer_rows
+        .iter()
+        .map(|(_, row)| polynomial_to_row(row, &column_index))
+        .collect();
+    let reducer_pivots = reducer_rows
+        .iter()
+        .map(|(pivot, _)| {
+            *column_index
+                .get(pivot)
+                .expect("reducer pivot is outside the matrix columns")
+        })
+        .collect::<Vec<_>>();
+
+    polynomials
+        .iter()
+        .map(|polynomial| {
+            let mut row = polynomial_to_row(polynomial, &column_index);
+            for (reducer_row, &pivot_col) in reducer_matrix.iter().zip(reducer_pivots.iter()) {
+                let pivot_value = row[pivot_col].clone();
+                if pivot_value.is_zero() {
+                    continue;
+                }
+                for col in pivot_col..row.len() {
+                    row[col] = row[col].clone() - pivot_value.clone() * reducer_row[col].clone();
+                }
+            }
+            row_to_polynomial(num_vars, &monomials, &row)
+        })
+        .collect()
+}
+
+fn symbolic_reduction_rows<C: Field>(
+    polynomials: &[MultiPoly<C>],
+    divisors: &[MultiPoly<C>],
+    divisor_leading_terms: &[LeadingTerm<C>],
+    order: MonomialOrder,
+) -> (Vec<Vec<u32>>, Vec<(Vec<u32>, MultiPoly<C>)>) {
+    let mut monomial_set = BTreeSet::new();
+    let mut pending = Vec::new();
+    for polynomial in polynomials {
+        for monomial in polynomial.terms().keys() {
+            if monomial_set.insert(monomial.clone()) {
+                pending.push(monomial.clone());
+            }
+        }
+    }
+
+    let mut reducer_pivots = HashSet::new();
+    let mut reducer_rows = Vec::new();
+    while let Some(monomial) = pending.pop() {
+        let Some((divisor_index, exponent_quotient)) =
+            first_dividing_leading_term(&monomial, divisor_leading_terms)
+        else {
+            continue;
+        };
+        if !reducer_pivots.insert(monomial.clone()) {
+            continue;
+        }
+        let divisor_lt = &divisor_leading_terms[divisor_index];
+        let row = multiply_by_monomial(
+            &divisors[divisor_index],
+            &exponent_quotient,
+            C::one() / divisor_lt.coefficient.clone(),
+        );
+        for new_monomial in row.terms().keys() {
+            if monomial_set.insert(new_monomial.clone()) {
+                pending.push(new_monomial.clone());
+            }
+        }
+        reducer_rows.push((monomial, row));
+    }
+
+    let mut monomials: Vec<_> = monomial_set.into_iter().collect();
+    monomials.sort_by(|a, b| order.compare(b, a));
+    reducer_rows.sort_by(|(a, _), (b, _)| order.compare(b, a));
+    (monomials, reducer_rows)
+}
+
+fn first_dividing_leading_term<C>(
+    monomial: &[u32],
+    divisor_leading_terms: &[LeadingTerm<C>],
+) -> Option<(usize, Vec<u32>)> {
+    divisor_leading_terms
+        .iter()
+        .enumerate()
+        .find_map(|(i, divisor_lt)| {
+            monomial_quotient(monomial, &divisor_lt.exponents).map(|quotient| (i, quotient))
+        })
+}
+
+fn polynomial_to_row<C: Ring>(
+    polynomial: &MultiPoly<C>,
+    column_index: &BTreeMap<Vec<u32>, usize>,
+) -> Vec<C> {
+    let mut row = vec![C::zero(); column_index.len()];
+    for (monomial, coefficient) in polynomial.terms() {
+        let &column = column_index
+            .get(monomial)
+            .expect("polynomial contains a monomial outside the matrix columns");
+        row[column] = coefficient.clone();
+    }
+    row
+}
+
+fn row_to_polynomial<C: Ring>(num_vars: usize, monomials: &[Vec<u32>], row: &[C]) -> MultiPoly<C> {
+    let terms = monomials
+        .iter()
+        .cloned()
+        .zip(row.iter().cloned())
+        .filter_map(|(monomial, coefficient)| {
+            (!coefficient.is_zero()).then_some((monomial, coefficient))
+        })
+        .collect();
+    MultiPoly::from_terms(num_vars, terms)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -241,5 +411,41 @@ mod tests {
             normal_form_with_leading_terms(&f, &divisors, &leading_terms, MonomialOrder::Lex),
             normal_form(&f, &divisors, MonomialOrder::Lex)
         );
+    }
+
+    #[test]
+    fn test_matrix_normal_forms_match_scalar_normal_forms() {
+        let polynomials = vec![
+            mono(&[2, 0], 1) + mono(&[0, 2], 1),
+            mono(&[2, 1], 1) - mono(&[0, 3], 1) + constant(2),
+        ];
+        let divisors = vec![
+            mono(&[1, 0], 1) - mono(&[0, 1], 1),
+            mono(&[0, 2], 1) - constant(1),
+        ];
+        let leading_terms = divisors
+            .iter()
+            .map(|divisor| leading_term(divisor, MonomialOrder::Lex).unwrap())
+            .collect::<Vec<_>>();
+
+        let matrix_forms = matrix_normal_forms_with_leading_terms(
+            &polynomials,
+            &divisors,
+            &leading_terms,
+            MonomialOrder::Lex,
+        );
+        let scalar_forms = polynomials
+            .iter()
+            .map(|polynomial| {
+                normal_form_with_leading_terms(
+                    polynomial,
+                    &divisors,
+                    &leading_terms,
+                    MonomialOrder::Lex,
+                )
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(matrix_forms, scalar_forms);
     }
 }

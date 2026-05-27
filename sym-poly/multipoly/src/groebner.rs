@@ -8,7 +8,10 @@ use std::collections::HashSet;
 
 use sym_poly_core::{Field, Ring};
 
-use crate::division::{multiply_by_monomial, normal_form, normal_form_with_leading_terms};
+use crate::division::{
+    matrix_normal_forms_with_leading_terms, multiply_by_monomial, normal_form,
+    normal_form_with_leading_terms,
+};
 use crate::monomial_order::{leading_term, monomial_divides, LeadingTerm, MonomialOrder};
 use crate::MultiPoly;
 
@@ -19,6 +22,9 @@ pub struct GroebnerOptions {
     pub skip_relatively_prime_leading_terms: bool,
     /// Buchberger chain criterion using already handled S-pairs.
     pub skip_chain_criterion_pairs: bool,
+    /// Reduce all currently minimal lcm-degree S-polynomials in one matrix
+    /// batch. Disable this to compare against scalar Buchberger reduction.
+    pub batch_reduce_same_lcm_degree: bool,
 }
 
 impl Default for GroebnerOptions {
@@ -26,6 +32,7 @@ impl Default for GroebnerOptions {
         Self {
             skip_relatively_prime_leading_terms: true,
             skip_chain_criterion_pairs: true,
+            batch_reduce_same_lcm_degree: true,
         }
     }
 }
@@ -37,6 +44,11 @@ pub struct BuchbergerStats {
     pub pairs_processed: usize,
     pub pairs_skipped_relatively_prime: usize,
     pub pairs_skipped_chain_criterion: usize,
+    pub matrix_reduction_batches: usize,
+    pub matrix_reduction_polynomials: usize,
+    pub matrix_zero_rechecks: usize,
+    pub matrix_zero_rechecks_nonzero: usize,
+    pub batch_fallbacks: usize,
     pub zero_remainders: usize,
     pub nonzero_remainders: usize,
 }
@@ -186,40 +198,91 @@ pub fn buchberger_basis_with_stats<C: Field>(
         ..BuchbergerStats::default()
     };
 
-    while let Some((i, j)) = take_best_pair(&mut pairs, &basis_lts) {
-        stats.pairs_processed += 1;
-        let pair = canonical_pair(i, j);
-        if options.skip_relatively_prime_leading_terms
-            && leading_monomials_are_relatively_prime(&basis_lts[i], &basis_lts[j])
-        {
-            stats.pairs_skipped_relatively_prime += 1;
-            handled_pairs.insert(pair);
-            continue;
+    while !pairs.is_empty() {
+        let pair_batch =
+            take_next_pair_batch(&mut pairs, &basis_lts, options.batch_reduce_same_lcm_degree);
+        let mut active_pairs = Vec::new();
+        let mut s_polynomials = Vec::new();
+
+        for (i, j) in pair_batch {
+            stats.pairs_processed += 1;
+            let pair = canonical_pair(i, j);
+            if options.skip_relatively_prime_leading_terms
+                && leading_monomials_are_relatively_prime(&basis_lts[i], &basis_lts[j])
+            {
+                stats.pairs_skipped_relatively_prime += 1;
+                handled_pairs.insert(pair);
+                continue;
+            }
+            if options.skip_chain_criterion_pairs
+                && chain_criterion_applies(i, j, &basis_lts, &handled_pairs)
+            {
+                stats.pairs_skipped_chain_criterion += 1;
+                handled_pairs.insert(pair);
+                continue;
+            }
+
+            active_pairs.push(pair);
+            s_polynomials.push(s_polynomial_with_leading_terms(
+                &basis[i],
+                &basis[j],
+                &basis_lts[i],
+                &basis_lts[j],
+            ));
         }
-        if options.skip_chain_criterion_pairs
-            && chain_criterion_applies(i, j, &basis_lts, &handled_pairs)
-        {
-            stats.pairs_skipped_chain_criterion += 1;
-            handled_pairs.insert(pair);
+
+        if s_polynomials.is_empty() {
             continue;
         }
 
-        let s = s_polynomial_with_leading_terms(&basis[i], &basis[j], &basis_lts[i], &basis_lts[j]);
-        let remainder = normal_form_with_leading_terms(&s, &basis, &basis_lts, order);
-        handled_pairs.insert(pair);
-        if remainder.is_zero() {
-            stats.zero_remainders += 1;
-            continue;
+        let remainders = if s_polynomials.len() == 1 || !options.batch_reduce_same_lcm_degree {
+            s_polynomials
+                .iter()
+                .map(|s| normal_form_with_leading_terms(s, &basis, &basis_lts, order))
+                .collect()
+        } else {
+            stats.matrix_reduction_batches += 1;
+            stats.matrix_reduction_polynomials += s_polynomials.len();
+            let mut remainders =
+                matrix_normal_forms_with_leading_terms(&s_polynomials, &basis, &basis_lts, order);
+            for (s, remainder) in s_polynomials.iter().zip(remainders.iter_mut()) {
+                if !remainder.is_zero() {
+                    continue;
+                }
+                stats.matrix_zero_rechecks += 1;
+                let scalar_remainder = normal_form_with_leading_terms(s, &basis, &basis_lts, order);
+                if !scalar_remainder.is_zero() {
+                    stats.matrix_zero_rechecks_nonzero += 1;
+                    *remainder = scalar_remainder;
+                }
+            }
+            remainders
+        };
+
+        for (pair, remainder) in active_pairs.into_iter().zip(remainders) {
+            handled_pairs.insert(pair);
+            if remainder.is_zero() {
+                stats.zero_remainders += 1;
+                continue;
+            }
+            stats.nonzero_remainders += 1;
+            let new_index = basis.len();
+            let new_polynomial = make_monic(&remainder, order);
+            let new_lt = leading_term(&new_polynomial, order).expect("nonzero polynomial");
+            basis.push(new_polynomial);
+            basis_lts.push(new_lt);
+            for i in 0..new_index {
+                pairs.push((i, new_index));
+            }
         }
-        stats.nonzero_remainders += 1;
-        let new_index = basis.len();
-        let new_polynomial = make_monic(&remainder, order);
-        let new_lt = leading_term(&new_polynomial, order).expect("nonzero polynomial");
-        basis.push(new_polynomial);
-        basis_lts.push(new_lt);
-        for i in 0..new_index {
-            pairs.push((i, new_index));
-        }
+    }
+
+    if options.batch_reduce_same_lcm_degree && !is_groebner_basis(&basis, order) {
+        let mut fallback_options = options;
+        fallback_options.batch_reduce_same_lcm_degree = false;
+        let mut fallback = buchberger_basis_with_stats(generators, order, fallback_options);
+        fallback.stats.batch_fallbacks += 1;
+        return fallback;
     }
 
     GroebnerComputation { basis, stats }
@@ -246,7 +309,8 @@ pub fn reduced_groebner_basis_with_stats<C: Field>(
     options: GroebnerOptions,
 ) -> GroebnerComputation<C> {
     let computation = buchberger_basis_with_stats(generators, order, options);
-    let basis = computation.basis;
+    let mut basis = computation.basis;
+    remove_leading_monomial_multiples(&mut basis, order);
     let mut reduced = Vec::new();
 
     for i in 0..basis.len() {
@@ -261,12 +325,21 @@ pub fn reduced_groebner_basis_with_stats<C: Field>(
         }
     }
 
-    remove_leading_monomial_multiples(&mut reduced, order);
     reduced.sort_by(|a, b| {
         let a_lt = leading_term(a, order).expect("nonzero polynomial");
         let b_lt = leading_term(b, order).expect("nonzero polynomial");
         order.compare(&b_lt.exponents, &a_lt.exponents)
     });
+    if options.batch_reduce_same_lcm_degree
+        && (!is_groebner_basis(&reduced, order)
+            || !generators_reduce_to_zero(generators, &reduced, order))
+    {
+        let mut fallback_options = options;
+        fallback_options.batch_reduce_same_lcm_degree = false;
+        let mut fallback = reduced_groebner_basis_with_stats(generators, order, fallback_options);
+        fallback.stats.batch_fallbacks += 1;
+        return fallback;
+    }
     GroebnerComputation {
         basis: reduced,
         stats: computation.stats,
@@ -281,6 +354,16 @@ pub fn is_groebner_basis<C: Field>(basis: &[MultiPoly<C>], order: MonomialOrder)
         }
     }
     true
+}
+
+fn generators_reduce_to_zero<C: Field>(
+    generators: &[MultiPoly<C>],
+    basis: &[MultiPoly<C>],
+    order: MonomialOrder,
+) -> bool {
+    generators
+        .iter()
+        .all(|generator| normal_form(generator, basis, order).is_zero())
 }
 
 pub fn make_monic<C: Field>(polynomial: &MultiPoly<C>, order: MonomialOrder) -> MultiPoly<C> {
@@ -329,15 +412,53 @@ fn canonical_pair(i: usize, j: usize) -> (usize, usize) {
     }
 }
 
-fn take_best_pair<C>(
+fn take_next_pair_batch<C>(
     pairs: &mut Vec<(usize, usize)>,
     leading_terms: &[LeadingTerm<C>],
-) -> Option<(usize, usize)> {
-    let (best_index, _) = pairs.iter().enumerate().min_by_key(|(_, &(i, j))| {
-        let lcm = monomial_lcm(&leading_terms[i].exponents, &leading_terms[j].exponents);
-        (total_degree(&lcm), i.max(j), i.min(j))
-    })?;
-    Some(pairs.swap_remove(best_index))
+    batch_same_lcm_degree: bool,
+) -> Vec<(usize, usize)> {
+    if !batch_same_lcm_degree {
+        let best_index = best_pair_index(pairs, leading_terms);
+        return vec![pairs.swap_remove(best_index)];
+    }
+
+    let best_degree = pairs
+        .iter()
+        .map(|&(i, j)| pair_lcm_total_degree(i, j, leading_terms))
+        .min()
+        .expect("pair list is nonempty");
+    let mut batch = Vec::new();
+    let mut remaining = Vec::new();
+    for pair in pairs.drain(..) {
+        if pair_lcm_total_degree(pair.0, pair.1, leading_terms) == best_degree {
+            batch.push(pair);
+        } else {
+            remaining.push(pair);
+        }
+    }
+    *pairs = remaining;
+    batch.sort_by_key(|&(i, j)| (i.max(j), i.min(j)));
+    batch
+}
+
+fn best_pair_index<C>(pairs: &[(usize, usize)], leading_terms: &[LeadingTerm<C>]) -> usize {
+    pairs
+        .iter()
+        .enumerate()
+        .min_by_key(|(_, &(i, j))| {
+            (
+                pair_lcm_total_degree(i, j, leading_terms),
+                i.max(j),
+                i.min(j),
+            )
+        })
+        .map(|(index, _)| index)
+        .expect("pair list is nonempty")
+}
+
+fn pair_lcm_total_degree<C>(i: usize, j: usize, leading_terms: &[LeadingTerm<C>]) -> u32 {
+    let lcm = monomial_lcm(&leading_terms[i].exponents, &leading_terms[j].exponents);
+    total_degree(&lcm)
 }
 
 fn chain_criterion_applies<C>(
@@ -404,6 +525,10 @@ mod tests {
 
     fn mono(exponents: &[u32], coefficient: i64) -> MultiPoly<Q> {
         MultiPoly::monomial(2, exponents.to_vec(), q(coefficient))
+    }
+
+    fn mono_n(num_vars: usize, exponents: &[u32], coefficient: i64) -> MultiPoly<Q> {
+        MultiPoly::monomial(num_vars, exponents.to_vec(), q(coefficient))
     }
 
     fn constant(value: i64) -> MultiPoly<Q> {
@@ -474,6 +599,7 @@ mod tests {
             GroebnerOptions {
                 skip_relatively_prime_leading_terms: false,
                 skip_chain_criterion_pairs: true,
+                ..GroebnerOptions::default()
             },
         );
 
@@ -482,6 +608,69 @@ mod tests {
         assert_eq!(computation.stats.pairs_skipped_chain_criterion, 1);
         assert_eq!(computation.stats.zero_remainders, 2);
         assert!(is_groebner_basis(&computation.basis, MonomialOrder::Lex));
+    }
+
+    #[test]
+    fn test_batch_buchberger_matches_scalar_buchberger() {
+        let f = mono(&[2, 0], 1) - mono(&[0, 1], 1);
+        let g = mono(&[1, 1], 1) - constant(1);
+        let h = mono(&[0, 3], 1) - constant(1);
+        let generators = vec![f, g, h];
+        let scalar = reduced_groebner_basis_with_options(
+            &generators,
+            MonomialOrder::Lex,
+            GroebnerOptions {
+                batch_reduce_same_lcm_degree: false,
+                ..GroebnerOptions::default()
+            },
+        );
+        let batched = reduced_groebner_basis_with_options(
+            &generators,
+            MonomialOrder::Lex,
+            GroebnerOptions::default(),
+        );
+
+        assert_eq!(batched, scalar);
+        assert!(is_groebner_basis(&batched, MonomialOrder::Lex));
+    }
+
+    #[test]
+    fn test_batch_buchberger_records_matrix_reduction_stats() {
+        let f = mono(&[2, 0], 1) - mono(&[0, 1], 1);
+        let g = mono(&[1, 1], 1) - constant(1);
+        let h = mono(&[0, 2], 1) - mono(&[1, 0], 1);
+        let computation = buchberger_basis_with_stats(
+            &[f, g, h],
+            MonomialOrder::Lex,
+            GroebnerOptions {
+                skip_relatively_prime_leading_terms: false,
+                skip_chain_criterion_pairs: false,
+                batch_reduce_same_lcm_degree: true,
+            },
+        );
+
+        assert!(computation.stats.matrix_reduction_batches > 0);
+        assert!(computation.stats.matrix_reduction_polynomials >= 2);
+        assert!(is_groebner_basis(&computation.basis, MonomialOrder::Lex));
+    }
+
+    #[test]
+    fn test_reduced_groebner_basis_preserves_artin_s3_pure_power() {
+        let e1 = mono_n(3, &[1, 0, 0], 1) + mono_n(3, &[0, 1, 0], 1) + mono_n(3, &[0, 0, 1], 1);
+        let e2 = mono_n(3, &[1, 1, 0], 1) + mono_n(3, &[1, 0, 1], 1) + mono_n(3, &[0, 1, 1], 1);
+        let e3 = mono_n(3, &[1, 1, 1], 1);
+        let generators = vec![e1, e2, e3];
+        let gb = GroebnerBasis::new(generators.clone(), MonomialOrder::Lex);
+
+        assert!(gb
+            .leading_terms
+            .iter()
+            .any(|leading_term| leading_term.exponents == vec![0, 0, 3]));
+        assert!(generators_reduce_to_zero(
+            &generators,
+            &gb.generators,
+            MonomialOrder::Lex
+        ));
     }
 
     #[test]
