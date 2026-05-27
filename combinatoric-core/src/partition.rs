@@ -802,7 +802,10 @@ mod tests {
 
     #[test]
     fn test_sub_partitions_empty() {
-        assert_eq!(Partition::empty().sub_partitions(), vec![Partition::empty()]);
+        assert_eq!(
+            Partition::empty().sub_partitions(),
+            vec![Partition::empty()]
+        );
     }
 
     #[test]

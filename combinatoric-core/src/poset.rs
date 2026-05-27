@@ -504,6 +504,70 @@ impl Poset {
         dp.values().sum()
     }
 
+    fn count_order_preserving_dp_bigint_natural(&self, k: usize, weak: bool) -> BigInt {
+        use std::collections::HashMap;
+
+        let n = self.n;
+        if n == 0 {
+            return BigInt::one();
+        }
+        if k == 0 {
+            return BigInt::zero();
+        }
+
+        debug_assert!(self.is_naturally_labeled());
+
+        let delta: usize = if weak { 0 } else { 1 };
+        let plans = self.frontier_step_plans();
+
+        let mut dp: HashMap<Vec<usize>, BigInt> = HashMap::new();
+        dp.insert(Vec::new(), BigInt::one());
+
+        for plan in &plans {
+            let mut new_dp: HashMap<Vec<usize>, BigInt> = HashMap::new();
+
+            for (state, count) in &dp {
+                let mut lo = 1usize;
+                for &pos in &plan.parent_positions {
+                    let bound = state[pos] + delta;
+                    if bound > lo {
+                        lo = bound;
+                    }
+                }
+
+                if lo > k {
+                    continue;
+                }
+
+                let mut base_state =
+                    Vec::with_capacity(plan.keep_positions.len() + usize::from(plan.enters_live));
+                for &i in &plan.keep_positions {
+                    base_state.push(state[i]);
+                }
+
+                if !plan.enters_live {
+                    let num_choices = BigInt::from(k - lo + 1);
+                    *new_dp.entry(base_state).or_insert_with(BigInt::zero) += count * num_choices;
+                    continue;
+                }
+
+                let mut new_state = base_state;
+                for c in lo..=k {
+                    if new_state.len() == plan.keep_positions.len() {
+                        new_state.push(c);
+                    } else {
+                        *new_state.last_mut().unwrap() = c;
+                    }
+                    *new_dp.entry(new_state.clone()).or_insert_with(BigInt::zero) += count.clone();
+                }
+            }
+
+            dp = new_dp;
+        }
+
+        dp.values().fold(BigInt::zero(), |acc, count| acc + count)
+    }
+
     /// Count weakly order-preserving maps P → {1,...,k} using frontier DP.
     ///
     /// Automatically relabels the poset to natural labeling if needed.
@@ -518,6 +582,22 @@ impl Poset {
     pub fn count_strict_order_preserving_dp(&self, k: usize) -> usize {
         let p = self.natural_relabeling();
         p.count_order_preserving_dp(k, false)
+    }
+
+    /// Count weakly order-preserving maps P → {1,...,k} exactly.
+    ///
+    /// Automatically relabels the poset to natural labeling if needed.
+    pub fn count_weak_order_preserving_dp_bigint(&self, k: usize) -> BigInt {
+        let p = self.natural_relabeling();
+        p.count_order_preserving_dp_bigint_natural(k, true)
+    }
+
+    /// Count strictly order-preserving maps P → {1,...,k} exactly.
+    ///
+    /// Automatically relabels the poset to natural labeling if needed.
+    pub fn count_strict_order_preserving_dp_bigint(&self, k: usize) -> BigInt {
+        let p = self.natural_relabeling();
+        p.count_order_preserving_dp_bigint_natural(k, false)
     }
 
     // -- Order polynomial ---------------------------------------------------
@@ -625,23 +705,27 @@ impl Poset {
 
         let num_positive = (d + 2) / 2; // ceil((d+1)/2)
         let num_negative = (d + 1) / 2; // floor((d+1)/2)
-        let sign = if d % 2 == 0 { 1i64 } else { -1i64 };
+        let sign = if d % 2 == 0 {
+            BigInt::one()
+        } else {
+            -BigInt::one()
+        };
 
         let mut points: Vec<i64> = Vec::with_capacity(d + 1);
-        let mut values: Vec<i64> = Vec::with_capacity(d + 1);
+        let mut values: Vec<BigInt> = Vec::with_capacity(d + 1);
 
         // Positive evaluations: Ehr(t) = Ω(P, t+1)
         for t in 0..num_positive {
-            let val = p.count_order_preserving_dp(t + 1, true);
+            let val = p.count_order_preserving_dp_bigint_natural(t + 1, true);
             points.push(t as i64);
-            values.push(val as i64);
+            values.push(val);
         }
 
         // Negative evaluations via Stanley reciprocity:
         // Ehr(-k) = (-1)^n * Ω̄(P, k-1) for k ≥ 1.
         for k in 1..=num_negative {
-            let strict_val = p.count_order_preserving_dp(k - 1, false);
-            let ehr_neg = sign * strict_val as i64;
+            let strict_val = p.count_order_preserving_dp_bigint_natural(k - 1, false);
+            let ehr_neg = sign.clone() * strict_val;
             points.push(-(k as i64));
             values.push(ehr_neg);
         }
@@ -868,13 +952,10 @@ fn eval_big_poly(coeffs: &[BigRat], x: i64) -> BigRat {
 
 /// Lagrange interpolation with integer points and values.
 /// Returns exact rational coefficients using BigRational (no overflow).
-fn lagrange_interpolation_big(points: &[i64], values: &[i64]) -> Vec<BigRat> {
+fn lagrange_interpolation_big(points: &[i64], values: &[BigInt]) -> Vec<BigRat> {
     let n = points.len();
     let pts: Vec<BigInt> = points.iter().map(|&x| BigInt::from(x)).collect();
-    let mut dd: Vec<BigRat> = values
-        .iter()
-        .map(|&v| BigRat::from(BigInt::from(v)))
-        .collect();
+    let mut dd: Vec<BigRat> = values.iter().cloned().map(BigRat::from).collect();
 
     // Newton's divided differences
     for j in 1..n {
@@ -1297,6 +1378,30 @@ mod tests {
                 assert_eq!(strict, 0);
             }
         }
+    }
+
+    #[test]
+    fn test_dp_bigint_matches_usize_small() {
+        let p = Poset::from_shape(&Partition::new(vec![3, 2]));
+        for k in 0..=6 {
+            assert_eq!(
+                p.count_weak_order_preserving_dp_bigint(k),
+                BigInt::from(p.count_weak_order_preserving_dp(k))
+            );
+            assert_eq!(
+                p.count_strict_order_preserving_dp_bigint(k),
+                BigInt::from(p.count_strict_order_preserving_dp(k))
+            );
+        }
+    }
+
+    #[test]
+    fn test_dp_bigint_handles_counts_past_i64() {
+        let p = Poset::antichain(41);
+        assert_eq!(
+            p.count_weak_order_preserving_dp_bigint(3),
+            BigInt::from(3u32).pow(41)
+        );
     }
 
     // -- Ehrhart polynomial and h*-vector tests (Mathematica-verified) --
