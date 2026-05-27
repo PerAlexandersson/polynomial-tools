@@ -5,8 +5,10 @@
 //!
 //!   Γ(P,w) = Σ_{σ ∈ L(P)} F_{Des(σ)}
 //!
-//! where L(P) is the set of linear extensions and Des(σ) is the descent
-//! composition of σ.
+//! where L(P) is the set of linear extensions and Des(σ) is computed from
+//! the labels w(σ_i).  The identity labeling gives the usual natural-label
+//! convention.  An anti-natural labeling gives the strict order-preserving
+//! enumerator.
 //!
 //! This module takes raw poset data (cover relations) so it doesn't depend
 //! on the Poset type in combinatoric-core. A Poset-aware wrapper can be
@@ -31,30 +33,95 @@ pub fn p_partition_generating_function<C: Ring>(
     n: usize,
     covers: &[(usize, usize)],
 ) -> QSymFunction<C> {
+    let labels = (0..n).collect::<Vec<_>>();
+    p_partition_generating_function_with_labels(n, covers, &labels)
+}
+
+/// Compute the (P,w)-partition generating function in the fundamental basis.
+///
+/// `labels[v]` is the label w(v). Labels must be distinct. The descent set of
+/// a linear extension σ is `{i : labels[σ_i] > labels[σ_{i+1}]}`.
+pub fn p_partition_generating_function_with_labels<C: Ring>(
+    n: usize,
+    covers: &[(usize, usize)],
+    labels: &[usize],
+) -> QSymFunction<C> {
+    assert_eq!(labels.len(), n, "labels must have length n");
+    assert_distinct_labels(labels);
     if n == 0 {
         return QSymFunction::basis_element(QSymBasis::Fundamental, Composition::empty());
     }
 
-    // Build adjacency lists
+    let (children, parents) = adjacency_from_covers(n, covers);
+
+    // Enumerate linear extensions via backtracking
+    let extensions = enumerate_linear_extensions(n, &children, &parents);
+    p_partition_from_extensions(n, &extensions, labels)
+}
+
+/// Compute the strict order-preserving enumerator of a poset.
+///
+/// This is the generating function for maps f satisfying f(x) < f(y) whenever
+/// x <_P y.  It is implemented as a (P,w)-partition enumerator for a canonical
+/// anti-natural labeling w.
+pub fn strict_p_partition_generating_function<C: Ring>(
+    n: usize,
+    covers: &[(usize, usize)],
+) -> QSymFunction<C> {
+    if n == 0 {
+        return QSymFunction::basis_element(QSymBasis::Fundamental, Composition::empty());
+    }
+
+    let (children, parents) = adjacency_from_covers(n, covers);
+    let extensions = enumerate_linear_extensions(n, &children, &parents);
+    let first_extension = extensions
+        .first()
+        .expect("a finite acyclic poset has a linear extension");
+    let labels = anti_natural_labels(n, first_extension);
+    p_partition_from_extensions(n, &extensions, &labels)
+}
+
+fn p_partition_from_extensions<C: Ring>(
+    n: usize,
+    extensions: &[Vec<usize>],
+    labels: &[usize],
+) -> QSymFunction<C> {
+    let mut terms: BTreeMap<Composition, C> = BTreeMap::new();
+    for sigma in extensions {
+        let des_comp = descent_composition_with_labels(sigma, n, labels);
+        let entry = terms.entry(des_comp).or_insert_with(C::zero);
+        *entry = entry.clone() + C::one();
+    }
+
+    QSymFunction::from_terms(QSymBasis::Fundamental, terms)
+}
+
+fn adjacency_from_covers(
+    n: usize,
+    covers: &[(usize, usize)],
+) -> (Vec<Vec<usize>>, Vec<Vec<usize>>) {
     let mut children: Vec<Vec<usize>> = vec![vec![]; n];
     let mut parents: Vec<Vec<usize>> = vec![vec![]; n];
     for &(a, b) in covers {
         children[a].push(b);
         parents[b].push(a);
     }
+    (children, parents)
+}
 
-    // Enumerate linear extensions via backtracking
-    let extensions = enumerate_linear_extensions(n, &children, &parents);
-
-    // For each linear extension, compute descent composition and accumulate
-    let mut terms: BTreeMap<Composition, C> = BTreeMap::new();
-    for sigma in &extensions {
-        let des_comp = descent_composition(sigma, n);
-        let entry = terms.entry(des_comp).or_insert_with(C::zero);
-        *entry = entry.clone() + C::one();
+fn assert_distinct_labels(labels: &[usize]) {
+    let mut seen = BTreeSet::new();
+    for &label in labels {
+        assert!(seen.insert(label), "labels must be distinct");
     }
+}
 
-    QSymFunction::from_terms(QSymBasis::Fundamental, terms)
+fn anti_natural_labels(n: usize, extension: &[usize]) -> Vec<usize> {
+    let mut labels = vec![0; n];
+    for (position, &element) in extension.iter().enumerate() {
+        labels[element] = n - 1 - position;
+    }
+    labels
 }
 
 /// Enumerate all linear extensions of a poset.
@@ -131,17 +198,16 @@ fn backtrack_extensions(
     }
 }
 
-/// Compute the descent composition of a permutation σ.
+/// Compute the descent composition of a labeled linear extension σ.
 ///
-/// The descent set is {i : σ[i] > σ[i+1]} (0-indexed positions).
-/// The descent composition records the lengths of ascending runs.
-fn descent_composition(sigma: &[usize], n: usize) -> Composition {
+/// The descent set is {i : labels[σ[i]] > labels[σ[i+1]]}.
+fn descent_composition_with_labels(sigma: &[usize], n: usize, labels: &[usize]) -> Composition {
     if n <= 1 {
         return Composition::new(vec![n as u32]);
     }
     let mut des_set = BTreeSet::new();
     for i in 0..n - 1 {
-        if sigma[i] > sigma[i + 1] {
+        if labels[sigma[i]] > labels[sigma[i + 1]] {
             des_set.insert((i + 1) as u32);
         }
     }
@@ -158,6 +224,14 @@ mod tests {
         // Γ = F_(3)
         let f: QSymFunction<i64> = p_partition_generating_function(3, &[(0, 1), (1, 2)]);
         assert_eq!(f.coefficient(&Composition::new(vec![3])), 1);
+        assert_eq!(f.terms().len(), 1);
+    }
+
+    #[test]
+    fn test_chain_3_strict() {
+        // Strict maps on a 3-chain have generating function e_3 = F_(1,1,1).
+        let f: QSymFunction<i64> = strict_p_partition_generating_function(3, &[(0, 1), (1, 2)]);
+        assert_eq!(f.coefficient(&Composition::new(vec![1, 1, 1])), 1);
         assert_eq!(f.terms().len(), 1);
     }
 
@@ -190,6 +264,19 @@ mod tests {
         let f: QSymFunction<i64> = p_partition_generating_function(3, &[(0, 2), (1, 2)]);
         assert_eq!(f.coefficient(&Composition::new(vec![3])), 1);
         assert_eq!(f.coefficient(&Composition::new(vec![1, 2])), 1);
+        assert_eq!(f.terms().len(), 2);
+    }
+
+    #[test]
+    fn test_labeled_v_poset() {
+        // With an anti-natural labeling, both cover inequalities are strict.
+        // The first extension [0,1,2] has descents at both positions, while
+        // [1,0,2] has a descent only at the second position.
+        let labels = vec![2, 1, 0];
+        let f: QSymFunction<i64> =
+            p_partition_generating_function_with_labels(3, &[(0, 2), (1, 2)], &labels);
+        assert_eq!(f.coefficient(&Composition::new(vec![1, 1, 1])), 1);
+        assert_eq!(f.coefficient(&Composition::new(vec![2, 1])), 1);
         assert_eq!(f.terms().len(), 2);
     }
 

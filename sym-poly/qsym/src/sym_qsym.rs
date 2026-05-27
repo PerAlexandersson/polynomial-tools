@@ -3,10 +3,13 @@
 //! - `sym_to_qsym`: Sym -> QSym (inclusion). In monomial bases:
 //!   m_λ ↦ Σ_{α: sort(α)=λ} M_α
 //!
-//! - `qsym_to_sym`: QSym -> Sym (forgetful map). In monomial bases:
+//! - `qsym_to_sym`: QSym -> Sym (lumping map). In monomial bases:
 //!   M_α ↦ m_{sort(α)}
+//!
+//! - `symmetric_qsym_to_sym`: checked projection for QSym functions that are
+//!   symmetric under rearranging composition parts.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use sym_poly_core::{Composition, Partition, Ring};
 use sym_poly_sym::Basis;
@@ -35,11 +38,13 @@ pub fn sym_to_qsym<C: Ring>(f: &SymmetricFunction<C>) -> QSymFunction<C> {
     QSymFunction::from_terms(QSymBasis::Monomial, result_terms)
 }
 
-/// Forgetful map QSym -> Sym (monomial basis).
+/// Lumping map QSym -> Sym (monomial basis).
 ///
 /// M_α ↦ m_{sort(α)}
 ///
-/// This is a ring homomorphism.
+/// This sums all coefficients in a rearrangement class. It is not the inverse
+/// of [`sym_to_qsym`]: applying it to the inclusion of `m_λ` multiplies the
+/// coefficient by the number of distinct compositions sorting to `λ`.
 pub fn qsym_to_sym<C: Ring>(f: &QSymFunction<C>) -> SymmetricFunction<C> {
     let in_m = f.to_monomial_basis();
     let mut result_terms: BTreeMap<Partition, C> = BTreeMap::new();
@@ -51,6 +56,32 @@ pub fn qsym_to_sym<C: Ring>(f: &QSymFunction<C>) -> SymmetricFunction<C> {
     }
 
     SymmetricFunction::from_terms(Basis::Monomial, result_terms)
+}
+
+/// Project a genuinely symmetric QSym function back to Sym.
+///
+/// Returns `None` if any composition rearrangement class has unequal
+/// coefficients, including missing rearrangements whose coefficient is zero.
+/// On success this is the inverse of [`sym_to_qsym`] on the monomial bases.
+pub fn symmetric_qsym_to_sym<C: Ring>(f: &QSymFunction<C>) -> Option<SymmetricFunction<C>> {
+    let in_m = f.to_monomial_basis();
+    let partitions: BTreeSet<_> = in_m.terms().keys().map(Composition::to_partition).collect();
+    let mut result_terms: BTreeMap<Partition, C> = BTreeMap::new();
+
+    for lambda in partitions {
+        let comps = compositions_sorting_to(&lambda);
+        let coeff = in_m.coefficient(&comps[0]);
+        for alpha in comps.iter().skip(1) {
+            if in_m.coefficient(alpha) != coeff {
+                return None;
+            }
+        }
+        if !coeff.is_zero() {
+            result_terms.insert(lambda, coeff);
+        }
+    }
+
+    Some(SymmetricFunction::from_terms(Basis::Monomial, result_terms))
 }
 
 /// All compositions whose parts, when sorted in decreasing order, give λ.
@@ -178,5 +209,20 @@ mod tests {
                 lambda
             );
         }
+    }
+
+    #[test]
+    fn test_symmetric_qsym_to_sym_inverts_inclusion() {
+        let f: SymmetricFunction<i64> =
+            SymmetricFunction::monomial_symmetric(Partition::new(vec![2, 1]));
+        let q = sym_to_qsym(&f);
+        let back = symmetric_qsym_to_sym(&q).unwrap();
+        assert_eq!(back, f);
+    }
+
+    #[test]
+    fn test_symmetric_qsym_to_sym_rejects_missing_rearrangement() {
+        let q: QSymFunction<i64> = QSymFunction::monomial_qsym(Composition::new(vec![2, 1]));
+        assert!(symmetric_qsym_to_sym(&q).is_none());
     }
 }

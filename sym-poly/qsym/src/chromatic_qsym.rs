@@ -8,7 +8,7 @@
 use std::collections::BTreeMap;
 
 use combinatoric_core::ordered_set_partitions;
-use sym_poly_core::{Composition, Ring};
+use sym_poly_core::{Composition, Ring, UnivariatePolynomial};
 
 use crate::basis::QSymBasis;
 use crate::qsym_function::QSymFunction;
@@ -36,6 +36,56 @@ pub fn chromatic_qsym<C: Ring>(n: usize, edges: &[(usize, usize)]) -> QSymFuncti
     QSymFunction::from_terms(QSymBasis::Monomial, terms)
 }
 
+/// Shareshian--Wachs style asc-weighted chromatic quasisymmetric function.
+///
+/// The graph vertices are ordered by their labels `0 < 1 < ... < n-1`.  For a
+/// proper coloring encoded as an ordered set partition `(B_1, ..., B_k)`, the
+/// ascent statistic is
+///
+/// ```text
+/// #{ {i,j} in E : i < j and block(i) < block(j) }.
+/// ```
+///
+/// The coefficient of `M_alpha` is therefore a polynomial in `q`, where the
+/// coefficient of `q^a` counts proper ordered set partitions of block-size
+/// composition `alpha` with exactly `a` ascents.
+pub fn chromatic_qsym_asc(
+    n: usize,
+    edges: &[(usize, usize)],
+) -> QSymFunction<UnivariatePolynomial<i64>> {
+    if n == 0 {
+        return QSymFunction::basis_element(QSymBasis::Monomial, Composition::empty());
+    }
+
+    let mut adj: Vec<Vec<bool>> = vec![vec![false; n]; n];
+    let mut normalized_edges = Vec::new();
+    for &(u, v) in edges {
+        assert!(u < n && v < n, "edge endpoint out of range");
+        if u == v {
+            continue;
+        }
+        adj[u][v] = true;
+        adj[v][u] = true;
+        let edge = if u < v { (u, v) } else { (v, u) };
+        normalized_edges.push(edge);
+    }
+    normalized_edges.sort_unstable();
+    normalized_edges.dedup();
+
+    let mut terms: BTreeMap<Composition, UnivariatePolynomial<i64>> = BTreeMap::new();
+
+    for partition in ordered_set_partitions(n) {
+        process_ordered_partition_with_ascents(
+            &partition.into_blocks(),
+            &adj,
+            &normalized_edges,
+            &mut terms,
+        );
+    }
+
+    QSymFunction::from_terms(QSymBasis::Monomial, terms)
+}
+
 /// Check if the ordered partition is proper. If so, record its block-size
 /// composition.
 fn process_ordered_partition<C: Ring>(
@@ -58,9 +108,45 @@ fn process_ordered_partition<C: Ring>(
     *entry = entry.clone() + C::one();
 }
 
+fn process_ordered_partition_with_ascents(
+    blocks: &[Vec<usize>],
+    adj: &[Vec<bool>],
+    edges: &[(usize, usize)],
+    terms: &mut BTreeMap<Composition, UnivariatePolynomial<i64>>,
+) {
+    for block in blocks {
+        for i in 0..block.len() {
+            for j in i + 1..block.len() {
+                if adj[block[i]][block[j]] {
+                    return;
+                }
+            }
+        }
+    }
+
+    let mut block_of = vec![0usize; adj.len()];
+    for (block_idx, block) in blocks.iter().enumerate() {
+        for &vertex in block {
+            block_of[vertex] = block_idx;
+        }
+    }
+
+    let ascents = edges
+        .iter()
+        .filter(|&&(u, v)| block_of[u] < block_of[v])
+        .count();
+    let comp = Composition::new(blocks.iter().map(|block| block.len() as u32).collect());
+    let entry = terms.entry(comp).or_insert_with(UnivariatePolynomial::zero);
+    *entry = entry.clone() + UnivariatePolynomial::monomial(ascents, 1);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use combinatoric_core::Graph;
+    use sym_poly_sym::chromatic_symmetric;
+
+    use crate::sym_qsym::symmetric_qsym_to_sym;
 
     #[test]
     fn test_empty_graph_1v() {
@@ -155,5 +241,43 @@ mod tests {
             f.coefficient(&Composition::new(vec![2, 1])),
             f.coefficient(&Composition::new(vec![1, 2])),
         );
+    }
+
+    #[test]
+    fn test_chromatic_qsym_projects_to_chromatic_symmetric() {
+        let g = Graph::path(3);
+        let q = chromatic_qsym::<i64>(g.num_vertices(), g.edges());
+        let from_q = symmetric_qsym_to_sym(&q).unwrap();
+        let from_sym = chromatic_symmetric::<i64>(&g).to_monomial_basis();
+        assert_eq!(from_q, from_sym);
+    }
+
+    fn evaluate_q_at_one(f: &QSymFunction<UnivariatePolynomial<i64>>) -> QSymFunction<i64> {
+        let terms = f
+            .terms()
+            .iter()
+            .map(|(comp, poly)| {
+                let value = poly.coeffs().iter().copied().sum::<i64>();
+                (comp.clone(), value)
+            })
+            .collect();
+        QSymFunction::from_terms(f.basis(), terms)
+    }
+
+    #[test]
+    fn test_chromatic_qsym_asc_edge() {
+        let f = chromatic_qsym_asc(2, &[(0, 1)]);
+        let coeff = f.coefficient(&Composition::new(vec![1, 1]));
+        assert_eq!(coeff, UnivariatePolynomial::new(vec![1, 1]));
+        assert_eq!(f.terms().len(), 1);
+    }
+
+    #[test]
+    fn test_chromatic_qsym_asc_specializes_at_one() {
+        let g = Graph::path(3);
+        let weighted = chromatic_qsym_asc(g.num_vertices(), g.edges());
+        let at_one = evaluate_q_at_one(&weighted);
+        let unweighted = chromatic_qsym::<i64>(g.num_vertices(), g.edges());
+        assert_eq!(at_one, unweighted);
     }
 }

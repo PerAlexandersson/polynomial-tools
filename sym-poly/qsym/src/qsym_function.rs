@@ -60,6 +60,14 @@ impl<C: Ring> QSymFunction<C> {
         Self::basis_element(QSymBasis::Fundamental, comp)
     }
 
+    pub fn quasisymmetric_schur(comp: Composition) -> Self {
+        Self::basis_element(QSymBasis::QuasisymmetricSchur, comp)
+    }
+
+    pub fn dual_immaculate(comp: Composition) -> Self {
+        Self::basis_element(QSymBasis::DualImmaculate, comp)
+    }
+
     // -----------------------------------------------------------------------
     // Accessors
     // -----------------------------------------------------------------------
@@ -126,6 +134,12 @@ impl<C: Ring> QSymFunction<C> {
     }
     pub fn to_fundamental_basis(&self) -> Self {
         self.to_basis(QSymBasis::Fundamental)
+    }
+    pub fn to_quasisymmetric_schur_basis(&self) -> Self {
+        self.to_basis(QSymBasis::QuasisymmetricSchur)
+    }
+    pub fn to_dual_immaculate_basis(&self) -> Self {
+        self.to_basis(QSymBasis::DualImmaculate)
     }
     pub fn to_psi_basis(&self) -> Self {
         self.to_basis(QSymBasis::PowerSumPsi)

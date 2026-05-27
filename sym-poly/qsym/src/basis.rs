@@ -2,10 +2,10 @@ use std::fmt;
 
 /// Bases for the ring of quasisymmetric functions.
 ///
-/// Bases for the ring of quasisymmetric functions.
-///
 /// - `Monomial`      -- M_α (quasisymmetric monomial)
 /// - `Fundamental`   -- F_α (Gessel fundamental)
+/// - `QuasisymmetricSchur` -- S_α (Haglund--Luoto--Mason--van Willigenburg)
+/// - `DualImmaculate` -- S*_α (dual immaculate)
 /// - `PowerSumPsi`   -- Ψ_α (type 1 power sum)
 /// - `PowerSumPhi`   -- Φ_α (type 2 power sum)
 ///
@@ -17,6 +17,8 @@ use std::fmt;
 pub enum QSymBasis {
     Monomial,
     Fundamental,
+    QuasisymmetricSchur,
+    DualImmaculate,
     PowerSumPsi,
     PowerSumPhi,
 }
@@ -27,6 +29,8 @@ impl QSymBasis {
         match self {
             QSymBasis::Monomial => "M",
             QSymBasis::Fundamental => "F",
+            QSymBasis::QuasisymmetricSchur => "QS",
+            QSymBasis::DualImmaculate => "S*",
             QSymBasis::PowerSumPsi => "Ψ",
             QSymBasis::PowerSumPhi => "Φ",
         }
