@@ -816,6 +816,49 @@ pub fn backtrack_image(pi: &[u8], s_set: &[Vec<u8>]) -> Vec<u8> {
     s_set[candidates[0]].clone()
 }
 
+/// Compute the backtrack image of a search order with respect to derangements.
+///
+/// This uses the greedy completion criterion: after assigning the current
+/// position, the only forbidden remaining state is a common singleton position
+/// and value.
+pub fn derangement_backtrack_image(pi: &[u8]) -> Vec<u8> {
+    let n = pi.len();
+    assert!(n != 1, "D_1 has no derangements");
+    let mut image = vec![0u8; n];
+    let mut used_values = vec![false; n + 1];
+
+    for (step, &p) in pi.iter().enumerate() {
+        let p_idx = p as usize;
+        let one_position_will_remain = step + 2 == n;
+        let remaining_position = one_position_will_remain.then(|| pi[step + 1]);
+        let mut chosen = None;
+
+        for v in 1..=n as u8 {
+            if used_values[v as usize] || v == p {
+                continue;
+            }
+
+            if let Some(r) = remaining_position {
+                let remaining_value = (1..=n as u8)
+                    .find(|&w| !used_values[w as usize] && w != v)
+                    .expect("one value should remain");
+                if remaining_value == r {
+                    continue;
+                }
+            }
+
+            chosen = Some(v);
+            break;
+        }
+
+        let v = chosen.expect("derangement completion should exist");
+        image[p_idx - 1] = v;
+        used_values[v as usize] = true;
+    }
+
+    image
+}
+
 /// Compute the backtrack polynomial: Σ_{π ∈ S_n} t^{stat(backtrack_π(S))}.
 pub fn backtrack_stat_poly(n: u8, s_set: &[Vec<u8>], stat: crate::statistics::Stat) -> Vec<i64> {
     let all_pi = all_permutations(n);
@@ -1863,6 +1906,25 @@ mod tests {
         let s_set = vec![vec![2, 3, 1], vec![3, 1, 2]];
         assert_eq!(backtrack_image(&[1, 2, 3], &s_set), vec![2, 3, 1]);
         assert_eq!(backtrack_image(&[2, 1, 3], &s_set), vec![3, 1, 2]);
+    }
+
+    #[test]
+    fn test_derangement_backtrack_image_matches_generic() {
+        for n in 2..=6u8 {
+            let derangements: Vec<Vec<u8>> = all_permutations(n)
+                .into_iter()
+                .filter(|p| is_derangement(p))
+                .collect();
+            for pi in all_permutations(n) {
+                assert_eq!(
+                    derangement_backtrack_image(&pi),
+                    backtrack_image(&pi, &derangements),
+                    "n={} pi={:?}",
+                    n,
+                    pi
+                );
+            }
+        }
     }
 
     #[test]
