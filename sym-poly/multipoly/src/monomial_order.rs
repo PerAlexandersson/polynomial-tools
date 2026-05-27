@@ -39,14 +39,17 @@ pub fn leading_term<C: Ring>(
     polynomial: &MultiPoly<C>,
     order: MonomialOrder,
 ) -> Option<LeadingTerm<C>> {
-    polynomial
-        .terms()
-        .iter()
-        .max_by(|(a, _), (b, _)| order.compare(a, b))
-        .map(|(exponents, coefficient)| LeadingTerm {
-            exponents: exponents.clone(),
-            coefficient: coefficient.clone(),
-        })
+    let term = match order {
+        MonomialOrder::Lex => polynomial.terms().iter().next_back(),
+        MonomialOrder::GrLex | MonomialOrder::GrevLex => polynomial
+            .terms()
+            .iter()
+            .max_by(|(a, _), (b, _)| order.compare(a, b)),
+    };
+    term.map(|(exponents, coefficient)| LeadingTerm {
+        exponents: exponents.clone(),
+        coefficient: coefficient.clone(),
+    })
 }
 
 pub fn monomial_divides(divisor: &[u32], dividend: &[u32]) -> bool {

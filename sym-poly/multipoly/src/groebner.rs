@@ -412,8 +412,12 @@ fn canonical_pair(i: usize, j: usize) -> (usize, usize) {
 }
 
 fn pair_lcm_total_degree<C>(i: usize, j: usize, leading_terms: &[LeadingTerm<C>]) -> u32 {
-    let lcm = monomial_lcm(&leading_terms[i].exponents, &leading_terms[j].exponents);
-    total_degree(&lcm)
+    leading_terms[i]
+        .exponents
+        .iter()
+        .zip(leading_terms[j].exponents.iter())
+        .map(|(&a, &b)| a.max(b))
+        .sum()
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -517,10 +521,6 @@ fn chain_criterion_applies<C>(
     })
 }
 
-fn total_degree(exponents: &[u32]) -> u32 {
-    exponents.iter().sum()
-}
-
 fn remove_leading_monomial_multiples<C: Ring>(basis: &mut Vec<MultiPoly<C>>, order: MonomialOrder) {
     let leading_terms: Vec<_> = basis
         .iter()
@@ -620,6 +620,22 @@ mod tests {
         assert_eq!(computation.stats.pairs_skipped_relatively_prime, 0);
         assert_eq!(computation.stats.zero_remainders, 1);
         assert!(is_groebner_basis(&computation.basis, MonomialOrder::Lex));
+    }
+
+    #[test]
+    fn test_pair_lcm_total_degree_without_lcm_allocation() {
+        let leading_terms = vec![
+            LeadingTerm {
+                exponents: vec![2, 0, 1],
+                coefficient: q(1),
+            },
+            LeadingTerm {
+                exponents: vec![1, 3, 0],
+                coefficient: q(1),
+            },
+        ];
+
+        assert_eq!(pair_lcm_total_degree(0, 1, &leading_terms), 6);
     }
 
     #[test]
