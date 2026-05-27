@@ -144,7 +144,8 @@ fn process_ordered_partition_with_ascents(
 mod tests {
     use super::*;
     use combinatoric_core::Graph;
-    use sym_poly_sym::chromatic_symmetric;
+    use std::collections::BTreeMap;
+    use sym_poly_sym::{chromatic_symmetric, hessenberg_area_dot_frobenius_target};
 
     use crate::sym_qsym::symmetric_qsym_to_sym;
 
@@ -264,6 +265,42 @@ mod tests {
         QSymFunction::from_terms(f.basis(), terms)
     }
 
+    fn omega_symmetric_projection_by_q_degree(
+        f: &QSymFunction<UnivariatePolynomial<i64>>,
+    ) -> BTreeMap<u32, sym_poly_sym::SymmetricFunction<i64>> {
+        let max_degree = f
+            .terms()
+            .values()
+            .map(|poly| poly.coeffs().len().saturating_sub(1))
+            .max()
+            .unwrap_or(0);
+        let mut result = BTreeMap::new();
+
+        for degree in 0..=max_degree {
+            let terms = f
+                .terms()
+                .iter()
+                .filter_map(|(composition, poly)| {
+                    let coeff = poly.coeffs().get(degree).copied().unwrap_or(0);
+                    if coeff == 0 {
+                        None
+                    } else {
+                        Some((composition.clone(), coeff))
+                    }
+                })
+                .collect();
+            let qsym_degree = QSymFunction::from_terms(f.basis(), terms);
+            if qsym_degree.is_zero() {
+                continue;
+            }
+            let sym_degree = symmetric_qsym_to_sym(&qsym_degree)
+                .expect("chromatic QSym should be symmetric for unit interval graphs");
+            result.insert(degree as u32, sym_degree.omega_involution());
+        }
+
+        result
+    }
+
     #[test]
     fn test_chromatic_qsym_asc_edge() {
         let f = chromatic_qsym_asc(2, &[(0, 1)]);
@@ -279,5 +316,16 @@ mod tests {
         let at_one = evaluate_q_at_one(&weighted);
         let unweighted = chromatic_qsym::<i64>(g.num_vertices(), g.edges());
         assert_eq!(at_one, unweighted);
+    }
+
+    #[test]
+    fn test_hessenberg_target_matches_omega_chromatic_qsym_asc() {
+        let area = [0, 1, 1];
+        let graph = Graph::unit_interval(&area);
+        let qsym = chromatic_qsym_asc(graph.num_vertices(), graph.edges());
+        let from_qsym = omega_symmetric_projection_by_q_degree(&qsym);
+        let target = hessenberg_area_dot_frobenius_target(&area).unwrap();
+
+        assert_eq!(from_qsym, target);
     }
 }
