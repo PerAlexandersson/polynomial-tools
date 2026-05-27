@@ -7,6 +7,7 @@
 //! - [`monomial_order`] — monomial orders and leading terms
 //! - [`division`] — multivariate division and normal forms
 //! - [`groebner`] — basic Buchberger algorithm for small exact quotients
+//! - [`quotient`] — finite standard-monomial quotient bases
 //! - [`operators`] — simple, Demazure, and t-deformed operators (∂_i, π_i, θ_i)
 //! - [`key_polynomial`] — Demazure characters via π operators
 //! - [`atom_polynomial`] — Demazure atoms via θ operators
@@ -27,6 +28,7 @@ pub mod multipoly;
 pub mod multipoly_function;
 pub mod nonsymmetric_macdonald;
 pub mod operators;
+pub mod quotient;
 pub mod schubert_polynomial;
 pub mod slide_polynomial;
 pub mod transition;
@@ -59,6 +61,10 @@ pub use nonsymmetric_macdonald::{nonsymmetric_hall_littlewood, nonsymmetric_macd
 pub use operators::{
     partial_i, partial_word, pi_i, pi_word, theta_i, theta_word, tpi_i, tpi_word, ttheta_i,
     ttheta_word,
+};
+pub use quotient::{
+    normal_form_in_basis, pure_power_bounds, quotient_basis, quotient_coordinates,
+    standard_monomials_from_leading_monomials, QuotientBasis,
 };
 pub use schubert_polynomial::{
     schubert_polynomial, schubert_to_atom, schubert_to_fund_slide, schubert_to_key,
