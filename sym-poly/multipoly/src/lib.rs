@@ -30,6 +30,7 @@ pub mod multipoly_function;
 pub mod nonsymmetric_macdonald;
 pub mod operators;
 pub mod quotient;
+pub mod quotient_module;
 pub mod schubert_polynomial;
 pub mod slide_polynomial;
 pub mod symmetric_polynomials;
@@ -78,6 +79,7 @@ pub use quotient::{
     quotient_coordinates, restrict_matrix_to_indices, standard_monomials_from_leading_monomials,
     QuotientBasis,
 };
+pub use quotient_module::{PolynomialQuotientSnModule, PolynomialQuotientSnModuleError};
 pub use schubert_polynomial::{
     schubert_polynomial, schubert_to_atom, schubert_to_fund_slide, schubert_to_key,
     schubert_to_monomial,
