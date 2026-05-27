@@ -1489,6 +1489,7 @@ dependencies = [
  "num-rational",
  "num-traits",
  "sym-poly-core",
+ "sym-poly-multipoly",
 ]
 
 [[package]]
