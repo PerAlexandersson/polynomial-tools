@@ -1,4 +1,4 @@
-# Project: combpoly — Combinatorial generating polynomials
+# Project Guide: combpoly
 
 ## Purpose
 
