@@ -94,11 +94,11 @@ pub use operators::{
     ttheta_word,
 };
 pub use quotient::{
-    is_degree_preserving_action_matrix, normal_form_in_basis, permute_variables, pure_power_bounds,
-    quotient_action_matrices_by_permutation_and_degree, quotient_action_matrix_by_permutation,
-    quotient_action_matrix_degree_blocks, quotient_basis, quotient_basis_degrees,
-    quotient_coordinates, restrict_matrix_to_indices, standard_monomials_from_leading_monomials,
-    QuotientBasis,
+    is_degree_preserving_action_matrix, normal_form_in_basis, permute_monomial, permute_variables,
+    pure_power_bounds, quotient_action_matrices_by_permutation_and_degree,
+    quotient_action_matrix_by_permutation, quotient_action_matrix_degree_blocks, quotient_basis,
+    quotient_basis_degrees, quotient_basis_index, quotient_coordinates, restrict_matrix_to_indices,
+    standard_monomials_from_leading_monomials, QuotientBasis,
 };
 pub use quotient_module::{PolynomialQuotientSnModule, PolynomialQuotientSnModuleError};
 pub use schubert_polynomial::{

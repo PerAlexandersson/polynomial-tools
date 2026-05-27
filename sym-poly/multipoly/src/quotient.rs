@@ -22,6 +22,16 @@ impl QuotientBasis {
     }
 }
 
+pub fn quotient_basis_index(basis: &QuotientBasis) -> BTreeMap<Vec<u32>, usize> {
+    basis
+        .monomials
+        .iter()
+        .cloned()
+        .enumerate()
+        .map(|(i, monomial)| (monomial, i))
+        .collect()
+}
+
 /// Find pure-power bounds from leading monomials.
 ///
 /// If the leading ideal contains `x_i^b` for every variable, then every
@@ -85,14 +95,27 @@ pub fn quotient_coordinates<C: Field>(
         basis.num_vars,
         "polynomial has wrong number of variables"
     );
+    let index = quotient_basis_index(basis);
+    quotient_coordinates_with_index(polynomial, gb, basis, &index)
+}
+
+fn quotient_coordinates_with_index<C: Field>(
+    polynomial: &MultiPoly<C>,
+    gb: &GroebnerBasis<C>,
+    basis: &QuotientBasis,
+    index: &BTreeMap<Vec<u32>, usize>,
+) -> Option<Vec<C>> {
+    assert_eq!(
+        polynomial.num_vars(),
+        basis.num_vars,
+        "polynomial has wrong number of variables"
+    );
+    assert_eq!(
+        index.len(),
+        basis.dimension(),
+        "quotient basis index has the wrong size"
+    );
     let normal = gb.normal_form(polynomial);
-    let index: BTreeMap<_, _> = basis
-        .monomials
-        .iter()
-        .cloned()
-        .enumerate()
-        .map(|(i, monomial)| (monomial, i))
-        .collect();
     let mut coordinates = vec![C::zero(); basis.dimension()];
     for (monomial, coeff) in normal.terms() {
         let &i = index.get(monomial)?;
@@ -145,6 +168,21 @@ pub fn permute_variables<C: Field>(
     MultiPoly::from_terms(polynomial.num_vars(), terms)
 }
 
+pub fn permute_monomial(exponents: &[u32], permutation: &[usize]) -> Vec<u32> {
+    assert_permutation(permutation);
+    assert_eq!(
+        exponents.len(),
+        permutation.len(),
+        "permutation has wrong size for monomial"
+    );
+
+    let mut new_exponents = vec![0u32; permutation.len()];
+    for (source, &target) in permutation.iter().enumerate() {
+        new_exponents[target] = exponents[source];
+    }
+    new_exponents
+}
+
 /// Matrix induced by a variable permutation on a finite quotient basis.
 ///
 /// Matrices use the column convention: column `j` is the coordinate vector of
@@ -166,11 +204,11 @@ pub fn quotient_action_matrix_by_permutation<C: Field>(
     );
 
     let dim = basis.dimension();
+    let index = quotient_basis_index(basis);
     let mut matrix = zero_matrix::<C>(dim, dim);
     for (col, monomial) in basis.monomials.iter().enumerate() {
-        let basis_element = MultiPoly::x_power(basis.num_vars, monomial.clone());
-        let image = permute_variables(&basis_element, permutation);
-        let coords = quotient_coordinates(&image, gb, basis)?;
+        let image = MultiPoly::x_power(basis.num_vars, permute_monomial(monomial, permutation));
+        let coords = quotient_coordinates_with_index(&image, gb, basis, &index)?;
         for row in 0..dim {
             matrix[row][col] = coords[row].clone();
         }
@@ -337,6 +375,10 @@ mod tests {
         let basis = quotient_basis(&gb).unwrap();
 
         assert_eq!(
+            quotient_basis_index(&basis),
+            BTreeMap::from([(vec![0, 0], 0), (vec![0, 1], 1)])
+        );
+        assert_eq!(
             quotient_coordinates(&(constant(3) + mono(&[1, 0], 2)), &gb, &basis),
             Some(vec![q(3), q(-2)])
         );
@@ -352,6 +394,7 @@ mod tests {
         let swapped = permute_variables(&f, &[1, 0]);
 
         assert_eq!(swapped, mono(&[0, 2], 1) + mono(&[1, 1], 3));
+        assert_eq!(permute_monomial(&[2, 0], &[1, 0]), vec![0, 2]);
     }
 
     #[test]

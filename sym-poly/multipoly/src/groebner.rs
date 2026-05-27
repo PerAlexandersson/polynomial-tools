@@ -4,7 +4,7 @@
 //! but it includes the first criteria and caches needed by quotient-module
 //! computations.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use sym_poly_core::{Field, Ring};
 
@@ -190,7 +190,7 @@ pub fn buchberger_basis_with_stats<C: Field>(
         .iter()
         .map(|polynomial| leading_term(polynomial, order).expect("nonzero polynomial"))
         .collect::<Vec<_>>();
-    let mut pairs = all_pairs(basis.len());
+    let mut pairs = CriticalPairQueue::new(&basis_lts);
     let mut handled_pairs = HashSet::new();
     let mut stats = BuchbergerStats {
         input_generators: generators.len(),
@@ -199,8 +199,7 @@ pub fn buchberger_basis_with_stats<C: Field>(
     };
 
     while !pairs.is_empty() {
-        let pair_batch =
-            take_next_pair_batch(&mut pairs, &basis_lts, options.batch_reduce_same_lcm_degree);
+        let pair_batch = pairs.take_next_batch(options.batch_reduce_same_lcm_degree);
         let mut active_pairs = Vec::new();
         let mut s_polynomials = Vec::new();
 
@@ -272,7 +271,7 @@ pub fn buchberger_basis_with_stats<C: Field>(
             basis.push(new_polynomial);
             basis_lts.push(new_lt);
             for i in 0..new_index {
-                pairs.push((i, new_index));
+                pairs.insert(i, new_index, &basis_lts);
             }
         }
     }
@@ -412,53 +411,88 @@ fn canonical_pair(i: usize, j: usize) -> (usize, usize) {
     }
 }
 
-fn take_next_pair_batch<C>(
-    pairs: &mut Vec<(usize, usize)>,
-    leading_terms: &[LeadingTerm<C>],
-    batch_same_lcm_degree: bool,
-) -> Vec<(usize, usize)> {
-    if !batch_same_lcm_degree {
-        let best_index = best_pair_index(pairs, leading_terms);
-        return vec![pairs.swap_remove(best_index)];
-    }
-
-    let best_degree = pairs
-        .iter()
-        .map(|&(i, j)| pair_lcm_total_degree(i, j, leading_terms))
-        .min()
-        .expect("pair list is nonempty");
-    let mut batch = Vec::new();
-    let mut remaining = Vec::new();
-    for pair in pairs.drain(..) {
-        if pair_lcm_total_degree(pair.0, pair.1, leading_terms) == best_degree {
-            batch.push(pair);
-        } else {
-            remaining.push(pair);
-        }
-    }
-    *pairs = remaining;
-    batch.sort_by_key(|&(i, j)| (i.max(j), i.min(j)));
-    batch
-}
-
-fn best_pair_index<C>(pairs: &[(usize, usize)], leading_terms: &[LeadingTerm<C>]) -> usize {
-    pairs
-        .iter()
-        .enumerate()
-        .min_by_key(|(_, &(i, j))| {
-            (
-                pair_lcm_total_degree(i, j, leading_terms),
-                i.max(j),
-                i.min(j),
-            )
-        })
-        .map(|(index, _)| index)
-        .expect("pair list is nonempty")
-}
-
 fn pair_lcm_total_degree<C>(i: usize, j: usize, leading_terms: &[LeadingTerm<C>]) -> u32 {
     let lcm = monomial_lcm(&leading_terms[i].exponents, &leading_terms[j].exponents);
     total_degree(&lcm)
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct CriticalPairQueue {
+    by_lcm_degree: BTreeMap<u32, Vec<(usize, usize)>>,
+    len: usize,
+}
+
+impl CriticalPairQueue {
+    fn new<C>(leading_terms: &[LeadingTerm<C>]) -> Self {
+        let mut queue = Self::default();
+        for i in 0..leading_terms.len() {
+            for j in i + 1..leading_terms.len() {
+                queue.insert(i, j, leading_terms);
+            }
+        }
+        queue
+    }
+
+    fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    fn insert<C>(&mut self, i: usize, j: usize, leading_terms: &[LeadingTerm<C>]) {
+        let pair = canonical_pair(i, j);
+        let degree = pair_lcm_total_degree(pair.0, pair.1, leading_terms);
+        self.by_lcm_degree.entry(degree).or_default().push(pair);
+        self.len += 1;
+    }
+
+    fn take_next_batch(&mut self, batch_same_lcm_degree: bool) -> Vec<(usize, usize)> {
+        assert!(self.len > 0, "critical pair queue is empty");
+        if batch_same_lcm_degree {
+            return self.take_smallest_degree_bucket();
+        }
+        vec![self.take_best_pair()]
+    }
+
+    fn take_smallest_degree_bucket(&mut self) -> Vec<(usize, usize)> {
+        let degree = *self
+            .by_lcm_degree
+            .keys()
+            .next()
+            .expect("critical pair queue is empty");
+        let mut bucket = self
+            .by_lcm_degree
+            .remove(&degree)
+            .expect("degree bucket disappeared");
+        self.len -= bucket.len();
+        bucket.sort_by_key(|&(i, j)| (i.max(j), i.min(j)));
+        bucket
+    }
+
+    fn take_best_pair(&mut self) -> (usize, usize) {
+        let degree = *self
+            .by_lcm_degree
+            .keys()
+            .next()
+            .expect("critical pair queue is empty");
+        let bucket = self
+            .by_lcm_degree
+            .get_mut(&degree)
+            .expect("degree bucket disappeared");
+        let best_index = bucket
+            .iter()
+            .enumerate()
+            .min_by_key(|entry| {
+                let &(i, j) = entry.1;
+                (i.max(j), i.min(j))
+            })
+            .map(|(index, _)| index)
+            .expect("degree bucket is empty");
+        let pair = bucket.swap_remove(best_index);
+        if bucket.is_empty() {
+            self.by_lcm_degree.remove(&degree);
+        }
+        self.len -= 1;
+        pair
+    }
 }
 
 fn chain_criterion_applies<C>(
