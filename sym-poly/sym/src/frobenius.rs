@@ -118,6 +118,7 @@ pub fn multigraded_frobenius_from_trace_matrices<C: Ring>(
 mod tests {
     use super::*;
     use num_rational::Ratio;
+    use sym_poly_core::FiniteSnModule;
 
     type Q = Ratio<i64>;
 
@@ -134,6 +135,22 @@ mod tests {
             .iter()
             .map(|(parts, value)| (p(parts), q(*value)))
             .collect()
+    }
+
+    fn permutation_sign(permutation: &[usize]) -> i64 {
+        let mut inversions = 0usize;
+        for i in 0..permutation.len() {
+            for j in i + 1..permutation.len() {
+                if permutation[i] > permutation[j] {
+                    inversions += 1;
+                }
+            }
+        }
+        if inversions % 2 == 0 {
+            1
+        } else {
+            -1
+        }
     }
 
     #[test]
@@ -206,6 +223,29 @@ mod tests {
         let multigraded = multigraded_frobenius_from_character_values(&multigraded_values);
         let degree_zero = multigraded[&vec![0, 0]].to_schur_basis();
         let degree_one = multigraded[&vec![1, 0]].to_schur_basis();
+
+        assert_eq!(degree_zero.coefficient(&p(&[2])), q(1));
+        assert_eq!(degree_zero.terms().len(), 1);
+        assert_eq!(degree_one.coefficient(&p(&[1, 1])), q(1));
+        assert_eq!(degree_one.terms().len(), 1);
+    }
+
+    #[test]
+    fn test_finite_sn_module_to_multigraded_frobenius() {
+        let module =
+            FiniteSnModule::<&str, Q>::new(2, vec!["trivial", "sign"], vec![vec![0], vec![1]]);
+        let matrices = module.action_matrices_by_degree_and_cycle_type(|permutation, &basis| {
+            let coefficient = match basis {
+                "trivial" => q(1),
+                "sign" => q(permutation_sign(permutation)),
+                _ => unreachable!(),
+            };
+            vec![(basis, coefficient)]
+        });
+
+        let frobenius = multigraded_frobenius_from_trace_matrices(&matrices);
+        let degree_zero = frobenius[&vec![0]].to_schur_basis();
+        let degree_one = frobenius[&vec![1]].to_schur_basis();
 
         assert_eq!(degree_zero.coefficient(&p(&[2])), q(1));
         assert_eq!(degree_zero.terms().len(), 1);

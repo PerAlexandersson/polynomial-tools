@@ -22,6 +22,7 @@ pub mod composition {
 pub mod crt;
 pub mod field;
 pub mod finite_field;
+pub mod finite_sn_module;
 pub mod formal_sum;
 pub mod index;
 pub mod linear_algebra;
@@ -45,6 +46,7 @@ pub use crt::{
 };
 pub use field::Field;
 pub use finite_field::PrimeField;
+pub use finite_sn_module::FiniteSnModule;
 pub use formal_sum::FormalSum;
 pub use index::BasisIndex;
 pub use polynomial::UnivariatePolynomial;
