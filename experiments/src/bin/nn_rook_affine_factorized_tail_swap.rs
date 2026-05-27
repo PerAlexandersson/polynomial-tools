@@ -15,6 +15,14 @@
 //! optional degree shift.  At a shared select interval we splice the prefix of
 //! one word to the suffix/terminal marker of the other word and then test
 //! whether the crossed words are present among the originally generated words.
+//!
+//! Optional fifth argument:
+//!
+//! - `target_skip_suffix`: also treats shared target-skip support labels as
+//!   suffix-splice sites.
+//! - `target_skip_marker`: treats shared target-skip support labels as
+//!   terminal affine-marker swap sites.
+//! - `target_skip_all`: enables both target-skip probes.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::env;
@@ -50,6 +58,35 @@ struct TermOptions {
     include_t: bool,
     terminal_hull: bool,
     observed_completion: bool,
+}
+
+#[derive(Clone, Copy)]
+struct SwapOptions {
+    allow_target_skip_suffix: bool,
+    allow_target_skip_marker: bool,
+}
+
+impl SwapOptions {
+    fn parse(input: &str) -> Self {
+        match input {
+            "target_skip_suffix" | "target-skip-suffix" | "tss" => Self {
+                allow_target_skip_suffix: true,
+                allow_target_skip_marker: false,
+            },
+            "target_skip_marker" | "target-skip-marker" | "tsm" => Self {
+                allow_target_skip_suffix: false,
+                allow_target_skip_marker: true,
+            },
+            "target_skip_all" | "target-skip-all" | "tsa" => Self {
+                allow_target_skip_suffix: true,
+                allow_target_skip_marker: true,
+            },
+            _ => Self {
+                allow_target_skip_suffix: false,
+                allow_target_skip_marker: false,
+            },
+        }
+    }
 }
 
 impl TermOptions {
@@ -288,6 +325,7 @@ enum Resource {
 enum Candidate {
     Select(SelectSwapSite),
     SuffixAfterRow { row: usize },
+    TargetSkipMarker { row: usize },
 }
 
 #[derive(Clone, Debug)]
@@ -1029,11 +1067,22 @@ fn row_has_shared_resource(
         .any(|resource| resource_row(resource) == row)
 }
 
+fn row_has_shared_target_skip(
+    row: usize,
+    left_resources: &BTreeSet<Resource>,
+    right_resources: &BTreeSet<Resource>,
+) -> bool {
+    left_resources
+        .intersection(right_resources)
+        .any(|resource| matches!(resource, Resource::TargetSkip { row: r, .. } if *r == row))
+}
+
 fn swap_candidates(
     p: &AbsPath,
     q: &AbsPath,
     left_resources: &BTreeSet<Resource>,
     right_resources: &BTreeSet<Resource>,
+    swap_options: SwapOptions,
 ) -> Vec<Candidate> {
     let mut out = Vec::new();
     if let Some(site) = first_select_swap_site(p, q) {
@@ -1044,7 +1093,16 @@ fn swap_candidates(
         let bounds_match =
             p.word.events[row].target_bound_phys() == q.word.events[row].target_bound_phys();
         if degree_after_row(p, row) == degree_after_row(q, row)
-            && (last_row || bounds_match)
+            && swap_options.allow_target_skip_marker
+            && row_has_shared_target_skip(row, left_resources, right_resources)
+        {
+            out.push(Candidate::TargetSkipMarker { row });
+        }
+        if degree_after_row(p, row) == degree_after_row(q, row)
+            && (last_row
+                || bounds_match
+                || (swap_options.allow_target_skip_suffix
+                    && row_has_shared_target_skip(row, left_resources, right_resources)))
             && row_has_shared_resource(row, left_resources, right_resources)
         {
             out.push(Candidate::SuffixAfterRow { row });
@@ -1146,6 +1204,23 @@ fn crossed_words(p: &AbsPath, q: &AbsPath, candidate: &Candidate) -> Option<(Wor
                 },
             ))
         }
+        Candidate::TargetSkipMarker { row } => {
+            let _row = *row;
+            Some((
+                Word {
+                    component: p.word.component.clone(),
+                    param: q.word.param,
+                    offset: q.word.offset,
+                    events: p.word.events.clone(),
+                },
+                Word {
+                    component: q.word.component.clone(),
+                    param: p.word.param,
+                    offset: p.word.offset,
+                    events: q.word.events.clone(),
+                },
+            ))
+        }
     }
 }
 
@@ -1171,6 +1246,7 @@ fn check_packet(
     h: usize,
     kind: QKind,
     terms: TermOptions,
+    swap_options: SwapOptions,
     minor_size: usize,
     summary: &mut Summary,
 ) {
@@ -1221,8 +1297,13 @@ fn check_packet(
                                 continue;
                             }
 
-                            let candidates =
-                                swap_candidates(left, right, &left_resources, &right_resources);
+                            let candidates = swap_candidates(
+                                left,
+                                right,
+                                &left_resources,
+                                &right_resources,
+                                swap_options,
+                            );
                             if candidates.is_empty() {
                                 summary.no_swap_candidate += 1;
                                 if summary.first_failure.is_none() {
@@ -1329,7 +1410,8 @@ fn check_packet(
                                 }
                                 match candidate {
                                     Candidate::Select(_) => summary.closed_by_select += 1,
-                                    Candidate::SuffixAfterRow { .. } => {
+                                    Candidate::SuffixAfterRow { .. }
+                                    | Candidate::TargetSkipMarker { .. } => {
                                         summary.closed_by_suffix += 1
                                     }
                                 }
@@ -1397,10 +1479,14 @@ fn main() {
     };
     let term_filter = env::args().nth(4).unwrap_or_else(|| "all".to_string());
     let terms = TermOptions::parse(&term_filter);
+    let swap_filter = env::args()
+        .nth(5)
+        .unwrap_or_else(|| "state_suffix".to_string());
+    let swap_options = SwapOptions::parse(&swap_filter);
 
     println!("=== Affine factorized path-word tail-swap probe ===");
     println!(
-        "Checking |eta| <= {max_n}, minor size {minor_size}, Q filter {kind_filter}, terms {term_filter}.\n"
+        "Checking |eta| <= {max_n}, minor size {minor_size}, Q filter {kind_filter}, terms {term_filter}, swaps {swap_filter}.\n"
     );
 
     let mut packets_checked = 0usize;
@@ -1413,7 +1499,17 @@ fn main() {
             for (c, p, h) in boundary_packets(&eta) {
                 packets_checked += 1;
                 for &kind in &kinds {
-                    check_packet(&eta, c, p, h, kind, terms, minor_size, &mut summary);
+                    check_packet(
+                        &eta,
+                        c,
+                        p,
+                        h,
+                        kind,
+                        terms,
+                        swap_options,
+                        minor_size,
+                        &mut summary,
+                    );
                 }
             }
         }
