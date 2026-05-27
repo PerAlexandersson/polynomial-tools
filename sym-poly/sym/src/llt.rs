@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 
 use sym_poly_core::{Partition, Ring, UnivariatePolynomial};
 
+use crate::kostka::sn_character;
 use crate::{Basis, SymmetricFunction};
 
 /// Compute the graph LLT polynomial in the monomial basis.
@@ -50,6 +51,72 @@ pub fn unicellular_llt(area: &[u8]) -> SymmetricFunction<UnivariatePolynomial<i6
     graph_llt_symmetric(area.len(), &edges, &[], &[])
 }
 
+/// Degree-wise Schur expansion of the unicellular LLT Frobenius target.
+///
+/// The output maps a `q`-degree to the corresponding Schur-positive symmetric
+/// function. It is the representation-theoretic target for the LLT/twin
+/// manifold analogue of the Hessenberg dot-action story.
+pub fn unicellular_llt_frobenius_target(
+    area: &[u8],
+) -> Option<BTreeMap<u32, SymmetricFunction<i64>>> {
+    if !is_area_sequence(area) {
+        return None;
+    }
+
+    let schur = unicellular_llt(area).to_schur_basis();
+    let mut by_degree: BTreeMap<u32, BTreeMap<Partition, i64>> = BTreeMap::new();
+    for (partition, coefficient) in schur.terms() {
+        for (degree, &multiplicity) in coefficient.coeffs().iter().enumerate() {
+            if multiplicity == 0 {
+                continue;
+            }
+            by_degree
+                .entry(degree as u32)
+                .or_default()
+                .insert(partition.clone(), multiplicity);
+        }
+    }
+
+    Some(
+        by_degree
+            .into_iter()
+            .map(|(degree, terms)| (degree, SymmetricFunction::from_terms(Basis::Schur, terms)))
+            .collect(),
+    )
+}
+
+/// Graded character values of the abstract LLT representation target.
+///
+/// This realizes the Schur expansion of [`unicellular_llt_frobenius_target`]
+/// as a direct sum of irreducible `S_n` characters. It does not construct the
+/// geometric twin-manifold action matrices; rather, it gives the character
+/// table that such matrices must have.
+pub fn unicellular_llt_character_values_by_degree(
+    area: &[u8],
+) -> Option<BTreeMap<u32, BTreeMap<Partition, i64>>> {
+    let frobenius = unicellular_llt_frobenius_target(area)?;
+    let n = area.len() as u32;
+    let cycle_types = Partition::all_of_size(n);
+    let mut result = BTreeMap::new();
+
+    for (degree, schur_function) in frobenius {
+        let mut character_values = BTreeMap::new();
+        for cycle_type in &cycle_types {
+            let value = schur_function
+                .terms()
+                .iter()
+                .map(|(lambda, &multiplicity)| multiplicity * sn_character(lambda, cycle_type))
+                .sum();
+            if value != 0 {
+                character_values.insert(cycle_type.clone(), value);
+            }
+        }
+        result.insert(degree, character_values);
+    }
+
+    Some(result)
+}
+
 /// Unit-interval graph edges from an area sequence.
 ///
 /// Vertex `j` is adjacent to `j - gap` for `1 <= gap <= area[j]`.
@@ -65,6 +132,13 @@ pub fn unit_interval_edges(area: &[u8]) -> Vec<(usize, usize)> {
     }
     edges.sort_unstable();
     edges
+}
+
+fn is_area_sequence(area: &[u8]) -> bool {
+    area.iter().enumerate().all(|(i, &v)| v as usize <= i)
+        && area
+            .windows(2)
+            .all(|w| usize::from(w[1]) <= usize::from(w[0]) + 1)
 }
 
 fn count_llt_colorings_of_type(
@@ -145,6 +219,16 @@ fn next_multiset_perm(perm: &mut [usize]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::frobenius::graded_frobenius_from_character_values;
+    use num_rational::Ratio;
+
+    fn p(parts: &[u32]) -> Partition {
+        Partition::new(parts.to_vec())
+    }
+
+    fn q(n: i64) -> Ratio<i64> {
+        Ratio::from_integer(n)
+    }
 
     #[test]
     fn test_unit_interval_edges() {
@@ -195,5 +279,65 @@ mod tests {
             f.coefficient(&Partition::new(vec![1, 1, 1])),
             UnivariatePolynomial::new(vec![1, 2, 2, 1])
         );
+    }
+
+    #[test]
+    fn test_unicellular_llt_frobenius_target_edgeless_s3() {
+        let target = unicellular_llt_frobenius_target(&[0, 0, 0]).unwrap();
+
+        assert_eq!(target.keys().copied().collect::<Vec<_>>(), vec![0]);
+        assert_eq!(target[&0].coefficient(&p(&[3])), 1);
+        assert_eq!(target[&0].coefficient(&p(&[2, 1])), 2);
+        assert_eq!(target[&0].coefficient(&p(&[1, 1, 1])), 1);
+        assert_eq!(target[&0].terms().len(), 3);
+    }
+
+    #[test]
+    fn test_unicellular_llt_frobenius_target_rejects_invalid_area() {
+        assert!(unicellular_llt_frobenius_target(&[0, 2]).is_none());
+        assert!(unicellular_llt_character_values_by_degree(&[0, 2]).is_none());
+    }
+
+    #[test]
+    fn test_unicellular_llt_characters_reconstruct_frobenius() {
+        let area = [0, 1, 1];
+        let target = unicellular_llt_frobenius_target(&area).unwrap();
+        let character_values = unicellular_llt_character_values_by_degree(&area).unwrap();
+        let rational_character_values: BTreeMap<_, BTreeMap<_, _>> = character_values
+            .into_iter()
+            .map(|(degree, values)| {
+                (
+                    degree,
+                    values
+                        .into_iter()
+                        .map(|(cycle_type, value)| (cycle_type, q(value)))
+                        .collect(),
+                )
+            })
+            .collect();
+        let reconstructed = graded_frobenius_from_character_values(&rational_character_values);
+
+        for (&degree, target_degree) in &target {
+            let reconstructed_schur = reconstructed[&degree].to_schur_basis();
+            let target_schur = target_degree.to_schur_basis();
+            for partition in Partition::all_of_size(area.len() as u32) {
+                assert_eq!(
+                    reconstructed_schur.coefficient(&partition),
+                    q(target_schur.coefficient(&partition))
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_unicellular_llt_complete_graph_s3_character_values() {
+        let values = unicellular_llt_character_values_by_degree(&[0, 1, 2]).unwrap();
+
+        assert_eq!(values[&0][&p(&[1, 1, 1])], 1);
+        assert_eq!(values[&0][&p(&[2, 1])], 1);
+        assert_eq!(values[&0][&p(&[3])], 1);
+        assert_eq!(values[&3][&p(&[1, 1, 1])], 1);
+        assert_eq!(values[&3][&p(&[2, 1])], -1);
+        assert_eq!(values[&3][&p(&[3])], 1);
     }
 }
