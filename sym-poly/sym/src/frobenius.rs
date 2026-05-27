@@ -62,6 +62,28 @@ pub fn frobenius_from_trace_matrices<C: Ring>(
     frobenius_from_character_values(&character_values)
 }
 
+/// Build graded Frobenius characteristics from character values by degree.
+pub fn graded_frobenius_from_character_values<C: Ring>(
+    graded_character_values: &BTreeMap<u32, BTreeMap<Partition, C>>,
+) -> BTreeMap<u32, SymmetricFunction<C>> {
+    graded_character_values
+        .iter()
+        .map(|(&degree, character_values)| {
+            (degree, frobenius_from_character_values(character_values))
+        })
+        .collect()
+}
+
+/// Build graded Frobenius characteristics from action matrices by degree.
+pub fn graded_frobenius_from_trace_matrices<C: Ring>(
+    graded_action_matrices: &BTreeMap<u32, BTreeMap<Partition, Matrix<C>>>,
+) -> BTreeMap<u32, SymmetricFunction<C>> {
+    graded_action_matrices
+        .iter()
+        .map(|(&degree, action_matrices)| (degree, frobenius_from_trace_matrices(action_matrices)))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -125,5 +147,22 @@ mod tests {
         let schur = frobenius_from_trace_matrices(&matrices).to_schur_basis();
         assert_eq!(schur.coefficient(&p(&[1, 1])), q(1));
         assert_eq!(schur.terms().len(), 1);
+    }
+
+    #[test]
+    fn test_graded_frobenius_from_character_values() {
+        let graded_values = BTreeMap::from([
+            (0, character_table(&[(&[2], 1), (&[1, 1], 1)])),
+            (1, character_table(&[(&[2], -1), (&[1, 1], 1)])),
+        ]);
+
+        let graded = graded_frobenius_from_character_values(&graded_values);
+        let degree_zero = graded[&0].to_schur_basis();
+        let degree_one = graded[&1].to_schur_basis();
+
+        assert_eq!(degree_zero.coefficient(&p(&[2])), q(1));
+        assert_eq!(degree_zero.terms().len(), 1);
+        assert_eq!(degree_one.coefficient(&p(&[1, 1])), q(1));
+        assert_eq!(degree_one.terms().len(), 1);
     }
 }

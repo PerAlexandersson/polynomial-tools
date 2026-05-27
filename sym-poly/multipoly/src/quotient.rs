@@ -189,6 +189,86 @@ pub fn quotient_basis_degrees(basis: &QuotientBasis) -> BTreeMap<u32, Vec<usize>
     by_degree
 }
 
+pub fn restrict_matrix_to_indices<C: Field>(matrix: &[Vec<C>], indices: &[usize]) -> Matrix<C> {
+    let dim = matrix.len();
+    assert!(
+        matrix.iter().all(|row| row.len() == dim),
+        "matrix must be square"
+    );
+    assert!(
+        indices.iter().all(|&i| i < dim),
+        "matrix index out of range"
+    );
+
+    indices
+        .iter()
+        .map(|&row| {
+            indices
+                .iter()
+                .map(|&col| matrix[row][col].clone())
+                .collect()
+        })
+        .collect()
+}
+
+pub fn quotient_action_matrix_degree_blocks<C: Field>(
+    basis: &QuotientBasis,
+    action_matrix: &[Vec<C>],
+) -> BTreeMap<u32, Matrix<C>> {
+    assert_eq!(
+        action_matrix.len(),
+        basis.dimension(),
+        "action matrix has the wrong number of rows"
+    );
+    assert!(
+        action_matrix
+            .iter()
+            .all(|row| row.len() == basis.dimension()),
+        "action matrix has the wrong number of columns"
+    );
+
+    quotient_basis_degrees(basis)
+        .into_iter()
+        .map(|(degree, indices)| (degree, restrict_matrix_to_indices(action_matrix, &indices)))
+        .collect()
+}
+
+pub fn quotient_action_matrices_by_permutation_and_degree<C: Field>(
+    gb: &GroebnerBasis<C>,
+    basis: &QuotientBasis,
+    permutation: &[usize],
+) -> Option<BTreeMap<u32, Matrix<C>>> {
+    let action = quotient_action_matrix_by_permutation(gb, basis, permutation)?;
+    Some(quotient_action_matrix_degree_blocks(basis, &action))
+}
+
+pub fn is_degree_preserving_action_matrix<C: Field>(
+    basis: &QuotientBasis,
+    action_matrix: &[Vec<C>],
+) -> bool {
+    if action_matrix.len() != basis.dimension()
+        || action_matrix
+            .iter()
+            .any(|row| row.len() != basis.dimension())
+    {
+        return false;
+    }
+
+    let degrees: Vec<u32> = basis
+        .monomials
+        .iter()
+        .map(|monomial| monomial.iter().sum())
+        .collect();
+    for row in 0..basis.dimension() {
+        for col in 0..basis.dimension() {
+            if degrees[row] != degrees[col] && !action_matrix[row][col].is_zero() {
+                return false;
+            }
+        }
+    }
+    true
+}
+
 fn enumerate_box(bounds: &[u32], index: usize, current: &mut [u32], monomials: &mut Vec<Vec<u32>>) {
     if index == bounds.len() {
         monomials.push(current.to_vec());
@@ -288,6 +368,15 @@ mod tests {
         assert_eq!(
             quotient_basis_degrees(&basis),
             BTreeMap::from([(0, vec![0]), (1, vec![1])])
+        );
+        assert!(is_degree_preserving_action_matrix(&basis, &action));
+        assert_eq!(
+            quotient_action_matrix_degree_blocks(&basis, &action),
+            BTreeMap::from([(0, vec![vec![q(1)]]), (1, vec![vec![q(-1)]])])
+        );
+        assert_eq!(
+            quotient_action_matrices_by_permutation_and_degree(&gb, &basis, &[1, 0]).unwrap(),
+            BTreeMap::from([(0, vec![vec![q(1)]]), (1, vec![vec![q(-1)]])])
         );
     }
 }

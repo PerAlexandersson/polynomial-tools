@@ -31,6 +31,7 @@ pub mod operators;
 pub mod quotient;
 pub mod schubert_polynomial;
 pub mod slide_polynomial;
+pub mod symmetric_polynomials;
 pub mod transition;
 
 pub use atom_polynomial::{atom_polynomial, t_atom_polynomial};
@@ -63,12 +64,15 @@ pub use operators::{
     ttheta_word,
 };
 pub use quotient::{
-    normal_form_in_basis, permute_variables, pure_power_bounds,
-    quotient_action_matrix_by_permutation, quotient_basis, quotient_basis_degrees,
-    quotient_coordinates, standard_monomials_from_leading_monomials, QuotientBasis,
+    is_degree_preserving_action_matrix, normal_form_in_basis, permute_variables, pure_power_bounds,
+    quotient_action_matrices_by_permutation_and_degree, quotient_action_matrix_by_permutation,
+    quotient_action_matrix_degree_blocks, quotient_basis, quotient_basis_degrees,
+    quotient_coordinates, restrict_matrix_to_indices, standard_monomials_from_leading_monomials,
+    QuotientBasis,
 };
 pub use schubert_polynomial::{
     schubert_polynomial, schubert_to_atom, schubert_to_fund_slide, schubert_to_key,
     schubert_to_monomial,
 };
 pub use slide_polynomial::{fundamental_slide_polynomial, monomial_slide_polynomial};
+pub use symmetric_polynomials::{elementary_symmetric_generators, elementary_symmetric_polynomial};
