@@ -9,12 +9,17 @@
 //!
 //! 1. Verify *f* is homogeneous with nonnegative coefficients.
 //! 2. If deg ≤ 1, accept.
-//! 3. If deg = 2, extract the Hessian and check that every 2×2 principal
-//!    minor is ≤ 0 (equivalently, `h_ii · h_jj ≤ h_ij²` for all *i ≠ j*).
+//! 3. If deg = 2, extract the Hessian, use the 2×2 principal minors as a
+//!    fast necessary check, then count the positive eigenvalues of the full
+//!    Hessian.
 //! 4. If deg > 2, check that every first partial derivative ∂f/∂xᵢ is
 //!    Lorentzian (recursion reduces degree by 1 each step).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+
+use num_bigint::BigInt;
+use num_rational::Ratio;
+use num_traits::Zero;
 
 use crate::multipoly::MultiPoly;
 
@@ -35,6 +40,14 @@ pub enum LorentzianResult {
         derivative_seq: Vec<usize>,
         /// The two variable indices for which `h_ii·h_jj > h_ij²`.
         vars: (usize, usize),
+    },
+    /// Not Lorentzian: a degree-2 derivative has a Hessian with too many
+    /// positive eigenvalues.
+    HessianInertiaFailure {
+        /// The derivative sequence that produced the failing quadratic.
+        derivative_seq: Vec<usize>,
+        /// Number of positive eigenvalues found.
+        positive_eigenvalues: usize,
     },
 }
 
@@ -112,12 +125,13 @@ fn check_lorentzian_recursive(
 ///
 /// The actual Hessian has H\[i\]\[i\] = 2·c(xᵢ²) and H\[i\]\[j\] = c(xᵢxⱼ),
 /// so the 2×2 minor condition is 4·c(xᵢ²)·c(xⱼ²) ≤ c(xᵢxⱼ)².
+/// These minors are only a fast necessary filter; the full Hessian must
+/// have at most one positive eigenvalue.
 fn check_quadratic_lorentzian(f: &MultiPoly<i64>, deriv_seq: &[usize]) -> LorentzianResult {
     let n = f.num_vars();
 
-    // Extract coefficient matrix from degree-2 polynomial.
-    // h[i][j] = coefficient of xᵢxⱼ (= xᵢ² when i==j).
-    let mut h = vec![vec![0i64; n]; n];
+    // Extract the actual Hessian matrix.
+    let mut h = vec![vec![0i128; n]; n];
     for (exp, &coeff) in f.terms() {
         let mut vars = Vec::new();
         for (v, &e) in exp.iter().enumerate() {
@@ -128,20 +142,18 @@ fn check_quadratic_lorentzian(f: &MultiPoly<i64>, deriv_seq: &[usize]) -> Lorent
         debug_assert_eq!(vars.len(), 2);
         let (i, j) = (vars[0], vars[1]);
         if i == j {
-            h[i][i] = coeff;
+            h[i][i] = 2 * coeff as i128;
         } else {
-            h[i][j] = coeff;
-            h[j][i] = coeff;
+            h[i][j] = coeff as i128;
+            h[j][i] = coeff as i128;
         }
     }
 
-    // Hessian has diagonal 2·h[i][i] and off-diagonal h[i][j].
-    // 2×2 minor: (2·h[i][i])(2·h[j][j]) - h[i][j]² ≤ 0
-    //         ⟺ 4·h[i][i]·h[j][j] ≤ h[i][j]²
+    // Fast 2×2 necessary check.
     for i in 0..n {
         for j in (i + 1)..n {
-            let diag_prod = 4 * h[i][i] as i128 * h[j][j] as i128;
-            let off_sq = h[i][j] as i128 * h[i][j] as i128;
+            let diag_prod = h[i][i] * h[j][j];
+            let off_sq = h[i][j] * h[i][j];
             if diag_prod > off_sq {
                 return LorentzianResult::HessianFailure {
                     derivative_seq: deriv_seq.to_vec(),
@@ -150,6 +162,15 @@ fn check_quadratic_lorentzian(f: &MultiPoly<i64>, deriv_seq: &[usize]) -> Lorent
             }
         }
     }
+
+    let positive_eigenvalues = positive_eigenvalue_count(&h);
+    if positive_eigenvalues > 1 {
+        return LorentzianResult::HessianInertiaFailure {
+            derivative_seq: deriv_seq.to_vec(),
+            positive_eigenvalues,
+        };
+    }
+
     LorentzianResult::Yes
 }
 
@@ -161,13 +182,118 @@ fn partial_derivative(f: &MultiPoly<i64>, var: usize) -> MultiPoly<i64> {
         if exp[var] == 0 {
             continue;
         }
-        let new_coeff = coeff * exp[var] as i64;
+        let new_coeff = coeff
+            .checked_mul(i64::from(exp[var]))
+            .expect("partial derivative coefficient overflow");
         let mut new_exp = exp.clone();
         new_exp[var] -= 1;
         let entry = terms.entry(new_exp).or_insert(0i64);
-        *entry += new_coeff;
+        *entry = entry
+            .checked_add(new_coeff)
+            .expect("partial derivative coefficient overflow");
     }
     MultiPoly::from_terms(n, terms)
+}
+
+/// Count positive eigenvalues of a real symmetric matrix.
+///
+/// The count is computed exactly by rational congruence diagonalization, so
+/// Sylvester inertia is preserved without floating-point tolerances.
+fn positive_eigenvalue_count(matrix: &[Vec<i128>]) -> usize {
+    let n = matrix.len();
+    if n == 0 {
+        return 0;
+    }
+
+    type BigRat = Ratio<BigInt>;
+
+    let mut a: Vec<Vec<BigRat>> = matrix
+        .iter()
+        .map(|row| {
+            row.iter()
+                .map(|&x| BigRat::from_integer(BigInt::from(x)))
+                .collect()
+        })
+        .collect();
+
+    let mut positives = 0;
+    let mut k = 0;
+
+    while k < n {
+        let mut pivot = (k..n).find(|&i| !a[i][i].is_zero());
+
+        if pivot.is_none() {
+            let mut offdiag = None;
+            'outer: for i in k..n {
+                for j in (i + 1)..n {
+                    if !a[i][j].is_zero() {
+                        offdiag = Some((i, j));
+                        break 'outer;
+                    }
+                }
+            }
+            if let Some((i, j)) = offdiag {
+                add_basis_vector(&mut a, i, j, k);
+                pivot = Some(i);
+            } else {
+                break;
+            }
+        }
+
+        let pivot = pivot.unwrap();
+        if pivot != k {
+            swap_symmetric(&mut a, pivot, k);
+        }
+
+        let pivot_value = a[k][k].clone();
+        debug_assert!(!pivot_value.is_zero());
+        if pivot_value > BigRat::zero() {
+            positives += 1;
+        }
+
+        for i in (k + 1)..n {
+            for j in i..n {
+                let correction = a[i][k].clone() * a[k][j].clone() / pivot_value.clone();
+                let updated = a[i][j].clone() - correction;
+                a[i][j] = updated.clone();
+                if i != j {
+                    a[j][i] = updated;
+                }
+            }
+        }
+
+        for i in (k + 1)..n {
+            a[i][k] = BigRat::zero();
+            a[k][i] = BigRat::zero();
+        }
+
+        k += 1;
+    }
+
+    positives
+}
+
+fn swap_symmetric<T>(matrix: &mut [Vec<T>], i: usize, j: usize) {
+    matrix.swap(i, j);
+    for row in matrix {
+        row.swap(i, j);
+    }
+}
+
+fn add_basis_vector<T>(matrix: &mut [Vec<T>], target: usize, source: usize, start: usize)
+where
+    T: Clone + std::ops::AddAssign,
+{
+    let n = matrix.len();
+    let source_row: Vec<T> = (start..n).map(|col| matrix[source][col].clone()).collect();
+    let source_col: Vec<T> = (start..n).map(|row| matrix[row][source].clone()).collect();
+
+    for (offset, col) in (start..n).enumerate() {
+        matrix[target][col] += source_row[offset].clone();
+    }
+    for (offset, row) in (start..n).enumerate() {
+        matrix[row][target] += source_col[offset].clone();
+    }
 }
 
 /// Convenience: check Lorentzian and return a bool.
@@ -200,13 +326,17 @@ pub fn is_strictly_lorentzian(f: &MultiPoly<i64>) -> LorentzianResult {
 /// g(x) = Σ c_α x^α / α!  is Lorentzian.
 ///
 /// Because ∂ⁱ(x^α / α!) = x^{α−eᵢ} / (α−eᵢ)!, the Hessian of the
-/// (d−2)-fold derivative of g has entries c_{β+eᵢ+eⱼ}.  The Lorentzian
-/// condition therefore becomes, for every |β| = d−2 and every i ≠ j:
+/// (d−2)-fold derivative of g has entries c_{β+eᵢ+eⱼ}.  Thus for every
+/// |β| = d−2 the full matrix
 ///
-/// > c_{β+2eᵢ} · c_{β+2eⱼ}  ≤  c_{β+eᵢ+eⱼ}²
+/// > H_β(i,j) = c_{β+eᵢ+eⱼ}
 ///
-/// This works directly on the coefficients of f — no factorial division
-/// or rational arithmetic required.
+/// must have at most one positive eigenvalue.  The pairwise inequalities
+/// c_{β+2eᵢ} · c_{β+2eⱼ} ≤ c_{β+eᵢ+eⱼ}² are checked first as a fast
+/// necessary filter, but they are not sufficient in three or more variables.
+///
+/// This works directly on the coefficients of f; no factorial division is
+/// required.
 pub fn is_normalized_lorentzian(f: &MultiPoly<i64>) -> LorentzianResult {
     if f.is_zero() {
         return LorentzianResult::Yes;
@@ -233,50 +363,90 @@ pub fn is_normalized_lorentzian(f: &MultiPoly<i64>) -> LorentzianResult {
     }
 
     let n = f.num_vars();
+    let bases = normalized_hessian_bases(f, d);
 
-    // For each pair (i, j) with i < j, collect the base vectors β
-    // where both c(β+2eᵢ) > 0 and c(β+2eⱼ) > 0, then verify the inequality.
-    for i in 0..n {
-        for j in (i + 1)..n {
-            // Collect β's from support elements that have ≥ 2 in coordinate i.
-            for (alpha, _) in f.terms() {
-                if alpha[i] < 2 {
-                    continue;
-                }
-                let mut beta = alpha.clone();
-                beta[i] -= 2;
-                // β is now a candidate base for the (i,j) check.
-                // Need c(β+2eⱼ) to be nonzero for the check to be non-trivial.
-                let mut beta_2j = beta.clone();
-                beta_2j[j] += 2;
-                let c_2j = f.coefficient(&beta_2j);
-                if c_2j == 0 {
-                    continue;
-                }
-                let c_2i = f.coefficient(alpha); // = c(β+2eᵢ)
-                let mut beta_ij = beta.clone();
-                beta_ij[i] += 1;
-                beta_ij[j] += 1;
-                let c_ij = f.coefficient(&beta_ij);
+    for beta in bases {
+        let h = normalized_hessian_matrix(f, &beta);
 
-                // Check: c_2i * c_2j ≤ c_ij²
-                let lhs = c_2i as i128 * c_2j as i128;
-                let rhs = c_ij as i128 * c_ij as i128;
+        // Fast 2×2 necessary check.
+        for i in 0..n {
+            for j in (i + 1)..n {
+                let lhs = h[i][i] * h[j][j];
+                let rhs = h[i][j] * h[i][j];
                 if lhs > rhs {
                     return LorentzianResult::HessianFailure {
-                        derivative_seq: beta
-                            .iter()
-                            .enumerate()
-                            .flat_map(|(v, &e)| std::iter::repeat(v).take(e as usize))
-                            .collect(),
+                        derivative_seq: beta_to_derivative_seq(&beta),
                         vars: (i, j),
                     };
                 }
             }
         }
+
+        let positive_eigenvalues = positive_eigenvalue_count(&h);
+        if positive_eigenvalues > 1 {
+            return LorentzianResult::HessianInertiaFailure {
+                derivative_seq: beta_to_derivative_seq(&beta),
+                positive_eigenvalues,
+            };
+        }
     }
 
     LorentzianResult::Yes
+}
+
+fn normalized_hessian_bases(f: &MultiPoly<i64>, degree: u32) -> BTreeSet<Vec<u32>> {
+    let n = f.num_vars();
+    let mut bases = BTreeSet::new();
+
+    if degree < 2 {
+        return bases;
+    }
+
+    for alpha in f.terms().keys() {
+        for i in 0..n {
+            for j in i..n {
+                if i == j {
+                    if alpha[i] < 2 {
+                        continue;
+                    }
+                } else if alpha[i] == 0 || alpha[j] == 0 {
+                    continue;
+                }
+
+                let mut beta = alpha.clone();
+                beta[i] -= 1;
+                beta[j] -= 1;
+                bases.insert(beta);
+            }
+        }
+    }
+
+    bases
+}
+
+fn normalized_hessian_matrix(f: &MultiPoly<i64>, beta: &[u32]) -> Vec<Vec<i128>> {
+    let n = f.num_vars();
+    let mut h = vec![vec![0i128; n]; n];
+
+    for i in 0..n {
+        for j in i..n {
+            let mut alpha = beta.to_vec();
+            alpha[i] += 1;
+            alpha[j] += 1;
+            let coeff = f.coefficient(&alpha) as i128;
+            h[i][j] = coeff;
+            h[j][i] = coeff;
+        }
+    }
+
+    h
+}
+
+fn beta_to_derivative_seq(beta: &[u32]) -> Vec<usize> {
+    beta.iter()
+        .enumerate()
+        .flat_map(|(v, &e)| std::iter::repeat(v).take(e as usize))
+        .collect()
 }
 
 /// Normalized Lorentzian check as a bool.
@@ -374,6 +544,27 @@ mod tests {
     }
 
     #[test]
+    fn test_positive_eigenvalue_count_exact_zero_diagonal_pivot() {
+        assert_eq!(positive_eigenvalue_count(&[vec![0, 1], vec![1, 0]]), 1);
+        assert_eq!(
+            positive_eigenvalue_count(&[vec![0, 1, 1], vec![1, 0, 1], vec![1, 1, 0],]),
+            1
+        );
+    }
+
+    #[test]
+    fn test_positive_eigenvalue_count_exact_diagonal_cases() {
+        assert_eq!(
+            positive_eigenvalue_count(&[vec![2, 0, 0], vec![0, -1, 0], vec![0, 0, 0],]),
+            1
+        );
+        assert_eq!(
+            positive_eigenvalue_count(&[vec![1, 0, 0], vec![0, 1, 0], vec![0, 0, 1],]),
+            3
+        );
+    }
+
+    #[test]
     fn test_zero_is_lorentzian() {
         let f = MultiPoly::<i64>::zero(3);
         assert!(is_lorentzian_bool(&f));
@@ -437,10 +628,35 @@ mod tests {
     }
 
     #[test]
+    fn test_quadratic_pairwise_minors_not_sufficient() {
+        // The fast 2x2 principal-minor checks pass, but the full Hessian has
+        // two positive eigenvalues.
+        let f = poly_from_map(
+            4,
+            vec![
+                (vec![1, 1, 0, 0], 2),
+                (vec![1, 0, 1, 0], 2),
+                (vec![1, 0, 0, 1], 2),
+                (vec![0, 1, 0, 1], 2),
+                (vec![0, 0, 0, 2], 1),
+            ],
+        );
+        let r = is_lorentzian(&f);
+        assert!(matches!(
+            r,
+            LorentzianResult::HessianInertiaFailure {
+                positive_eigenvalues: 2,
+                ..
+            }
+        ));
+    }
+
+    #[test]
     fn test_quadratic_not_lorentzian_subtle() {
         // q = x² + xy + y². Hessian [[2,1],[1,2]], eigenvalues 3,1.
         // Two positive eigenvalues → NOT Lorentzian.
-        // (But IS normalized-Lorentzian since 1·1 ≤ 1.)
+        // In two variables the normalized Hessian check is equivalent to
+        // the normalized pairwise inequality, so this is normalized-Lorentzian.
         let f = poly_from_map(2, vec![(vec![2, 0], 1), (vec![1, 1], 1), (vec![0, 2], 1)]);
         assert!(!is_lorentzian_bool(&f));
         assert!(is_normalized_lorentzian_bool(&f));
@@ -661,6 +877,32 @@ mod tests {
         // c_{20}·c_{02} = 1 > c_{11}² = 0. Fails.
         let f = poly_from_map(2, vec![(vec![2, 0], 1), (vec![0, 2], 1)]);
         assert!(!is_normalized_lorentzian_bool(&f));
+    }
+
+    #[test]
+    fn test_normalized_pairwise_minors_not_sufficient() {
+        // This normalized Hessian has entries
+        // [[0,1,1,1], [1,0,0,1], [1,0,0,0], [1,1,0,1]].
+        // All pairwise normalized inequalities pass, but the full Hessian has
+        // two positive eigenvalues.
+        let f = poly_from_map(
+            4,
+            vec![
+                (vec![1, 1, 0, 0], 1),
+                (vec![1, 0, 1, 0], 1),
+                (vec![1, 0, 0, 1], 1),
+                (vec![0, 1, 0, 1], 1),
+                (vec![0, 0, 0, 2], 1),
+            ],
+        );
+        let r = is_normalized_lorentzian(&f);
+        assert!(matches!(
+            r,
+            LorentzianResult::HessianInertiaFailure {
+                positive_eigenvalues: 2,
+                ..
+            }
+        ));
     }
 
     #[test]

@@ -282,30 +282,17 @@ mod tests {
             let f = MultiPolyFunction::<i64>::key(alpha);
             let expanded = f.to_multipoly();
             let direct: MultiPoly<i64> = key_polynomial(alpha);
-            assert_eq!(
-                expanded, direct,
-                "key mismatch for alpha = {:?}",
-                alpha
-            );
+            assert_eq!(expanded, direct, "key mismatch for alpha = {:?}", alpha);
         }
     }
 
     #[test]
     fn test_atom_to_monomial_matches_direct() {
-        for alpha in &[
-            vec![2, 1],
-            vec![1, 2],
-            vec![0, 2],
-            vec![1, 0, 2],
-        ] {
+        for alpha in &[vec![2, 1], vec![1, 2], vec![0, 2], vec![1, 0, 2]] {
             let f = MultiPolyFunction::<i64>::atom(alpha);
             let expanded = f.to_multipoly();
             let direct: MultiPoly<i64> = atom_polynomial(alpha);
-            assert_eq!(
-                expanded, direct,
-                "atom mismatch for alpha = {:?}",
-                alpha
-            );
+            assert_eq!(expanded, direct, "atom mismatch for alpha = {:?}", alpha);
         }
     }
 
@@ -414,12 +401,7 @@ mod tests {
     #[test]
     fn test_key_to_fund_slide_positive() {
         // Key polynomials expand positively in fundamental slides (Assaf-Searles 2018)
-        for alpha in &[
-            vec![1, 2],
-            vec![0, 3],
-            vec![1, 0, 2],
-            vec![0, 1, 2],
-        ] {
+        for alpha in &[vec![1, 2], vec![0, 3], vec![1, 0, 2], vec![0, 1, 2]] {
             let f = MultiPolyFunction::<i64>::key(alpha);
             let in_slides = f.to_fund_slide_basis();
             assert!(
@@ -495,14 +477,8 @@ mod tests {
         let a = MultiPolyFunction::<i64>::key(&[1, 2]);
         let b = MultiPolyFunction::<i64>::key(&[0, 3]);
         let sum = a.clone() + b.clone();
-        assert_eq!(
-            sum.coefficient(&WeakComposition::from_slice(&[1, 2])),
-            1
-        );
-        assert_eq!(
-            sum.coefficient(&WeakComposition::from_slice(&[0, 3])),
-            1
-        );
+        assert_eq!(sum.coefficient(&WeakComposition::from_slice(&[1, 2])), 1);
+        assert_eq!(sum.coefficient(&WeakComposition::from_slice(&[0, 3])), 1);
         let diff = sum - b;
         assert_eq!(diff, a);
     }
