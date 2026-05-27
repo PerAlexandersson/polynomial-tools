@@ -57,20 +57,12 @@ pub fn chromatic_qsym_asc(
         return QSymFunction::basis_element(QSymBasis::Monomial, Composition::empty());
     }
 
+    let normalized_edges = normalize_edges(n, edges);
     let mut adj: Vec<Vec<bool>> = vec![vec![false; n]; n];
-    let mut normalized_edges = Vec::new();
-    for &(u, v) in edges {
-        assert!(u < n && v < n, "edge endpoint out of range");
-        if u == v {
-            continue;
-        }
+    for &(u, v) in &normalized_edges {
         adj[u][v] = true;
         adj[v][u] = true;
-        let edge = if u < v { (u, v) } else { (v, u) };
-        normalized_edges.push(edge);
     }
-    normalized_edges.sort_unstable();
-    normalized_edges.dedup();
 
     let mut terms: BTreeMap<Composition, UnivariatePolynomial<i64>> = BTreeMap::new();
 
@@ -78,6 +70,33 @@ pub fn chromatic_qsym_asc(
         process_ordered_partition_with_ascents(
             &partition.into_blocks(),
             &adj,
+            &normalized_edges,
+            &mut terms,
+        );
+    }
+
+    QSymFunction::from_terms(QSymBasis::Monomial, terms)
+}
+
+/// LLT-style all-coloring quasisymmetric function with ascent weights.
+///
+/// This uses the same ascent statistic as [`chromatic_qsym_asc`], but removes
+/// the proper-coloring condition. For unit-interval graphs, the symmetric
+/// projection is the graph/unicellular LLT polynomial with the same edge set.
+pub fn coloring_qsym_asc(
+    n: usize,
+    edges: &[(usize, usize)],
+) -> QSymFunction<UnivariatePolynomial<i64>> {
+    if n == 0 {
+        return QSymFunction::basis_element(QSymBasis::Monomial, Composition::empty());
+    }
+
+    let normalized_edges = normalize_edges(n, edges);
+    let mut terms: BTreeMap<Composition, UnivariatePolynomial<i64>> = BTreeMap::new();
+
+    for partition in ordered_set_partitions(n) {
+        process_ordered_partition_all_colorings_with_ascents(
+            &partition.into_blocks(),
             &normalized_edges,
             &mut terms,
         );
@@ -140,12 +159,49 @@ fn process_ordered_partition_with_ascents(
     *entry = entry.clone() + UnivariatePolynomial::monomial(ascents, 1);
 }
 
+fn process_ordered_partition_all_colorings_with_ascents(
+    blocks: &[Vec<usize>],
+    edges: &[(usize, usize)],
+    terms: &mut BTreeMap<Composition, UnivariatePolynomial<i64>>,
+) {
+    let mut block_of = vec![0usize; blocks.iter().map(Vec::len).sum()];
+    for (block_idx, block) in blocks.iter().enumerate() {
+        for &vertex in block {
+            block_of[vertex] = block_idx;
+        }
+    }
+
+    let ascents = edges
+        .iter()
+        .filter(|&&(u, v)| block_of[u] < block_of[v])
+        .count();
+    let comp = Composition::new(blocks.iter().map(|block| block.len() as u32).collect());
+    let entry = terms.entry(comp).or_insert_with(UnivariatePolynomial::zero);
+    *entry = entry.clone() + UnivariatePolynomial::monomial(ascents, 1);
+}
+
+fn normalize_edges(n: usize, edges: &[(usize, usize)]) -> Vec<(usize, usize)> {
+    let mut normalized_edges = Vec::new();
+    for &(u, v) in edges {
+        assert!(u < n && v < n, "edge endpoint out of range");
+        if u == v {
+            continue;
+        }
+        normalized_edges.push(if u < v { (u, v) } else { (v, u) });
+    }
+    normalized_edges.sort_unstable();
+    normalized_edges.dedup();
+    normalized_edges
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use combinatoric_core::Graph;
     use std::collections::BTreeMap;
-    use sym_poly_sym::{chromatic_symmetric, hessenberg_area_dot_frobenius_target};
+    use sym_poly_sym::{
+        chromatic_symmetric, hessenberg_area_dot_frobenius_target, unicellular_llt,
+    };
 
     use crate::sym_qsym::symmetric_qsym_to_sym;
 
@@ -310,6 +366,21 @@ mod tests {
     }
 
     #[test]
+    fn test_coloring_qsym_asc_edge() {
+        let f = coloring_qsym_asc(2, &[(0, 1)]);
+
+        assert_eq!(
+            f.coefficient(&Composition::new(vec![2])),
+            UnivariatePolynomial::new(vec![1])
+        );
+        assert_eq!(
+            f.coefficient(&Composition::new(vec![1, 1])),
+            UnivariatePolynomial::new(vec![1, 1])
+        );
+        assert_eq!(f.terms().len(), 2);
+    }
+
+    #[test]
     fn test_chromatic_qsym_asc_specializes_at_one() {
         let g = Graph::path(3);
         let weighted = chromatic_qsym_asc(g.num_vertices(), g.edges());
@@ -327,5 +398,15 @@ mod tests {
         let target = hessenberg_area_dot_frobenius_target(&area).unwrap();
 
         assert_eq!(from_qsym, target);
+    }
+
+    #[test]
+    fn test_unit_interval_coloring_qsym_projects_to_unicellular_llt() {
+        let area = [0, 1, 1];
+        let graph = Graph::unit_interval(&area);
+        let qsym = coloring_qsym_asc(graph.num_vertices(), graph.edges());
+        let from_qsym = symmetric_qsym_to_sym(&qsym).unwrap();
+
+        assert_eq!(from_qsym, unicellular_llt(&area));
     }
 }

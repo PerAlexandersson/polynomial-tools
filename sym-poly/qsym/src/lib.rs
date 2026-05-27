@@ -31,7 +31,7 @@ pub mod sym_qsym;
 pub mod transition;
 
 pub use basis::QSymBasis;
-pub use chromatic_qsym::{chromatic_qsym, chromatic_qsym_asc};
+pub use chromatic_qsym::{chromatic_qsym, chromatic_qsym_asc, coloring_qsym_asc};
 pub use p_partition::p_partition_generating_function;
 pub use qsym_function::QSymFunction;
 pub use schur_qsym::{
