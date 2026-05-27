@@ -10,21 +10,66 @@ use crate::division::{multiply_by_monomial, normal_form};
 use crate::monomial_order::{leading_term, monomial_divides, MonomialOrder};
 use crate::MultiPoly;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GroebnerOptions {
+    /// Buchberger product criterion: if leading monomials are relatively
+    /// prime, the corresponding S-polynomial reduces to zero.
+    pub skip_relatively_prime_leading_terms: bool,
+}
+
+impl Default for GroebnerOptions {
+    fn default() -> Self {
+        Self {
+            skip_relatively_prime_leading_terms: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct BuchbergerStats {
+    pub input_generators: usize,
+    pub monic_generators: usize,
+    pub pairs_processed: usize,
+    pub pairs_skipped_relatively_prime: usize,
+    pub zero_remainders: usize,
+    pub nonzero_remainders: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GroebnerComputation<C: Ring> {
+    pub basis: Vec<MultiPoly<C>>,
+    pub stats: BuchbergerStats,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GroebnerBasis<C: Ring> {
     pub num_vars: usize,
     pub order: MonomialOrder,
     pub generators: Vec<MultiPoly<C>>,
+    pub stats: BuchbergerStats,
 }
 
 impl<C: Field> GroebnerBasis<C> {
     pub fn new(generators: Vec<MultiPoly<C>>, order: MonomialOrder) -> Self {
-        let generators = reduced_groebner_basis(&generators, order);
-        let num_vars = generators.first().map(MultiPoly::num_vars).unwrap_or(0);
+        Self::with_options(generators, order, GroebnerOptions::default())
+    }
+
+    pub fn with_options(
+        generators: Vec<MultiPoly<C>>,
+        order: MonomialOrder,
+        options: GroebnerOptions,
+    ) -> Self {
+        let computation = reduced_groebner_basis_with_stats(&generators, order, options);
+        let num_vars = computation
+            .basis
+            .first()
+            .map(MultiPoly::num_vars)
+            .unwrap_or(0);
         Self {
             num_vars,
             order,
-            generators,
+            generators: computation.basis,
+            stats: computation.stats,
         }
     }
 
@@ -57,8 +102,27 @@ pub fn buchberger_basis<C: Field>(
     generators: &[MultiPoly<C>],
     order: MonomialOrder,
 ) -> Vec<MultiPoly<C>> {
+    buchberger_basis_with_options(generators, order, GroebnerOptions::default())
+}
+
+pub fn buchberger_basis_with_options<C: Field>(
+    generators: &[MultiPoly<C>],
+    order: MonomialOrder,
+    options: GroebnerOptions,
+) -> Vec<MultiPoly<C>> {
+    buchberger_basis_with_stats(generators, order, options).basis
+}
+
+pub fn buchberger_basis_with_stats<C: Field>(
+    generators: &[MultiPoly<C>],
+    order: MonomialOrder,
+    options: GroebnerOptions,
+) -> GroebnerComputation<C> {
     if generators.is_empty() {
-        return Vec::new();
+        return GroebnerComputation {
+            basis: Vec::new(),
+            stats: BuchbergerStats::default(),
+        };
     }
     let num_vars = generators[0].num_vars();
     assert!(
@@ -74,13 +138,28 @@ pub fn buchberger_basis<C: Field>(
         .map(|polynomial| make_monic(polynomial, order))
         .collect();
     let mut pairs = all_pairs(basis.len());
+    let mut stats = BuchbergerStats {
+        input_generators: generators.len(),
+        monic_generators: basis.len(),
+        ..BuchbergerStats::default()
+    };
 
     while let Some((i, j)) = pairs.pop() {
+        stats.pairs_processed += 1;
+        if options.skip_relatively_prime_leading_terms
+            && leading_monomials_are_relatively_prime(&basis[i], &basis[j], order)
+        {
+            stats.pairs_skipped_relatively_prime += 1;
+            continue;
+        }
+
         let s = s_polynomial(&basis[i], &basis[j], order);
         let remainder = normal_form(&s, &basis, order);
         if remainder.is_zero() {
+            stats.zero_remainders += 1;
             continue;
         }
+        stats.nonzero_remainders += 1;
         let new_index = basis.len();
         basis.push(make_monic(&remainder, order));
         for i in 0..new_index {
@@ -88,14 +167,31 @@ pub fn buchberger_basis<C: Field>(
         }
     }
 
-    basis
+    GroebnerComputation { basis, stats }
 }
 
 pub fn reduced_groebner_basis<C: Field>(
     generators: &[MultiPoly<C>],
     order: MonomialOrder,
 ) -> Vec<MultiPoly<C>> {
-    let basis = buchberger_basis(generators, order);
+    reduced_groebner_basis_with_options(generators, order, GroebnerOptions::default())
+}
+
+pub fn reduced_groebner_basis_with_options<C: Field>(
+    generators: &[MultiPoly<C>],
+    order: MonomialOrder,
+    options: GroebnerOptions,
+) -> Vec<MultiPoly<C>> {
+    reduced_groebner_basis_with_stats(generators, order, options).basis
+}
+
+pub fn reduced_groebner_basis_with_stats<C: Field>(
+    generators: &[MultiPoly<C>],
+    order: MonomialOrder,
+    options: GroebnerOptions,
+) -> GroebnerComputation<C> {
+    let computation = buchberger_basis_with_stats(generators, order, options);
+    let basis = computation.basis;
     let mut reduced = Vec::new();
 
     for i in 0..basis.len() {
@@ -116,7 +212,10 @@ pub fn reduced_groebner_basis<C: Field>(
         let b_lt = leading_term(b, order).expect("nonzero polynomial");
         order.compare(&b_lt.exponents, &a_lt.exponents)
     });
-    reduced
+    GroebnerComputation {
+        basis: reduced,
+        stats: computation.stats,
+    }
 }
 
 pub fn is_groebner_basis<C: Field>(basis: &[MultiPoly<C>], order: MonomialOrder) -> bool {
@@ -137,6 +236,19 @@ pub fn make_monic<C: Field>(polynomial: &MultiPoly<C>, order: MonomialOrder) -> 
 fn monomial_lcm(a: &[u32], b: &[u32]) -> Vec<u32> {
     assert_eq!(a.len(), b.len(), "monomials have different lengths");
     a.iter().zip(b.iter()).map(|(&x, &y)| x.max(y)).collect()
+}
+
+fn leading_monomials_are_relatively_prime<C: Ring>(
+    f: &MultiPoly<C>,
+    g: &MultiPoly<C>,
+    order: MonomialOrder,
+) -> bool {
+    let lt_f = leading_term(f, order).expect("first polynomial is zero");
+    let lt_g = leading_term(g, order).expect("second polynomial is zero");
+    lt_f.exponents
+        .iter()
+        .zip(lt_g.exponents.iter())
+        .all(|(&a, &b)| a == 0 || b == 0)
 }
 
 fn monomial_difference(a: &[u32], b: &[u32]) -> Vec<u32> {
@@ -222,6 +334,37 @@ mod tests {
         let basis = buchberger_basis(&[g1, g2], MonomialOrder::Lex);
 
         assert!(is_groebner_basis(&basis, MonomialOrder::Lex));
+    }
+
+    #[test]
+    fn test_product_criterion_skips_relatively_prime_leading_terms() {
+        let g1 = mono(&[1, 0], 1) + constant(1);
+        let g2 = mono(&[0, 1], 1) + constant(-1);
+        let computation =
+            buchberger_basis_with_stats(&[g1, g2], MonomialOrder::Lex, GroebnerOptions::default());
+
+        assert_eq!(computation.stats.pairs_processed, 1);
+        assert_eq!(computation.stats.pairs_skipped_relatively_prime, 1);
+        assert_eq!(computation.stats.zero_remainders, 0);
+        assert!(is_groebner_basis(&computation.basis, MonomialOrder::Lex));
+    }
+
+    #[test]
+    fn test_product_criterion_can_be_disabled() {
+        let g1 = mono(&[1, 0], 1) + constant(1);
+        let g2 = mono(&[0, 1], 1) + constant(-1);
+        let computation = buchberger_basis_with_stats(
+            &[g1, g2],
+            MonomialOrder::Lex,
+            GroebnerOptions {
+                skip_relatively_prime_leading_terms: false,
+            },
+        );
+
+        assert_eq!(computation.stats.pairs_processed, 1);
+        assert_eq!(computation.stats.pairs_skipped_relatively_prime, 0);
+        assert_eq!(computation.stats.zero_remainders, 1);
+        assert!(is_groebner_basis(&computation.basis, MonomialOrder::Lex));
     }
 
     #[test]

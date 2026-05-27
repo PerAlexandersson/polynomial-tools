@@ -40,8 +40,10 @@ pub use atom_polynomial::{atom_polynomial, t_atom_polynomial};
 pub use basis::MultiPolyBasis;
 pub use division::{divide_by_polynomials, multiply_by_monomial, normal_form, DivisionResult};
 pub use groebner::{
-    buchberger_basis, is_groebner_basis, make_monic, reduced_groebner_basis, s_polynomial,
-    GroebnerBasis,
+    buchberger_basis, buchberger_basis_with_options, buchberger_basis_with_stats,
+    is_groebner_basis, make_monic, reduced_groebner_basis, reduced_groebner_basis_with_options,
+    reduced_groebner_basis_with_stats, s_polynomial, BuchbergerStats, GroebnerBasis,
+    GroebnerComputation, GroebnerOptions,
 };
 pub use indexed_variables::{
     ideal_generators_are_invariant_under_index_permutation, ideal_generators_are_sn_invariant,
