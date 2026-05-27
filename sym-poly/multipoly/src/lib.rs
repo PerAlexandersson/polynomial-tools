@@ -19,6 +19,7 @@
 pub mod atom_polynomial;
 pub mod basis;
 pub mod division;
+pub mod graded_quotient;
 pub mod groebner;
 pub mod indexed_variables;
 pub mod key_polynomial;
@@ -39,6 +40,10 @@ pub mod transition;
 pub use atom_polynomial::{atom_polynomial, t_atom_polynomial};
 pub use basis::MultiPolyBasis;
 pub use division::{divide_by_polynomials, multiply_by_monomial, normal_form, DivisionResult};
+pub use graded_quotient::{
+    graded_quotient_component, monomials_with_multidegree, polynomial_multidegree,
+    GradedQuotientComponent,
+};
 pub use groebner::{
     buchberger_basis, buchberger_basis_with_options, buchberger_basis_with_stats,
     is_groebner_basis, make_monic, reduced_groebner_basis, reduced_groebner_basis_with_options,
