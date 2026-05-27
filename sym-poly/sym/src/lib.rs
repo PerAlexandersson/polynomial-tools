@@ -9,6 +9,7 @@
 pub mod basis;
 pub mod chromatic;
 pub mod frobenius;
+pub mod hessenberg_gkm;
 pub mod kostka;
 pub mod llt;
 pub mod macdonald;
@@ -25,6 +26,7 @@ pub use frobenius::{
     graded_frobenius_from_character_values, graded_frobenius_from_trace_matrices,
     multigraded_frobenius_from_character_values, multigraded_frobenius_from_trace_matrices,
 };
+pub use hessenberg_gkm::{hessenberg_gkm_dot_action_matrices, hessenberg_gkm_dot_frobenius};
 pub use llt::{graph_llt_symmetric, unicellular_llt, unit_interval_edges};
 pub use macdonald::{
     delta_eigenvalue, delta_modified_macdonald, delta_prime_eigenvalue,
