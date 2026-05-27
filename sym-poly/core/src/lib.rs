@@ -46,7 +46,11 @@ pub use crt::{
 };
 pub use field::Field;
 pub use finite_field::PrimeField;
-pub use finite_sn_module::FiniteSnModule;
+pub use finite_sn_module::{
+    left_permutation_basis_action, permutation_basis_module, right_permutation_basis_action,
+    symmetric_group_permutation_basis, ungraded_permutation_basis_module, FiniteSnModule,
+    PermutationBasis,
+};
 pub use formal_sum::FormalSum;
 pub use index::BasisIndex;
 pub use polynomial::UnivariatePolynomial;

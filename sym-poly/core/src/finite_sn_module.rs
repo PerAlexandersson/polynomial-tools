@@ -10,9 +10,12 @@ use std::marker::PhantomData;
 
 use crate::linear_algebra::{matrix_trace, zero_matrix, Matrix};
 use crate::sn_action::{
-    action_matrix_from_basis, assert_permutation, conjugacy_class_representatives,
+    action_matrix_from_basis, assert_permutation, compose_permutations,
+    conjugacy_class_representatives, inverse_permutation,
 };
 use crate::{Partition, Ring};
+
+pub type PermutationBasis = Vec<usize>;
 
 /// A finite `S_n` module with a chosen homogeneous basis.
 ///
@@ -206,6 +209,77 @@ where
     }
 }
 
+/// The fixed-point basis indexed by permutations in `S_n`.
+pub fn symmetric_group_permutation_basis(n: usize) -> Vec<PermutationBasis> {
+    combinatoric_core::all_permutations_zero_indexed(n)
+}
+
+/// A finite `S_n` module whose basis is indexed by permutations in `S_n`.
+///
+/// This is the natural fixed-point label set for Hessenberg/GKM experiments.
+/// The caller supplies a multidegree for each permutation label.
+pub fn permutation_basis_module<C, F>(
+    symmetric_group_degree: usize,
+    mut multidegree: F,
+) -> FiniteSnModule<PermutationBasis, C>
+where
+    C: Ring,
+    F: FnMut(&[usize]) -> Vec<u32>,
+{
+    let basis = symmetric_group_permutation_basis(symmetric_group_degree);
+    let multidegrees = basis
+        .iter()
+        .map(|permutation| multidegree(permutation))
+        .collect();
+    FiniteSnModule::new(symmetric_group_degree, basis, multidegrees)
+}
+
+/// Ungraded permutation-label module on the basis `S_n`.
+pub fn ungraded_permutation_basis_module<C: Ring>(
+    symmetric_group_degree: usize,
+) -> FiniteSnModule<PermutationBasis, C> {
+    FiniteSnModule::ungraded(
+        symmetric_group_degree,
+        symmetric_group_permutation_basis(symmetric_group_degree),
+    )
+}
+
+/// Left action on permutation labels: `sigma . w = sigma ∘ w`.
+pub fn left_permutation_basis_action<C: Ring>(
+    permutation: &[usize],
+    basis_element: &[usize],
+) -> Vec<(PermutationBasis, C)> {
+    assert_permutation(permutation);
+    assert_permutation(basis_element);
+    assert_eq!(
+        permutation.len(),
+        basis_element.len(),
+        "permutation and basis label have different sizes"
+    );
+    vec![(compose_permutations(permutation, basis_element), C::one())]
+}
+
+/// Right-regular left action on permutation labels: `sigma . w = w ∘ sigma^{-1}`.
+///
+/// The inverse makes this a left `S_n` action while retaining the usual right
+/// multiplication convention on labels.
+pub fn right_permutation_basis_action<C: Ring>(
+    permutation: &[usize],
+    basis_element: &[usize],
+) -> Vec<(PermutationBasis, C)> {
+    assert_permutation(permutation);
+    assert_permutation(basis_element);
+    assert_eq!(
+        permutation.len(),
+        basis_element.len(),
+        "permutation and basis label have different sizes"
+    );
+    vec![(
+        compose_permutations(basis_element, &inverse_permutation(permutation)),
+        C::one(),
+    )]
+}
+
 fn assert_unique_basis<B: Clone + Ord>(basis: &[B]) {
     let mut seen = BTreeSet::new();
     for basis_element in basis {
@@ -246,6 +320,7 @@ fn restrict_matrix_to_indices<C: Ring>(matrix: &[Vec<C>], indices: &[usize]) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::linear_algebra::matrix_multiply;
     use crate::sn_action::{cycle_type, identity_permutation, simple_transposition};
     use num_rational::Ratio;
 
@@ -284,6 +359,74 @@ mod tests {
         assert_eq!(values[&p(&[3])], q(0));
         assert_eq!(values[&p(&[2, 1])], q(1));
         assert_eq!(values[&p(&[1, 1, 1])], q(3));
+    }
+
+    #[test]
+    fn test_permutation_basis_left_regular_characters() {
+        let module = ungraded_permutation_basis_module::<Q>(3);
+        let values = module.character_values_by_cycle_type(|permutation, basis| {
+            left_permutation_basis_action::<Q>(permutation, basis)
+        });
+
+        assert_eq!(module.dimension(), 6);
+        assert_eq!(values[&p(&[3])], q(0));
+        assert_eq!(values[&p(&[2, 1])], q(0));
+        assert_eq!(values[&p(&[1, 1, 1])], q(6));
+    }
+
+    #[test]
+    fn test_permutation_basis_right_regular_characters() {
+        let module = ungraded_permutation_basis_module::<Q>(3);
+        let values = module.character_values_by_cycle_type(|permutation, basis| {
+            right_permutation_basis_action::<Q>(permutation, basis)
+        });
+
+        assert_eq!(values[&p(&[3])], q(0));
+        assert_eq!(values[&p(&[2, 1])], q(0));
+        assert_eq!(values[&p(&[1, 1, 1])], q(6));
+    }
+
+    #[test]
+    fn test_permutation_basis_actions_are_left_representations() {
+        let module = ungraded_permutation_basis_module::<Q>(3);
+        let s0 = simple_transposition(3, 0);
+        let s1 = simple_transposition(3, 1);
+        let product = crate::sn_action::compose_permutations(&s0, &s1);
+
+        let left_s0 = module.action_matrix_by_permutation(&s0, |permutation, basis| {
+            left_permutation_basis_action::<Q>(permutation, basis)
+        });
+        let left_s1 = module.action_matrix_by_permutation(&s1, |permutation, basis| {
+            left_permutation_basis_action::<Q>(permutation, basis)
+        });
+        let left_product = module.action_matrix_by_permutation(&product, |permutation, basis| {
+            left_permutation_basis_action::<Q>(permutation, basis)
+        });
+        assert_eq!(matrix_multiply(&left_s0, &left_s1), left_product);
+
+        let right_s0 = module.action_matrix_by_permutation(&s0, |permutation, basis| {
+            right_permutation_basis_action::<Q>(permutation, basis)
+        });
+        let right_s1 = module.action_matrix_by_permutation(&s1, |permutation, basis| {
+            right_permutation_basis_action::<Q>(permutation, basis)
+        });
+        let right_product = module.action_matrix_by_permutation(&product, |permutation, basis| {
+            right_permutation_basis_action::<Q>(permutation, basis)
+        });
+        assert_eq!(matrix_multiply(&right_s0, &right_s1), right_product);
+    }
+
+    #[test]
+    fn test_permutation_basis_module_accepts_custom_multidegrees() {
+        let module = permutation_basis_module::<Q, _>(3, |permutation| {
+            vec![permutation.iter().filter(|&&value| value == 0).count() as u32]
+        });
+
+        assert_eq!(module.dimension(), 6);
+        assert_eq!(
+            module.degree_blocks(),
+            BTreeMap::from([(vec![1], vec![0, 1, 2, 3, 4, 5])])
+        );
     }
 
     #[test]

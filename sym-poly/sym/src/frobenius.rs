@@ -118,7 +118,9 @@ pub fn multigraded_frobenius_from_trace_matrices<C: Ring>(
 mod tests {
     use super::*;
     use num_rational::Ratio;
-    use sym_poly_core::FiniteSnModule;
+    use sym_poly_core::{
+        left_permutation_basis_action, ungraded_permutation_basis_module, FiniteSnModule,
+    };
 
     type Q = Ratio<i64>;
 
@@ -251,5 +253,20 @@ mod tests {
         assert_eq!(degree_zero.terms().len(), 1);
         assert_eq!(degree_one.coefficient(&p(&[1, 1])), q(1));
         assert_eq!(degree_one.terms().len(), 1);
+    }
+
+    #[test]
+    fn test_permutation_basis_module_regular_frobenius_s3() {
+        let module = ungraded_permutation_basis_module::<Q>(3);
+        let matrices = module.action_matrices_by_cycle_type(|permutation, basis| {
+            left_permutation_basis_action::<Q>(permutation, basis)
+        });
+
+        let schur = frobenius_from_trace_matrices(&matrices).to_schur_basis();
+
+        assert_eq!(schur.coefficient(&p(&[3])), q(1));
+        assert_eq!(schur.coefficient(&p(&[2, 1])), q(2));
+        assert_eq!(schur.coefficient(&p(&[1, 1, 1])), q(1));
+        assert_eq!(schur.terms().len(), 3);
     }
 }
