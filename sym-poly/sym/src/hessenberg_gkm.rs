@@ -10,8 +10,7 @@ use std::collections::BTreeMap;
 use combinatoric_core::Graph;
 use num_rational::Ratio;
 use sym_poly_core::linear_algebra::{
-    kernel_basis, quotient_action_matrix, solve_linear_system, zero_matrix, Matrix, QuotientSpace,
-    Vector,
+    quotient_action_matrix, rref, zero_matrix, Matrix, QuotientSpace, Vector,
 };
 use sym_poly_core::sn_action::{
     assert_permutation, compose_permutations, conjugacy_class_representatives, inverse_permutation,
@@ -30,8 +29,14 @@ struct HomogeneousGkmComponent {
     monomials: Vec<Vec<u32>>,
     monomial_index: BTreeMap<Vec<u32>, usize>,
     module_basis: Vec<Vector<Q>>,
-    module_basis_as_columns: Matrix<Q>,
+    module_coordinate_columns: Vec<usize>,
     ordinary_quotient: QuotientSpace<Q>,
+}
+
+#[derive(Debug, Clone)]
+struct GkmModuleBasis {
+    vectors: Vec<Vector<Q>>,
+    coordinate_columns: Vec<usize>,
 }
 
 /// Compute dot-action matrices on ordinary Hessenberg cohomology.
@@ -65,7 +70,8 @@ pub fn hessenberg_gkm_dot_action_matrices(
             fixed_points.clone(),
             fixed_point_index.clone(),
             degree,
-            module_basis,
+            module_basis.vectors,
+            module_basis.coordinate_columns,
             Vec::new(),
         );
         let relations = if degree == 0 {
@@ -116,6 +122,7 @@ impl HomogeneousGkmComponent {
         fixed_point_index: BTreeMap<Vec<usize>, usize>,
         degree: u32,
         module_basis: Vec<Vector<Q>>,
+        module_coordinate_columns: Vec<usize>,
         relations: Vec<Vector<Q>>,
     ) -> Self {
         let monomials = homogeneous_monomials(fixed_points.first().map_or(0, Vec::len), degree);
@@ -125,8 +132,6 @@ impl HomogeneousGkmComponent {
             .enumerate()
             .map(|(index, monomial)| (monomial, index))
             .collect::<BTreeMap<_, _>>();
-        let module_basis_as_columns =
-            basis_vectors_as_columns(fixed_points.len() * monomials.len(), &module_basis);
         let ordinary_quotient = QuotientSpace::from_relations(module_basis.len(), &relations);
 
         Self {
@@ -135,7 +140,7 @@ impl HomogeneousGkmComponent {
             monomials,
             monomial_index,
             module_basis,
-            module_basis_as_columns,
+            module_coordinate_columns,
             ordinary_quotient,
         }
     }
@@ -150,8 +155,10 @@ impl HomogeneousGkmComponent {
             self.ambient_dimension(),
             "ambient vector has wrong dimension"
         );
-        solve_linear_system(&self.module_basis_as_columns, vector)
-            .expect("ambient vector should lie in the GKM module span")
+        self.module_coordinate_columns
+            .iter()
+            .map(|&col| vector[col].clone())
+            .collect()
     }
 
     fn module_dot_action_matrix(&self, permutation: &[usize]) -> Matrix<Q> {
@@ -201,7 +208,7 @@ fn homogeneous_gkm_module_basis(
     n: usize,
     hessenberg_edges: &[(usize, usize)],
     degree: u32,
-) -> Vec<Vector<Q>> {
+) -> GkmModuleBasis {
     let fixed_points = sym_poly_core::symmetric_group_permutation_basis(n);
     let fixed_point_index = fixed_points
         .iter()
@@ -238,9 +245,12 @@ fn homogeneous_gkm_module_basis(
     }
 
     if constraints.is_empty() {
-        standard_basis(ambient_dimension)
+        GkmModuleBasis {
+            vectors: standard_basis(ambient_dimension),
+            coordinate_columns: (0..ambient_dimension).collect(),
+        }
     } else {
-        kernel_basis(&constraints)
+        kernel_basis_with_coordinate_columns(ambient_dimension, &constraints)
     }
 }
 
@@ -340,12 +350,6 @@ fn weak_compositions_rec(
     current[index] = 0;
 }
 
-fn basis_vectors_as_columns(ambient_dimension: usize, basis: &[Vector<Q>]) -> Matrix<Q> {
-    (0..ambient_dimension)
-        .map(|row| basis.iter().map(|vector| vector[row].clone()).collect())
-        .collect()
-}
-
 fn standard_basis(dimension: usize) -> Vec<Vector<Q>> {
     (0..dimension)
         .map(|index| {
@@ -354,6 +358,39 @@ fn standard_basis(dimension: usize) -> Vec<Vector<Q>> {
             vector
         })
         .collect()
+}
+
+fn kernel_basis_with_coordinate_columns(
+    ambient_dimension: usize,
+    constraints: &[Vector<Q>],
+) -> GkmModuleBasis {
+    let reduced = rref(constraints);
+    let coordinate_columns = complement_columns(ambient_dimension, &reduced.pivot_columns);
+    let mut vectors = Vec::with_capacity(coordinate_columns.len());
+
+    for &free_col in &coordinate_columns {
+        let mut vector = vec![Q::zero(); ambient_dimension];
+        vector[free_col] = Q::one();
+        for (pivot_row, &pivot_col) in reduced.pivot_columns.iter().enumerate() {
+            vector[pivot_col] = -reduced.matrix[pivot_row][free_col].clone();
+        }
+        vectors.push(vector);
+    }
+
+    GkmModuleBasis {
+        vectors,
+        coordinate_columns,
+    }
+}
+
+fn complement_columns(num_cols: usize, pivot_columns: &[usize]) -> Vec<usize> {
+    let mut is_pivot = vec![false; num_cols];
+    for &col in pivot_columns {
+        if col < num_cols {
+            is_pivot[col] = true;
+        }
+    }
+    (0..num_cols).filter(|&col| !is_pivot[col]).collect()
 }
 
 fn transposition(n: usize, i: usize, j: usize) -> Vec<usize> {
