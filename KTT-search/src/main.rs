@@ -8,7 +8,7 @@
 
 use clap::Parser;
 use dotenv::from_path;
-use hashbrown::HashSet;
+use hashbrown::{HashMap, HashSet};
 use kostka::ehrhart::{compute_ehrhart, compute_hstar, EhrhartPoly};
 use kostka::gt_dim::gt_polytope_dim_full;
 use kostka::Partition;
@@ -104,6 +104,10 @@ struct Args {
     #[arg(long)]
     skew: bool,
 
+    /// Disable upper/lower flag mutations.
+    #[arg(long)]
+    no_flag_mutations: bool,
+
     /// MariaDB connection URL. Also read from KOSTKA_DB_URL if set.
     #[arg(long, env = "KOSTKA_DB_URL")]
     db_url: Option<String>,
@@ -118,6 +122,7 @@ struct SearchConfig {
     max_total_size: u32,
     max_states: usize,
     skew: bool,
+    flag_mutations: bool,
 }
 
 impl From<&Args> for SearchConfig {
@@ -130,6 +135,7 @@ impl From<&Args> for SearchConfig {
             max_total_size: args.max_total_size,
             max_states: args.max_states,
             skew: args.skew,
+            flag_mutations: !args.no_flag_mutations,
         }
     }
 }
@@ -150,8 +156,12 @@ fn load_db_url(cli_url: Option<String>) -> Option<String> {
         return cli_url;
     }
 
-    let env_path = Path::new("/home/paxinum/Dropbox/projects/rust/kostka/.env");
-    let _ = from_path(env_path);
+    let env_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .map(|p| p.join("kostka/.env"));
+    if let Some(env_path) = env_path {
+        let _ = from_path(env_path);
+    }
 
     let host = match std::env::var("DB_HOST") {
         Ok(host) if host == "localhost" => "127.0.0.1".to_string(),
@@ -206,6 +216,75 @@ fn init_db_pool(db_url: Option<String>) -> Option<Pool> {
     Some(pool)
 }
 
+fn parse_csv_u32(s: &str) -> Vec<u32> {
+    if s.trim().is_empty() {
+        return Vec::new();
+    }
+    s.split(',')
+        .filter_map(|x| x.trim().parse::<u32>().ok())
+        .collect()
+}
+
+fn load_cached_states(pool: Option<&Pool>) -> HashMap<SearchKey, CachedState> {
+    let Some(pool) = pool else {
+        return HashMap::new();
+    };
+
+    let mut conn = pool.get_conn().expect("Failed to get DB connection");
+    let rows: Vec<(
+        String,
+        String,
+        String,
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+        u8,
+        String,
+        Option<String>,
+    )> = conn
+        .query(
+            r"SELECT lambda, mu, weight, upper_flags, lower_flags,
+                     c1_num, c1_den, negative, status, polynomial
+              FROM ktt_search_states",
+        )
+        .unwrap_or_else(|e| {
+            eprintln!("DB cache load error: {}", e);
+            Vec::new()
+        });
+
+    let mut cached = HashMap::with_capacity(rows.len());
+    for (lam, mu, w, uf, lf, c1_num, c1_den, negative, status, polynomial) in rows {
+        let lambda = parse_csv_u32(&lam);
+        let mu = parse_csv_u32(&mu);
+        let weight = parse_csv_u32(&w);
+        let upper_flags = parse_csv_u32(&uf);
+        let lower_flags = parse_csv_u32(&lf);
+        let score = match (c1_num, c1_den) {
+            (Some(num), Some(den)) => {
+                let num: Option<BigInt> = num.parse().ok();
+                let den: Option<BigInt> = den.parse().ok();
+                match (num, den) {
+                    (Some(num), Some(den)) if !den.is_zero() => Some(BigRational::new(num, den)),
+                    _ => None,
+                }
+            }
+            _ => None,
+        };
+        let key = canonical_key(&lambda, &mu, &weight, &upper_flags, &lower_flags);
+        cached.insert(
+            key,
+            CachedState {
+                score,
+                negative: negative != 0,
+                status,
+                polynomial,
+            },
+        );
+    }
+    cached
+}
+
 // ── Search entry ────────────────────────────────────────────────────────────
 
 /// 5-tuple key: (λ, μ, w, upper_flags, lower_flags).
@@ -220,6 +299,14 @@ struct SearchEntry {
     lower_flags: Vec<u32>,
     /// Search priority inherited from the parent state. Smaller is explored first.
     priority: BigRational,
+}
+
+#[derive(Clone)]
+struct CachedState {
+    score: Option<BigRational>,
+    negative: bool,
+    status: String,
+    polynomial: Option<String>,
 }
 
 impl Eq for SearchEntry {}
@@ -695,7 +782,7 @@ fn generate_mutations(
 
     // ── H. Flag mutations: shift upper/lower flags ±1, add/remove flags ────
     // Keep λ, μ, w fixed; only change flags.
-    {
+    if config().flag_mutations {
         let n_rows = n as u32;
         // Mutate existing upper flags.
         for i in 0..uf.len() {
@@ -1275,6 +1362,13 @@ fn main() {
         .set(SearchConfig::from(&args))
         .expect("search config already initialized");
     let db_pool = init_db_pool(args.db_url.clone());
+    let cached_states = load_cached_states(db_pool.as_ref());
+    if !cached_states.is_empty() {
+        eprintln!(
+            "Loaded {} cached search states from database.",
+            cached_states.len()
+        );
+    }
 
     let mut heap: BinaryHeap<SearchEntry> = BinaryHeap::new();
     let mut visited: HashSet<SearchKey> = HashSet::new();
@@ -1287,12 +1381,13 @@ fn main() {
     let mut best_poly_str = String::new();
     let mut found_negative = false;
     let mut computed_count: u64 = 0;
+    let mut cached_count: u64 = 0;
     let mut dedup_count: u64 = 0;
     let start = Instant::now();
     let cfg = config();
 
     eprintln!(
-        "Search config: dim {}..={}, max_lam_part={}, max_w_part={}, max_total_size={}, max_states={}, skew={}",
+        "Search config: dim {}..={}, max_lam_part={}, max_w_part={}, max_total_size={}, max_states={}, skew={}, flag_mutations={}",
         cfg.min_dim,
         cfg.max_dim,
         cfg.max_lam_part,
@@ -1300,6 +1395,7 @@ fn main() {
         cfg.max_total_size,
         cfg.max_states,
         cfg.skew,
+        cfg.flag_mutations,
     );
 
     if let Some(ref bs) = best_score {
@@ -1371,6 +1467,48 @@ fn main() {
         } else {
             Some(lf.as_slice())
         };
+        let cache_key = canonical_key(lam, mu, w, uf, lf);
+        if let Some(cached) = cached_states.get(&cache_key) {
+            computed_count += 1;
+            cached_count += 1;
+
+            if cached.status == "panic" {
+                continue;
+            }
+            if cached.status != "computed" {
+                continue;
+            }
+            if cached.negative {
+                found_negative = true;
+            }
+            let is_new_poly = cached
+                .polynomial
+                .as_ref()
+                .map(|poly_str| seen_polys.insert(poly_str.clone()))
+                .unwrap_or(true);
+            if !is_new_poly {
+                dedup_count += 1;
+            }
+            if is_new_poly {
+                let base_priority = cached.score.as_ref().unwrap_or(&entry.priority);
+                let mutations = generate_mutations(lam, mu, w, uf, lf);
+                for (ml, mm, mw, muf, mlf) in mutations {
+                    let next_priority = child_priority(base_priority, &ml, &mm, &mw);
+                    let key = canonical_key(&ml, &mm, &mw, &muf, &mlf);
+                    if visited.insert(key) {
+                        heap.push(SearchEntry {
+                            lambda: ml,
+                            mu: mm,
+                            weight: mw,
+                            upper_flags: muf,
+                            lower_flags: mlf,
+                            priority: next_priority,
+                        });
+                    }
+                }
+            }
+            continue;
+        }
 
         let poly = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             compute_ehrhart(
@@ -1560,6 +1698,7 @@ fn main() {
     eprintln!();
     eprintln!("═══════════════════════════ SEARCH COMPLETE ═══════════════════════════");
     eprintln!("  Computed: {}", computed_count);
+    eprintln!("  Cached:   {} (replayed from DB)", cached_count);
     eprintln!(
         "  Deduped:  {} (same polynomial, mutations skipped)",
         dedup_count
