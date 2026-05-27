@@ -39,7 +39,10 @@ pub mod transition;
 
 pub use atom_polynomial::{atom_polynomial, t_atom_polynomial};
 pub use basis::MultiPolyBasis;
-pub use division::{divide_by_polynomials, multiply_by_monomial, normal_form, DivisionResult};
+pub use division::{
+    divide_by_polynomials, multiply_by_monomial, normal_form, normal_form_with_leading_terms,
+    DivisionResult,
+};
 pub use graded_quotient::{
     graded_quotient_component, monomials_with_multidegree, polynomial_multidegree,
     GradedQuotientComponent,

@@ -7,7 +7,7 @@ use sym_poly_core::sn_action::assert_permutation;
 use sym_poly_core::Field;
 
 use crate::groebner::GroebnerBasis;
-use crate::monomial_order::{leading_term, monomial_divides};
+use crate::monomial_order::monomial_divides;
 use crate::MultiPoly;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,9 +64,9 @@ pub fn standard_monomials_from_leading_monomials(
 
 pub fn quotient_basis<C: Field>(gb: &GroebnerBasis<C>) -> Option<QuotientBasis> {
     let leading_monomials: Vec<_> = gb
-        .generators
+        .leading_terms
         .iter()
-        .filter_map(|polynomial| leading_term(polynomial, gb.order).map(|lt| lt.exponents))
+        .map(|leading_term| leading_term.exponents.clone())
         .collect();
     let monomials = standard_monomials_from_leading_monomials(gb.num_vars, &leading_monomials)?;
     Some(QuotientBasis {

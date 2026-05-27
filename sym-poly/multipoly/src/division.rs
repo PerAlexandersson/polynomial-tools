@@ -2,7 +2,7 @@
 
 use sym_poly_core::{Field, Ring};
 
-use crate::monomial_order::{leading_term, monomial_quotient, MonomialOrder};
+use crate::monomial_order::{leading_term, monomial_quotient, LeadingTerm, MonomialOrder};
 use crate::MultiPoly;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -103,6 +103,54 @@ pub fn normal_form<C: Field>(
     divide_by_polynomials(polynomial, divisors, order).remainder
 }
 
+pub fn normal_form_with_leading_terms<C: Field>(
+    polynomial: &MultiPoly<C>,
+    divisors: &[MultiPoly<C>],
+    divisor_leading_terms: &[LeadingTerm<C>],
+    order: MonomialOrder,
+) -> MultiPoly<C> {
+    assert_eq!(
+        divisors.len(),
+        divisor_leading_terms.len(),
+        "divisor and leading-term lists have different lengths"
+    );
+    assert!(
+        divisors
+            .iter()
+            .all(|divisor| divisor.num_vars() == polynomial.num_vars()),
+        "all divisors must have the same number of variables as the polynomial"
+    );
+
+    let num_vars = polynomial.num_vars();
+    let mut remainder = MultiPoly::zero(num_vars);
+    let mut current = polynomial.clone();
+
+    while let Some(current_lt) = leading_term(&current, order) {
+        let mut reduced = false;
+
+        for (divisor, divisor_lt) in divisors.iter().zip(divisor_leading_terms.iter()) {
+            let Some(exp_quotient) =
+                monomial_quotient(&current_lt.exponents, &divisor_lt.exponents)
+            else {
+                continue;
+            };
+            let coeff_quotient = current_lt.coefficient.clone() / divisor_lt.coefficient.clone();
+            current = current - multiply_by_monomial(divisor, &exp_quotient, coeff_quotient);
+            reduced = true;
+            break;
+        }
+
+        if !reduced {
+            let remainder_term =
+                MultiPoly::monomial(num_vars, current_lt.exponents, current_lt.coefficient);
+            remainder = remainder + remainder_term.clone();
+            current = current - remainder_term;
+        }
+    }
+
+    remainder
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -174,6 +222,24 @@ mod tests {
         assert_eq!(
             normal_form(&f, &[g], MonomialOrder::Lex),
             mono(&[0, 1], 1) + constant(1)
+        );
+    }
+
+    #[test]
+    fn test_normal_form_with_cached_leading_terms() {
+        let f = mono(&[2, 0], 1) + mono(&[0, 2], 1);
+        let divisors = vec![
+            mono(&[1, 0], 1) - mono(&[0, 1], 1),
+            mono(&[0, 1], 1) - constant(1),
+        ];
+        let leading_terms = divisors
+            .iter()
+            .map(|divisor| leading_term(divisor, MonomialOrder::Lex).unwrap())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            normal_form_with_leading_terms(&f, &divisors, &leading_terms, MonomialOrder::Lex),
+            normal_form(&f, &divisors, MonomialOrder::Lex)
         );
     }
 }
