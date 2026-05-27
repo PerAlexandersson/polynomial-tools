@@ -17,7 +17,9 @@ pub mod symmetric_function;
 pub mod transition;
 
 pub use basis::Basis;
-pub use chromatic::{chromatic_symmetric, first_bad_edge_symmetric};
+pub use chromatic::{
+    chromatic_symmetric, first_bad_edge_symmetric, hessenberg_area_dot_frobenius_target,
+};
 pub use frobenius::{
     frobenius_from_character_values, frobenius_from_trace_matrices,
     graded_frobenius_from_character_values, graded_frobenius_from_trace_matrices,

@@ -263,6 +263,52 @@ pub fn q_chromatic_symmetric(g: &Graph) -> BTreeMap<Partition, Vec<i64>> {
     result
 }
 
+/// Shareshian--Wachs Frobenius target for a Hessenberg area sequence.
+///
+/// For the unit-interval graph `G` encoded by `area`, this returns the
+/// coefficient of each `q^d` in `ω X_G(q)`. Under the Shareshian--Wachs
+/// theorem, these are the Frobenius characteristics of the graded dot-action
+/// pieces of the corresponding regular semisimple Hessenberg variety.
+pub fn hessenberg_area_dot_frobenius_target(
+    area: &[u8],
+) -> Option<BTreeMap<u32, SymmetricFunction<i64>>> {
+    if !is_area_sequence(area) {
+        return None;
+    }
+
+    let graph = Graph::unit_interval(area);
+    let q_chromatic = q_chromatic_symmetric(&graph);
+    let mut by_degree: BTreeMap<u32, BTreeMap<Partition, i64>> = BTreeMap::new();
+    for (partition, coeffs) in q_chromatic {
+        for (degree, coeff) in coeffs.into_iter().enumerate() {
+            if coeff == 0 {
+                continue;
+            }
+            by_degree
+                .entry(degree as u32)
+                .or_default()
+                .insert(partition.clone(), coeff);
+        }
+    }
+
+    Some(
+        by_degree
+            .into_iter()
+            .map(|(degree, terms)| {
+                let chromatic_degree = SymmetricFunction::from_terms(Basis::Monomial, terms);
+                (degree, chromatic_degree.omega_involution())
+            })
+            .collect(),
+    )
+}
+
+fn is_area_sequence(area: &[u8]) -> bool {
+    area.iter().enumerate().all(|(i, &v)| v as usize <= i)
+        && area
+            .windows(2)
+            .all(|w| usize::from(w[1]) <= usize::from(w[0]) + 1)
+}
+
 /// Like count_proper_colorings_of_type but tracks ascent count for q-weighting.
 /// Returns a Vec where entry[a] = coefficient of q^a for m_λ.
 fn count_proper_colorings_of_type_q(g: &Graph, lambda: &Partition) -> Vec<i64> {
@@ -489,6 +535,43 @@ mod tests {
         let m111_total: i64 = qcs[&Partition::new(vec![1, 1, 1])].iter().sum();
         assert_eq!(m21_total, 1);
         assert_eq!(m111_total, 6);
+    }
+
+    #[test]
+    fn test_hessenberg_area_dot_frobenius_target_edgeless() {
+        let target = hessenberg_area_dot_frobenius_target(&[0, 0, 0]).unwrap();
+
+        assert_eq!(target.keys().copied().collect::<Vec<_>>(), vec![0]);
+        let schur = target[&0].to_schur_basis();
+        assert_eq!(schur.coefficient(&Partition::new(vec![3])), 1);
+        assert_eq!(schur.coefficient(&Partition::new(vec![2, 1])), 2);
+        assert_eq!(schur.coefficient(&Partition::new(vec![1, 1, 1])), 1);
+        assert_eq!(schur.terms().len(), 3);
+    }
+
+    #[test]
+    fn test_hessenberg_area_dot_frobenius_target_complete_graph_k3() {
+        let target = hessenberg_area_dot_frobenius_target(&[0, 1, 2]).unwrap();
+
+        assert_eq!(target.keys().copied().collect::<Vec<_>>(), vec![0, 1, 2, 3]);
+        let degree_zero = target[&0].to_schur_basis();
+        let degree_one = target[&1].to_schur_basis();
+        let degree_two = target[&2].to_schur_basis();
+        let degree_three = target[&3].to_schur_basis();
+
+        assert_eq!(degree_zero.coefficient(&Partition::new(vec![3])), 1);
+        assert_eq!(degree_zero.terms().len(), 1);
+        assert_eq!(degree_one.coefficient(&Partition::new(vec![3])), 2);
+        assert_eq!(degree_one.terms().len(), 1);
+        assert_eq!(degree_two.coefficient(&Partition::new(vec![3])), 2);
+        assert_eq!(degree_two.terms().len(), 1);
+        assert_eq!(degree_three.coefficient(&Partition::new(vec![3])), 1);
+        assert_eq!(degree_three.terms().len(), 1);
+    }
+
+    #[test]
+    fn test_hessenberg_area_dot_frobenius_target_rejects_invalid_area() {
+        assert!(hessenberg_area_dot_frobenius_target(&[0, 2]).is_none());
     }
 
     // -- Edge cases --
