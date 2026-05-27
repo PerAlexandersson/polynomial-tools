@@ -68,6 +68,21 @@ fn diagonal_power_sum_generators<C: Ring>(num_indices: usize) -> Vec<MultiPoly<C
     generators
 }
 
+fn diagonal_coinvariant_s3_hilbert() -> BTreeMap<Vec<u32>, usize> {
+    BTreeMap::from([
+        (vec![0, 0], 1),
+        (vec![0, 1], 2),
+        (vec![0, 2], 2),
+        (vec![0, 3], 1),
+        (vec![1, 0], 2),
+        (vec![1, 1], 3),
+        (vec![1, 2], 1),
+        (vec![2, 0], 2),
+        (vec![2, 1], 1),
+        (vec![3, 0], 1),
+    ])
+}
+
 fn factorial(n: usize) -> i64 {
     (1..=n as i64).product()
 }
@@ -154,18 +169,7 @@ fn diagonal_coinvariant_s3_dimension_benchmark() {
     assert_eq!(module.dimension(), 16);
     assert_eq!(
         module.hilbert_series_by_multidegree(),
-        BTreeMap::from([
-            (vec![0, 0], 1),
-            (vec![0, 1], 2),
-            (vec![0, 2], 2),
-            (vec![0, 3], 1),
-            (vec![1, 0], 2),
-            (vec![1, 1], 3),
-            (vec![1, 2], 1),
-            (vec![2, 0], 2),
-            (vec![2, 1], 1),
-            (vec![3, 0], 1),
-        ])
+        diagonal_coinvariant_s3_hilbert()
     );
 
     let matrices = module
@@ -182,6 +186,26 @@ fn diagonal_coinvariant_s3_dimension_benchmark() {
 
     assert_eq!(degree_00.coefficient(&p(&[3])), q(1));
     assert_eq!(degree_00.terms().len(), 1);
+}
+
+#[test]
+#[ignore = "benchmark: run explicitly when comparing monomial orders on the diagonal S_3 path"]
+fn diagonal_coinvariant_s3_dimension_all_standard_orders() {
+    for order in MonomialOrder::STANDARD_ORDERS {
+        let module = PolynomialQuotientSnModule::new(
+            IndexedVariables::new(2, 3),
+            diagonal_power_sum_generators::<Q>(3),
+            order,
+        )
+        .expect("diagonal coinvariant quotient should be finite and S_3-invariant");
+
+        assert_eq!(module.dimension(), 16, "{order} gave the wrong dimension");
+        assert_eq!(
+            module.hilbert_series_by_multidegree(),
+            diagonal_coinvariant_s3_hilbert(),
+            "{order} gave the wrong Hilbert series"
+        );
+    }
 }
 
 #[test]

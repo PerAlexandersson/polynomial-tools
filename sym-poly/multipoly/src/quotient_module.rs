@@ -207,6 +207,25 @@ mod tests {
     }
 
     #[test]
+    fn test_artin_s2_quotient_module_supports_standard_orders() {
+        for order in MonomialOrder::STANDARD_ORDERS {
+            let module = PolynomialQuotientSnModule::new(
+                IndexedVariables::new(1, 2),
+                elementary_symmetric_generators::<Q>(2),
+                order,
+            )
+            .unwrap();
+
+            assert_eq!(module.dimension(), 2, "{order} gave the wrong dimension");
+            assert!(module.ideal_generators_are_sn_invariant());
+            assert_eq!(
+                module.hilbert_series_by_multidegree(),
+                BTreeMap::from([(vec![0], 1), (vec![1], 1)])
+            );
+        }
+    }
+
+    #[test]
     fn test_rejects_non_invariant_ideal() {
         let result = PolynomialQuotientSnModule::new(
             IndexedVariables::new(1, 2),

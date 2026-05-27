@@ -368,6 +368,21 @@ mod tests {
     }
 
     #[test]
+    fn test_artin_coinvariant_s2_basis_supports_standard_orders() {
+        for order in MonomialOrder::STANDARD_ORDERS {
+            let e1 = mono(&[1, 0], 1) + mono(&[0, 1], 1);
+            let e2 = mono(&[1, 1], 1);
+            let gb = GroebnerBasis::new(vec![e1, e2], order);
+            let basis = quotient_basis(&gb).expect("Artin quotient should be finite");
+            let action = quotient_action_matrix_by_permutation(&gb, &basis, &[1, 0]).unwrap();
+
+            assert_eq!(basis.dimension(), 2, "{order} gave the wrong dimension");
+            assert_eq!(matrix_trace(&action), q(0), "{order} gave the wrong trace");
+            assert!(is_degree_preserving_action_matrix(&basis, &action));
+        }
+    }
+
+    #[test]
     fn test_quotient_coordinates_artin_s2() {
         let e1 = mono(&[1, 0], 1) + mono(&[0, 1], 1);
         let e2 = mono(&[1, 1], 1);

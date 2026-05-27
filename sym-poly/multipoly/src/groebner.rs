@@ -591,6 +591,26 @@ mod tests {
     }
 
     #[test]
+    fn test_buchberger_supports_standard_monomial_orders() {
+        let e1 = mono_n(3, &[1, 0, 0], 1) + mono_n(3, &[0, 1, 0], 1) + mono_n(3, &[0, 0, 1], 1);
+        let e2 = mono_n(3, &[1, 1, 0], 1) + mono_n(3, &[1, 0, 1], 1) + mono_n(3, &[0, 1, 1], 1);
+        let e3 = mono_n(3, &[1, 1, 1], 1);
+        let generators = vec![e1, e2, e3];
+
+        for order in MonomialOrder::STANDARD_ORDERS {
+            let basis = reduced_groebner_basis(&generators, order);
+            assert!(
+                is_groebner_basis(&basis, order),
+                "{order} did not produce a Groebner basis"
+            );
+            assert!(
+                generators_reduce_to_zero(&generators, &basis, order),
+                "{order} basis does not generate the original ideal"
+            );
+        }
+    }
+
+    #[test]
     fn test_product_criterion_skips_relatively_prime_leading_terms() {
         let g1 = mono(&[1, 0], 1) + constant(1);
         let g2 = mono(&[0, 1], 1) + constant(-1);

@@ -1,6 +1,8 @@
 //! Monomial orders for sparse multivariate polynomials.
 
 use std::cmp::Ordering;
+use std::fmt;
+use std::str::FromStr;
 
 use sym_poly_core::Ring;
 
@@ -22,7 +24,32 @@ pub struct LeadingTerm<C> {
     pub coefficient: C,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParseMonomialOrderError {
+    input: String,
+}
+
+impl ParseMonomialOrderError {
+    pub fn input(&self) -> &str {
+        &self.input
+    }
+}
+
+impl fmt::Display for ParseMonomialOrderError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "unknown monomial order `{}`", self.input)
+    }
+}
+
+impl std::error::Error for ParseMonomialOrderError {}
+
 impl MonomialOrder {
+    pub const STANDARD_ORDERS: [MonomialOrder; 3] = [
+        MonomialOrder::Lex,
+        MonomialOrder::GrLex,
+        MonomialOrder::GrevLex,
+    ];
+
     pub fn compare(&self, a: &[u32], b: &[u32]) -> Ordering {
         assert_eq!(a.len(), b.len(), "monomials have different lengths");
         match self {
@@ -31,6 +58,35 @@ impl MonomialOrder {
             MonomialOrder::GrevLex => {
                 compare_total_degree(a, b).then_with(|| compare_grevlex_same_degree(a, b))
             }
+        }
+    }
+}
+
+impl fmt::Display for MonomialOrder {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = match self {
+            MonomialOrder::Lex => "lex",
+            MonomialOrder::GrLex => "grlex",
+            MonomialOrder::GrevLex => "grevlex",
+        };
+        f.write_str(name)
+    }
+}
+
+impl FromStr for MonomialOrder {
+    type Err = ParseMonomialOrderError;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        match input.trim().to_ascii_lowercase().as_str() {
+            "lex" | "lexicographic" => Ok(MonomialOrder::Lex),
+            "grlex" | "graded-lex" | "graded_lex" | "gradedlex" => Ok(MonomialOrder::GrLex),
+            "grevlex" | "graded-revlex" | "graded_revlex" | "gradedrevlex"
+            | "graded-reverse-lex" | "graded_reverse_lex" | "gradedreverselex" => {
+                Ok(MonomialOrder::GrevLex)
+            }
+            _ => Err(ParseMonomialOrderError {
+                input: input.to_string(),
+            }),
         }
     }
 }
@@ -123,6 +179,40 @@ mod tests {
         assert_eq!(order.compare(&[2, 0], &[1, 1]), Ordering::Greater);
         assert_eq!(order.compare(&[0, 2], &[1, 1]), Ordering::Less);
         assert_eq!(order.compare(&[1, 2], &[2, 0]), Ordering::Greater);
+    }
+
+    #[test]
+    fn test_standard_monomial_order_list() {
+        assert_eq!(
+            MonomialOrder::STANDARD_ORDERS,
+            [
+                MonomialOrder::Lex,
+                MonomialOrder::GrLex,
+                MonomialOrder::GrevLex
+            ]
+        );
+    }
+
+    #[test]
+    fn test_monomial_order_display_and_parse() {
+        for order in MonomialOrder::STANDARD_ORDERS {
+            assert_eq!(order.to_string().parse::<MonomialOrder>().unwrap(), order);
+        }
+        assert_eq!(
+            "lexicographic".parse::<MonomialOrder>().unwrap(),
+            MonomialOrder::Lex
+        );
+        assert_eq!(
+            "graded-lex".parse::<MonomialOrder>().unwrap(),
+            MonomialOrder::GrLex
+        );
+        assert_eq!(
+            "graded-reverse-lex".parse::<MonomialOrder>().unwrap(),
+            MonomialOrder::GrevLex
+        );
+
+        let error = "not-an-order".parse::<MonomialOrder>().unwrap_err();
+        assert_eq!(error.input(), "not-an-order");
     }
 
     #[test]

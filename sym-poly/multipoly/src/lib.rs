@@ -85,6 +85,7 @@ pub use modular_groebner::{
 };
 pub use monomial_order::{
     leading_term, monomial_divides, monomial_quotient, LeadingTerm, MonomialOrder,
+    ParseMonomialOrderError,
 };
 pub use multipoly::MultiPoly;
 pub use multipoly_function::MultiPolyFunction;
