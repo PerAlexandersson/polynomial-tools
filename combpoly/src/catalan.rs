@@ -99,6 +99,104 @@ pub fn is_area_sequence(a: &[u8]) -> bool {
             .all(|w| usize::from(w[1]) <= usize::from(w[0]) + 1)
 }
 
+/// Check whether `h` is a Hessenberg function.
+///
+/// The values are stored in the usual one-indexed Hessenberg convention:
+/// `h[i - 1]` is `h(i)`, and a valid function satisfies
+/// `i <= h(i) <= n` and `h(i) <= h(i + 1)`.
+pub fn is_hessenberg_function(h: &[usize]) -> bool {
+    let n = h.len();
+    h.iter()
+        .enumerate()
+        .all(|(i, &value)| i + 1 <= value && value <= n)
+        && h.windows(2).all(|w| w[0] <= w[1])
+}
+
+/// Convert a Hessenberg function to the same-label Dyck area sequence.
+///
+/// We use the label convention compatible with [`area_sequence_unit_interval_edges`]:
+/// the incomparability graph has an edge `i < j` when `j <= h(i)`, using
+/// one-indexed labels. The returned area sequence satisfies
+/// `area[j - 1] = #{ i < j : h(i) >= j }`.
+pub fn hessenberg_function_to_area_sequence(h: &[usize]) -> Option<Vec<u8>> {
+    if !is_hessenberg_function(h) {
+        return None;
+    }
+
+    let n = h.len();
+    let mut area = Vec::with_capacity(n);
+    for target in 1..=n {
+        let count = h[..target - 1]
+            .iter()
+            .filter(|&&value| value >= target)
+            .count();
+        area.push(u8::try_from(count).ok()?);
+    }
+    Some(area)
+}
+
+/// Convert a Dyck area sequence to the same-label Hessenberg function.
+///
+/// This is inverse to [`hessenberg_function_to_area_sequence`] for the
+/// convention where an area sequence gives edges `i < j` iff
+/// `j - i <= area[j - 1]`, using one-indexed labels.
+pub fn area_sequence_to_hessenberg_function(area: &[u8]) -> Option<Vec<usize>> {
+    if !is_area_sequence(area) {
+        return None;
+    }
+
+    let n = area.len();
+    let mut h = Vec::with_capacity(n);
+    for source in 1..=n {
+        let mut value = source;
+        for target in source + 1..=n {
+            if usize::from(area[target - 1]) >= target - source {
+                value = target;
+            }
+        }
+        h.push(value);
+    }
+    is_hessenberg_function(&h).then_some(h)
+}
+
+/// Unit-interval incomparability edges from an area sequence.
+///
+/// Edges use zero-indexed vertex labels. Equivalently, with one-indexed
+/// labels, there is an edge `i < j` iff `j - i <= area[j - 1]`.
+pub fn area_sequence_unit_interval_edges(area: &[u8]) -> Option<Vec<(usize, usize)>> {
+    if !is_area_sequence(area) {
+        return None;
+    }
+
+    let mut edges = Vec::new();
+    for j in 0..area.len() {
+        for gap in 1..=usize::from(area[j]) {
+            edges.push((j - gap, j));
+        }
+    }
+    edges.sort_unstable();
+    Some(edges)
+}
+
+/// Incomparability edges of a Hessenberg function.
+///
+/// The input uses one-indexed Hessenberg values, while returned edges use
+/// zero-indexed Rust vertex labels. There is an edge `i < j` iff `j <= h(i)`
+/// in one-indexed labels.
+pub fn hessenberg_function_incomparability_edges(h: &[usize]) -> Option<Vec<(usize, usize)>> {
+    if !is_hessenberg_function(h) {
+        return None;
+    }
+
+    let mut edges = Vec::new();
+    for (i, &value) in h.iter().enumerate() {
+        for j in i + 1..value {
+            edges.push((i, j));
+        }
+    }
+    Some(edges)
+}
+
 /// Convert an area sequence to its Dyck word in the alphabet `{N,E}`.
 pub fn area_sequence_to_dyck_word(a: &[u8]) -> String {
     let n = a.len();
@@ -756,6 +854,81 @@ mod tests {
         let mut a: Vec<u8> = (0..=u8::MAX).collect();
         a.push(0);
         assert!(is_area_sequence(&a));
+    }
+
+    #[test]
+    fn test_hessenberg_function_validator() {
+        assert!(is_hessenberg_function(&[]));
+        assert!(is_hessenberg_function(&[1]));
+        assert!(is_hessenberg_function(&[1, 2, 3]));
+        assert!(is_hessenberg_function(&[2, 4, 4, 5, 5]));
+
+        assert!(!is_hessenberg_function(&[0]));
+        assert!(!is_hessenberg_function(&[1, 1]));
+        assert!(!is_hessenberg_function(&[2, 1]));
+        assert!(!is_hessenberg_function(&[1, 4, 4]));
+    }
+
+    #[test]
+    fn test_hessenberg_area_conversion_examples() {
+        assert_eq!(
+            hessenberg_function_to_area_sequence(&[1, 2, 3, 4]),
+            Some(vec![0, 0, 0, 0])
+        );
+        assert_eq!(
+            hessenberg_function_to_area_sequence(&[4, 4, 4, 4]),
+            Some(vec![0, 1, 2, 3])
+        );
+        assert_eq!(
+            hessenberg_function_to_area_sequence(&[2, 3, 3]),
+            Some(vec![0, 1, 1])
+        );
+        assert_eq!(
+            area_sequence_to_hessenberg_function(&[0, 1, 1, 2, 1]),
+            Some(vec![2, 4, 4, 5, 5])
+        );
+
+        assert_eq!(hessenberg_function_to_area_sequence(&[2, 1]), None);
+        assert_eq!(area_sequence_to_hessenberg_function(&[0, 2]), None);
+    }
+
+    #[test]
+    fn test_hessenberg_area_conversion_roundtrip() {
+        for n in 0..=7 {
+            for area in all_area_sequences(n) {
+                let h = area_sequence_to_hessenberg_function(&area).unwrap();
+                assert!(is_hessenberg_function(&h));
+                assert_eq!(hessenberg_function_to_area_sequence(&h), Some(area));
+            }
+        }
+    }
+
+    #[test]
+    fn test_hessenberg_incomparability_edges_match_area_edges() {
+        assert_eq!(
+            area_sequence_unit_interval_edges(&[0, 1, 1]),
+            Some(vec![(0, 1), (1, 2)])
+        );
+        assert_eq!(
+            hessenberg_function_incomparability_edges(&[2, 3, 3]),
+            Some(vec![(0, 1), (1, 2)])
+        );
+        assert_eq!(
+            hessenberg_function_incomparability_edges(&[4, 4, 4, 4]),
+            Some(vec![(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)])
+        );
+        assert_eq!(area_sequence_unit_interval_edges(&[0, 2]), None);
+        assert_eq!(hessenberg_function_incomparability_edges(&[2, 1]), None);
+
+        for n in 0..=7 {
+            for area in all_area_sequences(n) {
+                let h = area_sequence_to_hessenberg_function(&area).unwrap();
+                assert_eq!(
+                    hessenberg_function_incomparability_edges(&h),
+                    area_sequence_unit_interval_edges(&area)
+                );
+            }
+        }
     }
 
     #[test]
