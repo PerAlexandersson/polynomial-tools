@@ -7,8 +7,10 @@
 use std::collections::BTreeMap;
 
 use sym_poly_core::linear_algebra::Matrix;
-use sym_poly_core::sn_action::{assert_permutation, simple_transposition};
-use sym_poly_core::Field;
+use sym_poly_core::sn_action::{
+    assert_permutation, conjugacy_class_representatives, simple_transposition,
+};
+use sym_poly_core::{Field, Partition};
 
 use crate::groebner::GroebnerBasis;
 use crate::quotient::{
@@ -155,6 +157,31 @@ pub fn quotient_action_matrices_by_index_permutation_and_multidegree<C: Field>(
     ))
 }
 
+pub fn quotient_action_matrices_by_multidegree_and_cycle_type<C: Field>(
+    variables: &IndexedVariables,
+    gb: &GroebnerBasis<C>,
+    basis: &QuotientBasis,
+) -> Option<BTreeMap<Vec<u32>, BTreeMap<Partition, Matrix<C>>>> {
+    let mut by_degree: BTreeMap<Vec<u32>, BTreeMap<Partition, Matrix<C>>> = BTreeMap::new();
+
+    for (cycle_type, representative) in conjugacy_class_representatives(variables.num_indices()) {
+        let blocks = quotient_action_matrices_by_index_permutation_and_multidegree(
+            variables,
+            gb,
+            basis,
+            &representative,
+        )?;
+        for (degree, matrix) in blocks {
+            by_degree
+                .entry(degree)
+                .or_default()
+                .insert(cycle_type.clone(), matrix);
+        }
+    }
+
+    Some(by_degree)
+}
+
 pub fn is_multidegree_preserving_action_matrix<C: Field>(
     variables: &IndexedVariables,
     basis: &QuotientBasis,
@@ -228,6 +255,10 @@ mod tests {
         Q::from_integer(n)
     }
 
+    fn p(parts: &[u32]) -> Partition {
+        Partition::new(parts.to_vec())
+    }
+
     #[test]
     fn test_indexed_variable_conventions() {
         let variables = IndexedVariables::new(2, 3);
@@ -290,5 +321,13 @@ mod tests {
         .unwrap();
         assert_eq!(matrix_trace(&blocks[&vec![0]]), q(1));
         assert_eq!(matrix_trace(&blocks[&vec![1]]), q(-1));
+
+        let by_cycle_type =
+            quotient_action_matrices_by_multidegree_and_cycle_type(&variables, &gb, &basis)
+                .unwrap();
+        assert_eq!(matrix_trace(&by_cycle_type[&vec![0]][&p(&[1, 1])]), q(1));
+        assert_eq!(matrix_trace(&by_cycle_type[&vec![0]][&p(&[2])]), q(1));
+        assert_eq!(matrix_trace(&by_cycle_type[&vec![1]][&p(&[1, 1])]), q(1));
+        assert_eq!(matrix_trace(&by_cycle_type[&vec![1]][&p(&[2])]), q(-1));
     }
 }

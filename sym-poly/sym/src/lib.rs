@@ -21,6 +21,7 @@ pub use chromatic::{chromatic_symmetric, first_bad_edge_symmetric};
 pub use frobenius::{
     frobenius_from_character_values, frobenius_from_trace_matrices,
     graded_frobenius_from_character_values, graded_frobenius_from_trace_matrices,
+    multigraded_frobenius_from_character_values, multigraded_frobenius_from_trace_matrices,
 };
 pub use llt::{graph_llt_symmetric, unicellular_llt, unit_interval_edges};
 pub use macdonald::{

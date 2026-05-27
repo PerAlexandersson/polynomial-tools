@@ -84,6 +84,36 @@ pub fn graded_frobenius_from_trace_matrices<C: Ring>(
         .collect()
 }
 
+/// Build multigraded Frobenius characteristics from character values.
+pub fn multigraded_frobenius_from_character_values<C: Ring>(
+    multigraded_character_values: &BTreeMap<Vec<u32>, BTreeMap<Partition, C>>,
+) -> BTreeMap<Vec<u32>, SymmetricFunction<C>> {
+    multigraded_character_values
+        .iter()
+        .map(|(degree, character_values)| {
+            (
+                degree.clone(),
+                frobenius_from_character_values(character_values),
+            )
+        })
+        .collect()
+}
+
+/// Build multigraded Frobenius characteristics from action matrices.
+pub fn multigraded_frobenius_from_trace_matrices<C: Ring>(
+    multigraded_action_matrices: &BTreeMap<Vec<u32>, BTreeMap<Partition, Matrix<C>>>,
+) -> BTreeMap<Vec<u32>, SymmetricFunction<C>> {
+    multigraded_action_matrices
+        .iter()
+        .map(|(degree, action_matrices)| {
+            (
+                degree.clone(),
+                frobenius_from_trace_matrices(action_matrices),
+            )
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -159,6 +189,23 @@ mod tests {
         let graded = graded_frobenius_from_character_values(&graded_values);
         let degree_zero = graded[&0].to_schur_basis();
         let degree_one = graded[&1].to_schur_basis();
+
+        assert_eq!(degree_zero.coefficient(&p(&[2])), q(1));
+        assert_eq!(degree_zero.terms().len(), 1);
+        assert_eq!(degree_one.coefficient(&p(&[1, 1])), q(1));
+        assert_eq!(degree_one.terms().len(), 1);
+    }
+
+    #[test]
+    fn test_multigraded_frobenius_from_character_values() {
+        let multigraded_values = BTreeMap::from([
+            (vec![0, 0], character_table(&[(&[2], 1), (&[1, 1], 1)])),
+            (vec![1, 0], character_table(&[(&[2], -1), (&[1, 1], 1)])),
+        ]);
+
+        let multigraded = multigraded_frobenius_from_character_values(&multigraded_values);
+        let degree_zero = multigraded[&vec![0, 0]].to_schur_basis();
+        let degree_one = multigraded[&vec![1, 0]].to_schur_basis();
 
         assert_eq!(degree_zero.coefficient(&p(&[2])), q(1));
         assert_eq!(degree_zero.terms().len(), 1);

@@ -46,6 +46,7 @@ pub use indexed_variables::{
     ideal_generators_are_invariant_under_index_permutation, ideal_generators_are_sn_invariant,
     is_multidegree_preserving_action_matrix,
     quotient_action_matrices_by_index_permutation_and_multidegree,
+    quotient_action_matrices_by_multidegree_and_cycle_type,
     quotient_action_matrix_multidegree_blocks, quotient_basis_multidegrees, IndexedVariables,
 };
 pub use key_polynomial::{key_polynomial, t_key_polynomial};
