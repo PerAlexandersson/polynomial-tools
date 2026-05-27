@@ -1,4 +1,5 @@
 use num_rational::Ratio;
+use std::collections::BTreeMap;
 use sym_poly_core::Partition;
 use sym_poly_multipoly::{
     quotient_action_matrices_by_multidegree_and_cycle_type, quotient_basis, GroebnerBasis,
@@ -96,6 +97,21 @@ fn diagonal_coinvariant_s3_dimension_benchmark() {
     .expect("diagonal coinvariant quotient should be finite and S_3-invariant");
 
     assert_eq!(module.dimension(), 16);
+    assert_eq!(
+        module.hilbert_series_by_multidegree(),
+        BTreeMap::from([
+            (vec![0, 0], 1),
+            (vec![0, 1], 2),
+            (vec![0, 2], 2),
+            (vec![0, 3], 1),
+            (vec![1, 0], 2),
+            (vec![1, 1], 3),
+            (vec![1, 2], 1),
+            (vec![2, 0], 2),
+            (vec![2, 1], 1),
+            (vec![3, 0], 1),
+        ])
+    );
 
     let matrices = module
         .action_matrices_by_multidegree_and_cycle_type()

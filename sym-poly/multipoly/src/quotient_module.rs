@@ -93,6 +93,13 @@ impl<C: Field> PolynomialQuotientSnModule<C> {
         quotient_basis_multidegrees(&self.variables, &self.quotient_basis)
     }
 
+    pub fn hilbert_series_by_multidegree(&self) -> BTreeMap<Vec<u32>, usize> {
+        self.multidegrees()
+            .into_iter()
+            .map(|(degree, indices)| (degree, indices.len()))
+            .collect()
+    }
+
     pub fn action_matrices_by_index_permutation_and_multidegree(
         &self,
         index_permutation: &[usize],
@@ -186,6 +193,10 @@ mod tests {
         assert_eq!(
             module.multidegrees(),
             BTreeMap::from([(vec![0], vec![0]), (vec![1], vec![1])])
+        );
+        assert_eq!(
+            module.hilbert_series_by_multidegree(),
+            BTreeMap::from([(vec![0], 1), (vec![1], 1)])
         );
 
         let blocks = module
