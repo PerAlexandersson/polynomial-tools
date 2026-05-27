@@ -2,7 +2,7 @@ use num_rational::Ratio;
 use sym_poly_core::Partition;
 use sym_poly_multipoly::{
     quotient_action_matrices_by_multidegree_and_cycle_type, quotient_basis, GroebnerBasis,
-    IndexedVariables, MonomialOrder, MultiPoly,
+    IndexedVariables, MonomialOrder, MultiPoly, PolynomialQuotientSnModule,
 };
 use sym_poly_sym::multigraded_frobenius_from_trace_matrices;
 
@@ -30,6 +30,36 @@ fn diagonal_coinvariant_s2_generators() -> Vec<MultiPoly<Q>> {
     ]
 }
 
+fn diagonal_power_sum_generator(
+    variables: &IndexedVariables,
+    x_degree: u32,
+    y_degree: u32,
+) -> MultiPoly<Q> {
+    let mut polynomial = MultiPoly::zero(variables.num_vars());
+    for index in 0..variables.num_indices() {
+        let mut exponents = vec![0u32; variables.num_vars()];
+        exponents[variables.variable_index(0, index)] = x_degree;
+        exponents[variables.variable_index(1, index)] = y_degree;
+        polynomial = polynomial + MultiPoly::monomial(variables.num_vars(), exponents, q(1));
+    }
+    polynomial
+}
+
+fn diagonal_power_sum_generators(num_indices: usize) -> Vec<MultiPoly<Q>> {
+    let variables = IndexedVariables::new(2, num_indices);
+    let mut generators = Vec::new();
+    for total_degree in 1..=num_indices as u32 {
+        for x_degree in (0..=total_degree).rev() {
+            generators.push(diagonal_power_sum_generator(
+                &variables,
+                x_degree,
+                total_degree - x_degree,
+            ));
+        }
+    }
+    generators
+}
+
 #[test]
 fn diagonal_coinvariant_s2_multigraded_frobenius() {
     let variables = IndexedVariables::new(2, 2);
@@ -53,4 +83,26 @@ fn diagonal_coinvariant_s2_multigraded_frobenius() {
     assert_eq!(degree_10.terms().len(), 1);
     assert_eq!(degree_01.coefficient(&p(&[1, 1])), q(1));
     assert_eq!(degree_01.terms().len(), 1);
+}
+
+#[test]
+#[ignore = "benchmark: run explicitly when checking the diagonal coinvariant S_3 Groebner path"]
+fn diagonal_coinvariant_s3_dimension_benchmark() {
+    let module = PolynomialQuotientSnModule::new(
+        IndexedVariables::new(2, 3),
+        diagonal_power_sum_generators(3),
+        MonomialOrder::Lex,
+    )
+    .expect("diagonal coinvariant quotient should be finite and S_3-invariant");
+
+    assert_eq!(module.dimension(), 16);
+
+    let matrices = module
+        .action_matrices_by_multidegree_and_cycle_type()
+        .expect("diagonal quotient should carry the diagonal S_3 action");
+    let frobenius = multigraded_frobenius_from_trace_matrices(&matrices);
+    let degree_00 = frobenius[&vec![0, 0]].to_schur_basis();
+
+    assert_eq!(degree_00.coefficient(&p(&[3])), q(1));
+    assert_eq!(degree_00.terms().len(), 1);
 }
