@@ -20,6 +20,7 @@ pub mod atom_polynomial;
 pub mod basis;
 pub mod division;
 pub mod groebner;
+pub mod indexed_variables;
 pub mod key_polynomial;
 pub mod kohnert;
 pub mod lorentzian;
@@ -40,6 +41,12 @@ pub use division::{divide_by_polynomials, multiply_by_monomial, normal_form, Div
 pub use groebner::{
     buchberger_basis, is_groebner_basis, make_monic, reduced_groebner_basis, s_polynomial,
     GroebnerBasis,
+};
+pub use indexed_variables::{
+    ideal_generators_are_invariant_under_index_permutation, ideal_generators_are_sn_invariant,
+    is_multidegree_preserving_action_matrix,
+    quotient_action_matrices_by_index_permutation_and_multidegree,
+    quotient_action_matrix_multidegree_blocks, quotient_basis_multidegrees, IndexedVariables,
 };
 pub use key_polynomial::{key_polynomial, t_key_polynomial};
 pub use kohnert::{
