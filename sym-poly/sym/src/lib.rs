@@ -16,6 +16,7 @@ pub mod macdonald;
 pub mod shifted_lr;
 pub mod symmetric_function;
 pub mod transition;
+pub mod twin_gkm;
 
 pub use basis::Basis;
 pub use chromatic::{
@@ -42,3 +43,7 @@ pub use shifted_lr::{
     shifted_schur_evaluation, ShiftedLrError, ShiftedLrStats,
 };
 pub use symmetric_function::SymmetricFunction;
+pub use twin_gkm::{
+    twin_gkm_dagger_action_matrices, twin_gkm_dagger_character_values_by_degree,
+    twin_gkm_dagger_frobenius,
+};
