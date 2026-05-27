@@ -63,8 +63,9 @@ pub use operators::{
     ttheta_word,
 };
 pub use quotient::{
-    normal_form_in_basis, pure_power_bounds, quotient_basis, quotient_coordinates,
-    standard_monomials_from_leading_monomials, QuotientBasis,
+    normal_form_in_basis, permute_variables, pure_power_bounds,
+    quotient_action_matrix_by_permutation, quotient_basis, quotient_basis_degrees,
+    quotient_coordinates, standard_monomials_from_leading_monomials, QuotientBasis,
 };
 pub use schubert_polynomial::{
     schubert_polynomial, schubert_to_atom, schubert_to_fund_slide, schubert_to_key,

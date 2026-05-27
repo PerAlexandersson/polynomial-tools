@@ -2,6 +2,8 @@
 
 use std::collections::BTreeMap;
 
+use sym_poly_core::linear_algebra::{zero_matrix, Matrix};
+use sym_poly_core::sn_action::assert_permutation;
 use sym_poly_core::Field;
 
 use crate::groebner::GroebnerBasis;
@@ -115,6 +117,78 @@ pub fn normal_form_in_basis<C: Field>(
     Some(MultiPoly::from_terms(basis.num_vars, terms))
 }
 
+/// Apply a zero-indexed variable permutation to a polynomial.
+///
+/// The convention is `sigma . x_i = x_{sigma(i)}`.
+pub fn permute_variables<C: Field>(
+    polynomial: &MultiPoly<C>,
+    permutation: &[usize],
+) -> MultiPoly<C> {
+    assert_permutation(permutation);
+    assert_eq!(
+        polynomial.num_vars(),
+        permutation.len(),
+        "permutation has wrong size for polynomial"
+    );
+
+    let terms = polynomial
+        .terms()
+        .iter()
+        .map(|(exponents, coeff)| {
+            let mut new_exponents = vec![0u32; permutation.len()];
+            for (source, &target) in permutation.iter().enumerate() {
+                new_exponents[target] = exponents[source];
+            }
+            (new_exponents, coeff.clone())
+        })
+        .collect();
+    MultiPoly::from_terms(polynomial.num_vars(), terms)
+}
+
+/// Matrix induced by a variable permutation on a finite quotient basis.
+///
+/// Matrices use the column convention: column `j` is the coordinate vector of
+/// the image of the `j`th standard monomial.
+pub fn quotient_action_matrix_by_permutation<C: Field>(
+    gb: &GroebnerBasis<C>,
+    basis: &QuotientBasis,
+    permutation: &[usize],
+) -> Option<Matrix<C>> {
+    assert_eq!(
+        gb.num_vars, basis.num_vars,
+        "Groebner basis and quotient basis have incompatible variable counts"
+    );
+    assert_permutation(permutation);
+    assert_eq!(
+        permutation.len(),
+        basis.num_vars,
+        "permutation has wrong size for quotient basis"
+    );
+
+    let dim = basis.dimension();
+    let mut matrix = zero_matrix::<C>(dim, dim);
+    for (col, monomial) in basis.monomials.iter().enumerate() {
+        let basis_element = MultiPoly::x_power(basis.num_vars, monomial.clone());
+        let image = permute_variables(&basis_element, permutation);
+        let coords = quotient_coordinates(&image, gb, basis)?;
+        for row in 0..dim {
+            matrix[row][col] = coords[row].clone();
+        }
+    }
+    Some(matrix)
+}
+
+pub fn quotient_basis_degrees(basis: &QuotientBasis) -> BTreeMap<u32, Vec<usize>> {
+    let mut by_degree = BTreeMap::new();
+    for (i, monomial) in basis.monomials.iter().enumerate() {
+        by_degree
+            .entry(monomial.iter().sum::<u32>())
+            .or_insert_with(Vec::new)
+            .push(i);
+    }
+    by_degree
+}
+
 fn enumerate_box(bounds: &[u32], index: usize, current: &mut [u32], monomials: &mut Vec<Vec<u32>>) {
     if index == bounds.len() {
         monomials.push(current.to_vec());
@@ -131,6 +205,7 @@ mod tests {
     use super::*;
     use crate::MonomialOrder;
     use num_rational::Ratio;
+    use sym_poly_core::linear_algebra::matrix_trace;
 
     type Q = Ratio<i64>;
 
@@ -188,6 +263,31 @@ mod tests {
         assert_eq!(
             normal_form_in_basis(&(constant(3) + mono(&[1, 0], 2)), &gb, &basis),
             Some(constant(3) + mono(&[0, 1], -2))
+        );
+    }
+
+    #[test]
+    fn test_permute_variables() {
+        let f = mono(&[2, 0], 1) + mono(&[1, 1], 3);
+        let swapped = permute_variables(&f, &[1, 0]);
+
+        assert_eq!(swapped, mono(&[0, 2], 1) + mono(&[1, 1], 3));
+    }
+
+    #[test]
+    fn test_quotient_action_matrix_artin_s2() {
+        let e1 = mono(&[1, 0], 1) + mono(&[0, 1], 1);
+        let e2 = mono(&[1, 1], 1);
+        let gb = GroebnerBasis::new(vec![e1, e2], MonomialOrder::Lex);
+        let basis = quotient_basis(&gb).unwrap();
+        let action = quotient_action_matrix_by_permutation(&gb, &basis, &[1, 0]).unwrap();
+
+        assert_eq!(basis.monomials, vec![vec![0, 0], vec![0, 1]]);
+        assert_eq!(action, vec![vec![q(1), q(0)], vec![q(0), q(-1)]]);
+        assert_eq!(matrix_trace(&action), q(0));
+        assert_eq!(
+            quotient_basis_degrees(&basis),
+            BTreeMap::from([(0, vec![0]), (1, vec![1])])
         );
     }
 }
