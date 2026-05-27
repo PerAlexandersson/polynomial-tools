@@ -112,9 +112,11 @@ pub fn first_bad_edge_symmetric<C: Ring>(
         edge_order.len(),
         "edge_order must not contain duplicates"
     );
+    let mut graph_edges = g.edges().to_vec();
+    graph_edges.sort_unstable();
     assert_eq!(
         normalized_order.as_slice(),
-        g.edges(),
+        graph_edges.as_slice(),
         "edge_order must list each edge of the graph exactly once"
     );
 
@@ -128,7 +130,7 @@ pub fn first_bad_edge_symmetric<C: Ring>(
             .collect();
         let (u, v) = normalize_edge(edge_order[idx]);
         let prefix_graph = Graph::new(g.num_vertices(), &prefix_edges);
-        let ge = prefix_graph.contract_edge(u, v);
+        let ge = prefix_graph.identify_vertices(u, v);
         let contribution = chromatic_symmetric::<C>(&ge);
         for (partition, coeff) in contribution.terms() {
             let entry = terms.entry(partition.clone()).or_insert_with(C::zero);
@@ -432,6 +434,16 @@ mod tests {
     #[test]
     fn test_first_bad_edge_path3() {
         let g = Graph::path(3);
+        let f = first_bad_edge_symmetric::<i64>(&g, &[(0, 1), (1, 2)]);
+        let m = f.to_monomial_basis();
+        assert_eq!(m.coefficient(&Partition::new(vec![2])), 1);
+        assert_eq!(m.coefficient(&Partition::new(vec![1, 1])), 4);
+        assert_eq!(m.terms().len(), 2);
+    }
+
+    #[test]
+    fn test_first_bad_edge_accepts_unsorted_graph_edges() {
+        let g = Graph::new(3, &[(1, 2), (0, 1)]);
         let f = first_bad_edge_symmetric::<i64>(&g, &[(0, 1), (1, 2)]);
         let m = f.to_monomial_basis();
         assert_eq!(m.coefficient(&Partition::new(vec![2])), 1);

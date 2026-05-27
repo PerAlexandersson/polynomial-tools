@@ -360,6 +360,9 @@ impl Graph {
 
     /// Whether vertices `u` and `v` are adjacent.
     pub fn has_edge(&self, u: usize, v: usize) -> bool {
+        if u >= self.n || v >= self.n {
+            return false;
+        }
         self.adj[u].contains(&v)
     }
 
@@ -565,8 +568,15 @@ impl Graph {
         Graph::new(self.n, &edges)
     }
 
-    /// Contract an edge: merge v into u, remove self-loops.
-    pub fn contract_edge(&self, u: usize, v: usize) -> Self {
+    /// Identify two vertices, removing self-loops and relabeling the remaining
+    /// vertices to `0..n-1`.
+    pub fn identify_vertices(&self, u: usize, v: usize) -> Self {
+        assert!(u < self.n, "vertex u out of range");
+        assert!(v < self.n, "vertex v out of range");
+        if u == v {
+            return self.clone();
+        }
+
         // Redirect all edges involving v to u, then delete v
         let (keep, remove) = if u < v { (u, v) } else { (v, u) };
         let mut new_edges = Vec::new();
@@ -587,6 +597,16 @@ impl Graph {
             })
             .collect();
         Graph::new(self.n - 1, &new_edges)
+    }
+
+    /// Contract an existing edge: merge its endpoints, remove self-loops, and
+    /// relabel the remaining vertices to `0..n-1`.
+    pub fn contract_edge(&self, u: usize, v: usize) -> Self {
+        assert!(u < self.n, "vertex u out of range");
+        assert!(v < self.n, "vertex v out of range");
+        assert!(u != v, "cannot contract a loop");
+        assert!(self.has_edge(u, v), "cannot contract a non-edge");
+        self.identify_vertices(u, v)
     }
 
     /// Line graph L(G): vertices are edges of G, two vertices in L(G) are
@@ -1787,6 +1807,22 @@ mod tests {
         let g = p3.contract_edge(0, 1); // merge 1 into 0, result: 0-1 (was 0-2)
         assert_eq!(g.num_vertices(), 2);
         assert_eq!(g.num_edges(), 1);
+    }
+
+    #[test]
+    fn test_identify_nonadjacent_vertices() {
+        let g = Graph::path(3); // 0-1-2
+        let identified = g.identify_vertices(0, 2);
+        assert_eq!(identified.num_vertices(), 2);
+        assert_eq!(identified.num_edges(), 1);
+        assert!(identified.has_edge(0, 1));
+    }
+
+    #[test]
+    #[should_panic(expected = "cannot contract a non-edge")]
+    fn test_contract_edge_rejects_non_edge() {
+        let g = Graph::path(3);
+        let _ = g.contract_edge(0, 2);
     }
 
     #[test]
