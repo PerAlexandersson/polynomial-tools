@@ -20,7 +20,7 @@ use sym_poly_core::linear_algebra::{
 use sym_poly_core::sn_action::{
     assert_permutation, compose_permutations, conjugacy_class_representatives, inverse_permutation,
 };
-use sym_poly_core::{Partition, Ring};
+use sym_poly_core::{chinese_remainder, symmetric_residue, Field, Partition, PrimeField, Ring};
 use sym_poly_multipoly::{
     elementary_symmetric_generators, quotient_action_matrices_by_multidegree_and_cycle_type,
     quotient_basis, GroebnerBasis, IndexedVariables, MonomialOrder,
@@ -30,15 +30,16 @@ use crate::frobenius::graded_frobenius_from_character_values;
 use crate::SymmetricFunction;
 
 type Q = Ratio<i64>;
+type ResidueCharacterValues = BTreeMap<u32, BTreeMap<Partition, i128>>;
 
 #[derive(Debug, Clone)]
-struct HomogeneousTwinGkmComponent {
+struct HomogeneousTwinGkmComponent<C: Field> {
     fixed_points: Vec<Vec<usize>>,
     fixed_point_index: BTreeMap<Vec<usize>, usize>,
     monomials: Vec<Vec<u32>>,
-    module_basis: Vec<Vector<Q>>,
+    module_basis: Vec<Vector<C>>,
     module_coordinate_columns: Vec<usize>,
-    ordinary_quotient: QuotientSpace<Q>,
+    ordinary_quotient: QuotientSpace<C>,
 }
 
 #[derive(Debug, Clone)]
@@ -58,8 +59,8 @@ struct TwinEdgeAdjacency {
 }
 
 #[derive(Debug, Clone)]
-struct TwinGkmModuleBasis {
-    vectors: Vec<Vector<Q>>,
+struct TwinGkmModuleBasis<C: Field> {
+    vectors: Vec<Vector<C>>,
     coordinate_columns: Vec<usize>,
 }
 
@@ -78,11 +79,11 @@ pub fn twin_gkm_dagger_action_matrices(
         return None;
     }
     if is_complete_area_sequence(area) {
-        return Some(complete_graph_artin_action_matrices(area.len()));
+        return Some(complete_graph_artin_action_matrices::<Q>(area.len()));
     }
 
     let n = area.len();
-    let components = noncomplete_twin_gkm_components(area);
+    let components = noncomplete_twin_gkm_components::<Q>(area);
 
     let mut by_degree = BTreeMap::new();
     for (degree, component) in components.iter().enumerate() {
@@ -104,19 +105,106 @@ pub fn twin_gkm_dagger_action_matrices(
 }
 
 /// Compute graded character values of the twin-manifold dagger action.
+///
+/// This is the default high-level path: all linear algebra is performed over
+/// prime fields, and the final integer character values are lifted by CRT.
 pub fn twin_gkm_dagger_character_values_by_degree(
+    area: &[u8],
+) -> Option<BTreeMap<u32, BTreeMap<Partition, Ratio<i64>>>> {
+    let values = twin_gkm_dagger_character_values_crt(area)?;
+    Some(
+        values
+            .into_iter()
+            .map(|(degree, degree_values)| {
+                (
+                    degree,
+                    degree_values
+                        .into_iter()
+                        .map(|(cycle_type, value)| (cycle_type, Q::from_integer(value)))
+                        .collect(),
+                )
+            })
+            .collect(),
+    )
+}
+
+/// Compute graded character values over a single prime field.
+pub fn twin_gkm_dagger_character_values_mod_prime<const P: u64>(
+    area: &[u8],
+) -> Option<BTreeMap<u32, BTreeMap<Partition, PrimeField<P>>>> {
+    if !is_area_sequence(area) {
+        return None;
+    }
+    if is_complete_area_sequence(area) {
+        let matrices = complete_graph_artin_action_matrices::<PrimeField<P>>(area.len());
+        return Some(trace_values_from_action_matrices(matrices));
+    }
+
+    let n = area.len();
+    let components = noncomplete_twin_gkm_components::<PrimeField<P>>(area);
+    let mut by_degree = BTreeMap::new();
+
+    for (degree, component) in components.iter().enumerate() {
+        if component.ordinary_quotient.dimension() == 0 {
+            continue;
+        }
+
+        let mut values = BTreeMap::new();
+        for (cycle_type, representative) in conjugacy_class_representatives(n) {
+            let trace = component.ordinary_dagger_trace(&representative);
+            if !trace.is_zero() {
+                values.insert(cycle_type, trace);
+            }
+        }
+        by_degree.insert(degree as u32, values);
+    }
+
+    Some(by_degree)
+}
+
+/// Compute integer graded character values by CRT-lifting prime-field traces.
+pub fn twin_gkm_dagger_character_values_crt(
+    area: &[u8],
+) -> Option<BTreeMap<u32, BTreeMap<Partition, i64>>> {
+    if !is_area_sequence(area) {
+        return None;
+    }
+
+    let bound = character_trace_bound(area.len());
+    let mut residues = Vec::new();
+    let mut modulus = 1i128;
+
+    push_prime_residues::<1_000_000_007>(area, &mut residues, &mut modulus)?;
+    let required_modulus = bound.checked_mul(2).unwrap_or(i128::MAX);
+
+    if modulus <= required_modulus {
+        push_prime_residues::<1_000_000_009>(area, &mut residues, &mut modulus)?;
+    }
+    if modulus <= required_modulus {
+        push_prime_residues::<998_244_353>(area, &mut residues, &mut modulus)?;
+    }
+
+    if modulus <= required_modulus {
+        return None;
+    }
+
+    Some(lift_character_residues(area.len(), &residues))
+}
+
+/// Rational reference implementation for small cases and regression checks.
+pub fn twin_gkm_dagger_character_values_by_degree_rational(
     area: &[u8],
 ) -> Option<BTreeMap<u32, BTreeMap<Partition, Ratio<i64>>>> {
     if !is_area_sequence(area) {
         return None;
     }
     if is_complete_area_sequence(area) {
-        let matrices = complete_graph_artin_action_matrices(area.len());
+        let matrices = complete_graph_artin_action_matrices::<Q>(area.len());
         return Some(trace_values_from_action_matrices(matrices));
     }
 
     let n = area.len();
-    let components = noncomplete_twin_gkm_components(area);
+    let components = noncomplete_twin_gkm_components::<Q>(area);
     let mut by_degree = BTreeMap::new();
 
     for (degree, component) in components.iter().enumerate() {
@@ -150,14 +238,14 @@ pub fn twin_gkm_dagger_frobenius(
     )
 }
 
-impl HomogeneousTwinGkmComponent {
+impl<C: Field> HomogeneousTwinGkmComponent<C> {
     fn new(
         fixed_points: Vec<Vec<usize>>,
         fixed_point_index: BTreeMap<Vec<usize>, usize>,
         monomials: Vec<Vec<u32>>,
-        module_basis: Vec<Vector<Q>>,
+        module_basis: Vec<Vector<C>>,
         module_coordinate_columns: Vec<usize>,
-        relations: Vec<Vector<Q>>,
+        relations: Vec<Vector<C>>,
     ) -> Self {
         let ordinary_quotient = QuotientSpace::from_relations(module_basis.len(), &relations);
 
@@ -175,7 +263,7 @@ impl HomogeneousTwinGkmComponent {
         self.fixed_points.len() * self.monomials.len()
     }
 
-    fn module_coordinates(&self, vector: &[Q]) -> Vector<Q> {
+    fn module_coordinates(&self, vector: &[C]) -> Vector<C> {
         assert_eq!(
             vector.len(),
             self.ambient_dimension(),
@@ -187,10 +275,10 @@ impl HomogeneousTwinGkmComponent {
             .collect()
     }
 
-    fn module_dagger_action_matrix(&self, permutation: &[usize]) -> Matrix<Q> {
+    fn module_dagger_action_matrix(&self, permutation: &[usize]) -> Matrix<C> {
         assert_permutation(permutation);
         let dim = self.module_basis.len();
-        let mut matrix = zero_matrix::<Q>(dim, dim);
+        let mut matrix = zero_matrix::<C>(dim, dim);
         let source_point_indices = self.dagger_source_point_indices(permutation);
 
         for (col, basis_vector) in self.module_basis.iter().enumerate() {
@@ -205,10 +293,10 @@ impl HomogeneousTwinGkmComponent {
         matrix
     }
 
-    fn ordinary_dagger_trace(&self, permutation: &[usize]) -> Q {
+    fn ordinary_dagger_trace(&self, permutation: &[usize]) -> C {
         assert_permutation(permutation);
         let source_point_indices = self.dagger_source_point_indices(permutation);
-        let mut trace = Q::zero();
+        let mut trace = C::zero();
 
         for (quotient_col, &module_basis_index) in
             self.ordinary_quotient.free_columns.iter().enumerate()
@@ -239,9 +327,9 @@ impl HomogeneousTwinGkmComponent {
     fn apply_dagger_action_to_ambient_vector(
         &self,
         source_point_indices: &[usize],
-        vector: &[Q],
-    ) -> Vector<Q> {
-        let mut result = vec![Q::zero(); self.ambient_dimension()];
+        vector: &[C],
+    ) -> Vector<C> {
+        let mut result = vec![C::zero(); self.ambient_dimension()];
         let monomial_count = self.monomials.len();
 
         for (target_point_index, &source_point_index) in source_point_indices.iter().enumerate() {
@@ -261,7 +349,7 @@ impl HomogeneousTwinGkmComponent {
     }
 }
 
-fn noncomplete_twin_gkm_components(area: &[u8]) -> Vec<HomogeneousTwinGkmComponent> {
+fn noncomplete_twin_gkm_components<C: Field>(area: &[u8]) -> Vec<HomogeneousTwinGkmComponent<C>> {
     let graph = Graph::unit_interval(area);
     let n = area.len();
     let max_degree = graph.num_edges() as u32;
@@ -308,9 +396,9 @@ fn noncomplete_twin_gkm_components(area: &[u8]) -> Vec<HomogeneousTwinGkmCompone
     components
 }
 
-fn trace_values_from_action_matrices(
-    matrices: BTreeMap<u32, BTreeMap<Partition, Matrix<Q>>>,
-) -> BTreeMap<u32, BTreeMap<Partition, Q>> {
+fn trace_values_from_action_matrices<C: Ring>(
+    matrices: BTreeMap<u32, BTreeMap<Partition, Matrix<C>>>,
+) -> BTreeMap<u32, BTreeMap<Partition, C>> {
     matrices
         .into_iter()
         .map(|(degree, class_matrices)| {
@@ -389,13 +477,13 @@ impl TwinGkmCombinatorics {
     }
 }
 
-fn homogeneous_twin_gkm_module_basis(
+fn homogeneous_twin_gkm_module_basis<C: Field>(
     combinatorics: &TwinGkmCombinatorics,
     degree: u32,
-) -> TwinGkmModuleBasis {
+) -> TwinGkmModuleBasis<C> {
     let monomials = combinatorics.monomials(degree);
     let ambient_dimension = combinatorics.fixed_points.len() * monomials.len();
-    let mut constraints = Vec::new();
+    let mut constraints: Vec<Vector<C>> = Vec::new();
 
     for adjacency in &combinatorics.edge_adjacencies {
         for row in divisibility_constraints_for_edge(
@@ -419,40 +507,43 @@ fn homogeneous_twin_gkm_module_basis(
     }
 }
 
-fn divisibility_constraints_for_edge(
+fn divisibility_constraints_for_edge<C: Ring>(
     point_index: usize,
     adjacent_point_index: usize,
     substitution_groups: &[Vec<usize>],
     monomial_count: usize,
     ambient_dimension: usize,
-) -> Vec<Vector<Q>> {
+) -> Vec<Vector<C>>
+where
+    C: Ring,
+{
     substitution_groups
         .iter()
         .map(|group| {
-            let mut row = vec![Q::zero(); ambient_dimension];
+            let mut row = vec![C::zero(); ambient_dimension];
             for &monomial_idx in group {
                 row[point_index * monomial_count + monomial_idx] =
-                    row[point_index * monomial_count + monomial_idx].clone() + Q::one();
+                    row[point_index * monomial_count + monomial_idx].clone() + C::one();
                 row[adjacent_point_index * monomial_count + monomial_idx] =
-                    row[adjacent_point_index * monomial_count + monomial_idx].clone() - Q::one();
+                    row[adjacent_point_index * monomial_count + monomial_idx].clone() - C::one();
             }
             row
         })
         .collect()
 }
 
-fn variable_multiple_relations(
-    previous: &HomogeneousTwinGkmComponent,
-    current: &HomogeneousTwinGkmComponent,
+fn variable_multiple_relations<C: Field>(
+    previous: &HomogeneousTwinGkmComponent<C>,
+    current: &HomogeneousTwinGkmComponent<C>,
     multiplication_maps: &[Vec<usize>],
-) -> Vec<Vector<Q>> {
+) -> Vec<Vector<C>> {
     let mut relations = Vec::new();
     let previous_monomial_count = previous.monomials.len();
     let current_monomial_count = current.monomials.len();
 
     for basis_vector in &previous.module_basis {
         for variable_map in multiplication_maps {
-            let mut ambient = vec![Q::zero(); current.ambient_dimension()];
+            let mut ambient = vec![C::zero(); current.ambient_dimension()];
             for point_index in 0..previous.fixed_points.len() {
                 for (monomial_index, &target_monomial_index) in variable_map.iter().enumerate() {
                     let source = point_index * previous_monomial_count + monomial_index;
@@ -564,27 +655,27 @@ fn weak_compositions_rec(
     current[index] = 0;
 }
 
-fn standard_basis(dimension: usize) -> Vec<Vector<Q>> {
+fn standard_basis<C: Ring>(dimension: usize) -> Vec<Vector<C>> {
     (0..dimension)
         .map(|index| {
-            let mut vector = vec![Q::zero(); dimension];
-            vector[index] = Q::one();
+            let mut vector = vec![C::zero(); dimension];
+            vector[index] = C::one();
             vector
         })
         .collect()
 }
 
-fn kernel_basis_with_coordinate_columns(
+fn kernel_basis_with_coordinate_columns<C: Field>(
     ambient_dimension: usize,
-    constraints: &[Vector<Q>],
-) -> TwinGkmModuleBasis {
+    constraints: &[Vector<C>],
+) -> TwinGkmModuleBasis<C> {
     let reduced = rref(constraints);
     let coordinate_columns = complement_columns(ambient_dimension, &reduced.pivot_columns);
     let mut vectors = Vec::with_capacity(coordinate_columns.len());
 
     for &free_col in &coordinate_columns {
-        let mut vector = vec![Q::zero(); ambient_dimension];
-        vector[free_col] = Q::one();
+        let mut vector = vec![C::zero(); ambient_dimension];
+        vector[free_col] = C::one();
         for (pivot_row, &pivot_col) in reduced.pivot_columns.iter().enumerate() {
             vector[pivot_col] = -reduced.matrix[pivot_row][free_col].clone();
         }
@@ -634,9 +725,11 @@ fn is_complete_area_sequence(area: &[u8]) -> bool {
         .all(|(index, &value)| value as usize == index)
 }
 
-fn complete_graph_artin_action_matrices(n: usize) -> BTreeMap<u32, BTreeMap<Partition, Matrix<Q>>> {
+fn complete_graph_artin_action_matrices<C: Field>(
+    n: usize,
+) -> BTreeMap<u32, BTreeMap<Partition, Matrix<C>>> {
     let groebner_basis =
-        GroebnerBasis::new(elementary_symmetric_generators::<Q>(n), MonomialOrder::Lex);
+        GroebnerBasis::new(elementary_symmetric_generators::<C>(n), MonomialOrder::Lex);
     let basis = quotient_basis(&groebner_basis).expect("Artin quotient has a finite basis");
     let variables = IndexedVariables::new(1, n);
     quotient_action_matrices_by_multidegree_and_cycle_type(&variables, &groebner_basis, &basis)
@@ -647,6 +740,79 @@ fn complete_graph_artin_action_matrices(n: usize) -> BTreeMap<u32, BTreeMap<Part
             (degree[0], matrices)
         })
         .collect()
+}
+
+fn push_prime_residues<const P: u64>(
+    area: &[u8],
+    residues: &mut Vec<(i128, ResidueCharacterValues)>,
+    modulus_product: &mut i128,
+) -> Option<()> {
+    let values = twin_gkm_dagger_character_values_mod_prime::<P>(area)?;
+    residues.push((P as i128, prime_values_to_residues(values)));
+    *modulus_product = modulus_product.checked_mul(P as i128)?;
+    Some(())
+}
+
+fn prime_values_to_residues<const P: u64>(
+    values: BTreeMap<u32, BTreeMap<Partition, PrimeField<P>>>,
+) -> ResidueCharacterValues {
+    values
+        .into_iter()
+        .map(|(degree, degree_values)| {
+            (
+                degree,
+                degree_values
+                    .into_iter()
+                    .map(|(cycle_type, value)| (cycle_type, value.value() as i128))
+                    .collect(),
+            )
+        })
+        .collect()
+}
+
+fn lift_character_residues(
+    n: usize,
+    residues: &[(i128, ResidueCharacterValues)],
+) -> BTreeMap<u32, BTreeMap<Partition, i64>> {
+    let mut degrees = std::collections::BTreeSet::new();
+    for (_, values) in residues {
+        degrees.extend(values.keys().copied());
+    }
+
+    let cycle_types = Partition::all_of_size(n as u32);
+    degrees
+        .into_iter()
+        .map(|degree| {
+            let mut degree_values = BTreeMap::new();
+            for cycle_type in &cycle_types {
+                let congruences = residues
+                    .iter()
+                    .map(|(prime, values)| {
+                        let residue = values
+                            .get(&degree)
+                            .and_then(|degree_values| degree_values.get(cycle_type))
+                            .copied()
+                            .unwrap_or(0);
+                        (residue, *prime)
+                    })
+                    .collect::<Vec<_>>();
+                let (residue, modulus) =
+                    chinese_remainder(&congruences).expect("prime moduli are coprime");
+                let value = symmetric_residue(residue, modulus);
+                if value != 0 {
+                    degree_values.insert(
+                        cycle_type.clone(),
+                        i64::try_from(value).expect("lifted character value fits in i64"),
+                    );
+                }
+            }
+            (degree, degree_values)
+        })
+        .collect()
+}
+
+fn character_trace_bound(n: usize) -> i128 {
+    (1..=n).fold(1i128, |acc, value| acc.saturating_mul(value as i128))
 }
 
 #[cfg(test)]
@@ -721,6 +887,13 @@ mod tests {
         }
     }
 
+    fn assert_crt_matches_rational_reference(area: &[u8]) {
+        let crt = twin_gkm_dagger_character_values_by_degree(area).unwrap();
+        let rational = twin_gkm_dagger_character_values_by_degree_rational(area).unwrap();
+
+        assert_eq!(crt, rational);
+    }
+
     #[test]
     fn test_twin_gkm_dagger_rejects_invalid_area() {
         assert!(twin_gkm_dagger_action_matrices(&[0, 2]).is_none());
@@ -748,6 +921,11 @@ mod tests {
             trace_values_from_action_matrices(twin_gkm_dagger_action_matrices(&area).unwrap());
 
         assert_eq!(direct, from_matrices);
+    }
+
+    #[test]
+    fn test_twin_gkm_dagger_path_s3_crt_matches_rational_reference() {
+        assert_crt_matches_rational_reference(&[0, 1, 1]);
     }
 
     #[test]
@@ -780,5 +958,10 @@ mod tests {
     fn test_twin_gkm_dagger_complete_graph_s4_artin_presentation_matches_llt() {
         assert_matches_llt_character_target(&[0, 1, 2, 3]);
         assert_matches_llt_frobenius_target(&[0, 1, 2, 3]);
+    }
+
+    #[test]
+    fn test_twin_gkm_dagger_complete_graph_s4_crt_matches_rational_reference() {
+        assert_crt_matches_rational_reference(&[0, 1, 2, 3]);
     }
 }
