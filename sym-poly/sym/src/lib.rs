@@ -27,7 +27,10 @@ pub use frobenius::{
     graded_frobenius_from_character_values, graded_frobenius_from_trace_matrices,
     multigraded_frobenius_from_character_values, multigraded_frobenius_from_trace_matrices,
 };
-pub use hessenberg_gkm::{hessenberg_gkm_dot_action_matrices, hessenberg_gkm_dot_frobenius};
+pub use hessenberg_gkm::{
+    hessenberg_gkm_dot_action_matrices, hessenberg_gkm_dot_character_values_by_degree,
+    hessenberg_gkm_dot_frobenius,
+};
 pub use llt::{
     graph_llt_symmetric, unicellular_llt, unicellular_llt_character_values_by_degree,
     unicellular_llt_frobenius_target, unit_interval_edges,

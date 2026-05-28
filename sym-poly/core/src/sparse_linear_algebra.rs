@@ -65,10 +65,17 @@ pub fn sparse_to_dense<C: Ring>(num_cols: usize, vector: &SparseVector<C>) -> Ve
 }
 
 pub fn sparse_rref<C: Field>(num_cols: usize, rows: &[SparseVector<C>]) -> SparseRrefResult<C> {
+    sparse_rref_from_rows(num_cols, rows.iter().cloned())
+}
+
+pub fn sparse_rref_from_rows<C: Field, I>(num_cols: usize, rows: I) -> SparseRrefResult<C>
+where
+    I: IntoIterator<Item = SparseVector<C>>,
+{
     let mut pivot_rows: BTreeMap<usize, SparseVector<C>> = BTreeMap::new();
 
     for row in rows {
-        let mut reduced = canonical_sparse_vector(num_cols, row);
+        let mut reduced = canonical_sparse_vector(num_cols, &row);
         reduce_by_pivots(&mut reduced, &pivot_rows);
         if reduced.is_empty() {
             continue;
@@ -125,6 +132,17 @@ pub fn sparse_kernel_basis_with_free_columns<C: Field>(
     rows: &[SparseVector<C>],
 ) -> (Vec<SparseVector<C>>, Vec<usize>) {
     let reduced = sparse_rref(num_cols, rows);
+    sparse_kernel_basis_from_rref(&reduced)
+}
+
+pub fn sparse_kernel_basis_with_free_columns_from_rows<C: Field, I>(
+    num_cols: usize,
+    rows: I,
+) -> (Vec<SparseVector<C>>, Vec<usize>)
+where
+    I: IntoIterator<Item = SparseVector<C>>,
+{
+    let reduced = sparse_rref_from_rows(num_cols, rows);
     sparse_kernel_basis_from_rref(&reduced)
 }
 
@@ -215,10 +233,14 @@ fn reduce_by_pivots<C: Field>(
     }
 }
 
-fn coefficient_at<C: Ring>(row: &SparseVector<C>, col: usize) -> C {
+pub fn sparse_coefficient<C: Ring>(row: &SparseVector<C>, col: usize) -> C {
     row.binary_search_by_key(&col, |(entry_col, _)| *entry_col)
         .map(|index| row[index].1.clone())
         .unwrap_or_else(|_| C::zero())
+}
+
+fn coefficient_at<C: Ring>(row: &SparseVector<C>, col: usize) -> C {
+    sparse_coefficient(row, col)
 }
 
 fn scale_row<C: Ring>(row: &SparseVector<C>, scale: C) -> SparseVector<C> {
@@ -399,6 +421,19 @@ mod tests {
                 vec![F101::one(), F101::zero(), F101::from_i64(5)],
                 vec![F101::zero(), F101::one(), F101::from_i64(48)]
             ]
+        );
+    }
+
+    #[test]
+    fn test_sparse_rref_from_rows_matches_slice_entry_point() {
+        let rows = vec![
+            sparse_vector(4, vec![(0, q(1)), (2, q(3))]),
+            sparse_vector(4, vec![(1, q(2)), (2, q(4)), (3, q(6))]),
+        ];
+
+        assert_eq!(
+            sparse_rref_from_rows(4, rows.clone()),
+            sparse_rref(4, &rows)
         );
     }
 }
