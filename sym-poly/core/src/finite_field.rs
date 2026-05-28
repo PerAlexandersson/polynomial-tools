@@ -1,7 +1,15 @@
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fmt;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 use crate::{Field, Ring};
+
+const INVERSE_CACHE_LIMIT: usize = 1 << 16;
+
+thread_local! {
+    static INVERSE_CACHE: RefCell<HashMap<(u64, u64), u64>> = RefCell::new(HashMap::new());
+}
 
 /// An element of the prime field `F_P`.
 ///
@@ -45,12 +53,30 @@ impl<const P: u64> PrimeField<P> {
 
     pub fn inverse(self) -> Self {
         assert!(!self.is_zero(), "division by zero");
+        if self.value == 1 || self.value == P - 1 {
+            return self;
+        }
+
+        if let Some(inverse) =
+            INVERSE_CACHE.with(|cache| cache.borrow().get(&(P, self.value)).copied())
+        {
+            return Self { value: inverse };
+        }
+
         let (gcd, inverse, _) = extended_gcd(self.value as i128, P as i128);
         assert!(
             gcd == 1,
             "nonzero element is not invertible; modulus is not prime"
         );
-        Self::new(inverse)
+        let inverse = Self::new(inverse);
+        INVERSE_CACHE.with(|cache| {
+            let mut cache = cache.borrow_mut();
+            if cache.len() >= INVERSE_CACHE_LIMIT {
+                cache.clear();
+            }
+            cache.insert((P, self.value), inverse.value);
+        });
+        inverse
     }
 }
 
@@ -58,7 +84,12 @@ impl<const P: u64> Add for PrimeField<P> {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self {
-        let value = ((self.value as u128 + rhs.value as u128) % P as u128) as u64;
+        let (sum, overflow) = self.value.overflowing_add(rhs.value);
+        let value = if overflow || sum >= P {
+            sum.wrapping_sub(P)
+        } else {
+            sum
+        };
         Self { value }
     }
 }
@@ -67,7 +98,11 @@ impl<const P: u64> Sub for PrimeField<P> {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self {
-        let value = ((P as u128 + self.value as u128 - rhs.value as u128) % P as u128) as u64;
+        let value = if self.value >= rhs.value {
+            self.value - rhs.value
+        } else {
+            P - (rhs.value - self.value)
+        };
         Self { value }
     }
 }
@@ -90,6 +125,15 @@ impl<const P: u64> Mul for PrimeField<P> {
     type Output = Self;
 
     fn mul(self, rhs: Self) -> Self {
+        if self.is_zero() || rhs.is_zero() {
+            return Self::zero();
+        }
+        if self.value == 1 {
+            return rhs;
+        }
+        if rhs.value == 1 {
+            return self;
+        }
         let value = ((self.value as u128 * rhs.value as u128) % P as u128) as u64;
         Self { value }
     }
@@ -122,6 +166,12 @@ impl<const P: u64> Ring for PrimeField<P> {
 
     fn exact_div_i64(&self, divisor: i64) -> Self {
         assert!(divisor != 0, "division by zero");
+        if divisor == 1 {
+            return *self;
+        }
+        if divisor == -1 {
+            return -*self;
+        }
         *self / Self::from_i64(divisor)
     }
 }
@@ -172,7 +222,9 @@ mod tests {
         let x = F101::from_i64(37);
 
         assert_eq!(x / x, F101::one());
+        assert_eq!(x.inverse(), x.inverse());
         assert_eq!(F101::from_i64(6).exact_div_i64(3), F101::from_i64(2));
+        assert_eq!(F101::from_i64(6).exact_div_i64(-1), F101::from_i64(-6));
     }
 
     #[test]
