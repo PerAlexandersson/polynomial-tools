@@ -121,6 +121,32 @@ pub fn circular_unicellular_llt(
     directed_graph_llt_symmetric(area.len(), &directed_edges, &[], &[])
 }
 
+/// The circular unicellular LLT polynomial after substituting `q -> q + 1`.
+pub fn circular_unicellular_llt_q_plus_one(
+    area: &[u8],
+) -> Option<SymmetricFunction<UnivariatePolynomial<i64>>> {
+    let llt = circular_unicellular_llt(area)?;
+    Some(substitute_q_plus_one_symmetric_function(&llt))
+}
+
+/// Elementary-basis expansion of the circular unicellular LLT after `q -> q+1`.
+pub fn circular_unicellular_llt_q_plus_one_e_expansion(
+    area: &[u8],
+) -> Option<SymmetricFunction<UnivariatePolynomial<i64>>> {
+    Some(circular_unicellular_llt_q_plus_one(area)?.to_elementary_basis())
+}
+
+/// Check e-positivity of the circular unicellular LLT after `q -> q+1`.
+pub fn circular_unicellular_llt_q_plus_one_is_e_positive(area: &[u8]) -> Option<bool> {
+    let e_expansion = circular_unicellular_llt_q_plus_one_e_expansion(area)?;
+    Some(
+        e_expansion
+            .terms()
+            .values()
+            .all(|coefficient| coefficient.coeffs().iter().all(|&c| c >= 0)),
+    )
+}
+
 /// Degree-wise Schur expansion of the unicellular LLT Frobenius target.
 ///
 /// The output maps a `q`-degree to the corresponding Schur-positive symmetric
@@ -372,6 +398,43 @@ fn character_values_from_schur_frobenius(
     result
 }
 
+fn substitute_q_plus_one_symmetric_function(
+    f: &SymmetricFunction<UnivariatePolynomial<i64>>,
+) -> SymmetricFunction<UnivariatePolynomial<i64>> {
+    let terms = f
+        .terms()
+        .iter()
+        .map(|(partition, coefficient)| (partition.clone(), substitute_q_plus_one(coefficient)))
+        .collect();
+    SymmetricFunction::from_terms(f.basis(), terms)
+}
+
+fn substitute_q_plus_one(poly: &UnivariatePolynomial<i64>) -> UnivariatePolynomial<i64> {
+    let mut coeffs = vec![0; poly.coeffs().len()];
+    for (degree, &coefficient) in poly.coeffs().iter().enumerate() {
+        if coefficient == 0 {
+            continue;
+        }
+        for target_degree in 0..=degree {
+            coeffs[target_degree] +=
+                coefficient * binomial_u32(degree as u32, target_degree as u32) as i64;
+        }
+    }
+    UnivariatePolynomial::new(coeffs)
+}
+
+fn binomial_u32(n: u32, k: u32) -> u64 {
+    if k > n {
+        return 0;
+    }
+    let k = k.min(n - k);
+    let mut result = 1u64;
+    for i in 0..k {
+        result = result * u64::from(n - i) / u64::from(i + 1);
+    }
+    result
+}
+
 fn compositions_sorting_to_partition(lambda: &Partition) -> Vec<Vec<u32>> {
     let mut parts = lambda.parts().to_vec();
     parts.sort_unstable();
@@ -546,6 +609,39 @@ mod tests {
     }
 
     #[test]
+    fn test_circular_unicellular_llt_q_plus_one_directed_cycle_e_positive() {
+        let e_expansion = circular_unicellular_llt_q_plus_one_e_expansion(&[1, 1, 1]).unwrap();
+
+        assert_eq!(
+            e_expansion.coefficient(&Partition::new(vec![1, 1, 1])),
+            UnivariatePolynomial::new(vec![1])
+        );
+        assert_eq!(
+            e_expansion.coefficient(&Partition::new(vec![2, 1])),
+            UnivariatePolynomial::new(vec![0, 3])
+        );
+        assert_eq!(
+            e_expansion.coefficient(&Partition::new(vec![3])),
+            UnivariatePolynomial::new(vec![0, 0, 3])
+        );
+        assert_eq!(
+            circular_unicellular_llt_q_plus_one_is_e_positive(&[1, 1, 1]),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn test_circular_unicellular_llt_q_plus_one_rank3_e_positive() {
+        for area in all_circular_area_sequences(3) {
+            assert_eq!(
+                circular_unicellular_llt_q_plus_one_is_e_positive(&area),
+                Some(true),
+                "area {area:?}"
+            );
+        }
+    }
+
+    #[test]
     fn test_unicellular_llt_frobenius_target_edgeless_s3() {
         let target = unicellular_llt_frobenius_target(&[0, 0, 0]).unwrap();
 
@@ -636,5 +732,30 @@ mod tests {
         assert_eq!(values[&3][&p(&[1, 1, 1])], 1);
         assert_eq!(values[&3][&p(&[2, 1])], -1);
         assert_eq!(values[&3][&p(&[3])], 1);
+    }
+
+    fn all_circular_area_sequences(n: usize) -> Vec<Vec<u8>> {
+        if n == 0 {
+            return vec![Vec::new()];
+        }
+
+        let mut result = Vec::new();
+        let mut current = vec![0u8; n];
+        circular_area_sequences_rec(0, &mut current, &mut result);
+        result
+    }
+
+    fn circular_area_sequences_rec(index: usize, current: &mut [u8], result: &mut Vec<Vec<u8>>) {
+        if index == current.len() {
+            if Graph::is_circular_unit_interval_area_sequence(current) {
+                result.push(current.to_vec());
+            }
+            return;
+        }
+
+        for value in 0..current.len() {
+            current[index] = value as u8;
+            circular_area_sequences_rec(index + 1, current, result);
+        }
     }
 }

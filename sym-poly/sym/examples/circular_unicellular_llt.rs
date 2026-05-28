@@ -4,7 +4,8 @@ use combinatoric_core::Graph;
 use sym_poly_core::UnivariatePolynomial;
 use sym_poly_sym::{
     circular_unicellular_llt, circular_unicellular_llt_character_values_by_degree,
-    circular_unicellular_llt_frobenius_target, SymmetricFunction,
+    circular_unicellular_llt_frobenius_target, circular_unicellular_llt_q_plus_one_e_expansion,
+    circular_unicellular_llt_q_plus_one_is_e_positive, SymmetricFunction,
 };
 
 fn main() {
@@ -67,11 +68,16 @@ fn print_area_sequence(area: &[u8]) {
     };
     let frobenius = circular_unicellular_llt_frobenius_target(area).unwrap();
     let characters = circular_unicellular_llt_character_values_by_degree(area).unwrap();
+    let shifted_e_expansion = circular_unicellular_llt_q_plus_one_e_expansion(area).unwrap();
+    let shifted_e_positive = circular_unicellular_llt_q_plus_one_is_e_positive(area).unwrap();
 
     println!("area {:?}", area);
     println!("Schur-positive: {}", is_schur_positive(&frobenius));
+    println!("e-positive after q -> q+1: {shifted_e_positive}");
     println!("Circular unicellular LLT in m-basis:");
-    println!("  {}", format_monomial_function(&llt));
+    println!("  {}", format_basis_function(&llt, "m"));
+    println!("After q -> q+1 in e-basis:");
+    println!("  {}", format_basis_function(&shifted_e_expansion, "e"));
     println!("Schur Frobenius:");
     for (degree, schur) in frobenius {
         println!("  q^{degree}: {schur}");
@@ -88,14 +94,15 @@ fn print_area_sequence(area: &[u8]) {
     println!();
 }
 
-fn format_monomial_function(f: &SymmetricFunction<UnivariatePolynomial<i64>>) -> String {
-    let monomial = f.to_monomial_basis();
-    if monomial.is_zero() {
+fn format_basis_function(
+    f: &SymmetricFunction<UnivariatePolynomial<i64>>,
+    basis_label: &str,
+) -> String {
+    if f.is_zero() {
         return "0".to_string();
     }
 
-    monomial
-        .terms()
+    f.terms()
         .iter()
         .map(|(partition, coefficient)| {
             let coefficient = coefficient.to_string();
@@ -105,9 +112,9 @@ fn format_monomial_function(f: &SymmetricFunction<UnivariatePolynomial<i64>>) ->
                 coefficient
             };
             if coefficient == "1" {
-                format!("m[{partition}]")
+                format!("{basis_label}[{partition}]")
             } else {
-                format!("{coefficient}*m[{partition}]")
+                format!("{coefficient}*{basis_label}[{partition}]")
             }
         })
         .collect::<Vec<_>>()

@@ -39,9 +39,11 @@ pub use hessenberg_gkm::{
 };
 pub use llt::{
     circular_unicellular_llt, circular_unicellular_llt_character_values_by_degree,
-    circular_unicellular_llt_frobenius_target, directed_graph_llt_symmetric, graph_llt_symmetric,
-    unicellular_llt, unicellular_llt_character_values_by_degree, unicellular_llt_frobenius_target,
-    unit_interval_edges,
+    circular_unicellular_llt_frobenius_target, circular_unicellular_llt_q_plus_one,
+    circular_unicellular_llt_q_plus_one_e_expansion,
+    circular_unicellular_llt_q_plus_one_is_e_positive, directed_graph_llt_symmetric,
+    graph_llt_symmetric, unicellular_llt, unicellular_llt_character_values_by_degree,
+    unicellular_llt_frobenius_target, unit_interval_edges,
 };
 pub use macdonald::{
     delta_eigenvalue, delta_modified_macdonald, delta_prime_eigenvalue,
