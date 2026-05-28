@@ -3,7 +3,7 @@ use std::env;
 
 use num_rational::Ratio;
 use sym_poly_sym::{
-    twin_gkm_dagger_character_values_by_degree, twin_gkm_dagger_frobenius,
+    graded_frobenius_from_character_values, twin_gkm_dagger_character_values_by_degree,
     unicellular_llt_frobenius_target, SymmetricFunction,
 };
 
@@ -58,15 +58,18 @@ fn parse_area_entry(text: &str) -> Result<u8, String> {
 }
 
 fn print_area_sequence(area: &[u8]) {
-    let Some(frobenius) = twin_gkm_dagger_frobenius(area) else {
+    let Some(characters) = twin_gkm_dagger_character_values_by_degree(area) else {
         println!("area {:?}: invalid area sequence", area);
         return;
     };
+    let frobenius: BTreeMap<_, _> = graded_frobenius_from_character_values(&characters)
+        .into_iter()
+        .filter(|(_, function)| !function.is_zero())
+        .collect();
     let target = unicellular_llt_frobenius_target(area);
     let matches_target = target
         .as_ref()
         .is_some_and(|target| schur_strings_i64(target) == schur_strings_ratio(&frobenius));
-    let characters = twin_gkm_dagger_character_values_by_degree(area).unwrap();
 
     println!("area {:?}", area);
     println!("matches unicellular LLT: {matches_target}");

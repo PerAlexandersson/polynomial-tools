@@ -20,9 +20,10 @@ use sym_poly_core::linear_algebra::{
 use sym_poly_core::sn_action::{
     assert_permutation, compose_permutations, conjugacy_class_representatives, inverse_permutation,
 };
-use sym_poly_core::{Partition, Ring};
+use sym_poly_core::{Partition, Ring, Tableau};
 
-use crate::frobenius::graded_frobenius_from_trace_matrices;
+use crate::frobenius::graded_frobenius_from_character_values;
+use crate::kostka::sn_character;
 use crate::SymmetricFunction;
 
 type Q = Ratio<i64>;
@@ -109,9 +110,24 @@ pub fn twin_gkm_dagger_action_matrices(
 }
 
 /// Compute graded character values of the twin-manifold dagger action.
+///
+/// For the complete graph this uses the coinvariant-ring fake-degree model:
+/// the multiplicity of `S^lambda` in degree `d` is the number of standard
+/// Young tableaux of shape `lambda` with major index `d`. This avoids the
+/// large dense GKM row reductions in the top complete-graph degrees while
+/// preserving the same character table.
 pub fn twin_gkm_dagger_character_values_by_degree(
     area: &[u8],
 ) -> Option<BTreeMap<u32, BTreeMap<Partition, Ratio<i64>>>> {
+    if !is_area_sequence(area) {
+        return None;
+    }
+    if is_complete_area_sequence(area) {
+        return Some(complete_graph_coinvariant_character_values_by_degree(
+            area.len(),
+        ));
+    }
+
     let matrices = twin_gkm_dagger_action_matrices(area)?;
     Some(
         matrices
@@ -132,9 +148,9 @@ pub fn twin_gkm_dagger_character_values_by_degree(
 pub fn twin_gkm_dagger_frobenius(
     area: &[u8],
 ) -> Option<BTreeMap<u32, SymmetricFunction<Ratio<i64>>>> {
-    let matrices = twin_gkm_dagger_action_matrices(area)?;
+    let character_values = twin_gkm_dagger_character_values_by_degree(area)?;
     Some(
-        graded_frobenius_from_trace_matrices(&matrices)
+        graded_frobenius_from_character_values(&character_values)
             .into_iter()
             .filter(|(_, f)| !f.is_zero())
             .collect(),
@@ -439,9 +455,52 @@ fn is_area_sequence(area: &[u8]) -> bool {
             .all(|w| usize::from(w[1]) <= usize::from(w[0]) + 1)
 }
 
+fn is_complete_area_sequence(area: &[u8]) -> bool {
+    area.iter()
+        .enumerate()
+        .all(|(index, &value)| value as usize == index)
+}
+
+fn complete_graph_coinvariant_character_values_by_degree(
+    n: usize,
+) -> BTreeMap<u32, BTreeMap<Partition, Q>> {
+    let cycle_types = Partition::all_of_size(n as u32);
+    let mut schur_multiplicities_by_degree: BTreeMap<u32, BTreeMap<Partition, i64>> =
+        BTreeMap::new();
+
+    for lambda in Partition::all_of_size(n as u32) {
+        for tableau in Tableau::standard_tableaux_iter(&lambda) {
+            let major_index = tableau.descent_set().iter().copied().sum();
+            *schur_multiplicities_by_degree
+                .entry(major_index)
+                .or_default()
+                .entry(lambda.clone())
+                .or_insert(0) += 1;
+        }
+    }
+
+    schur_multiplicities_by_degree
+        .into_iter()
+        .map(|(degree, schur_multiplicities)| {
+            let mut character_values = BTreeMap::new();
+            for cycle_type in &cycle_types {
+                let value = schur_multiplicities
+                    .iter()
+                    .map(|(lambda, &multiplicity)| multiplicity * sn_character(lambda, cycle_type))
+                    .sum::<i64>();
+                if value != 0 {
+                    character_values.insert(cycle_type.clone(), Q::from_integer(value));
+                }
+            }
+            (degree, character_values)
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::frobenius::graded_frobenius_from_trace_matrices;
     use crate::llt::{
         unicellular_llt_character_values_by_degree, unicellular_llt_frobenius_target,
     };
@@ -533,5 +592,31 @@ mod tests {
     fn test_twin_gkm_dagger_complete_graph_s3_matches_llt() {
         assert_matches_llt_character_target(&[0, 1, 2]);
         assert_matches_llt_frobenius_target(&[0, 1, 2]);
+    }
+
+    #[test]
+    fn test_twin_gkm_dagger_complete_graph_s3_action_matrices_match_llt() {
+        let area = [0, 1, 2];
+        let computed =
+            graded_frobenius_from_trace_matrices(&twin_gkm_dagger_action_matrices(&area).unwrap());
+        let target = unicellular_llt_frobenius_target(&area).unwrap();
+
+        for degree in 0..=3 {
+            let computed_schur = computed[&degree].to_schur_basis();
+            let target_schur = target[&degree].to_schur_basis();
+            for partition in Partition::all_of_size(area.len() as u32) {
+                assert_eq!(
+                    computed_schur.coefficient(&partition),
+                    q(target_schur.coefficient(&partition)),
+                    "mismatch in degree {degree}, partition {partition:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_twin_gkm_dagger_complete_graph_s4_fast_path_matches_llt() {
+        assert_matches_llt_character_target(&[0, 1, 2, 3]);
+        assert_matches_llt_frobenius_target(&[0, 1, 2, 3]);
     }
 }
