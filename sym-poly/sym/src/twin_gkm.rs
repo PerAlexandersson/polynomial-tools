@@ -26,7 +26,7 @@ use sym_poly_multipoly::{
     quotient_basis, GroebnerBasis, IndexedVariables, MonomialOrder,
 };
 
-use crate::frobenius::graded_frobenius_from_trace_matrices;
+use crate::frobenius::graded_frobenius_from_character_values;
 use crate::SymmetricFunction;
 
 type Q = Ratio<i64>;
@@ -36,10 +36,25 @@ struct HomogeneousTwinGkmComponent {
     fixed_points: Vec<Vec<usize>>,
     fixed_point_index: BTreeMap<Vec<usize>, usize>,
     monomials: Vec<Vec<u32>>,
-    monomial_index: BTreeMap<Vec<u32>, usize>,
     module_basis: Vec<Vector<Q>>,
     module_coordinate_columns: Vec<usize>,
     ordinary_quotient: QuotientSpace<Q>,
+}
+
+#[derive(Debug, Clone)]
+struct TwinGkmCombinatorics {
+    fixed_points: Vec<Vec<usize>>,
+    edge_adjacencies: Vec<TwinEdgeAdjacency>,
+    monomials_by_degree: Vec<Vec<Vec<u32>>>,
+    substitution_groups_by_degree: Vec<Vec<Vec<Vec<usize>>>>,
+    multiplication_maps_by_degree: Vec<Vec<Vec<usize>>>,
+}
+
+#[derive(Debug, Clone)]
+struct TwinEdgeAdjacency {
+    edge_index: usize,
+    point_index: usize,
+    adjacent_point_index: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -66,37 +81,8 @@ pub fn twin_gkm_dagger_action_matrices(
         return Some(complete_graph_artin_action_matrices(area.len()));
     }
 
-    let graph = Graph::unit_interval(area);
     let n = area.len();
-    let max_degree = graph.num_edges() as u32;
-    let fixed_points = sym_poly_core::symmetric_group_permutation_basis(n);
-    let fixed_point_index = fixed_points
-        .iter()
-        .cloned()
-        .enumerate()
-        .map(|(index, point)| (point, index))
-        .collect::<BTreeMap<_, _>>();
-
-    let mut components = Vec::new();
-    for degree in 0..=max_degree {
-        let module_basis = homogeneous_twin_gkm_module_basis(n, graph.edges(), degree);
-        let mut component = HomogeneousTwinGkmComponent::new(
-            fixed_points.clone(),
-            fixed_point_index.clone(),
-            degree,
-            module_basis.vectors,
-            module_basis.coordinate_columns,
-            Vec::new(),
-        );
-        let relations = if degree == 0 {
-            Vec::new()
-        } else {
-            variable_multiple_relations(&components[(degree - 1) as usize], &component, n)
-        };
-        component.ordinary_quotient =
-            QuotientSpace::from_relations(component.module_basis.len(), &relations);
-        components.push(component);
-    }
+    let components = noncomplete_twin_gkm_components(area);
 
     let mut by_degree = BTreeMap::new();
     for (degree, component) in components.iter().enumerate() {
@@ -121,29 +107,43 @@ pub fn twin_gkm_dagger_action_matrices(
 pub fn twin_gkm_dagger_character_values_by_degree(
     area: &[u8],
 ) -> Option<BTreeMap<u32, BTreeMap<Partition, Ratio<i64>>>> {
-    let matrices = twin_gkm_dagger_action_matrices(area)?;
-    Some(
-        matrices
-            .into_iter()
-            .map(|(degree, class_matrices)| {
-                let values = class_matrices
-                    .into_iter()
-                    .map(|(cycle_type, matrix)| (cycle_type, matrix_trace(&matrix)))
-                    .filter(|(_, trace)| !trace.is_zero())
-                    .collect();
-                (degree, values)
-            })
-            .collect(),
-    )
+    if !is_area_sequence(area) {
+        return None;
+    }
+    if is_complete_area_sequence(area) {
+        let matrices = complete_graph_artin_action_matrices(area.len());
+        return Some(trace_values_from_action_matrices(matrices));
+    }
+
+    let n = area.len();
+    let components = noncomplete_twin_gkm_components(area);
+    let mut by_degree = BTreeMap::new();
+
+    for (degree, component) in components.iter().enumerate() {
+        if component.ordinary_quotient.dimension() == 0 {
+            continue;
+        }
+
+        let mut values = BTreeMap::new();
+        for (cycle_type, representative) in conjugacy_class_representatives(n) {
+            let trace = component.ordinary_dagger_trace(&representative);
+            if !trace.is_zero() {
+                values.insert(cycle_type, trace);
+            }
+        }
+        by_degree.insert(degree as u32, values);
+    }
+
+    Some(by_degree)
 }
 
 /// Compute the graded Frobenius characteristic of the twin GKM dagger action.
 pub fn twin_gkm_dagger_frobenius(
     area: &[u8],
 ) -> Option<BTreeMap<u32, SymmetricFunction<Ratio<i64>>>> {
-    let matrices = twin_gkm_dagger_action_matrices(area)?;
+    let character_values = twin_gkm_dagger_character_values_by_degree(area)?;
     Some(
-        graded_frobenius_from_trace_matrices(&matrices)
+        graded_frobenius_from_character_values(&character_values)
             .into_iter()
             .filter(|(_, f)| !f.is_zero())
             .collect(),
@@ -154,25 +154,17 @@ impl HomogeneousTwinGkmComponent {
     fn new(
         fixed_points: Vec<Vec<usize>>,
         fixed_point_index: BTreeMap<Vec<usize>, usize>,
-        degree: u32,
+        monomials: Vec<Vec<u32>>,
         module_basis: Vec<Vector<Q>>,
         module_coordinate_columns: Vec<usize>,
         relations: Vec<Vector<Q>>,
     ) -> Self {
-        let monomials = homogeneous_monomials(fixed_points.first().map_or(0, Vec::len), degree);
-        let monomial_index = monomials
-            .iter()
-            .cloned()
-            .enumerate()
-            .map(|(index, monomial)| (monomial, index))
-            .collect::<BTreeMap<_, _>>();
         let ordinary_quotient = QuotientSpace::from_relations(module_basis.len(), &relations);
 
         Self {
             fixed_points,
             fixed_point_index,
             monomials,
-            monomial_index,
             module_basis,
             module_coordinate_columns,
             ordinary_quotient,
@@ -199,9 +191,11 @@ impl HomogeneousTwinGkmComponent {
         assert_permutation(permutation);
         let dim = self.module_basis.len();
         let mut matrix = zero_matrix::<Q>(dim, dim);
+        let source_point_indices = self.dagger_source_point_indices(permutation);
 
         for (col, basis_vector) in self.module_basis.iter().enumerate() {
-            let image = self.apply_dagger_action_to_ambient_vector(permutation, basis_vector);
+            let image =
+                self.apply_dagger_action_to_ambient_vector(&source_point_indices, basis_vector);
             let coords = self.module_coordinates(&image);
             for row in 0..dim {
                 matrix[row][col] = coords[row].clone();
@@ -211,19 +205,46 @@ impl HomogeneousTwinGkmComponent {
         matrix
     }
 
+    fn ordinary_dagger_trace(&self, permutation: &[usize]) -> Q {
+        assert_permutation(permutation);
+        let source_point_indices = self.dagger_source_point_indices(permutation);
+        let mut trace = Q::zero();
+
+        for (quotient_col, &module_basis_index) in
+            self.ordinary_quotient.free_columns.iter().enumerate()
+        {
+            let image = self.apply_dagger_action_to_ambient_vector(
+                &source_point_indices,
+                &self.module_basis[module_basis_index],
+            );
+            let module_coords = self.module_coordinates(&image);
+            let quotient_coords = self.ordinary_quotient.quotient_coordinates(&module_coords);
+            trace = trace + quotient_coords[quotient_col].clone();
+        }
+
+        trace
+    }
+
+    fn dagger_source_point_indices(&self, permutation: &[usize]) -> Vec<usize> {
+        let inverse = inverse_permutation(permutation);
+        self.fixed_points
+            .iter()
+            .map(|target_point| {
+                let source_point = compose_permutations(&inverse, target_point);
+                self.fixed_point_index[&source_point]
+            })
+            .collect()
+    }
+
     fn apply_dagger_action_to_ambient_vector(
         &self,
-        permutation: &[usize],
+        source_point_indices: &[usize],
         vector: &[Q],
     ) -> Vector<Q> {
         let mut result = vec![Q::zero(); self.ambient_dimension()];
         let monomial_count = self.monomials.len();
-        let inverse = inverse_permutation(permutation);
 
-        for (target_point_index, target_point) in self.fixed_points.iter().enumerate() {
-            let source_point = compose_permutations(&inverse, target_point);
-            let source_point_index = self.fixed_point_index[&source_point];
-
+        for (target_point_index, &source_point_index) in source_point_indices.iter().enumerate() {
             for monomial_index in 0..monomial_count {
                 let source_col = source_point_index * monomial_count + monomial_index;
                 let coeff = &vector[source_col];
@@ -240,11 +261,10 @@ impl HomogeneousTwinGkmComponent {
     }
 }
 
-fn homogeneous_twin_gkm_module_basis(
-    n: usize,
-    twin_edges: &[(usize, usize)],
-    degree: u32,
-) -> TwinGkmModuleBasis {
+fn noncomplete_twin_gkm_components(area: &[u8]) -> Vec<HomogeneousTwinGkmComponent> {
+    let graph = Graph::unit_interval(area);
+    let n = area.len();
+    let max_degree = graph.num_edges() as u32;
     let fixed_points = sym_poly_core::symmetric_group_permutation_basis(n);
     let fixed_point_index = fixed_points
         .iter()
@@ -252,29 +272,140 @@ fn homogeneous_twin_gkm_module_basis(
         .enumerate()
         .map(|(index, point)| (point, index))
         .collect::<BTreeMap<_, _>>();
-    let monomials = homogeneous_monomials(n, degree);
-    let ambient_dimension = fixed_points.len() * monomials.len();
+    let combinatorics = TwinGkmCombinatorics::new(
+        n,
+        graph.edges(),
+        fixed_points.clone(),
+        fixed_point_index.clone(),
+        max_degree,
+    );
+
+    let mut components = Vec::new();
+    for degree in 0..=max_degree {
+        let module_basis = homogeneous_twin_gkm_module_basis(&combinatorics, degree);
+        let mut component = HomogeneousTwinGkmComponent::new(
+            fixed_points.clone(),
+            fixed_point_index.clone(),
+            combinatorics.monomials(degree).to_vec(),
+            module_basis.vectors,
+            module_basis.coordinate_columns,
+            Vec::new(),
+        );
+        let relations = if degree == 0 {
+            Vec::new()
+        } else {
+            variable_multiple_relations(
+                &components[(degree - 1) as usize],
+                &component,
+                combinatorics.multiplication_maps(degree),
+            )
+        };
+        component.ordinary_quotient =
+            QuotientSpace::from_relations(component.module_basis.len(), &relations);
+        components.push(component);
+    }
+
+    components
+}
+
+fn trace_values_from_action_matrices(
+    matrices: BTreeMap<u32, BTreeMap<Partition, Matrix<Q>>>,
+) -> BTreeMap<u32, BTreeMap<Partition, Q>> {
+    matrices
+        .into_iter()
+        .map(|(degree, class_matrices)| {
+            let values = class_matrices
+                .into_iter()
+                .map(|(cycle_type, matrix)| (cycle_type, matrix_trace(&matrix)))
+                .filter(|(_, trace)| !trace.is_zero())
+                .collect();
+            (degree, values)
+        })
+        .collect()
+}
+
+impl TwinGkmCombinatorics {
+    fn new(
+        n: usize,
+        twin_edges: &[(usize, usize)],
+        fixed_points: Vec<Vec<usize>>,
+        fixed_point_index: BTreeMap<Vec<usize>, usize>,
+        max_degree: u32,
+    ) -> Self {
+        let edge_adjacencies =
+            twin_edge_adjacencies(n, twin_edges, &fixed_points, &fixed_point_index);
+        let monomials_by_degree = (0..=max_degree)
+            .map(|degree| homogeneous_monomials(n, degree))
+            .collect::<Vec<_>>();
+        let monomial_index_by_degree = monomials_by_degree
+            .iter()
+            .map(|monomials| {
+                monomials
+                    .iter()
+                    .cloned()
+                    .enumerate()
+                    .map(|(index, monomial)| (monomial, index))
+                    .collect::<BTreeMap<_, _>>()
+            })
+            .collect::<Vec<_>>();
+        let substitution_groups_by_degree = monomials_by_degree
+            .iter()
+            .map(|monomials| {
+                twin_edges
+                    .iter()
+                    .map(|&(i, j)| substitution_groups_for_edge(monomials, i, j))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        let mut multiplication_maps_by_degree = Vec::with_capacity(max_degree as usize + 1);
+        multiplication_maps_by_degree.push(Vec::new());
+        for degree in 1..=max_degree {
+            multiplication_maps_by_degree.push(multiplication_maps_between_degrees(
+                &monomials_by_degree[(degree - 1) as usize],
+                &monomial_index_by_degree[degree as usize],
+                n,
+            ));
+        }
+
+        Self {
+            fixed_points,
+            edge_adjacencies,
+            monomials_by_degree,
+            substitution_groups_by_degree,
+            multiplication_maps_by_degree,
+        }
+    }
+
+    fn monomials(&self, degree: u32) -> &[Vec<u32>] {
+        &self.monomials_by_degree[degree as usize]
+    }
+
+    fn substitution_groups(&self, degree: u32, edge_index: usize) -> &[Vec<usize>] {
+        &self.substitution_groups_by_degree[degree as usize][edge_index]
+    }
+
+    fn multiplication_maps(&self, degree: u32) -> &[Vec<usize>] {
+        &self.multiplication_maps_by_degree[degree as usize]
+    }
+}
+
+fn homogeneous_twin_gkm_module_basis(
+    combinatorics: &TwinGkmCombinatorics,
+    degree: u32,
+) -> TwinGkmModuleBasis {
+    let monomials = combinatorics.monomials(degree);
+    let ambient_dimension = combinatorics.fixed_points.len() * monomials.len();
     let mut constraints = Vec::new();
 
-    for (point_index, point) in fixed_points.iter().enumerate() {
-        for &(i, j) in twin_edges {
-            let transposition = transposition(n, i, j);
-            let adjacent_point = compose_permutations(point, &transposition);
-            let adjacent_point_index = fixed_point_index[&adjacent_point];
-            if point_index > adjacent_point_index {
-                continue;
-            }
-
-            for row in divisibility_constraints_for_edge(
-                point_index,
-                adjacent_point_index,
-                i,
-                j,
-                &monomials,
-                ambient_dimension,
-            ) {
-                constraints.push(row);
-            }
+    for adjacency in &combinatorics.edge_adjacencies {
+        for row in divisibility_constraints_for_edge(
+            adjacency.point_index,
+            adjacency.adjacent_point_index,
+            combinatorics.substitution_groups(degree, adjacency.edge_index),
+            monomials.len(),
+            ambient_dimension,
+        ) {
+            constraints.push(row);
         }
     }
 
@@ -291,54 +422,45 @@ fn homogeneous_twin_gkm_module_basis(
 fn divisibility_constraints_for_edge(
     point_index: usize,
     adjacent_point_index: usize,
-    label_a: usize,
-    label_b: usize,
-    monomials: &[Vec<u32>],
+    substitution_groups: &[Vec<usize>],
+    monomial_count: usize,
     ambient_dimension: usize,
 ) -> Vec<Vector<Q>> {
-    let monomial_count = monomials.len();
-    let mut rows_by_key: BTreeMap<Vec<u32>, Vector<Q>> = BTreeMap::new();
-
-    for (monomial_idx, monomial) in monomials.iter().enumerate() {
-        let key = substitute_equal_variables(monomial, label_a, label_b);
-        let row = rows_by_key
-            .entry(key)
-            .or_insert_with(|| vec![Q::zero(); ambient_dimension]);
-        row[point_index * monomial_count + monomial_idx] =
-            row[point_index * monomial_count + monomial_idx].clone() + Q::one();
-        row[adjacent_point_index * monomial_count + monomial_idx] =
-            row[adjacent_point_index * monomial_count + monomial_idx].clone() - Q::one();
-    }
-
-    rows_by_key
-        .into_values()
-        .filter(|row| row.iter().any(|entry| !entry.is_zero()))
+    substitution_groups
+        .iter()
+        .map(|group| {
+            let mut row = vec![Q::zero(); ambient_dimension];
+            for &monomial_idx in group {
+                row[point_index * monomial_count + monomial_idx] =
+                    row[point_index * monomial_count + monomial_idx].clone() + Q::one();
+                row[adjacent_point_index * monomial_count + monomial_idx] =
+                    row[adjacent_point_index * monomial_count + monomial_idx].clone() - Q::one();
+            }
+            row
+        })
         .collect()
 }
 
 fn variable_multiple_relations(
     previous: &HomogeneousTwinGkmComponent,
     current: &HomogeneousTwinGkmComponent,
-    n: usize,
+    multiplication_maps: &[Vec<usize>],
 ) -> Vec<Vector<Q>> {
     let mut relations = Vec::new();
     let previous_monomial_count = previous.monomials.len();
     let current_monomial_count = current.monomials.len();
 
     for basis_vector in &previous.module_basis {
-        for variable in 0..n {
+        for variable_map in multiplication_maps {
             let mut ambient = vec![Q::zero(); current.ambient_dimension()];
             for point_index in 0..previous.fixed_points.len() {
-                for (monomial_index, monomial) in previous.monomials.iter().enumerate() {
+                for (monomial_index, &target_monomial_index) in variable_map.iter().enumerate() {
                     let source = point_index * previous_monomial_count + monomial_index;
                     let coeff = &basis_vector[source];
                     if coeff.is_zero() {
                         continue;
                     }
 
-                    let mut product_monomial = monomial.clone();
-                    product_monomial[variable] += 1;
-                    let target_monomial_index = current.monomial_index[&product_monomial];
                     let target = point_index * current_monomial_count + target_monomial_index;
                     ambient[target] = ambient[target].clone() + coeff.clone();
                 }
@@ -348,6 +470,64 @@ fn variable_multiple_relations(
     }
 
     relations
+}
+
+fn twin_edge_adjacencies(
+    n: usize,
+    twin_edges: &[(usize, usize)],
+    fixed_points: &[Vec<usize>],
+    fixed_point_index: &BTreeMap<Vec<usize>, usize>,
+) -> Vec<TwinEdgeAdjacency> {
+    let mut result = Vec::new();
+    for (point_index, point) in fixed_points.iter().enumerate() {
+        for (edge_index, &(i, j)) in twin_edges.iter().enumerate() {
+            let transposition = transposition(n, i, j);
+            let adjacent_point = compose_permutations(point, &transposition);
+            let adjacent_point_index = fixed_point_index[&adjacent_point];
+            if point_index > adjacent_point_index {
+                continue;
+            }
+            result.push(TwinEdgeAdjacency {
+                edge_index,
+                point_index,
+                adjacent_point_index,
+            });
+        }
+    }
+    result
+}
+
+fn substitution_groups_for_edge(
+    monomials: &[Vec<u32>],
+    label_a: usize,
+    label_b: usize,
+) -> Vec<Vec<usize>> {
+    let mut groups_by_key: BTreeMap<Vec<u32>, Vec<usize>> = BTreeMap::new();
+    for (monomial_idx, monomial) in monomials.iter().enumerate() {
+        groups_by_key
+            .entry(substitute_equal_variables(monomial, label_a, label_b))
+            .or_default()
+            .push(monomial_idx);
+    }
+    groups_by_key.into_values().collect()
+}
+
+fn multiplication_maps_between_degrees(
+    previous_monomials: &[Vec<u32>],
+    current_monomial_index: &BTreeMap<Vec<u32>, usize>,
+    n: usize,
+) -> Vec<Vec<usize>> {
+    let mut maps = Vec::with_capacity(n);
+    for variable in 0..n {
+        let mut variable_map = Vec::with_capacity(previous_monomials.len());
+        for monomial in previous_monomials {
+            let mut product_monomial = monomial.clone();
+            product_monomial[variable] += 1;
+            variable_map.push(current_monomial_index[&product_monomial]);
+        }
+        maps.push(variable_map);
+    }
+    maps
 }
 
 fn homogeneous_monomials(num_vars: usize, degree: u32) -> Vec<Vec<u32>> {
@@ -558,6 +738,16 @@ mod tests {
     fn test_twin_gkm_dagger_path_s3_matches_llt() {
         assert_matches_llt_character_target(&[0, 1, 1]);
         assert_matches_llt_frobenius_target(&[0, 1, 1]);
+    }
+
+    #[test]
+    fn test_twin_gkm_dagger_path_s3_direct_traces_match_action_matrices() {
+        let area = [0, 1, 1];
+        let direct = twin_gkm_dagger_character_values_by_degree(&area).unwrap();
+        let from_matrices =
+            trace_values_from_action_matrices(twin_gkm_dagger_action_matrices(&area).unwrap());
+
+        assert_eq!(direct, from_matrices);
     }
 
     #[test]
