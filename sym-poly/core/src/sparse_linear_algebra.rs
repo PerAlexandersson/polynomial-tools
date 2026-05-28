@@ -252,15 +252,15 @@ fn reduce_by_existing_pivots<C: Field>(
             continue;
         }
 
-        let pivot_to_reduce = row.iter().skip(1).find_map(|(col, coeff)| {
-            pivot_rows
-                .get(col)
-                .map(|pivot_row| (coeff.clone(), pivot_row.clone()))
-        });
-        let Some((factor, pivot_row)) = pivot_to_reduce else {
+        let pivot_to_reduce = row
+            .iter()
+            .skip(1)
+            .find_map(|(col, coeff)| pivot_rows.contains_key(col).then(|| (coeff.clone(), *col)));
+        let Some((factor, pivot_col)) = pivot_to_reduce else {
             break;
         };
-        *row = subtract_scaled_row(row, factor, &pivot_row);
+        let pivot_row = &pivot_rows[&pivot_col];
+        *row = subtract_scaled_row(row, factor, pivot_row);
     }
 }
 

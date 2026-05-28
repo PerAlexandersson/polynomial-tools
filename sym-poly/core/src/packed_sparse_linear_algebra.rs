@@ -22,6 +22,17 @@ pub struct PackedSparseRrefResult {
     pub rank: usize,
 }
 
+/// A quotient of a byte-packed sparse coordinate space by sparse relations.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PackedSparseQuotientSpace {
+    pub ambient_dimension: usize,
+    pub relation_rref: Vec<PackedSparseRow>,
+    pub pivot_columns: Vec<usize>,
+    pub free_columns: Vec<usize>,
+    pub pivot_row_by_column: BTreeMap<usize, usize>,
+    pub free_index_by_column: BTreeMap<usize, usize>,
+}
+
 impl PackedSparseRow {
     pub fn new<const P: u8, I>(num_cols: usize, entries: I) -> Self
     where
@@ -145,6 +156,35 @@ pub fn packed_sparse_rank<const P: u8>(num_cols: usize, rows: &[PackedSparseRow]
     packed_sparse_rref::<P>(num_cols, rows).rank
 }
 
+/// Return a packed sparse basis for the right kernel of the matrix with these rows.
+pub fn packed_sparse_kernel_basis<const P: u8>(
+    num_cols: usize,
+    rows: &[PackedSparseRow],
+) -> Vec<PackedSparseRow> {
+    let reduced = packed_sparse_rref::<P>(num_cols, rows);
+    packed_sparse_kernel_basis_from_rref::<P>(&reduced).0
+}
+
+/// Return a packed sparse kernel basis together with the corresponding free columns.
+pub fn packed_sparse_kernel_basis_with_free_columns<const P: u8>(
+    num_cols: usize,
+    rows: &[PackedSparseRow],
+) -> (Vec<PackedSparseRow>, Vec<usize>) {
+    let reduced = packed_sparse_rref::<P>(num_cols, rows);
+    packed_sparse_kernel_basis_from_rref::<P>(&reduced)
+}
+
+pub fn packed_sparse_kernel_basis_with_free_columns_from_rows<const P: u8, I>(
+    num_cols: usize,
+    rows: I,
+) -> (Vec<PackedSparseRow>, Vec<usize>)
+where
+    I: IntoIterator<Item = PackedSparseRow>,
+{
+    let reduced = packed_sparse_rref_from_rows::<P, _>(num_cols, rows);
+    packed_sparse_kernel_basis_from_rref::<P>(&reduced)
+}
+
 pub fn packed_to_dense<const P: u8>(num_cols: usize, row: &PackedSparseRow) -> Vec<u8> {
     let mut dense = vec![0; num_cols];
     for (col, value) in row.to_pairs() {
@@ -169,6 +209,100 @@ pub fn inverse_table<const P: u8>() -> [u8; 256] {
         );
     }
     inverses
+}
+
+impl PackedSparseQuotientSpace {
+    pub fn from_relations<const P: u8>(
+        ambient_dimension: usize,
+        relations: &[PackedSparseRow],
+    ) -> Self {
+        let reduced = packed_sparse_rref::<P>(ambient_dimension, relations);
+        let free_columns = complement_columns(ambient_dimension, &reduced.pivot_columns);
+        let pivot_row_by_column = reduced
+            .pivot_columns
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(row_index, col)| (col, row_index))
+            .collect();
+        let free_index_by_column = free_columns
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(free_index, col)| (col, free_index))
+            .collect();
+        Self {
+            ambient_dimension,
+            relation_rref: reduced.rows,
+            pivot_columns: reduced.pivot_columns,
+            free_columns,
+            pivot_row_by_column,
+            free_index_by_column,
+        }
+    }
+
+    pub fn dimension(&self) -> usize {
+        self.free_columns.len()
+    }
+
+    pub fn normal_form_sparse<const P: u8>(&self, vector: &PackedSparseRow) -> PackedSparseRow {
+        let mut normal = PackedSparseRow::new::<P, _>(self.ambient_dimension, vector.to_pairs());
+        while let Some((pivot_position, pivot_row)) = normal
+            .cols
+            .iter()
+            .copied()
+            .enumerate()
+            .find_map(|(position, col)| {
+                self.pivot_row_by_column
+                    .get(&(col as usize))
+                    .copied()
+                    .map(|pivot_row| (position, pivot_row))
+            })
+        {
+            let factor = normal.vals[pivot_position];
+            normal = subtract_scaled_row::<P>(&normal, factor, &self.relation_rref[pivot_row]);
+        }
+        normal
+    }
+
+    /// Sparse quotient coordinates indexed by quotient-basis position.
+    pub fn quotient_coordinates_sparse<const P: u8>(
+        &self,
+        vector: &PackedSparseRow,
+    ) -> PackedSparseRow {
+        let normal = self.normal_form_sparse::<P>(vector);
+        let coords = normal
+            .to_pairs()
+            .into_iter()
+            .filter_map(|(ambient_col, coeff)| {
+                self.free_index_by_column
+                    .get(&ambient_col)
+                    .copied()
+                    .map(|free_index| (free_index, coeff))
+            });
+        PackedSparseRow::new::<P, _>(self.dimension(), coords)
+    }
+}
+
+fn packed_sparse_kernel_basis_from_rref<const P: u8>(
+    reduced: &PackedSparseRrefResult,
+) -> (Vec<PackedSparseRow>, Vec<usize>) {
+    let free_columns = complement_columns(reduced.num_cols, &reduced.pivot_columns);
+    let mut basis = Vec::with_capacity(free_columns.len());
+
+    for &free_col in &free_columns {
+        let mut entries = Vec::new();
+        entries.push((free_col, 1));
+        for (pivot_row, &pivot_col) in reduced.pivot_columns.iter().enumerate() {
+            let coeff = reduced.rows[pivot_row].coefficient(free_col);
+            if coeff != 0 {
+                entries.push((pivot_col, neg_mod::<P>(coeff)));
+            }
+        }
+        basis.push(PackedSparseRow::new::<P, _>(reduced.num_cols, entries));
+    }
+
+    (basis, free_columns)
 }
 
 fn canonicalize_row<const P: u8>(num_cols: usize, row: &mut PackedSparseRow) {
@@ -201,13 +335,14 @@ fn reduce_by_existing_pivots<const P: u8>(
             .skip(1)
             .find_map(|(col, value)| {
                 pivot_rows
-                    .get(&(col as usize))
-                    .map(|pivot_row| (value, pivot_row.clone()))
+                    .contains_key(&(col as usize))
+                    .then_some((value, col as usize))
             });
-        let Some((factor, pivot_row)) = pivot_to_reduce else {
+        let Some((factor, pivot_col)) = pivot_to_reduce else {
             break;
         };
-        *row = subtract_scaled_row::<P>(row, factor, &pivot_row);
+        let pivot_row = &pivot_rows[&pivot_col];
+        *row = subtract_scaled_row::<P>(row, factor, pivot_row);
     }
 }
 
@@ -322,10 +457,23 @@ fn mul_mod<const P: u8>(a: u8, b: u8) -> u8 {
     ((a as u16 * b as u16) % P as u16) as u8
 }
 
+fn complement_columns(num_cols: usize, pivot_columns: &[usize]) -> Vec<usize> {
+    let mut is_pivot = vec![false; num_cols];
+    for &col in pivot_columns {
+        if col < num_cols {
+            is_pivot[col] = true;
+        }
+    }
+    (0..num_cols).filter(|&col| !is_pivot[col]).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sparse_linear_algebra::{sparse_rref, sparse_to_dense, sparse_vector};
+    use crate::sparse_linear_algebra::{
+        sparse_kernel_basis_with_free_columns, sparse_rref, sparse_to_dense, sparse_vector,
+        SparseQuotientSpace,
+    };
     use crate::{PrimeField, Ring};
 
     type F251 = PrimeField<251>;
@@ -407,5 +555,59 @@ mod tests {
 
         assert_eq!(packed.pivot_columns, generic.pivot_columns);
         assert_eq!(packed.rank, generic.rank);
+    }
+
+    #[test]
+    fn test_packed_sparse_kernel_basis_matches_generic_prime_field() {
+        let rows = vec![
+            PackedSparseRow::new::<251, _>(4, vec![(0, 1), (1, 1), (3, 1)]),
+            PackedSparseRow::new::<251, _>(4, vec![(1, 2), (2, 1)]),
+        ];
+
+        let (packed_basis, packed_free_columns) =
+            packed_sparse_kernel_basis_with_free_columns::<251>(4, &rows);
+        let (generic_basis, generic_free_columns) =
+            sparse_kernel_basis_with_free_columns(4, &generic_rows::<251>(4, &rows));
+        let packed_dense = packed_basis
+            .iter()
+            .map(|row| packed_to_dense::<251>(4, row))
+            .collect::<Vec<_>>();
+        let generic_dense = generic_basis
+            .iter()
+            .map(|row| {
+                sparse_to_dense(4, row)
+                    .into_iter()
+                    .map(PrimeField::value)
+                    .map(|value| value as u8)
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(packed_free_columns, generic_free_columns);
+        assert_eq!(packed_dense, generic_dense);
+    }
+
+    #[test]
+    fn test_packed_sparse_quotient_coordinates_match_generic_prime_field() {
+        let relations = vec![
+            PackedSparseRow::new::<251, _>(3, vec![(0, 1), (1, 1)]),
+            PackedSparseRow::new::<251, _>(3, vec![(1, 1), (2, 1)]),
+        ];
+        let vector = PackedSparseRow::new::<251, _>(3, vec![(0, 3), (1, 4), (2, 5)]);
+        let packed_quotient = PackedSparseQuotientSpace::from_relations::<251>(3, &relations);
+        let generic_quotient =
+            SparseQuotientSpace::from_relations(3, &generic_rows::<251>(3, &relations));
+
+        let packed_coordinates = packed_quotient.quotient_coordinates_sparse::<251>(&vector);
+        let generic_coordinates =
+            generic_quotient.quotient_coordinates_sparse(&generic_row::<251>(3, &vector));
+        let generic_packed_coordinates = generic_coordinates
+            .into_iter()
+            .map(|(col, coeff)| (col, coeff.value() as u8));
+
+        assert_eq!(
+            packed_coordinates,
+            PackedSparseRow::new::<251, _>(packed_quotient.dimension(), generic_packed_coordinates)
+        );
     }
 }

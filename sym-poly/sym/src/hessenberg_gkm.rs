@@ -12,6 +12,10 @@ use num_rational::Ratio;
 use sym_poly_core::linear_algebra::{
     matrix_trace, quotient_action_matrix, rref, zero_matrix, Matrix, QuotientSpace, Vector,
 };
+use sym_poly_core::packed_sparse_linear_algebra::{
+    packed_sparse_kernel_basis_with_free_columns_from_rows, PackedSparseQuotientSpace,
+    PackedSparseRow,
+};
 use sym_poly_core::sn_action::{
     assert_permutation, compose_permutations, conjugacy_class_representatives, inverse_permutation,
 };
@@ -52,12 +56,31 @@ struct SparseHomogeneousGkmComponent<C: Field> {
     monomial_index: BTreeMap<Vec<u32>, usize>,
     module_basis: Vec<SparseVector<C>>,
     module_coordinate_columns: Vec<usize>,
+    module_coordinate_index_by_ambient_column: Vec<Option<usize>>,
     ordinary_quotient: SparseQuotientSpace<C>,
 }
 
 #[derive(Debug, Clone)]
 struct SparseGkmModuleBasis<C: Field> {
     vectors: Vec<SparseVector<C>>,
+    coordinate_columns: Vec<usize>,
+}
+
+#[derive(Debug, Clone)]
+struct PackedHomogeneousGkmComponent {
+    fixed_points: Vec<Vec<usize>>,
+    fixed_point_index: BTreeMap<Vec<usize>, usize>,
+    monomials: Vec<Vec<u32>>,
+    monomial_index: BTreeMap<Vec<u32>, usize>,
+    module_basis: Vec<PackedSparseRow>,
+    module_coordinate_columns: Vec<usize>,
+    module_coordinate_index_by_ambient_column: Vec<Option<usize>>,
+    ordinary_quotient: PackedSparseQuotientSpace,
+}
+
+#[derive(Debug, Clone)]
+struct PackedGkmModuleBasis {
+    vectors: Vec<PackedSparseRow>,
     coordinate_columns: Vec<usize>,
 }
 
@@ -228,6 +251,97 @@ pub fn hessenberg_gkm_dot_character_values_crt(
     Some(lift_character_residues(area.len(), &residues))
 }
 
+/// Compute graded character values over a byte-sized prime field.
+///
+/// This is the same GKM dot-action computation as
+/// [`hessenberg_gkm_dot_character_values_mod_prime`], but all sparse rows store
+/// coefficients as `u8`. It is an experimental backend for timing small-prime
+/// linear algebra against the generic `PrimeField<P>` path.
+pub fn hessenberg_gkm_dot_character_values_packed_mod_prime<const P: u8>(
+    area: &[u8],
+) -> Option<BTreeMap<u32, BTreeMap<Partition, u8>>> {
+    if !is_area_sequence(area) {
+        return None;
+    }
+
+    let n = area.len();
+    let components = packed_hessenberg_gkm_components::<P>(area);
+    let mut by_degree = BTreeMap::new();
+
+    for (degree, component) in components.iter().enumerate() {
+        if component.ordinary_quotient.dimension() == 0 {
+            continue;
+        }
+
+        let mut values = BTreeMap::new();
+        for (cycle_type, representative) in conjugacy_class_representatives(n) {
+            let trace = component.ordinary_dot_trace_mod_prime::<P>(&representative);
+            if trace != 0 {
+                values.insert(cycle_type, trace);
+            }
+        }
+        by_degree.insert(degree as u32, values);
+    }
+
+    Some(by_degree)
+}
+
+/// Compute integer graded character values by CRT-lifting packed small-prime traces.
+pub fn hessenberg_gkm_dot_character_values_packed_crt(
+    area: &[u8],
+) -> Option<BTreeMap<u32, BTreeMap<Partition, i64>>> {
+    if !is_area_sequence(area) {
+        return None;
+    }
+
+    let bound = character_trace_bound(area.len());
+    let mut residues = Vec::new();
+    let mut modulus = 1i128;
+
+    push_packed_prime_residues::<251>(area, &mut residues, &mut modulus)?;
+    let required_modulus = bound.checked_mul(2).unwrap_or(i128::MAX);
+
+    if modulus <= required_modulus {
+        push_packed_prime_residues::<241>(area, &mut residues, &mut modulus)?;
+    }
+    if modulus <= required_modulus {
+        push_packed_prime_residues::<239>(area, &mut residues, &mut modulus)?;
+    }
+    if modulus <= required_modulus {
+        push_packed_prime_residues::<233>(area, &mut residues, &mut modulus)?;
+    }
+    if modulus <= required_modulus {
+        push_packed_prime_residues::<229>(area, &mut residues, &mut modulus)?;
+    }
+
+    if modulus <= required_modulus {
+        return None;
+    }
+
+    Some(lift_character_residues(area.len(), &residues))
+}
+
+/// Compute graded character values through the packed small-prime backend.
+pub fn hessenberg_gkm_dot_character_values_by_degree_packed(
+    area: &[u8],
+) -> Option<BTreeMap<u32, BTreeMap<Partition, Ratio<i64>>>> {
+    let values = hessenberg_gkm_dot_character_values_packed_crt(area)?;
+    Some(
+        values
+            .into_iter()
+            .map(|(degree, degree_values)| {
+                (
+                    degree,
+                    degree_values
+                        .into_iter()
+                        .map(|(cycle_type, value)| (cycle_type, Q::from_integer(value)))
+                        .collect(),
+                )
+            })
+            .collect(),
+    )
+}
+
 /// Rational reference implementation for small cases and regression checks.
 pub fn hessenberg_gkm_dot_character_values_by_degree_rational(
     area: &[u8],
@@ -241,6 +355,19 @@ pub fn hessenberg_gkm_dot_frobenius(
     area: &[u8],
 ) -> Option<BTreeMap<u32, SymmetricFunction<Ratio<i64>>>> {
     let character_values = hessenberg_gkm_dot_character_values_by_degree(area)?;
+    Some(
+        graded_frobenius_from_character_values(&character_values)
+            .into_iter()
+            .filter(|(_, f)| !f.is_zero())
+            .collect(),
+    )
+}
+
+/// Compute the graded Frobenius characteristic using packed small-prime traces.
+pub fn hessenberg_gkm_dot_frobenius_packed(
+    area: &[u8],
+) -> Option<BTreeMap<u32, SymmetricFunction<Ratio<i64>>>> {
+    let character_values = hessenberg_gkm_dot_character_values_by_degree_packed(area)?;
     Some(
         graded_frobenius_from_character_values(&character_values)
             .into_iter()
@@ -347,6 +474,9 @@ impl<C: Field> SparseHomogeneousGkmComponent<C> {
         module_coordinate_columns: Vec<usize>,
         relations: Vec<SparseVector<C>>,
     ) -> Self {
+        let ambient_dimension = fixed_points.len() * monomials.len();
+        let module_coordinate_index_by_ambient_column =
+            coordinate_index_by_ambient_column(ambient_dimension, &module_coordinate_columns);
         let ordinary_quotient = SparseQuotientSpace::from_relations(module_basis.len(), &relations);
 
         Self {
@@ -356,6 +486,7 @@ impl<C: Field> SparseHomogeneousGkmComponent<C> {
             monomial_index,
             module_basis,
             module_coordinate_columns,
+            module_coordinate_index_by_ambient_column,
             ordinary_quotient,
         }
     }
@@ -365,23 +496,19 @@ impl<C: Field> SparseHomogeneousGkmComponent<C> {
     }
 
     fn module_coordinates_sparse(&self, vector: &SparseVector<C>) -> SparseVector<C> {
-        let mut result = Vec::new();
-        let mut coordinate_index = 0usize;
+        let mut result = Vec::with_capacity(vector.len().min(self.module_coordinate_columns.len()));
 
         for &(ambient_col, ref coeff) in vector {
-            while coordinate_index < self.module_coordinate_columns.len()
-                && self.module_coordinate_columns[coordinate_index] < ambient_col
+            if let Some(coordinate_index) =
+                self.module_coordinate_index_by_ambient_column[ambient_col]
             {
-                coordinate_index += 1;
-            }
-            if coordinate_index == self.module_coordinate_columns.len() {
-                break;
-            }
-            if self.module_coordinate_columns[coordinate_index] == ambient_col && !coeff.is_zero() {
-                result.push((coordinate_index, coeff.clone()));
+                if !coeff.is_zero() {
+                    result.push((coordinate_index, coeff.clone()));
+                }
             }
         }
 
+        result.sort_by_key(|(coordinate_index, _)| *coordinate_index);
         result
     }
 
@@ -432,6 +559,107 @@ impl<C: Field> SparseHomogeneousGkmComponent<C> {
         }
 
         sparse_vector(self.ambient_dimension(), entries)
+    }
+}
+
+impl PackedHomogeneousGkmComponent {
+    fn new<const P: u8>(
+        fixed_points: Vec<Vec<usize>>,
+        fixed_point_index: BTreeMap<Vec<usize>, usize>,
+        monomials: Vec<Vec<u32>>,
+        monomial_index: BTreeMap<Vec<u32>, usize>,
+        module_basis: Vec<PackedSparseRow>,
+        module_coordinate_columns: Vec<usize>,
+        relations: Vec<PackedSparseRow>,
+    ) -> Self {
+        let ambient_dimension = fixed_points.len() * monomials.len();
+        let module_coordinate_index_by_ambient_column =
+            coordinate_index_by_ambient_column(ambient_dimension, &module_coordinate_columns);
+        let ordinary_quotient =
+            PackedSparseQuotientSpace::from_relations::<P>(module_basis.len(), &relations);
+
+        Self {
+            fixed_points,
+            fixed_point_index,
+            monomials,
+            monomial_index,
+            module_basis,
+            module_coordinate_columns,
+            module_coordinate_index_by_ambient_column,
+            ordinary_quotient,
+        }
+    }
+
+    fn ambient_dimension(&self) -> usize {
+        self.fixed_points.len() * self.monomials.len()
+    }
+
+    fn module_coordinates_sparse<const P: u8>(&self, vector: &PackedSparseRow) -> PackedSparseRow {
+        let mut entries =
+            Vec::with_capacity(vector.len().min(self.module_coordinate_columns.len()));
+
+        for (ambient_col, coeff) in vector.cols.iter().copied().zip(vector.vals.iter().copied()) {
+            let ambient_col = ambient_col as usize;
+            if let Some(coordinate_index) =
+                self.module_coordinate_index_by_ambient_column[ambient_col]
+            {
+                if coeff != 0 {
+                    entries.push((coordinate_index, coeff));
+                }
+            }
+        }
+
+        PackedSparseRow::new::<P, _>(self.module_coordinate_columns.len(), entries)
+    }
+
+    fn ordinary_dot_trace_mod_prime<const P: u8>(&self, permutation: &[usize]) -> u8 {
+        assert_permutation(permutation);
+        let mut trace = 0u8;
+
+        for (quotient_col, &module_basis_index) in
+            self.ordinary_quotient.free_columns.iter().enumerate()
+        {
+            let image = self.apply_dot_action_to_packed_ambient_vector::<P>(
+                permutation,
+                &self.module_basis[module_basis_index],
+            );
+            let module_coords = self.module_coordinates_sparse::<P>(&image);
+            let quotient_coords = self
+                .ordinary_quotient
+                .quotient_coordinates_sparse::<P>(&module_coords);
+            trace = add_mod_u8::<P>(trace, quotient_coords.coefficient(quotient_col));
+        }
+
+        trace
+    }
+
+    fn apply_dot_action_to_packed_ambient_vector<const P: u8>(
+        &self,
+        permutation: &[usize],
+        vector: &PackedSparseRow,
+    ) -> PackedSparseRow {
+        let monomial_count = self.monomials.len();
+        let mut entries = Vec::with_capacity(vector.len());
+
+        for (source_col, coeff) in vector.cols.iter().copied().zip(vector.vals.iter().copied()) {
+            if coeff == 0 {
+                continue;
+            }
+
+            let source_col = source_col as usize;
+            let source_point_index = source_col / monomial_count;
+            let source_monomial_index = source_col % monomial_count;
+            let target_point =
+                compose_permutations(permutation, &self.fixed_points[source_point_index]);
+            let target_point_index = self.fixed_point_index[&target_point];
+            let image_monomial =
+                permute_monomial_variables(&self.monomials[source_monomial_index], permutation);
+            let target_monomial_index = self.monomial_index[&image_monomial];
+            let target_col = target_point_index * monomial_count + target_monomial_index;
+            entries.push((target_col, coeff));
+        }
+
+        PackedSparseRow::new::<P, _>(self.ambient_dimension(), entries)
     }
 }
 
@@ -555,6 +783,58 @@ fn sparse_hessenberg_gkm_components<C: Field>(
         };
         component.ordinary_quotient =
             SparseQuotientSpace::from_relations(component.module_basis.len(), &relations);
+        components.push(component);
+    }
+
+    components
+}
+
+fn packed_hessenberg_gkm_components<const P: u8>(
+    area: &[u8],
+) -> Vec<PackedHomogeneousGkmComponent> {
+    let graph = Graph::unit_interval(area);
+    let n = area.len();
+    let max_degree = graph.num_edges() as u32;
+    let fixed_points = sym_poly_core::symmetric_group_permutation_basis(n);
+    let fixed_point_index = fixed_points
+        .iter()
+        .cloned()
+        .enumerate()
+        .map(|(index, point)| (point, index))
+        .collect::<BTreeMap<_, _>>();
+    let combinatorics = HessenbergGkmCombinatorics::new(
+        n,
+        graph.edges(),
+        fixed_points.clone(),
+        fixed_point_index.clone(),
+        max_degree,
+    );
+
+    let mut components = Vec::new();
+    for degree in 0..=max_degree {
+        let module_basis = packed_homogeneous_gkm_module_basis::<P>(&combinatorics, degree);
+        let mut component = PackedHomogeneousGkmComponent::new::<P>(
+            combinatorics.fixed_points.clone(),
+            combinatorics.fixed_point_index.clone(),
+            combinatorics.monomials(degree).to_vec(),
+            combinatorics.monomial_index(degree).clone(),
+            module_basis.vectors,
+            module_basis.coordinate_columns,
+            Vec::new(),
+        );
+        let relations = if degree == 0 {
+            Vec::new()
+        } else {
+            packed_variable_multiple_relations::<P>(
+                &components[(degree - 1) as usize],
+                &component,
+                combinatorics.multiplication_maps(degree),
+            )
+        };
+        component.ordinary_quotient = PackedSparseQuotientSpace::from_relations::<P>(
+            component.module_basis.len(),
+            &relations,
+        );
         components.push(component);
     }
 
@@ -758,6 +1038,94 @@ fn sparse_variable_multiple_relations<C: Field>(
     relations
 }
 
+fn packed_homogeneous_gkm_module_basis<const P: u8>(
+    combinatorics: &HessenbergGkmCombinatorics,
+    degree: u32,
+) -> PackedGkmModuleBasis {
+    let monomial_count = combinatorics.monomials(degree).len();
+    let ambient_dimension = combinatorics.fixed_points.len() * monomial_count;
+
+    if combinatorics.edge_adjacencies.is_empty() {
+        PackedGkmModuleBasis {
+            vectors: packed_sparse_standard_basis::<P>(ambient_dimension),
+            coordinate_columns: (0..ambient_dimension).collect(),
+        }
+    } else {
+        let rows = combinatorics.edge_adjacencies.iter().flat_map(|adjacency| {
+            combinatorics
+                .substitution_groups(degree, adjacency.label_a, adjacency.label_b)
+                .iter()
+                .map(|group| {
+                    packed_divisibility_constraint_for_group::<P>(
+                        adjacency.point_index,
+                        adjacency.adjacent_point_index,
+                        group,
+                        monomial_count,
+                        ambient_dimension,
+                    )
+                })
+        });
+        let (vectors, coordinate_columns) =
+            packed_sparse_kernel_basis_with_free_columns_from_rows::<P, _>(ambient_dimension, rows);
+        PackedGkmModuleBasis {
+            vectors,
+            coordinate_columns,
+        }
+    }
+}
+
+fn packed_divisibility_constraint_for_group<const P: u8>(
+    point_index: usize,
+    adjacent_point_index: usize,
+    group: &[usize],
+    monomial_count: usize,
+    ambient_dimension: usize,
+) -> PackedSparseRow {
+    let mut entries = Vec::with_capacity(2 * group.len());
+    for &monomial_idx in group {
+        entries.push((point_index * monomial_count + monomial_idx, 1));
+        entries.push((adjacent_point_index * monomial_count + monomial_idx, P - 1));
+    }
+    PackedSparseRow::new::<P, _>(ambient_dimension, entries)
+}
+
+fn packed_variable_multiple_relations<const P: u8>(
+    previous: &PackedHomogeneousGkmComponent,
+    current: &PackedHomogeneousGkmComponent,
+    multiplication_maps: &[Vec<usize>],
+) -> Vec<PackedSparseRow> {
+    let mut relations = Vec::new();
+    let previous_monomial_count = previous.monomials.len();
+    let current_monomial_count = current.monomials.len();
+
+    for basis_vector in &previous.module_basis {
+        for variable_map in multiplication_maps {
+            let mut entries = Vec::new();
+            for (source, coeff) in basis_vector
+                .cols
+                .iter()
+                .copied()
+                .zip(basis_vector.vals.iter().copied())
+            {
+                if coeff == 0 {
+                    continue;
+                }
+
+                let source = source as usize;
+                let point_index = source / previous_monomial_count;
+                let monomial_index = source % previous_monomial_count;
+                let target_monomial_index = variable_map[monomial_index];
+                let target = point_index * current_monomial_count + target_monomial_index;
+                entries.push((target, coeff));
+            }
+            let ambient = PackedSparseRow::new::<P, _>(current.ambient_dimension(), entries);
+            relations.push(current.module_coordinates_sparse::<P>(&ambient));
+        }
+    }
+
+    relations
+}
+
 fn hessenberg_edge_adjacencies(
     n: usize,
     hessenberg_edges: &[(usize, usize)],
@@ -867,6 +1235,12 @@ fn sparse_standard_basis<C: Ring>(dimension: usize) -> Vec<SparseVector<C>> {
         .collect()
 }
 
+fn packed_sparse_standard_basis<const P: u8>(dimension: usize) -> Vec<PackedSparseRow> {
+    (0..dimension)
+        .map(|index| PackedSparseRow::new::<P, _>(dimension, vec![(index, 1)]))
+        .collect()
+}
+
 fn kernel_basis_with_coordinate_columns(
     ambient_dimension: usize,
     constraints: &[Vector<Q>],
@@ -898,6 +1272,17 @@ fn complement_columns(num_cols: usize, pivot_columns: &[usize]) -> Vec<usize> {
         }
     }
     (0..num_cols).filter(|&col| !is_pivot[col]).collect()
+}
+
+fn coordinate_index_by_ambient_column(
+    ambient_dimension: usize,
+    coordinate_columns: &[usize],
+) -> Vec<Option<usize>> {
+    let mut lookup = vec![None; ambient_dimension];
+    for (coordinate_index, &ambient_col) in coordinate_columns.iter().enumerate() {
+        lookup[ambient_col] = Some(coordinate_index);
+    }
+    lookup
 }
 
 fn transposition(n: usize, i: usize, j: usize) -> Vec<usize> {
@@ -978,6 +1363,34 @@ fn prime_values_to_residues<const P: u64>(
         .collect()
 }
 
+fn push_packed_prime_residues<const P: u8>(
+    area: &[u8],
+    residues: &mut Vec<(i128, ResidueCharacterValues)>,
+    modulus_product: &mut i128,
+) -> Option<()> {
+    let values = hessenberg_gkm_dot_character_values_packed_mod_prime::<P>(area)?;
+    residues.push((P as i128, packed_prime_values_to_residues(values)));
+    *modulus_product = modulus_product.checked_mul(P as i128)?;
+    Some(())
+}
+
+fn packed_prime_values_to_residues(
+    values: BTreeMap<u32, BTreeMap<Partition, u8>>,
+) -> ResidueCharacterValues {
+    values
+        .into_iter()
+        .map(|(degree, degree_values)| {
+            (
+                degree,
+                degree_values
+                    .into_iter()
+                    .map(|(cycle_type, value)| (cycle_type, value as i128))
+                    .collect(),
+            )
+        })
+        .collect()
+}
+
 fn lift_character_residues(
     n: usize,
     residues: &[(i128, ResidueCharacterValues)],
@@ -1021,6 +1434,15 @@ fn lift_character_residues(
 
 fn character_trace_bound(n: usize) -> i128 {
     (1..=n).fold(1i128, |acc, value| acc.saturating_mul(value as i128))
+}
+
+fn add_mod_u8<const P: u8>(a: u8, b: u8) -> u8 {
+    let sum = a as u16 + b as u16;
+    if sum >= P as u16 {
+        (sum - P as u16) as u8
+    } else {
+        sum as u8
+    }
 }
 
 #[cfg(test)]
@@ -1069,10 +1491,37 @@ mod tests {
         assert_eq!(crt, rational);
     }
 
+    fn assert_packed_matches_generic(area: &[u8]) {
+        let packed = hessenberg_gkm_dot_character_values_by_degree_packed(area).unwrap();
+        let generic = hessenberg_gkm_dot_character_values_by_degree(area).unwrap();
+
+        assert_eq!(packed, generic);
+    }
+
+    fn assert_packed_mod_prime_matches_generic_mod_prime(area: &[u8]) {
+        let packed = hessenberg_gkm_dot_character_values_packed_mod_prime::<251>(area).unwrap();
+        let generic = hessenberg_gkm_dot_character_values_mod_prime::<251>(area).unwrap();
+        let generic_as_u8 = generic
+            .into_iter()
+            .map(|(degree, degree_values)| {
+                (
+                    degree,
+                    degree_values
+                        .into_iter()
+                        .map(|(cycle_type, value)| (cycle_type, value.value() as u8))
+                        .collect::<BTreeMap<_, _>>(),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+
+        assert_eq!(packed, generic_as_u8);
+    }
+
     #[test]
     fn test_hessenberg_gkm_dot_frobenius_rejects_invalid_area() {
         assert!(hessenberg_gkm_dot_frobenius(&[0, 2]).is_none());
         assert!(hessenberg_gkm_dot_character_values_by_degree(&[0, 2]).is_none());
+        assert!(hessenberg_gkm_dot_frobenius_packed(&[0, 2]).is_none());
     }
 
     #[test]
@@ -1098,5 +1547,20 @@ mod tests {
     #[test]
     fn test_hessenberg_gkm_dot_complete_graph_s3_crt_matches_rational_reference() {
         assert_crt_matches_rational_reference(&[0, 1, 2]);
+    }
+
+    #[test]
+    fn test_hessenberg_gkm_dot_path_s3_packed_matches_generic_mod_prime() {
+        assert_packed_mod_prime_matches_generic_mod_prime(&[0, 1, 1]);
+    }
+
+    #[test]
+    fn test_hessenberg_gkm_dot_path_s3_packed_matches_generic_crt() {
+        assert_packed_matches_generic(&[0, 1, 1]);
+    }
+
+    #[test]
+    fn test_hessenberg_gkm_dot_complete_graph_s3_packed_matches_generic_crt() {
+        assert_packed_matches_generic(&[0, 1, 2]);
     }
 }
