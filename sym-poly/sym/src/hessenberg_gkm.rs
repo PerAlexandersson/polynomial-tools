@@ -1785,8 +1785,8 @@ mod tests {
     use crate::chromatic::{
         circular_area_dot_frobenius_target, hessenberg_area_dot_frobenius_target,
     };
-    use sym_poly_core::linear_algebra::{matrix_vector_multiply, rank};
     use std::collections::BTreeSet;
+    use sym_poly_core::linear_algebra::{matrix_vector_multiply, rank};
 
     fn q(n: i64) -> Q {
         Q::from_integer(n)
@@ -1887,12 +1887,7 @@ mod tests {
     }
 
     fn small_integer_vectors(dimension: usize, max_abs_value: i64) -> Vec<Vector<Q>> {
-        fn rec(
-            index: usize,
-            current: &mut [Q],
-            max_abs_value: i64,
-            result: &mut Vec<Vector<Q>>,
-        ) {
+        fn rec(index: usize, current: &mut [Q], max_abs_value: i64, result: &mut Vec<Vector<Q>>) {
             if index == current.len() {
                 if current.iter().any(|entry| !entry.is_zero()) {
                     result.push(current.to_vec());
