@@ -12,6 +12,7 @@
 //! - [`FormalSum`] for generic linear combinations of basis elements
 //! - [`matrix`] utilities for transition matrix computation
 //! - [`linear_algebra`] utilities for exact row reduction and quotient spaces
+//! - [`sparse_linear_algebra`] utilities for sparse modular row reduction
 //! - [`sn_action`] utilities for small exact `S_n`-module computations
 //! - [`RationalFunction`] and [`QtRationalFunction`] for `Q(q,t)` coefficient fields
 //! - [`TransitionCache`] for per-algebra cached transition matrices
@@ -36,6 +37,7 @@ pub mod ring {
     pub use combinatoric_core::ring::*;
 }
 pub mod sn_action;
+pub mod sparse_linear_algebra;
 pub mod ssaf;
 pub mod tableau;
 pub mod transition_cache;
