@@ -26,6 +26,8 @@ pub struct SparseQuotientSpace<C> {
     pub relation_rref: Vec<SparseVector<C>>,
     pub pivot_columns: Vec<usize>,
     pub free_columns: Vec<usize>,
+    pub pivot_row_by_column: BTreeMap<usize, usize>,
+    pub free_index_by_column: BTreeMap<usize, usize>,
 }
 
 pub fn sparse_vector<C: Ring, I>(num_cols: usize, entries: I) -> SparseVector<C>
@@ -76,7 +78,7 @@ where
 
     for row in rows {
         let mut reduced = canonical_sparse_vector(num_cols, &row);
-        reduce_by_pivots(&mut reduced, &pivot_rows);
+        reduce_by_existing_pivots(&mut reduced, &pivot_rows);
         if reduced.is_empty() {
             continue;
         }
@@ -150,11 +152,26 @@ impl<C: Field> SparseQuotientSpace<C> {
     pub fn from_relations(ambient_dimension: usize, relations: &[SparseVector<C>]) -> Self {
         let reduced = sparse_rref(ambient_dimension, relations);
         let free_columns = complement_columns(ambient_dimension, &reduced.pivot_columns);
+        let pivot_row_by_column = reduced
+            .pivot_columns
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(row_index, col)| (col, row_index))
+            .collect();
+        let free_index_by_column = free_columns
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(free_index, col)| (col, free_index))
+            .collect();
         Self {
             ambient_dimension,
             relation_rref: reduced.rows,
             pivot_columns: reduced.pivot_columns,
             free_columns,
+            pivot_row_by_column,
+            free_index_by_column,
         }
     }
 
@@ -164,11 +181,15 @@ impl<C: Field> SparseQuotientSpace<C> {
 
     pub fn normal_form_sparse(&self, vector: &SparseVector<C>) -> SparseVector<C> {
         let mut normal = canonical_sparse_vector(self.ambient_dimension, vector);
-        for (pivot_row, &pivot_col) in self.pivot_columns.iter().enumerate() {
-            let factor = coefficient_at(&normal, pivot_col);
-            if factor.is_zero() {
-                continue;
-            }
+        while let Some((pivot_position, pivot_row)) =
+            normal.iter().enumerate().find_map(|(position, (col, _))| {
+                self.pivot_row_by_column
+                    .get(col)
+                    .copied()
+                    .map(|pivot_row| (position, pivot_row))
+            })
+        {
+            let factor = normal[pivot_position].1.clone();
             normal = subtract_scaled_row(&normal, factor, &self.relation_rref[pivot_row]);
         }
         normal
@@ -178,12 +199,12 @@ impl<C: Field> SparseQuotientSpace<C> {
     pub fn quotient_coordinates_sparse(&self, vector: &SparseVector<C>) -> SparseVector<C> {
         let normal = self.normal_form_sparse(vector);
         let mut coords = Vec::new();
-        for (free_index, &ambient_col) in self.free_columns.iter().enumerate() {
-            let coeff = coefficient_at(&normal, ambient_col);
-            if !coeff.is_zero() {
+        for (ambient_col, coeff) in normal {
+            if let Some(&free_index) = self.free_index_by_column.get(&ambient_col) {
                 coords.push((free_index, coeff));
             }
         }
+        coords.sort_by_key(|(free_index, _)| *free_index);
         coords
     }
 
@@ -217,19 +238,29 @@ fn canonical_sparse_vector<C: Ring>(num_cols: usize, vector: &SparseVector<C>) -
     sparse_vector(num_cols, vector.iter().cloned())
 }
 
-fn reduce_by_pivots<C: Field>(
+fn reduce_by_existing_pivots<C: Field>(
     row: &mut SparseVector<C>,
     pivot_rows: &BTreeMap<usize, SparseVector<C>>,
 ) {
-    for (&pivot_col, pivot_row) in pivot_rows {
-        let factor = coefficient_at(row, pivot_col);
-        if factor.is_zero() {
+    loop {
+        let Some(&(leading_col, ref leading_factor)) = row.first() else {
+            break;
+        };
+        if let Some(pivot_row) = pivot_rows.get(&leading_col) {
+            let factor = leading_factor.clone();
+            *row = subtract_scaled_row(row, factor, pivot_row);
             continue;
         }
-        *row = subtract_scaled_row(row, factor, pivot_row);
-        if row.is_empty() {
+
+        let pivot_to_reduce = row.iter().skip(1).find_map(|(col, coeff)| {
+            pivot_rows
+                .get(col)
+                .map(|pivot_row| (coeff.clone(), pivot_row.clone()))
+        });
+        let Some((factor, pivot_row)) = pivot_to_reduce else {
             break;
-        }
+        };
+        *row = subtract_scaled_row(row, factor, &pivot_row);
     }
 }
 
@@ -435,5 +466,26 @@ mod tests {
             sparse_rref_from_rows(4, rows.clone()),
             sparse_rref(4, &rows)
         );
+    }
+
+    #[test]
+    fn test_sparse_rref_reduces_later_pivots_when_new_pivot_is_smaller() {
+        let dense = qm(&[&[0, 0, 1, 1], &[1, 1, 1, 0]]);
+        let sparse = dense
+            .iter()
+            .map(|row| dense_to_sparse(row))
+            .collect::<Vec<_>>();
+
+        let dense_reduced = rref(&dense);
+        let sparse_reduced = sparse_rref(4, &sparse);
+        let sparse_as_dense = sparse_reduced
+            .rows
+            .iter()
+            .map(|row| sparse_to_dense(4, row))
+            .collect::<Vec<_>>();
+        let dense_nonzero = dense_reduced.matrix[..dense_reduced.rank].to_vec();
+
+        assert_eq!(sparse_reduced.pivot_columns, dense_reduced.pivot_columns);
+        assert_eq!(sparse_as_dense, dense_nonzero);
     }
 }
