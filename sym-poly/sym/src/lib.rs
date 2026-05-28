@@ -29,7 +29,8 @@ pub use frobenius::{
     multigraded_frobenius_from_character_values, multigraded_frobenius_from_trace_matrices,
 };
 pub use hessenberg_gkm::{
-    hessenberg_gkm_dot_action_matrices, hessenberg_gkm_dot_character_values_by_degree,
+    affine_shadow_circular_gkm_hilbert, hessenberg_gkm_dot_action_matrices,
+    hessenberg_gkm_dot_character_values_by_degree,
     hessenberg_gkm_dot_character_values_by_degree_packed,
     hessenberg_gkm_dot_character_values_packed_crt,
     hessenberg_gkm_dot_character_values_packed_mod_prime, hessenberg_gkm_dot_frobenius,

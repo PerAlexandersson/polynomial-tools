@@ -102,6 +102,13 @@ struct GkmEdgeAdjacency {
     label_b: usize,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct DirectedCircularEdge {
+    source: usize,
+    target: usize,
+    wraps: bool,
+}
+
 /// Compute dot-action matrices on ordinary Hessenberg cohomology.
 ///
 /// The input is a Dyck area sequence. The corresponding unit-interval graph is
@@ -446,6 +453,82 @@ pub fn naive_circular_gkm_dot_frobenius(
             .filter(|(_, f)| !f.is_zero())
             .collect(),
     )
+}
+
+/// Hilbert series of a finite affine-shadow circular GKM experiment.
+///
+/// A wrap-around edge is treated as carrying a generic monodromy scalar
+/// `monodromy` and affine root label `t_i - t_j - h`.  Ordinary edges have
+/// monodromy `1` and label `t_i - t_j`.  The quotient is taken by all
+/// positive-degree variables `t_1,...,t_n,h`.
+///
+/// This is only a small-rank experimental shadow of an affine model: it tests
+/// whether adding winding data fixes the graded dimensions, but it does not by
+/// itself establish a well-defined dot action.
+pub fn affine_shadow_circular_gkm_hilbert(
+    area: &[u8],
+    monodromy: i64,
+) -> Option<BTreeMap<u32, usize>> {
+    if monodromy == 0 {
+        return None;
+    }
+
+    let directed_edges = directed_circular_edges(area)?;
+    let n = area.len();
+    let variable_count = n + 1;
+    let max_degree = directed_edges.len() as u32;
+    let fixed_points = sym_poly_core::symmetric_group_permutation_basis(n);
+    let sn_index = SnIndex::new(n);
+    let monodromy = Q::from_integer(monodromy);
+
+    let mut components: Vec<HomogeneousGkmComponent> = Vec::new();
+    let mut hilbert = BTreeMap::new();
+    for degree in 0..=max_degree {
+        let module_basis = affine_shadow_homogeneous_gkm_module_basis(
+            n,
+            variable_count,
+            &directed_edges,
+            &fixed_points,
+            &sn_index,
+            degree,
+            &monodromy,
+        );
+        let mut component = HomogeneousGkmComponent::new(
+            fixed_points.clone(),
+            sn_index.clone(),
+            degree,
+            module_basis.vectors,
+            module_basis.coordinate_columns,
+            Vec::new(),
+        );
+        component.monomials = homogeneous_monomials(variable_count, degree);
+        component.monomial_index = component
+            .monomials
+            .iter()
+            .cloned()
+            .enumerate()
+            .map(|(index, monomial)| (monomial, index))
+            .collect();
+
+        let relations = if degree == 0 {
+            Vec::new()
+        } else {
+            variable_multiple_relations(
+                &components[(degree - 1) as usize],
+                &component,
+                variable_count,
+            )
+        };
+        component.ordinary_quotient =
+            QuotientSpace::from_relations(component.module_basis.len(), &relations);
+        let dimension = component.ordinary_quotient.dimension();
+        if dimension != 0 {
+            hilbert.insert(degree, dimension);
+        }
+        components.push(component);
+    }
+
+    Some(hilbert)
 }
 
 impl HomogeneousGkmComponent {
@@ -946,6 +1029,124 @@ fn homogeneous_gkm_module_basis(
     }
 }
 
+fn affine_shadow_homogeneous_gkm_module_basis(
+    n: usize,
+    variable_count: usize,
+    directed_edges: &[DirectedCircularEdge],
+    fixed_points: &[Vec<usize>],
+    sn_index: &SnIndex,
+    degree: u32,
+    monodromy: &Q,
+) -> GkmModuleBasis {
+    let monomials = homogeneous_monomials(variable_count, degree);
+    let ambient_dimension = fixed_points.len() * monomials.len();
+    let mut constraints = Vec::new();
+
+    for (point_index, point) in fixed_points.iter().enumerate() {
+        for edge in directed_edges {
+            let adjacent_point_index =
+                right_transposition_fixed_point_index(sn_index, point, edge.source, edge.target);
+            if point_index > adjacent_point_index {
+                continue;
+            }
+
+            let label_a = point[edge.source];
+            let label_b = point[edge.target];
+            let edge_monodromy = if edge.wraps {
+                monodromy.clone()
+            } else {
+                Q::one()
+            };
+            for row in affine_shadow_divisibility_constraints_for_edge(
+                n,
+                point_index,
+                adjacent_point_index,
+                label_a,
+                label_b,
+                edge.wraps,
+                &edge_monodromy,
+                &monomials,
+                ambient_dimension,
+            ) {
+                constraints.push(row);
+            }
+        }
+    }
+
+    if constraints.is_empty() {
+        GkmModuleBasis {
+            vectors: standard_basis(ambient_dimension),
+            coordinate_columns: (0..ambient_dimension).collect(),
+        }
+    } else {
+        kernel_basis_with_coordinate_columns(ambient_dimension, &constraints)
+    }
+}
+
+fn affine_shadow_divisibility_constraints_for_edge(
+    n: usize,
+    point_index: usize,
+    adjacent_point_index: usize,
+    label_a: usize,
+    label_b: usize,
+    wraps: bool,
+    monodromy: &Q,
+    monomials: &[Vec<u32>],
+    ambient_dimension: usize,
+) -> Vec<Vector<Q>> {
+    let monomial_count = monomials.len();
+    let mut rows_by_key: BTreeMap<Vec<u32>, Vector<Q>> = BTreeMap::new();
+
+    for (monomial_idx, monomial) in monomials.iter().enumerate() {
+        for (key, coeff) in affine_shadow_substitute_label(monomial, label_a, label_b, wraps, n) {
+            let row = rows_by_key
+                .entry(key)
+                .or_insert_with(|| vec![Q::zero(); ambient_dimension]);
+            row[point_index * monomial_count + monomial_idx] =
+                row[point_index * monomial_count + monomial_idx].clone() + coeff.clone();
+            row[adjacent_point_index * monomial_count + monomial_idx] =
+                row[adjacent_point_index * monomial_count + monomial_idx].clone()
+                    - coeff * monodromy.clone();
+        }
+    }
+
+    rows_by_key
+        .into_values()
+        .filter(|row| row.iter().any(|entry| !entry.is_zero()))
+        .collect()
+}
+
+fn affine_shadow_substitute_label(
+    monomial: &[u32],
+    label_a: usize,
+    label_b: usize,
+    wraps: bool,
+    n: usize,
+) -> BTreeMap<Vec<u32>, Q> {
+    let hbar_index = n;
+    debug_assert!(hbar_index < monomial.len());
+    let mut base = monomial.to_vec();
+    let exponent = base[label_a];
+    base[label_a] = 0;
+
+    if !wraps {
+        base[label_b] += exponent;
+        return BTreeMap::from([(base, Q::one())]);
+    }
+
+    let mut result = BTreeMap::new();
+    for hbar_power in 0..=exponent {
+        let mut expanded = base.clone();
+        expanded[label_b] += exponent - hbar_power;
+        expanded[hbar_index] += hbar_power;
+        result.insert(
+            expanded,
+            Q::from_integer(binomial_u32(exponent, hbar_power) as i64),
+        );
+    }
+    result
+}
+
 fn divisibility_constraints_for_edge(
     point_index: usize,
     adjacent_point_index: usize,
@@ -1401,6 +1602,38 @@ fn is_area_sequence(area: &[u8]) -> bool {
             .all(|w| usize::from(w[1]) <= usize::from(w[0]) + 1)
 }
 
+fn directed_circular_edges(area: &[u8]) -> Option<Vec<DirectedCircularEdge>> {
+    if !Graph::is_circular_unit_interval_area_sequence(area) {
+        return None;
+    }
+
+    let n = area.len();
+    let mut edges = Vec::new();
+    for target in 0..n {
+        for gap in 1..=usize::from(area[target]) {
+            let source = (target + n - gap) % n;
+            edges.push(DirectedCircularEdge {
+                source,
+                target,
+                wraps: source > target,
+            });
+        }
+    }
+    Some(edges)
+}
+
+fn binomial_u32(n: u32, k: u32) -> u64 {
+    if k > n {
+        return 0;
+    }
+    let k = k.min(n - k);
+    let mut result = 1u64;
+    for i in 0..k {
+        result = result * u64::from(n - i) / u64::from(i + 1);
+    }
+    result
+}
+
 fn trace_values_from_action_matrices<C: Ring>(
     matrices: BTreeMap<u32, BTreeMap<Partition, Matrix<C>>>,
 ) -> BTreeMap<u32, BTreeMap<Partition, C>> {
@@ -1717,5 +1950,18 @@ mod tests {
 
         let target_degree_one = target[&1].to_schur_basis();
         assert_eq!(target_degree_one.coefficient(&Partition::new(vec![3])), 3);
+    }
+
+    #[test]
+    fn test_affine_shadow_hilbert_extends_complete_unit_interval_s3() {
+        let hilbert = affine_shadow_circular_gkm_hilbert(&[0, 1, 2], 2).unwrap();
+        assert_eq!(hilbert, BTreeMap::from([(0, 1), (1, 2), (2, 2), (3, 1)]));
+    }
+
+    #[test]
+    fn test_affine_shadow_hilbert_directed_cycle_s3_matches_target_dimensions() {
+        let hilbert = affine_shadow_circular_gkm_hilbert(&[1, 1, 1], 2).unwrap();
+        assert_eq!(hilbert, BTreeMap::from([(1, 3), (2, 3)]));
+        assert!(affine_shadow_circular_gkm_hilbert(&[1, 1, 1], 0).is_none());
     }
 }
