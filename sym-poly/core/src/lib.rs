@@ -13,6 +13,7 @@
 //! - [`matrix`] utilities for transition matrix computation
 //! - [`linear_algebra`] utilities for exact row reduction and quotient spaces
 //! - [`sparse_linear_algebra`] utilities for sparse modular row reduction
+//! - [`packed_sparse_linear_algebra`] experiments for byte-sized small-prime rows
 //! - [`sn_action`] utilities for small exact `S_n`-module computations
 //! - [`RationalFunction`] and [`QtRationalFunction`] for `Q(q,t)` coefficient fields
 //! - [`TransitionCache`] for per-algebra cached transition matrices
@@ -28,6 +29,7 @@ pub mod formal_sum;
 pub mod index;
 pub mod linear_algebra;
 pub mod matrix;
+pub mod packed_sparse_linear_algebra;
 pub mod partition {
     pub use combinatoric_core::partition::*;
 }
