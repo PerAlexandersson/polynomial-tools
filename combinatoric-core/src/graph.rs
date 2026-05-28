@@ -499,6 +499,54 @@ impl Graph {
         Graph::new(n, &edges)
     }
 
+    /// Check whether `area` is a circular unit interval area sequence.
+    ///
+    /// The entries are zero-indexed Rust values for
+    /// `(a_1,\dotsc,a_n)`.  A circular area sequence satisfies
+    /// `0 <= a_i <= n - 1` and `a_{i+1} <= a_i + 1`, with indices taken
+    /// cyclically.
+    pub fn is_circular_unit_interval_area_sequence(area: &[u8]) -> bool {
+        let n = area.len();
+        if n == 0 {
+            return true;
+        }
+        area.iter().all(|&value| usize::from(value) < n)
+            && (0..n).all(|i| {
+                let next = (i + 1) % n;
+                usize::from(area[next]) <= usize::from(area[i]) + 1
+            })
+    }
+
+    /// Directed edges of the circular unit arc digraph from an area sequence.
+    ///
+    /// The edge orientation is the one used in the circular chromatic
+    /// quasisymmetric function: for each target vertex `i`, add
+    /// `(i - gap) -> i`, with indices taken modulo `n`, for
+    /// `gap = 1, ..., area[i]`.
+    pub fn circular_unit_interval_directed_edges(area: &[u8]) -> Option<Vec<(usize, usize)>> {
+        if !Self::is_circular_unit_interval_area_sequence(area) {
+            return None;
+        }
+
+        let n = area.len();
+        let mut edges = Vec::new();
+        for target in 0..n {
+            for gap in 1..=usize::from(area[target]) {
+                let source = (target + n - gap) % n;
+                edges.push((source, target));
+            }
+        }
+        edges.sort_unstable();
+        edges.dedup();
+        Some(edges)
+    }
+
+    /// Underlying simple graph of a circular unit arc digraph.
+    pub fn circular_unit_interval(area: &[u8]) -> Option<Self> {
+        let directed_edges = Self::circular_unit_interval_directed_edges(area)?;
+        Some(Graph::new(area.len(), &directed_edges))
+    }
+
     /// Petersen graph (10 vertices, 15 edges, 3-regular).
     pub fn petersen() -> Self {
         let mut edges = Vec::new();
@@ -1608,6 +1656,18 @@ mod tests {
         let g = Graph::unit_interval(&[0, 1, 2]);
         assert_eq!(g.num_vertices(), 3);
         assert_eq!(g.num_edges(), 3); // complete graph K3
+    }
+
+    #[test]
+    fn test_circular_unit_interval_directed_edges() {
+        assert!(Graph::is_circular_unit_interval_area_sequence(&[1, 1, 1]));
+        assert!(!Graph::is_circular_unit_interval_area_sequence(&[0, 2, 0]));
+
+        let directed = Graph::circular_unit_interval_directed_edges(&[1, 1, 1]).unwrap();
+        assert_eq!(directed, vec![(0, 1), (1, 2), (2, 0)]);
+
+        let underlying = Graph::circular_unit_interval(&[1, 1, 1]).unwrap();
+        assert_eq!(underlying, Graph::cycle(3));
     }
 
     // -- Predicate tests --

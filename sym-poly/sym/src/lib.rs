@@ -20,7 +20,8 @@ pub mod twin_gkm;
 
 pub use basis::Basis;
 pub use chromatic::{
-    chromatic_symmetric, first_bad_edge_symmetric, hessenberg_area_dot_frobenius_target,
+    chromatic_symmetric, circular_area_dot_frobenius_target, first_bad_edge_symmetric,
+    hessenberg_area_dot_frobenius_target, q_chromatic_symmetric_with_ascent_edges,
 };
 pub use frobenius::{
     frobenius_from_character_values, frobenius_from_trace_matrices,
@@ -32,7 +33,8 @@ pub use hessenberg_gkm::{
     hessenberg_gkm_dot_character_values_by_degree_packed,
     hessenberg_gkm_dot_character_values_packed_crt,
     hessenberg_gkm_dot_character_values_packed_mod_prime, hessenberg_gkm_dot_frobenius,
-    hessenberg_gkm_dot_frobenius_packed,
+    hessenberg_gkm_dot_frobenius_packed, naive_circular_gkm_dot_character_values_by_degree,
+    naive_circular_gkm_dot_frobenius,
 };
 pub use llt::{
     graph_llt_symmetric, unicellular_llt, unicellular_llt_character_values_by_degree,

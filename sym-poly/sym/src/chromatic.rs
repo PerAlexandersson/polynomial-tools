@@ -245,22 +245,61 @@ fn next_multiset_perm(perm: &mut [usize]) -> bool {
 /// This is represented as a `BTreeMap<Partition, Vec<i64>>` where the Vec
 /// is indexed by ascent count.
 pub fn q_chromatic_symmetric(g: &Graph) -> BTreeMap<Partition, Vec<i64>> {
-    let n = g.num_vertices();
+    q_chromatic_symmetric_with_ascent_edges(g.num_vertices(), g.edges(), g.edges())
+}
+
+/// Compute the q-chromatic symmetric function with a separate ascent
+/// orientation.
+///
+/// The `proper_edges` determine which colorings are proper, as an undirected
+/// graph.  The `ascent_edges` are directed edges `(u, v)` contributing one
+/// ascent when `color(u) < color(v)`.  This covers circular unit arc digraphs,
+/// where the proper-coloring graph is the underlying simple graph but the
+/// ascent statistic uses the circular orientation.
+pub fn q_chromatic_symmetric_with_ascent_edges(
+    n: usize,
+    proper_edges: &[(usize, usize)],
+    ascent_edges: &[(usize, usize)],
+) -> BTreeMap<Partition, Vec<i64>> {
     if n == 0 {
         return BTreeMap::new();
     }
+    assert!(
+        ascent_edges.iter().all(|&(u, v)| u < n && v < n && u != v),
+        "ascent edge endpoint out of range"
+    );
 
+    let graph = Graph::new(n, proper_edges);
     let partitions = Partition::all_of_size(n as u32);
     let mut result: BTreeMap<Partition, Vec<i64>> = BTreeMap::new();
 
     for lambda in &partitions {
-        let q_counts = count_proper_colorings_of_type_q(g, lambda);
+        let q_counts =
+            count_proper_colorings_of_type_q_with_ascent_edges(&graph, ascent_edges, lambda);
         if q_counts.iter().any(|&c| c != 0) {
             result.insert(lambda.clone(), q_counts);
         }
     }
 
     result
+}
+
+/// Circular unit interval Frobenius target for the naive dot-action test.
+///
+/// This returns the coefficient of each `q^d` in
+/// `ω X_{\Gamma_a}(x;q)`, where proper colorings use the underlying circular
+/// unit interval graph and ascents use the circular edge orientation.
+pub fn circular_area_dot_frobenius_target(
+    area: &[u8],
+) -> Option<BTreeMap<u32, SymmetricFunction<i64>>> {
+    let directed_edges = Graph::circular_unit_interval_directed_edges(area)?;
+    let graph = Graph::circular_unit_interval(area)?;
+    let q_chromatic = q_chromatic_symmetric_with_ascent_edges(
+        graph.num_vertices(),
+        graph.edges(),
+        &directed_edges,
+    );
+    Some(omega_by_q_degree(q_chromatic))
 }
 
 /// Shareshian--Wachs Frobenius target for a Hessenberg area sequence.
@@ -278,6 +317,12 @@ pub fn hessenberg_area_dot_frobenius_target(
 
     let graph = Graph::unit_interval(area);
     let q_chromatic = q_chromatic_symmetric(&graph);
+    Some(omega_by_q_degree(q_chromatic))
+}
+
+fn omega_by_q_degree(
+    q_chromatic: BTreeMap<Partition, Vec<i64>>,
+) -> BTreeMap<u32, SymmetricFunction<i64>> {
     let mut by_degree: BTreeMap<u32, BTreeMap<Partition, i64>> = BTreeMap::new();
     for (partition, coeffs) in q_chromatic {
         for (degree, coeff) in coeffs.into_iter().enumerate() {
@@ -291,15 +336,13 @@ pub fn hessenberg_area_dot_frobenius_target(
         }
     }
 
-    Some(
-        by_degree
-            .into_iter()
-            .map(|(degree, terms)| {
-                let chromatic_degree = SymmetricFunction::from_terms(Basis::Monomial, terms);
-                (degree, chromatic_degree.omega_involution())
-            })
-            .collect(),
-    )
+    by_degree
+        .into_iter()
+        .map(|(degree, terms)| {
+            let chromatic_degree = SymmetricFunction::from_terms(Basis::Monomial, terms);
+            (degree, chromatic_degree.omega_involution())
+        })
+        .collect()
 }
 
 fn is_area_sequence(area: &[u8]) -> bool {
@@ -309,12 +352,14 @@ fn is_area_sequence(area: &[u8]) -> bool {
             .all(|w| usize::from(w[1]) <= usize::from(w[0]) + 1)
 }
 
-/// Like count_proper_colorings_of_type but tracks ascent count for q-weighting.
-/// Returns a Vec where entry[a] = coefficient of q^a for m_λ.
-fn count_proper_colorings_of_type_q(g: &Graph, lambda: &Partition) -> Vec<i64> {
+fn count_proper_colorings_of_type_q_with_ascent_edges(
+    g: &Graph,
+    ascent_edges: &[(usize, usize)],
+    lambda: &Partition,
+) -> Vec<i64> {
     let n = g.num_vertices();
     let parts = lambda.parts();
-    let max_ascents = g.num_edges();
+    let max_ascents = ascent_edges.len();
 
     let mut base_coloring = Vec::with_capacity(n);
     for (color, &freq) in parts.iter().enumerate() {
@@ -330,8 +375,7 @@ fn count_proper_colorings_of_type_q(g: &Graph, lambda: &Partition) -> Vec<i64> {
     loop {
         let proper = g.edges().iter().all(|&(u, v)| perm[u] != perm[v]);
         if proper {
-            let ascents = g
-                .edges()
+            let ascents = ascent_edges
                 .iter()
                 .filter(|&&(u, v)| perm[u] < perm[v])
                 .count();
@@ -572,6 +616,28 @@ mod tests {
     #[test]
     fn test_hessenberg_area_dot_frobenius_target_rejects_invalid_area() {
         assert!(hessenberg_area_dot_frobenius_target(&[0, 2]).is_none());
+    }
+
+    #[test]
+    fn test_circular_area_target_extends_hessenberg_target() {
+        let area = [0, 1, 1];
+        assert_eq!(
+            circular_area_dot_frobenius_target(&area).unwrap(),
+            hessenberg_area_dot_frobenius_target(&area).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_circular_area_target_directed_cycle_s3() {
+        let target = circular_area_dot_frobenius_target(&[1, 1, 1]).unwrap();
+
+        assert_eq!(target.keys().copied().collect::<Vec<_>>(), vec![1, 2]);
+        let degree_one = target[&1].to_schur_basis();
+        let degree_two = target[&2].to_schur_basis();
+        assert_eq!(degree_one.coefficient(&Partition::new(vec![3])), 3);
+        assert_eq!(degree_one.terms().len(), 1);
+        assert_eq!(degree_two.coefficient(&Partition::new(vec![3])), 3);
+        assert_eq!(degree_two.terms().len(), 1);
     }
 
     // -- Edge cases --

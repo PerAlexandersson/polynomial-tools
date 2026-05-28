@@ -193,8 +193,13 @@ pub fn hessenberg_gkm_dot_character_values_mod_prime<const P: u64>(
         return None;
     }
 
-    let n = area.len();
-    let components = sparse_hessenberg_gkm_components::<PrimeField<P>>(area);
+    let graph = Graph::unit_interval(area);
+    let n = graph.num_vertices();
+    let components = sparse_gkm_components_from_edges::<PrimeField<P>>(
+        n,
+        graph.edges(),
+        graph.num_edges() as u32,
+    );
     let mut by_degree = BTreeMap::new();
 
     for (degree, component) in components.iter().enumerate() {
@@ -223,25 +228,56 @@ pub fn hessenberg_gkm_dot_character_values_crt(
         return None;
     }
 
-    let bound = character_trace_bound(area.len());
+    let graph = Graph::unit_interval(area);
+    gkm_dot_character_values_crt_for_edges(
+        graph.num_vertices(),
+        graph.edges(),
+        graph.num_edges() as u32,
+    )
+}
+
+fn gkm_dot_character_values_crt_for_edges(
+    n: usize,
+    edges: &[(usize, usize)],
+    max_degree: u32,
+) -> Option<BTreeMap<u32, BTreeMap<Partition, i64>>> {
+    let bound = character_trace_bound(n);
     let mut residues = Vec::new();
     let mut modulus = 1i128;
 
-    push_prime_residues::<1_000_000_007>(area, &mut residues, &mut modulus)?;
+    push_prime_residues_for_edges::<1_000_000_007>(
+        n,
+        edges,
+        max_degree,
+        &mut residues,
+        &mut modulus,
+    )?;
     let required_modulus = bound.checked_mul(2).unwrap_or(i128::MAX);
 
     if modulus <= required_modulus {
-        push_prime_residues::<1_000_000_009>(area, &mut residues, &mut modulus)?;
+        push_prime_residues_for_edges::<1_000_000_009>(
+            n,
+            edges,
+            max_degree,
+            &mut residues,
+            &mut modulus,
+        )?;
     }
     if modulus <= required_modulus {
-        push_prime_residues::<998_244_353>(area, &mut residues, &mut modulus)?;
+        push_prime_residues_for_edges::<998_244_353>(
+            n,
+            edges,
+            max_degree,
+            &mut residues,
+            &mut modulus,
+        )?;
     }
 
     if modulus <= required_modulus {
         return None;
     }
 
-    Some(lift_character_residues(area.len(), &residues))
+    Some(lift_character_residues(n, &residues))
 }
 
 /// Compute graded character values over a byte-sized prime field.
@@ -361,6 +397,49 @@ pub fn hessenberg_gkm_dot_frobenius_packed(
     area: &[u8],
 ) -> Option<BTreeMap<u32, SymmetricFunction<Ratio<i64>>>> {
     let character_values = hessenberg_gkm_dot_character_values_by_degree_packed(area)?;
+    Some(
+        graded_frobenius_from_character_values(&character_values)
+            .into_iter()
+            .filter(|(_, f)| !f.is_zero())
+            .collect(),
+    )
+}
+
+/// Compute graded character values for the naive circular GKM dot-action model.
+///
+/// The circular area sequence supplies a directed circular unit arc digraph.
+/// The naive GKM model forgets the edge orientation and imposes the ordinary
+/// Hessenberg-style divisibility relation for each underlying transposition.
+pub fn naive_circular_gkm_dot_character_values_by_degree(
+    area: &[u8],
+) -> Option<BTreeMap<u32, BTreeMap<Partition, Ratio<i64>>>> {
+    let graph = Graph::circular_unit_interval(area)?;
+    let values = gkm_dot_character_values_crt_for_edges(
+        graph.num_vertices(),
+        graph.edges(),
+        graph.num_edges() as u32,
+    )?;
+    Some(
+        values
+            .into_iter()
+            .map(|(degree, degree_values)| {
+                (
+                    degree,
+                    degree_values
+                        .into_iter()
+                        .map(|(cycle_type, value)| (cycle_type, Q::from_integer(value)))
+                        .collect(),
+                )
+            })
+            .collect(),
+    )
+}
+
+/// Compute the graded Frobenius characteristic of the naive circular GKM model.
+pub fn naive_circular_gkm_dot_frobenius(
+    area: &[u8],
+) -> Option<BTreeMap<u32, SymmetricFunction<Ratio<i64>>>> {
+    let character_values = naive_circular_gkm_dot_character_values_by_degree(area)?;
     Some(
         graded_frobenius_from_character_values(&character_values)
             .into_iter()
@@ -745,15 +824,13 @@ impl HessenbergGkmCombinatorics {
     }
 }
 
-fn sparse_hessenberg_gkm_components<C: Field>(
-    area: &[u8],
+fn sparse_gkm_components_from_edges<C: Field>(
+    n: usize,
+    edges: &[(usize, usize)],
+    max_degree: u32,
 ) -> Vec<SparseHomogeneousGkmComponent<C>> {
-    let graph = Graph::unit_interval(area);
-    let n = area.len();
-    let max_degree = graph.num_edges() as u32;
     let fixed_points = sym_poly_core::symmetric_group_permutation_basis(n);
-    let combinatorics =
-        HessenbergGkmCombinatorics::new(n, graph.edges(), fixed_points.clone(), max_degree);
+    let combinatorics = HessenbergGkmCombinatorics::new(n, edges, fixed_points, max_degree);
 
     let mut components = Vec::new();
     for degree in 0..=max_degree {
@@ -1340,12 +1417,31 @@ fn trace_values_from_action_matrices<C: Ring>(
         .collect()
 }
 
-fn push_prime_residues<const P: u64>(
-    area: &[u8],
+fn push_prime_residues_for_edges<const P: u64>(
+    n: usize,
+    edges: &[(usize, usize)],
+    max_degree: u32,
     residues: &mut Vec<(i128, ResidueCharacterValues)>,
     modulus_product: &mut i128,
 ) -> Option<()> {
-    let values = hessenberg_gkm_dot_character_values_mod_prime::<P>(area)?;
+    let components = sparse_gkm_components_from_edges::<PrimeField<P>>(n, edges, max_degree);
+    let mut values = BTreeMap::new();
+
+    for (degree, component) in components.iter().enumerate() {
+        if component.ordinary_quotient.dimension() == 0 {
+            continue;
+        }
+
+        let mut degree_values = BTreeMap::new();
+        for (cycle_type, representative) in conjugacy_class_representatives(n) {
+            let trace = component.ordinary_dot_trace(&representative);
+            if !trace.is_zero() {
+                degree_values.insert(cycle_type, trace);
+            }
+        }
+        values.insert(degree as u32, degree_values);
+    }
+
     residues.push((P as i128, prime_values_to_residues(values)));
     *modulus_product = modulus_product.checked_mul(P as i128)?;
     Some(())
@@ -1453,7 +1549,9 @@ fn add_mod_u8<const P: u8>(a: u8, b: u8) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::chromatic::hessenberg_area_dot_frobenius_target;
+    use crate::chromatic::{
+        circular_area_dot_frobenius_target, hessenberg_area_dot_frobenius_target,
+    };
     use std::collections::BTreeSet;
 
     fn q(n: i64) -> Q {
@@ -1522,6 +1620,35 @@ mod tests {
         assert_eq!(packed, generic_as_u8);
     }
 
+    fn assert_naive_circular_matches_target(area: &[u8]) {
+        let computed = naive_circular_gkm_dot_frobenius(area).unwrap();
+        let target = circular_area_dot_frobenius_target(area).unwrap();
+
+        assert_eq!(
+            computed.keys().copied().collect::<Vec<_>>(),
+            target.keys().copied().collect::<Vec<_>>()
+        );
+
+        for (&degree, computed_function) in &computed {
+            let computed_schur = computed_function.to_schur_basis();
+            let target_schur = target[&degree].to_schur_basis();
+            let partitions = computed_schur
+                .terms()
+                .keys()
+                .chain(target_schur.terms().keys())
+                .cloned()
+                .collect::<BTreeSet<_>>();
+
+            for partition in partitions {
+                assert_eq!(
+                    computed_schur.coefficient(&partition),
+                    q(target_schur.coefficient(&partition)),
+                    "mismatch in degree {degree}, partition {partition:?}"
+                );
+            }
+        }
+    }
+
     #[test]
     fn test_hessenberg_gkm_dot_frobenius_rejects_invalid_area() {
         assert!(hessenberg_gkm_dot_frobenius(&[0, 2]).is_none());
@@ -1567,5 +1694,28 @@ mod tests {
     #[test]
     fn test_hessenberg_gkm_dot_complete_graph_s3_packed_matches_generic_crt() {
         assert_packed_matches_generic(&[0, 1, 2]);
+    }
+
+    #[test]
+    fn test_naive_circular_gkm_extends_unit_interval_case() {
+        assert_naive_circular_matches_target(&[0, 1, 1]);
+    }
+
+    #[test]
+    fn test_naive_circular_gkm_detects_directed_cycle_mismatch() {
+        let computed = naive_circular_gkm_dot_frobenius(&[1, 1, 1]).unwrap();
+        let target = circular_area_dot_frobenius_target(&[1, 1, 1]).unwrap();
+
+        assert_ne!(computed.keys().copied().collect::<Vec<_>>(), vec![1, 2]);
+        assert_eq!(target.keys().copied().collect::<Vec<_>>(), vec![1, 2]);
+
+        let computed_degree_zero = computed[&0].to_schur_basis();
+        assert_eq!(
+            computed_degree_zero.coefficient(&Partition::new(vec![3])),
+            q(1)
+        );
+
+        let target_degree_one = target[&1].to_schur_basis();
+        assert_eq!(target_degree_one.coefficient(&Partition::new(vec![3])), 3);
     }
 }
