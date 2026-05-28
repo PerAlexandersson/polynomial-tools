@@ -7,7 +7,7 @@
 
 use std::collections::BTreeMap;
 
-use combinatoric_core::ordered_set_partitions;
+use combinatoric_core::{ordered_set_partitions, Graph};
 use sym_poly_core::{Composition, Ring, UnivariatePolynomial};
 
 use crate::basis::QSymBasis;
@@ -105,6 +105,43 @@ pub fn coloring_qsym_asc(
     QSymFunction::from_terms(QSymBasis::Monomial, terms)
 }
 
+/// LLT-style all-coloring quasisymmetric function with directed ascent edges.
+///
+/// The edge `(u, v)` contributes one ascent when the color of `u` is smaller
+/// than the color of `v`. This is the circular analogue of
+/// [`coloring_qsym_asc`], where wrap edges must keep their circular
+/// orientation.
+pub fn coloring_qsym_asc_with_ascent_edges(
+    n: usize,
+    ascent_edges: &[(usize, usize)],
+) -> QSymFunction<UnivariatePolynomial<i64>> {
+    if n == 0 {
+        return QSymFunction::basis_element(QSymBasis::Monomial, Composition::empty());
+    }
+
+    let ascent_edges = normalize_directed_edges(n, ascent_edges);
+    let mut terms: BTreeMap<Composition, UnivariatePolynomial<i64>> = BTreeMap::new();
+
+    for partition in ordered_set_partitions(n) {
+        process_ordered_partition_all_colorings_with_ascents(
+            &partition.into_blocks(),
+            &ascent_edges,
+            &mut terms,
+        );
+    }
+
+    QSymFunction::from_terms(QSymBasis::Monomial, terms)
+}
+
+/// Circular LLT-style all-coloring quasisymmetric function.
+pub fn circular_coloring_qsym_asc(area: &[u8]) -> Option<QSymFunction<UnivariatePolynomial<i64>>> {
+    let ascent_edges = Graph::circular_unit_interval_directed_edges(area)?;
+    Some(coloring_qsym_asc_with_ascent_edges(
+        area.len(),
+        &ascent_edges,
+    ))
+}
+
 /// Check if the ordered partition is proper. If so, record its block-size
 /// composition.
 fn process_ordered_partition<C: Ring>(
@@ -194,13 +231,27 @@ fn normalize_edges(n: usize, edges: &[(usize, usize)]) -> Vec<(usize, usize)> {
     normalized_edges
 }
 
+fn normalize_directed_edges(n: usize, edges: &[(usize, usize)]) -> Vec<(usize, usize)> {
+    let mut normalized_edges = Vec::new();
+    for &(u, v) in edges {
+        assert!(u < n && v < n, "edge endpoint out of range");
+        if u != v {
+            normalized_edges.push((u, v));
+        }
+    }
+    normalized_edges.sort_unstable();
+    normalized_edges.dedup();
+    normalized_edges
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use combinatoric_core::Graph;
     use std::collections::BTreeMap;
     use sym_poly_sym::{
-        chromatic_symmetric, hessenberg_area_dot_frobenius_target, unicellular_llt,
+        chromatic_symmetric, circular_unicellular_llt, hessenberg_area_dot_frobenius_target,
+        unicellular_llt,
     };
 
     use crate::sym_qsym::symmetric_qsym_to_sym;
@@ -408,5 +459,14 @@ mod tests {
         let from_qsym = symmetric_qsym_to_sym(&qsym).unwrap();
 
         assert_eq!(from_qsym, unicellular_llt(&area));
+    }
+
+    #[test]
+    fn test_circular_coloring_qsym_projects_to_circular_unicellular_llt() {
+        let area = [1, 1, 1];
+        let qsym = circular_coloring_qsym_asc(&area).unwrap();
+        let from_qsym = symmetric_qsym_to_sym(&qsym).unwrap();
+
+        assert_eq!(from_qsym, circular_unicellular_llt(&area).unwrap());
     }
 }
