@@ -1785,6 +1785,7 @@ mod tests {
     use crate::chromatic::{
         circular_area_dot_frobenius_target, hessenberg_area_dot_frobenius_target,
     };
+    use sym_poly_core::linear_algebra::{matrix_vector_multiply, rank};
     use std::collections::BTreeSet;
 
     fn q(n: i64) -> Q {
@@ -1851,6 +1852,77 @@ mod tests {
             .collect::<BTreeMap<_, _>>();
 
         assert_eq!(packed, generic_as_u8);
+    }
+
+    fn path_s3_degree_one_dot_action_matrix(permutation: &[usize]) -> Matrix<Q> {
+        let graph = Graph::unit_interval(&[0, 1, 1]);
+        let n = graph.num_vertices();
+        let fixed_points = sym_poly_core::symmetric_group_permutation_basis(n);
+        let sn_index = SnIndex::new(n);
+        let mut components = Vec::new();
+
+        for degree in 0..=1 {
+            let module_basis = homogeneous_gkm_module_basis(n, graph.edges(), degree);
+            let mut component = HomogeneousGkmComponent::new(
+                fixed_points.clone(),
+                sn_index.clone(),
+                degree,
+                module_basis.vectors,
+                module_basis.coordinate_columns,
+                Vec::new(),
+            );
+            let relations = if degree == 0 {
+                Vec::new()
+            } else {
+                variable_multiple_relations(&components[0], &component, n)
+            };
+            component.ordinary_quotient =
+                QuotientSpace::from_relations(component.module_basis.len(), &relations);
+            components.push(component);
+        }
+
+        let degree_one = &components[1];
+        let module_action = degree_one.module_dot_action_matrix(permutation);
+        quotient_action_matrix(&degree_one.ordinary_quotient, &module_action)
+    }
+
+    fn small_integer_vectors(dimension: usize, max_abs_value: i64) -> Vec<Vector<Q>> {
+        fn rec(
+            index: usize,
+            current: &mut [Q],
+            max_abs_value: i64,
+            result: &mut Vec<Vector<Q>>,
+        ) {
+            if index == current.len() {
+                if current.iter().any(|entry| !entry.is_zero()) {
+                    result.push(current.to_vec());
+                }
+                return;
+            }
+
+            for value in -max_abs_value..=max_abs_value {
+                current[index] = q(value);
+                rec(index + 1, current, max_abs_value, result);
+            }
+            current[index] = Q::zero();
+        }
+
+        let mut result = Vec::new();
+        let mut current = vec![Q::zero(); dimension];
+        rec(0, &mut current, max_abs_value, &mut result);
+        result
+    }
+
+    fn action_image(matrix: &Matrix<Q>, vector: &[Q]) -> Vector<Q> {
+        matrix_vector_multiply(matrix, vector)
+    }
+
+    fn is_fixed_by(matrix: &Matrix<Q>, vector: &[Q]) -> bool {
+        action_image(matrix, vector) == vector
+    }
+
+    fn span_rank(vectors: &[Vector<Q>]) -> usize {
+        rank(vectors)
     }
 
     fn assert_naive_circular_matches_target(area: &[u8]) {
@@ -1922,6 +1994,59 @@ mod tests {
     #[test]
     fn test_hessenberg_gkm_dot_path_s3_packed_matches_generic_crt() {
         assert_packed_matches_generic(&[0, 1, 1]);
+    }
+
+    #[test]
+    fn test_hessenberg_gkm_dot_path_s3_degree_one_has_young_permutation_basis() {
+        let s1 = vec![1, 0, 2];
+        let s2 = vec![0, 2, 1];
+        let s1_action = path_s3_degree_one_dot_action_matrix(&s1);
+        let s2_action = path_s3_degree_one_dot_action_matrix(&s2);
+        let dimension = s1_action.len();
+        assert_eq!(dimension, 4);
+
+        let candidates = small_integer_vectors(dimension, 1);
+        let a1 = candidates
+            .iter()
+            .find_map(|candidate| {
+                if !is_fixed_by(&s2_action, candidate) {
+                    return None;
+                }
+                let a2 = action_image(&s1_action, candidate);
+                let a3 = action_image(&s2_action, &a2);
+                if span_rank(&[candidate.clone(), a2, a3]) == 3 {
+                    Some(candidate.clone())
+                } else {
+                    None
+                }
+            })
+            .expect("expected a vector with stabilizer containing <s2>");
+
+        let a2 = action_image(&s1_action, &a1);
+        let a3 = action_image(&s2_action, &a2);
+        let c = small_integer_vectors(dimension, 2)
+            .into_iter()
+            .find(|candidate| {
+                is_fixed_by(&s1_action, candidate)
+                    && is_fixed_by(&s2_action, candidate)
+                    && span_rank(&[candidate.clone(), a1.clone(), a2.clone(), a3.clone()]) == 4
+            })
+            .expect("expected an invariant vector outside the three-point orbit span");
+
+        assert_eq!(action_image(&s1_action, &c), c);
+        assert_eq!(action_image(&s2_action, &c), c);
+
+        assert_eq!(action_image(&s1_action, &a1), a2);
+        assert_eq!(action_image(&s1_action, &a2), a1);
+        assert_eq!(action_image(&s1_action, &a3), a3);
+
+        assert_eq!(action_image(&s2_action, &a1), a1);
+        assert_eq!(action_image(&s2_action, &a2), a3);
+        assert_eq!(action_image(&s2_action, &a3), a2);
+
+        assert_eq!(span_rank(&[c, a1, a2, a3]), 4);
+        assert_eq!(matrix_trace(&s1_action), q(2));
+        assert_eq!(matrix_trace(&s2_action), q(2));
     }
 
     #[test]
