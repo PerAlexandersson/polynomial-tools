@@ -35,6 +35,92 @@ pub fn identity_permutation(n: usize) -> Vec<usize> {
     (0..n).collect()
 }
 
+/// Factorial-number-system indexing for permutations in lexicographic order.
+///
+/// The index order agrees with [`combinatoric_core::all_permutations_zero_indexed`],
+/// hence also with [`crate::symmetric_group_permutation_basis`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SnIndex {
+    n: usize,
+    factorials: Vec<usize>,
+}
+
+impl SnIndex {
+    pub fn new(n: usize) -> Self {
+        let mut factorials = vec![1usize; n + 1];
+        for k in 1..=n {
+            factorials[k] = factorials[k - 1]
+                .checked_mul(k)
+                .expect("symmetric group order overflows usize");
+        }
+        Self { n, factorials }
+    }
+
+    pub fn n(&self) -> usize {
+        self.n
+    }
+
+    pub fn size(&self) -> usize {
+        self.factorials[self.n]
+    }
+
+    pub fn rank(&self, permutation: &[usize]) -> usize {
+        assert_eq!(
+            permutation.len(),
+            self.n,
+            "permutation has wrong size for this S_n index"
+        );
+        assert_permutation(permutation);
+
+        let mut unused = vec![true; self.n];
+        let mut rank = 0usize;
+        for (position, &value) in permutation.iter().enumerate() {
+            let smaller_unused = unused[..value]
+                .iter()
+                .filter(|&&available| available)
+                .count();
+            rank += smaller_unused * self.factorials[self.n - position - 1];
+            unused[value] = false;
+        }
+        rank
+    }
+
+    pub fn unrank(&self, mut rank: usize) -> Vec<usize> {
+        assert!(rank < self.size(), "permutation rank is out of range");
+
+        let mut unused = (0..self.n).collect::<Vec<_>>();
+        let mut permutation = Vec::with_capacity(self.n);
+        for position in 0..self.n {
+            let block = self.factorials[self.n - position - 1];
+            let index = rank / block;
+            rank %= block;
+            permutation.push(unused.remove(index));
+        }
+        permutation
+    }
+
+    /// Rank of `left ∘ right` without allocating the composed permutation.
+    pub fn rank_left_composition(&self, left: &[usize], right: &[usize]) -> usize {
+        assert_eq!(left.len(), self.n, "left permutation has wrong size");
+        assert_eq!(right.len(), self.n, "right permutation has wrong size");
+        debug_assert!(is_permutation(left));
+        debug_assert!(is_permutation(right));
+
+        let mut unused = vec![true; self.n];
+        let mut rank = 0usize;
+        for (position, &right_value) in right.iter().enumerate() {
+            let value = left[right_value];
+            let smaller_unused = unused[..value]
+                .iter()
+                .filter(|&&available| available)
+                .count();
+            rank += smaller_unused * self.factorials[self.n - position - 1];
+            unused[value] = false;
+        }
+        rank
+    }
+}
+
 /// The simple transposition `s_i = (i, i+1)`.
 pub fn simple_transposition(n: usize, i: usize) -> Vec<usize> {
     assert!(i + 1 < n, "simple transposition index out of range");
@@ -180,6 +266,31 @@ mod tests {
         assert_eq!(s1, vec![0, 2, 1]);
         assert_eq!(compose_permutations(&s0, &s1), vec![1, 2, 0]);
         assert_eq!(inverse_permutation(&vec![1, 2, 0]), vec![2, 0, 1]);
+    }
+
+    #[test]
+    fn test_sn_index_matches_lexicographic_permutation_basis() {
+        let index = SnIndex::new(3);
+        let basis = combinatoric_core::all_permutations_zero_indexed(3);
+
+        assert_eq!(index.size(), 6);
+        for (rank, permutation) in basis.iter().enumerate() {
+            assert_eq!(index.rank(permutation), rank);
+            assert_eq!(index.unrank(rank), *permutation);
+        }
+    }
+
+    #[test]
+    fn test_sn_index_rank_left_composition() {
+        let index = SnIndex::new(4);
+        let left = vec![2, 0, 3, 1];
+        let right = vec![1, 3, 0, 2];
+        let composed = compose_permutations(&left, &right);
+
+        assert_eq!(
+            index.rank_left_composition(&left, &right),
+            index.rank(&composed)
+        );
     }
 
     #[test]

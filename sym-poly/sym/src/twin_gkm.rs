@@ -17,9 +17,7 @@ use num_rational::Ratio;
 use sym_poly_core::linear_algebra::{
     matrix_trace, quotient_action_matrix, rref, zero_matrix, Matrix, QuotientSpace, Vector,
 };
-use sym_poly_core::sn_action::{
-    assert_permutation, compose_permutations, conjugacy_class_representatives, inverse_permutation,
-};
+use sym_poly_core::sn_action::{assert_permutation, conjugacy_class_representatives, SnIndex};
 use sym_poly_core::{chinese_remainder, symmetric_residue, Field, Partition, PrimeField, Ring};
 use sym_poly_multipoly::{
     elementary_symmetric_generators, quotient_action_matrices_by_multidegree_and_cycle_type,
@@ -35,7 +33,7 @@ type ResidueCharacterValues = BTreeMap<u32, BTreeMap<Partition, i128>>;
 #[derive(Debug, Clone)]
 struct HomogeneousTwinGkmComponent<C: Field> {
     fixed_points: Vec<Vec<usize>>,
-    fixed_point_index: BTreeMap<Vec<usize>, usize>,
+    sn_index: SnIndex,
     monomials: Vec<Vec<u32>>,
     module_basis: Vec<Vector<C>>,
     module_coordinate_columns: Vec<usize>,
@@ -45,6 +43,7 @@ struct HomogeneousTwinGkmComponent<C: Field> {
 #[derive(Debug, Clone)]
 struct TwinGkmCombinatorics {
     fixed_points: Vec<Vec<usize>>,
+    sn_index: SnIndex,
     edge_adjacencies: Vec<TwinEdgeAdjacency>,
     monomials_by_degree: Vec<Vec<Vec<u32>>>,
     substitution_groups_by_degree: Vec<Vec<Vec<Vec<usize>>>>,
@@ -241,7 +240,7 @@ pub fn twin_gkm_dagger_frobenius(
 impl<C: Field> HomogeneousTwinGkmComponent<C> {
     fn new(
         fixed_points: Vec<Vec<usize>>,
-        fixed_point_index: BTreeMap<Vec<usize>, usize>,
+        sn_index: SnIndex,
         monomials: Vec<Vec<u32>>,
         module_basis: Vec<Vector<C>>,
         module_coordinate_columns: Vec<usize>,
@@ -251,7 +250,7 @@ impl<C: Field> HomogeneousTwinGkmComponent<C> {
 
         Self {
             fixed_points,
-            fixed_point_index,
+            sn_index,
             monomials,
             module_basis,
             module_coordinate_columns,
@@ -314,14 +313,14 @@ impl<C: Field> HomogeneousTwinGkmComponent<C> {
     }
 
     fn dagger_source_point_indices(&self, permutation: &[usize]) -> Vec<usize> {
-        let inverse = inverse_permutation(permutation);
-        self.fixed_points
-            .iter()
-            .map(|target_point| {
-                let source_point = compose_permutations(&inverse, target_point);
-                self.fixed_point_index[&source_point]
-            })
-            .collect()
+        let mut source_by_target = vec![0usize; self.fixed_points.len()];
+        for (source_point_index, source_point) in self.fixed_points.iter().enumerate() {
+            let target_point_index = self
+                .sn_index
+                .rank_left_composition(permutation, source_point);
+            source_by_target[target_point_index] = source_point_index;
+        }
+        source_by_target
     }
 
     fn apply_dagger_action_to_ambient_vector(
@@ -354,26 +353,15 @@ fn noncomplete_twin_gkm_components<C: Field>(area: &[u8]) -> Vec<HomogeneousTwin
     let n = area.len();
     let max_degree = graph.num_edges() as u32;
     let fixed_points = sym_poly_core::symmetric_group_permutation_basis(n);
-    let fixed_point_index = fixed_points
-        .iter()
-        .cloned()
-        .enumerate()
-        .map(|(index, point)| (point, index))
-        .collect::<BTreeMap<_, _>>();
-    let combinatorics = TwinGkmCombinatorics::new(
-        n,
-        graph.edges(),
-        fixed_points.clone(),
-        fixed_point_index.clone(),
-        max_degree,
-    );
+    let combinatorics =
+        TwinGkmCombinatorics::new(n, graph.edges(), fixed_points.clone(), max_degree);
 
     let mut components = Vec::new();
     for degree in 0..=max_degree {
         let module_basis = homogeneous_twin_gkm_module_basis(&combinatorics, degree);
         let mut component = HomogeneousTwinGkmComponent::new(
             fixed_points.clone(),
-            fixed_point_index.clone(),
+            combinatorics.sn_index.clone(),
             combinatorics.monomials(degree).to_vec(),
             module_basis.vectors,
             module_basis.coordinate_columns,
@@ -417,11 +405,10 @@ impl TwinGkmCombinatorics {
         n: usize,
         twin_edges: &[(usize, usize)],
         fixed_points: Vec<Vec<usize>>,
-        fixed_point_index: BTreeMap<Vec<usize>, usize>,
         max_degree: u32,
     ) -> Self {
-        let edge_adjacencies =
-            twin_edge_adjacencies(n, twin_edges, &fixed_points, &fixed_point_index);
+        let sn_index = SnIndex::new(n);
+        let edge_adjacencies = twin_edge_adjacencies(n, twin_edges, &fixed_points, &sn_index);
         let monomials_by_degree = (0..=max_degree)
             .map(|degree| homogeneous_monomials(n, degree))
             .collect::<Vec<_>>();
@@ -457,6 +444,7 @@ impl TwinGkmCombinatorics {
 
         Self {
             fixed_points,
+            sn_index,
             edge_adjacencies,
             monomials_by_degree,
             substitution_groups_by_degree,
@@ -564,17 +552,15 @@ fn variable_multiple_relations<C: Field>(
 }
 
 fn twin_edge_adjacencies(
-    n: usize,
+    _n: usize,
     twin_edges: &[(usize, usize)],
     fixed_points: &[Vec<usize>],
-    fixed_point_index: &BTreeMap<Vec<usize>, usize>,
+    sn_index: &SnIndex,
 ) -> Vec<TwinEdgeAdjacency> {
     let mut result = Vec::new();
     for (point_index, point) in fixed_points.iter().enumerate() {
         for (edge_index, &(i, j)) in twin_edges.iter().enumerate() {
-            let transposition = transposition(n, i, j);
-            let adjacent_point = compose_permutations(point, &transposition);
-            let adjacent_point_index = fixed_point_index[&adjacent_point];
+            let adjacent_point_index = right_transposition_fixed_point_index(sn_index, point, i, j);
             if point_index > adjacent_point_index {
                 continue;
             }
@@ -698,11 +684,15 @@ fn complement_columns(num_cols: usize, pivot_columns: &[usize]) -> Vec<usize> {
     (0..num_cols).filter(|&col| !is_pivot[col]).collect()
 }
 
-fn transposition(n: usize, i: usize, j: usize) -> Vec<usize> {
-    assert!(i < n && j < n, "transposition index out of range");
-    let mut permutation: Vec<_> = (0..n).collect();
-    permutation.swap(i, j);
-    permutation
+fn right_transposition_fixed_point_index(
+    sn_index: &SnIndex,
+    point: &[usize],
+    i: usize,
+    j: usize,
+) -> usize {
+    let mut adjacent_point = point.to_vec();
+    adjacent_point.swap(i, j);
+    sn_index.rank(&adjacent_point)
 }
 
 fn substitute_equal_variables(monomial: &[u32], label_a: usize, label_b: usize) -> Vec<u32> {

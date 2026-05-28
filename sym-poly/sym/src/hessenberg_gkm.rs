@@ -16,9 +16,7 @@ use sym_poly_core::packed_sparse_linear_algebra::{
     packed_sparse_kernel_basis_with_free_columns_from_rows, PackedSparseQuotientSpace,
     PackedSparseRow,
 };
-use sym_poly_core::sn_action::{
-    assert_permutation, compose_permutations, conjugacy_class_representatives, inverse_permutation,
-};
+use sym_poly_core::sn_action::{assert_permutation, conjugacy_class_representatives, SnIndex};
 use sym_poly_core::sparse_linear_algebra::{
     sparse_coefficient, sparse_kernel_basis_with_free_columns_from_rows, sparse_vector,
     SparseQuotientSpace, SparseVector,
@@ -34,7 +32,7 @@ type ResidueCharacterValues = BTreeMap<u32, BTreeMap<Partition, i128>>;
 #[derive(Debug, Clone)]
 struct HomogeneousGkmComponent {
     fixed_points: Vec<Vec<usize>>,
-    fixed_point_index: BTreeMap<Vec<usize>, usize>,
+    sn_index: SnIndex,
     monomials: Vec<Vec<u32>>,
     monomial_index: BTreeMap<Vec<u32>, usize>,
     module_basis: Vec<Vector<Q>>,
@@ -51,7 +49,7 @@ struct GkmModuleBasis {
 #[derive(Debug, Clone)]
 struct SparseHomogeneousGkmComponent<C: Field> {
     fixed_points: Vec<Vec<usize>>,
-    fixed_point_index: BTreeMap<Vec<usize>, usize>,
+    sn_index: SnIndex,
     monomials: Vec<Vec<u32>>,
     monomial_index: BTreeMap<Vec<u32>, usize>,
     module_basis: Vec<SparseVector<C>>,
@@ -69,7 +67,7 @@ struct SparseGkmModuleBasis<C: Field> {
 #[derive(Debug, Clone)]
 struct PackedHomogeneousGkmComponent {
     fixed_points: Vec<Vec<usize>>,
-    fixed_point_index: BTreeMap<Vec<usize>, usize>,
+    sn_index: SnIndex,
     monomials: Vec<Vec<u32>>,
     monomial_index: BTreeMap<Vec<u32>, usize>,
     module_basis: Vec<PackedSparseRow>,
@@ -87,7 +85,7 @@ struct PackedGkmModuleBasis {
 #[derive(Debug, Clone)]
 struct HessenbergGkmCombinatorics {
     fixed_points: Vec<Vec<usize>>,
-    fixed_point_index: BTreeMap<Vec<usize>, usize>,
+    sn_index: SnIndex,
     edge_adjacencies: Vec<GkmEdgeAdjacency>,
     monomials_by_degree: Vec<Vec<Vec<u32>>>,
     monomial_index_by_degree: Vec<BTreeMap<Vec<u32>, usize>>,
@@ -121,19 +119,14 @@ pub fn hessenberg_gkm_dot_action_matrices(
     let n = area.len();
     let max_degree = graph.num_edges() as u32;
     let fixed_points = sym_poly_core::symmetric_group_permutation_basis(n);
-    let fixed_point_index = fixed_points
-        .iter()
-        .cloned()
-        .enumerate()
-        .map(|(index, point)| (point, index))
-        .collect::<BTreeMap<_, _>>();
+    let sn_index = SnIndex::new(n);
 
     let mut components = Vec::new();
     for degree in 0..=max_degree {
         let module_basis = homogeneous_gkm_module_basis(n, graph.edges(), degree);
         let mut component = HomogeneousGkmComponent::new(
             fixed_points.clone(),
-            fixed_point_index.clone(),
+            sn_index.clone(),
             degree,
             module_basis.vectors,
             module_basis.coordinate_columns,
@@ -379,7 +372,7 @@ pub fn hessenberg_gkm_dot_frobenius_packed(
 impl HomogeneousGkmComponent {
     fn new(
         fixed_points: Vec<Vec<usize>>,
-        fixed_point_index: BTreeMap<Vec<usize>, usize>,
+        sn_index: SnIndex,
         degree: u32,
         module_basis: Vec<Vector<Q>>,
         module_coordinate_columns: Vec<usize>,
@@ -396,7 +389,7 @@ impl HomogeneousGkmComponent {
 
         Self {
             fixed_points,
-            fixed_point_index,
+            sn_index,
             monomials,
             monomial_index,
             module_basis,
@@ -425,9 +418,17 @@ impl HomogeneousGkmComponent {
         assert_permutation(permutation);
         let dim = self.module_basis.len();
         let mut matrix = zero_matrix::<Q>(dim, dim);
+        let fixed_point_action =
+            fixed_point_left_action_table(&self.sn_index, &self.fixed_points, permutation);
+        let monomial_action =
+            monomial_permutation_action_table(&self.monomials, &self.monomial_index, permutation);
 
         for (col, basis_vector) in self.module_basis.iter().enumerate() {
-            let image = self.apply_dot_action_to_ambient_vector(permutation, basis_vector);
+            let image = self.apply_dot_action_to_ambient_vector(
+                &fixed_point_action,
+                &monomial_action,
+                basis_vector,
+            );
             let coords = self.module_coordinates(&image);
             for row in 0..dim {
                 matrix[row][col] = coords[row];
@@ -437,24 +438,25 @@ impl HomogeneousGkmComponent {
         matrix
     }
 
-    fn apply_dot_action_to_ambient_vector(&self, permutation: &[usize], vector: &[Q]) -> Vector<Q> {
+    fn apply_dot_action_to_ambient_vector(
+        &self,
+        fixed_point_action: &[usize],
+        monomial_action: &[usize],
+        vector: &[Q],
+    ) -> Vector<Q> {
         let mut result = vec![Q::zero(); self.ambient_dimension()];
         let monomial_count = self.monomials.len();
-        let inverse = inverse_permutation(permutation);
 
-        for (target_point_index, target_point) in self.fixed_points.iter().enumerate() {
-            let source_point = compose_permutations(&inverse, target_point);
-            let source_point_index = self.fixed_point_index[&source_point];
-
-            for (source_monomial_index, monomial) in self.monomials.iter().enumerate() {
+        for (source_point_index, &target_point_index) in fixed_point_action.iter().enumerate() {
+            for (source_monomial_index, &target_monomial_index) in
+                monomial_action.iter().enumerate()
+            {
                 let source_col = source_point_index * monomial_count + source_monomial_index;
                 let coeff = &vector[source_col];
                 if coeff.is_zero() {
                     continue;
                 }
 
-                let image_monomial = permute_monomial_variables(monomial, permutation);
-                let target_monomial_index = self.monomial_index[&image_monomial];
                 let target_row = target_point_index * monomial_count + target_monomial_index;
                 result[target_row] = result[target_row].clone() + coeff.clone();
             }
@@ -467,7 +469,7 @@ impl HomogeneousGkmComponent {
 impl<C: Field> SparseHomogeneousGkmComponent<C> {
     fn new(
         fixed_points: Vec<Vec<usize>>,
-        fixed_point_index: BTreeMap<Vec<usize>, usize>,
+        sn_index: SnIndex,
         monomials: Vec<Vec<u32>>,
         monomial_index: BTreeMap<Vec<u32>, usize>,
         module_basis: Vec<SparseVector<C>>,
@@ -481,7 +483,7 @@ impl<C: Field> SparseHomogeneousGkmComponent<C> {
 
         Self {
             fixed_points,
-            fixed_point_index,
+            sn_index,
             monomials,
             monomial_index,
             module_basis,
@@ -515,12 +517,17 @@ impl<C: Field> SparseHomogeneousGkmComponent<C> {
     fn ordinary_dot_trace(&self, permutation: &[usize]) -> C {
         assert_permutation(permutation);
         let mut trace = C::zero();
+        let fixed_point_action =
+            fixed_point_left_action_table(&self.sn_index, &self.fixed_points, permutation);
+        let monomial_action =
+            monomial_permutation_action_table(&self.monomials, &self.monomial_index, permutation);
 
         for (quotient_col, &module_basis_index) in
             self.ordinary_quotient.free_columns.iter().enumerate()
         {
             let image = self.apply_dot_action_to_sparse_ambient_vector(
-                permutation,
+                &fixed_point_action,
+                &monomial_action,
                 &self.module_basis[module_basis_index],
             );
             let module_coords = self.module_coordinates_sparse(&image);
@@ -535,7 +542,8 @@ impl<C: Field> SparseHomogeneousGkmComponent<C> {
 
     fn apply_dot_action_to_sparse_ambient_vector(
         &self,
-        permutation: &[usize],
+        fixed_point_action: &[usize],
+        monomial_action: &[usize],
         vector: &SparseVector<C>,
     ) -> SparseVector<C> {
         let monomial_count = self.monomials.len();
@@ -548,12 +556,8 @@ impl<C: Field> SparseHomogeneousGkmComponent<C> {
 
             let source_point_index = source_col / monomial_count;
             let source_monomial_index = source_col % monomial_count;
-            let target_point =
-                compose_permutations(permutation, &self.fixed_points[source_point_index]);
-            let target_point_index = self.fixed_point_index[&target_point];
-            let image_monomial =
-                permute_monomial_variables(&self.monomials[source_monomial_index], permutation);
-            let target_monomial_index = self.monomial_index[&image_monomial];
+            let target_point_index = fixed_point_action[source_point_index];
+            let target_monomial_index = monomial_action[source_monomial_index];
             let target_col = target_point_index * monomial_count + target_monomial_index;
             entries.push((target_col, coeff.clone()));
         }
@@ -565,7 +569,7 @@ impl<C: Field> SparseHomogeneousGkmComponent<C> {
 impl PackedHomogeneousGkmComponent {
     fn new<const P: u8>(
         fixed_points: Vec<Vec<usize>>,
-        fixed_point_index: BTreeMap<Vec<usize>, usize>,
+        sn_index: SnIndex,
         monomials: Vec<Vec<u32>>,
         monomial_index: BTreeMap<Vec<u32>, usize>,
         module_basis: Vec<PackedSparseRow>,
@@ -580,7 +584,7 @@ impl PackedHomogeneousGkmComponent {
 
         Self {
             fixed_points,
-            fixed_point_index,
+            sn_index,
             monomials,
             monomial_index,
             module_basis,
@@ -615,12 +619,17 @@ impl PackedHomogeneousGkmComponent {
     fn ordinary_dot_trace_mod_prime<const P: u8>(&self, permutation: &[usize]) -> u8 {
         assert_permutation(permutation);
         let mut trace = 0u8;
+        let fixed_point_action =
+            fixed_point_left_action_table(&self.sn_index, &self.fixed_points, permutation);
+        let monomial_action =
+            monomial_permutation_action_table(&self.monomials, &self.monomial_index, permutation);
 
         for (quotient_col, &module_basis_index) in
             self.ordinary_quotient.free_columns.iter().enumerate()
         {
             let image = self.apply_dot_action_to_packed_ambient_vector::<P>(
-                permutation,
+                &fixed_point_action,
+                &monomial_action,
                 &self.module_basis[module_basis_index],
             );
             let module_coords = self.module_coordinates_sparse::<P>(&image);
@@ -635,7 +644,8 @@ impl PackedHomogeneousGkmComponent {
 
     fn apply_dot_action_to_packed_ambient_vector<const P: u8>(
         &self,
-        permutation: &[usize],
+        fixed_point_action: &[usize],
+        monomial_action: &[usize],
         vector: &PackedSparseRow,
     ) -> PackedSparseRow {
         let monomial_count = self.monomials.len();
@@ -649,12 +659,8 @@ impl PackedHomogeneousGkmComponent {
             let source_col = source_col as usize;
             let source_point_index = source_col / monomial_count;
             let source_monomial_index = source_col % monomial_count;
-            let target_point =
-                compose_permutations(permutation, &self.fixed_points[source_point_index]);
-            let target_point_index = self.fixed_point_index[&target_point];
-            let image_monomial =
-                permute_monomial_variables(&self.monomials[source_monomial_index], permutation);
-            let target_monomial_index = self.monomial_index[&image_monomial];
+            let target_point_index = fixed_point_action[source_point_index];
+            let target_monomial_index = monomial_action[source_monomial_index];
             let target_col = target_point_index * monomial_count + target_monomial_index;
             entries.push((target_col, coeff));
         }
@@ -668,11 +674,11 @@ impl HessenbergGkmCombinatorics {
         n: usize,
         hessenberg_edges: &[(usize, usize)],
         fixed_points: Vec<Vec<usize>>,
-        fixed_point_index: BTreeMap<Vec<usize>, usize>,
         max_degree: u32,
     ) -> Self {
+        let sn_index = SnIndex::new(n);
         let edge_adjacencies =
-            hessenberg_edge_adjacencies(n, hessenberg_edges, &fixed_points, &fixed_point_index);
+            hessenberg_edge_adjacencies(n, hessenberg_edges, &fixed_points, &sn_index);
         let monomials_by_degree = (0..=max_degree)
             .map(|degree| homogeneous_monomials(n, degree))
             .collect::<Vec<_>>();
@@ -712,7 +718,7 @@ impl HessenbergGkmCombinatorics {
 
         Self {
             fixed_points,
-            fixed_point_index,
+            sn_index,
             edge_adjacencies,
             monomials_by_degree,
             monomial_index_by_degree,
@@ -746,26 +752,15 @@ fn sparse_hessenberg_gkm_components<C: Field>(
     let n = area.len();
     let max_degree = graph.num_edges() as u32;
     let fixed_points = sym_poly_core::symmetric_group_permutation_basis(n);
-    let fixed_point_index = fixed_points
-        .iter()
-        .cloned()
-        .enumerate()
-        .map(|(index, point)| (point, index))
-        .collect::<BTreeMap<_, _>>();
-    let combinatorics = HessenbergGkmCombinatorics::new(
-        n,
-        graph.edges(),
-        fixed_points.clone(),
-        fixed_point_index.clone(),
-        max_degree,
-    );
+    let combinatorics =
+        HessenbergGkmCombinatorics::new(n, graph.edges(), fixed_points.clone(), max_degree);
 
     let mut components = Vec::new();
     for degree in 0..=max_degree {
         let module_basis = sparse_homogeneous_gkm_module_basis::<C>(&combinatorics, degree);
         let mut component = SparseHomogeneousGkmComponent::new(
             combinatorics.fixed_points.clone(),
-            combinatorics.fixed_point_index.clone(),
+            combinatorics.sn_index.clone(),
             combinatorics.monomials(degree).to_vec(),
             combinatorics.monomial_index(degree).clone(),
             module_basis.vectors,
@@ -796,26 +791,15 @@ fn packed_hessenberg_gkm_components<const P: u8>(
     let n = area.len();
     let max_degree = graph.num_edges() as u32;
     let fixed_points = sym_poly_core::symmetric_group_permutation_basis(n);
-    let fixed_point_index = fixed_points
-        .iter()
-        .cloned()
-        .enumerate()
-        .map(|(index, point)| (point, index))
-        .collect::<BTreeMap<_, _>>();
-    let combinatorics = HessenbergGkmCombinatorics::new(
-        n,
-        graph.edges(),
-        fixed_points.clone(),
-        fixed_point_index.clone(),
-        max_degree,
-    );
+    let combinatorics =
+        HessenbergGkmCombinatorics::new(n, graph.edges(), fixed_points.clone(), max_degree);
 
     let mut components = Vec::new();
     for degree in 0..=max_degree {
         let module_basis = packed_homogeneous_gkm_module_basis::<P>(&combinatorics, degree);
         let mut component = PackedHomogeneousGkmComponent::new::<P>(
             combinatorics.fixed_points.clone(),
-            combinatorics.fixed_point_index.clone(),
+            combinatorics.sn_index.clone(),
             combinatorics.monomials(degree).to_vec(),
             combinatorics.monomial_index(degree).clone(),
             module_basis.vectors,
@@ -847,21 +831,15 @@ fn homogeneous_gkm_module_basis(
     degree: u32,
 ) -> GkmModuleBasis {
     let fixed_points = sym_poly_core::symmetric_group_permutation_basis(n);
-    let fixed_point_index = fixed_points
-        .iter()
-        .cloned()
-        .enumerate()
-        .map(|(index, point)| (point, index))
-        .collect::<BTreeMap<_, _>>();
+    let sn_index = SnIndex::new(n);
     let monomials = homogeneous_monomials(n, degree);
     let ambient_dimension = fixed_points.len() * monomials.len();
     let mut constraints = Vec::new();
 
     for (point_index, point) in fixed_points.iter().enumerate() {
         for &(i, j) in hessenberg_edges {
-            let transposition = transposition(n, i, j);
-            let adjacent_point = compose_permutations(point, &transposition);
-            let adjacent_point_index = fixed_point_index[&adjacent_point];
+            let adjacent_point_index =
+                right_transposition_fixed_point_index(&sn_index, point, i, j);
             if point_index > adjacent_point_index {
                 continue;
             }
@@ -1127,17 +1105,15 @@ fn packed_variable_multiple_relations<const P: u8>(
 }
 
 fn hessenberg_edge_adjacencies(
-    n: usize,
+    _n: usize,
     hessenberg_edges: &[(usize, usize)],
     fixed_points: &[Vec<usize>],
-    fixed_point_index: &BTreeMap<Vec<usize>, usize>,
+    sn_index: &SnIndex,
 ) -> Vec<GkmEdgeAdjacency> {
     let mut result = Vec::new();
     for (point_index, point) in fixed_points.iter().enumerate() {
         for &(i, j) in hessenberg_edges {
-            let transposition = transposition(n, i, j);
-            let adjacent_point = compose_permutations(point, &transposition);
-            let adjacent_point_index = fixed_point_index[&adjacent_point];
+            let adjacent_point_index = right_transposition_fixed_point_index(sn_index, point, i, j);
             if point_index > adjacent_point_index {
                 continue;
             }
@@ -1285,11 +1261,40 @@ fn coordinate_index_by_ambient_column(
     lookup
 }
 
-fn transposition(n: usize, i: usize, j: usize) -> Vec<usize> {
-    assert!(i < n && j < n, "transposition index out of range");
-    let mut permutation: Vec<_> = (0..n).collect();
-    permutation.swap(i, j);
-    permutation
+fn fixed_point_left_action_table(
+    sn_index: &SnIndex,
+    fixed_points: &[Vec<usize>],
+    permutation: &[usize],
+) -> Vec<usize> {
+    fixed_points
+        .iter()
+        .map(|point| sn_index.rank_left_composition(permutation, point))
+        .collect()
+}
+
+fn right_transposition_fixed_point_index(
+    sn_index: &SnIndex,
+    point: &[usize],
+    i: usize,
+    j: usize,
+) -> usize {
+    let mut adjacent_point = point.to_vec();
+    adjacent_point.swap(i, j);
+    sn_index.rank(&adjacent_point)
+}
+
+fn monomial_permutation_action_table(
+    monomials: &[Vec<u32>],
+    monomial_index: &BTreeMap<Vec<u32>, usize>,
+    permutation: &[usize],
+) -> Vec<usize> {
+    monomials
+        .iter()
+        .map(|monomial| {
+            let image = permute_monomial_variables(monomial, permutation);
+            monomial_index[&image]
+        })
+        .collect()
 }
 
 fn substitute_equal_variables(monomial: &[u32], label_a: usize, label_b: usize) -> Vec<u32> {
