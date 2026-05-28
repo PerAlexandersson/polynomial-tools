@@ -5,19 +5,44 @@ use num_rational::Ratio;
 use sym_poly_sym::SymmetricFunction;
 use sym_poly_sym::{hessenberg_area_dot_frobenius_target, hessenberg_gkm_dot_frobenius};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ComputationMode {
+    DotAction,
+    TargetFormula,
+}
+
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
-    let areas = parse_input(&args).unwrap_or_else(|message| {
+    let (mode, input_args) = parse_mode(&args).unwrap_or_else(|message| {
         eprintln!("{message}");
         eprintln!("usage:");
         eprintln!("  cargo run -p sym-poly-sym --example hessenberg_dot");
         eprintln!("  cargo run -p sym-poly-sym --example hessenberg_dot -- 4");
         eprintln!("  cargo run -p sym-poly-sym --example hessenberg_dot -- 0,1,1");
+        eprintln!("  cargo run -p sym-poly-sym --example hessenberg_dot -- --target 0,1,1");
+        std::process::exit(2);
+    });
+    let areas = parse_input(input_args).unwrap_or_else(|message| {
+        eprintln!("{message}");
         std::process::exit(2);
     });
 
     for area in areas {
-        print_area_sequence(&area);
+        match mode {
+            ComputationMode::DotAction => print_area_sequence(&area),
+            ComputationMode::TargetFormula => print_target_area_sequence(&area),
+        }
+    }
+}
+
+fn parse_mode(args: &[String]) -> Result<(ComputationMode, &[String]), String> {
+    if args.first().is_some_and(|arg| arg == "--target") {
+        if args.len() == 1 {
+            return Err("--target needs a rank or an area sequence".to_string());
+        }
+        Ok((ComputationMode::TargetFormula, &args[1..]))
+    } else {
+        Ok((ComputationMode::DotAction, args))
     }
 }
 
@@ -68,6 +93,20 @@ fn print_area_sequence(area: &[u8]) {
     println!("area {:?}", area);
     println!("matches omega X_G(q): {matches_target}");
     for (degree, schur) in schur_strings_ratio(&frobenius) {
+        println!("  q^{degree}: {schur}");
+    }
+    println!();
+}
+
+fn print_target_area_sequence(area: &[u8]) {
+    let Some(target) = hessenberg_area_dot_frobenius_target(area) else {
+        println!("area {:?}: invalid area sequence", area);
+        return;
+    };
+
+    println!("area {:?}", area);
+    println!("computed omega X_G(q) target formula; not action-derived");
+    for (degree, schur) in schur_strings_i64(&target) {
         println!("  q^{degree}: {schur}");
     }
     println!();
