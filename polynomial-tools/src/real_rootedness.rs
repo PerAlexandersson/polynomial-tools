@@ -546,7 +546,11 @@ fn bezout_matrix_bigint(f: &[i64], g: &[i64]) -> Option<Vec<Vec<BigInt>>> {
 }
 
 /// Compute the Bézout matrix from BigInt coefficient vectors.
-fn bezout_matrix_bigint_coeffs(f: &[BigInt], g: &[BigInt]) -> Option<Vec<Vec<BigInt>>> {
+///
+/// The coefficient vectors are in ascending degree order.  This is the exact
+/// no-overflow variant of [`bezout_matrix`], useful for benchmarking and for
+/// downstream linear-algebra experiments.
+pub fn bezout_matrix_bigint_coeffs(f: &[BigInt], g: &[BigInt]) -> Option<Vec<Vec<BigInt>>> {
     let zero_big = BigInt::from(0);
     let df = {
         let mut d = None;

@@ -440,6 +440,18 @@ if and only if B(f,g) is positive definite.
 
 This reduces interlacing to a single exact matrix definiteness check, avoiding
 root isolation entirely. It is 100–400× faster than Sturm chains at degree 15+.
+The default implementation uses fraction-free BigInt Bareiss elimination.
+For large matrices or large entries, `modular_leading_principal_minors_bigint`
+and `is_positive_definite_modular` provide a separate CRT-over-prime-fields
+path.  The modular path reconstructs the leading principal minors exactly using
+Hadamard bounds, so it is suitable for speed comparisons without replacing the
+default.
+
+Run the local comparison example with:
+
+```bash
+cargo run --release -p polynomial-tools --example bench_bareiss_vs_modular_linalg
+```
 
 For **same-degree** polynomials, `check_weak_interlacing` reduces to the
 deg+1 case by extending one polynomial with a root far to the right
