@@ -440,12 +440,12 @@ if and only if B(f,g) is positive definite.
 
 This reduces interlacing to a single exact matrix definiteness check, avoiding
 root isolation entirely. It is 100–400× faster than Sturm chains at degree 15+.
-The default implementation uses fraction-free BigInt Bareiss elimination.
-For large matrices or large entries, `modular_leading_principal_minors_bigint`
-and `is_positive_definite_modular` provide a separate CRT-over-prime-fields
-path.  The modular path reconstructs the leading principal minors exactly using
-Hadamard bounds, so it is suitable for speed comparisons without replacing the
-default.
+The default implementation uses fraction-free BigInt Bareiss elimination below
+dimension `30`, and switches to a CRT-over-prime-fields path for larger
+matrices.  The modular path reconstructs the leading principal minors exactly
+using Hadamard bounds.  For speed comparisons, the explicit entry points are
+`is_positive_definite_bareiss`, `is_positive_definite_modular`, and
+`modular_leading_principal_minors_bigint`.
 
 Run the local comparison example with:
 

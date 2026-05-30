@@ -78,8 +78,9 @@ pub use linalg::{
     bareiss_determinant_bigint, bareiss_determinant_polynomial_bigint,
     bareiss_leading_principal_minors_bigint, bareiss_leading_principal_minors_polynomial_bigint,
     check_tnn_neville, check_tnn_neville_bigint, check_total_positivity, determinant,
-    is_positive_definite, is_positive_definite_modular, is_positive_semidefinite, is_tnn,
-    is_totally_nonnegative, modular_leading_principal_minors_bigint,
+    is_positive_definite, is_positive_definite_bareiss, is_positive_definite_modular,
+    is_positive_semidefinite, is_tnn, is_totally_nonnegative,
+    modular_leading_principal_minors_bigint, MODULAR_POSITIVE_DEFINITE_DIMENSION_THRESHOLD,
 };
 
 pub mod parse;
