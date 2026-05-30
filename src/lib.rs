@@ -37,9 +37,9 @@
 //! - [`polynomial`] — `Polynomial<C>` with `CoeffRing`/`FieldRing` traits, arithmetic,
 //!   derivative, evaluate, shift, reverse, dilate, GCD, division, Lagrange interpolation
 //! - [`linalg`] — Exact linear algebra: fraction-free Bareiss elimination,
-//!   Gaussian elimination over ℚ, positive definiteness/semi-definiteness,
-//!   determinants, linear system solving, total non-negativity via Neville
-//!   elimination
+//!   modular/CRT determinant reconstruction, Gaussian elimination over ℚ,
+//!   positive definiteness/semi-definiteness, determinants, linear system
+//!   solving, total non-negativity via Neville elimination
 //! - [`real_rootedness`] — Bézout matrix (default) and Sturm chain real-rootedness,
 //!   strict/weak interlacing (including same-degree via Cauchy bound reduction),
 //!   log-concavity, ultra-log-concavity, palindromic check, gamma-positivity,
@@ -78,7 +78,8 @@ pub use linalg::{
     bareiss_determinant_bigint, bareiss_determinant_polynomial_bigint,
     bareiss_leading_principal_minors_bigint, bareiss_leading_principal_minors_polynomial_bigint,
     check_tnn_neville, check_tnn_neville_bigint, check_total_positivity, determinant,
-    is_positive_definite, is_positive_semidefinite, is_tnn, is_totally_nonnegative,
+    is_positive_definite, is_positive_definite_modular, is_positive_semidefinite, is_tnn,
+    is_totally_nonnegative, modular_leading_principal_minors_bigint,
 };
 
 pub mod parse;
@@ -114,6 +115,7 @@ pub use polynomial::{CoeffRing, FieldRing, Polynomial};
 pub use real_rootedness::{
     // Bézout matrix directly
     bezout_matrix,
+    bezout_matrix_bigint_coeffs,
     check_interlacing,
     check_interlacing_sturm,
     check_weak_interlacing,
