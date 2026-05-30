@@ -22,6 +22,10 @@ use num_traits::{One, Signed, ToPrimitive, Zero};
 
 type Q = Ratio<BigInt>;
 
+/// Matrix dimension at which the default positive-definiteness check switches
+/// from BigInt Bareiss to modular CRT reconstruction.
+pub const MODULAR_POSITIVE_DEFINITE_DIMENSION_THRESHOLD: usize = 30;
+
 // ---------------------------------------------------------------------------
 // Gaussian elimination core
 // ---------------------------------------------------------------------------
@@ -101,10 +105,21 @@ fn gaussian_elimination(mat: &[Vec<Q>]) -> EliminationResult {
 
 /// Check if a symmetric BigInt matrix is positive definite.
 ///
-/// Uses fraction-free Bareiss leading principal minors and Sylvester's
-/// criterion.  This keeps the computation in exact integers and avoids
-/// rational pivot growth in the common Bézout-matrix path.
+/// Uses Sylvester's criterion.  Small matrices use fraction-free BigInt
+/// Bareiss elimination; matrices of size
+/// [`MODULAR_POSITIVE_DEFINITE_DIMENSION_THRESHOLD`] or larger use the modular
+/// CRT path.  The explicit [`is_positive_definite_bareiss`] and
+/// [`is_positive_definite_modular`] entry points are kept for benchmarking.
 pub fn is_positive_definite(mat: &[Vec<BigInt>]) -> bool {
+    if mat.len() >= MODULAR_POSITIVE_DEFINITE_DIMENSION_THRESHOLD {
+        is_positive_definite_modular(mat)
+    } else {
+        is_positive_definite_bareiss(mat)
+    }
+}
+
+/// Check positive definiteness via BigInt Bareiss leading principal minors.
+pub fn is_positive_definite_bareiss(mat: &[Vec<BigInt>]) -> bool {
     bareiss_leading_principal_minors_bigint(mat)
         .map(|minors| minors.into_iter().all(|minor| minor > BigInt::zero()))
         .unwrap_or(false)
@@ -116,7 +131,6 @@ pub fn is_positive_definite(mat: &[Vec<BigInt>]) -> bool {
 /// the leading principal minors from determinants computed over prime fields,
 /// using Hadamard bounds to certify when CRT reconstruction is exact.
 ///
-/// The ordinary [`is_positive_definite`] Bareiss path is kept as the default.
 /// Use this function for benchmarking or when BigInt coefficient swell dominates.
 pub fn is_positive_definite_modular(mat: &[Vec<BigInt>]) -> bool {
     modular_leading_principal_minors_bigint(mat)
@@ -1121,6 +1135,17 @@ mod tests {
         );
     }
 
+    fn shifted_hilbert_like_matrix(size: usize) -> Vec<Vec<BigInt>> {
+        let mut mat = vec![vec![BigInt::zero(); size]; size];
+        for i in 0..size {
+            for j in 0..size {
+                mat[i][j] = BigInt::from((i + j + 1) as i64);
+            }
+            mat[i][i] += BigInt::from((size * size) as i64);
+        }
+        mat
+    }
+
     #[test]
     fn test_bareiss_polynomial_bigint_2x2() {
         // [[1+z, z], [z, 1+z]] has leading minors 1+z and 1+2z.
@@ -1187,7 +1212,22 @@ mod tests {
         // [[2, 1], [1, 2]] -> pivots: 2, 2 - 1/2 = 3/2 > 0
         let m = bi_mat(&[&[2, 1], &[1, 2]]);
         assert!(is_positive_definite(&m));
+        assert!(is_positive_definite_bareiss(&m));
         assert!(is_positive_definite_modular(&m));
+    }
+
+    #[test]
+    fn test_pd_default_agrees_with_paths_across_threshold() {
+        for size in [
+            MODULAR_POSITIVE_DEFINITE_DIMENSION_THRESHOLD - 1,
+            MODULAR_POSITIVE_DEFINITE_DIMENSION_THRESHOLD,
+        ] {
+            let m = shifted_hilbert_like_matrix(size);
+            let bareiss = is_positive_definite_bareiss(&m);
+            let modular = is_positive_definite_modular(&m);
+            assert_eq!(bareiss, modular);
+            assert_eq!(is_positive_definite(&m), modular);
+        }
     }
 
     #[test]
