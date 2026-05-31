@@ -35,6 +35,9 @@ pub const MODULAR_POSITIVE_DEFINITE_DIMENSION_THRESHOLD: usize = 30;
 /// time. The explicit [`is_positive_definite_bareiss`] and
 /// [`is_positive_definite_modular`] entry points are kept for benchmarking.
 pub fn is_positive_definite(mat: &[Vec<BigInt>]) -> bool {
+    if !is_symmetric_bigint_matrix(mat) {
+        return false;
+    }
     if mat.len() >= MODULAR_POSITIVE_DEFINITE_DIMENSION_THRESHOLD {
         is_positive_definite_modular(mat).unwrap_or_else(|| is_positive_definite_bareiss(mat))
     } else {
@@ -44,6 +47,9 @@ pub fn is_positive_definite(mat: &[Vec<BigInt>]) -> bool {
 
 /// Check positive definiteness via BigInt Bareiss leading principal minors.
 pub fn is_positive_definite_bareiss(mat: &[Vec<BigInt>]) -> bool {
+    if !is_symmetric_bigint_matrix(mat) {
+        return false;
+    }
     bareiss_leading_principal_minors_bigint(mat)
         .map(|minors| minors.into_iter().all(|minor| minor > BigInt::zero()))
         .unwrap_or(false)
@@ -58,6 +64,12 @@ pub fn is_positive_definite_bareiss(mat: &[Vec<BigInt>]) -> bool {
 /// Returns `None` when the matrix is not square or when the accumulated CRT
 /// modulus does not certify all leading minors within the prime budget.
 pub fn is_positive_definite_modular(mat: &[Vec<BigInt>]) -> Option<bool> {
+    if !is_square_bigint_matrix(mat) {
+        return None;
+    }
+    if !is_symmetric_bigint_matrix(mat) {
+        return Some(false);
+    }
     modular_leading_principal_minors_bigint(mat)
         .map(|minors| minors.into_iter().all(|minor| minor > BigInt::zero()))
 }
@@ -68,7 +80,7 @@ pub fn is_positive_definite_modular(mat: &[Vec<BigInt>]) -> Option<bool> {
 /// are non-negative, and zero pivots have zero entries in their column below.
 pub fn is_positive_semidefinite(mat: &[Vec<BigInt>]) -> bool {
     let n = mat.len();
-    if !is_square_bigint_matrix(mat) {
+    if !is_symmetric_bigint_matrix(mat) {
         return false;
     }
     let qmat = bigint_to_q(mat);
@@ -155,6 +167,21 @@ pub fn determinant(mat: &[Vec<BigInt>]) -> BigInt {
 fn is_square_bigint_matrix(mat: &[Vec<BigInt>]) -> bool {
     let n = mat.len();
     mat.iter().all(|row| row.len() == n)
+}
+
+fn is_symmetric_bigint_matrix(mat: &[Vec<BigInt>]) -> bool {
+    let n = mat.len();
+    if !is_square_bigint_matrix(mat) {
+        return false;
+    }
+    for i in 0..n {
+        for j in (i + 1)..n {
+            if mat[i][j] != mat[j][i] {
+                return false;
+            }
+        }
+    }
+    true
 }
 
 /// Compute the leading principal determinants by fraction-free Bareiss
@@ -1201,6 +1228,15 @@ mod tests {
     }
 
     #[test]
+    fn test_pd_rejects_nonsymmetric_matrix() {
+        let m = bi_mat(&[&[1, 2], &[0, 1]]);
+
+        assert!(!is_positive_definite(&m));
+        assert!(!is_positive_definite_bareiss(&m));
+        assert_eq!(is_positive_definite_modular(&m), Some(false));
+    }
+
+    #[test]
     fn test_pd_default_agrees_with_paths_across_threshold() {
         for size in [
             MODULAR_POSITIVE_DEFINITE_DIMENSION_THRESHOLD - 1,
@@ -1279,6 +1315,13 @@ mod tests {
     #[test]
     fn test_psd_rejects_nonsquare_matrix() {
         let m = bi_mat(&[&[1, 0, 0], &[0, 1, 0]]);
+
+        assert!(!is_positive_semidefinite(&m));
+    }
+
+    #[test]
+    fn test_psd_rejects_nonsymmetric_matrix() {
+        let m = bi_mat(&[&[1, 0], &[2, 1]]);
 
         assert!(!is_positive_semidefinite(&m));
     }
