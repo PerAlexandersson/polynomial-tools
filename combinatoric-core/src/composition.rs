@@ -44,7 +44,7 @@ impl WeakComposition {
 
     /// Sum of all parts.
     pub fn degree(&self) -> u32 {
-        self.0.iter().sum()
+        checked_part_sum(&self.0)
     }
 
     /// Whether all parts are zero.
@@ -164,7 +164,7 @@ impl Composition {
 
     /// Sum of all parts.
     pub fn size(&self) -> u32 {
-        self.0.iter().sum()
+        checked_part_sum(&self.0)
     }
 
     /// Whether this is the empty composition.
@@ -232,7 +232,12 @@ impl Composition {
             return;
         }
         let max_part = if parts_left > 1 {
-            remaining - (parts_left as u32 - 1)
+            let required_after_first =
+                u32::try_from(parts_left - 1).expect("composition length overflow");
+            if remaining < required_after_first {
+                return;
+            }
+            remaining - required_after_first
         } else {
             remaining
         };
@@ -287,7 +292,9 @@ impl Composition {
         let mut set = BTreeSet::new();
         let mut sum = 0u32;
         for (i, &part) in self.0.iter().enumerate() {
-            sum += part;
+            sum = sum
+                .checked_add(part)
+                .expect("composition partial sum overflow");
             if i < self.0.len() - 1 {
                 set.insert(sum);
             }
@@ -326,7 +333,9 @@ impl Composition {
 
         for i in 0..k {
             let width = reversed[i];
-            let right = offset + width;
+            let right = offset
+                .checked_add(width)
+                .expect("composition ribbon width overflow");
             outer_parts.push(right);
             inner_parts.push(offset);
             if i < k - 1 {
@@ -407,7 +416,9 @@ impl Composition {
                 parts.push(current);
                 current = 1;
             } else {
-                current += 1;
+                current = current
+                    .checked_add(1)
+                    .expect("composition word length overflow");
             }
         }
         parts.push(current);
@@ -451,6 +462,13 @@ impl Composition {
     }
 }
 
+fn checked_part_sum(parts: &[u32]) -> u32 {
+    parts
+        .iter()
+        .try_fold(0u32, |total, &part| total.checked_add(part))
+        .expect("composition size overflow")
+}
+
 impl fmt::Display for Composition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.is_empty() {
@@ -483,6 +501,11 @@ mod tests {
     }
 
     #[test]
+    fn test_compositions_k_impossible_length_is_empty() {
+        assert!(Composition::integer_compositions_k(2, 4).is_empty());
+    }
+
+    #[test]
     fn test_weak_compositions() {
         let comps = Composition::weak_integer_compositions(3, 2);
         assert_eq!(comps.len(), 4);
@@ -498,10 +521,34 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "composition size overflow")]
+    fn test_composition_size_rejects_overflow() {
+        let c = Composition::new(vec![u32::MAX, 1]);
+
+        let _ = c.size();
+    }
+
+    #[test]
+    #[should_panic(expected = "composition partial sum overflow")]
+    fn test_descent_set_rejects_overflow() {
+        let c = Composition::new(vec![u32::MAX, 1]);
+
+        let _ = c.composition_to_descent_set();
+    }
+
+    #[test]
     fn test_ribbon() {
         let c = Composition::new(vec![2, 3]);
         let (outer, inner) = c.composition_to_ribbon();
         assert_eq!(outer.size() - inner.size(), c.size());
+    }
+
+    #[test]
+    #[should_panic(expected = "composition ribbon width overflow")]
+    fn test_ribbon_rejects_overflow() {
+        let c = Composition::new(vec![u32::MAX, 2]);
+
+        let _ = c.composition_to_ribbon();
     }
 
     #[test]
@@ -546,6 +593,14 @@ mod tests {
     fn test_weak_composition_degree() {
         let wc = WeakComposition::new(vec![2, 0, 3]);
         assert_eq!(wc.degree(), 5);
+    }
+
+    #[test]
+    #[should_panic(expected = "composition size overflow")]
+    fn test_weak_composition_degree_rejects_overflow() {
+        let wc = WeakComposition::new(vec![u32::MAX, 1]);
+
+        let _ = wc.degree();
     }
 
     #[test]

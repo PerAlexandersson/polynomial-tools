@@ -58,7 +58,7 @@ impl Partition {
 
     /// The size |λ| = sum of all parts.
     pub fn size(&self) -> u32 {
-        self.0.iter().sum()
+        checked_part_sum(&self.0)
     }
 
     /// Whether this is the empty partition.
@@ -109,8 +109,12 @@ impl Partition {
         let mut sum_self: u32 = 0;
         let mut sum_other: u32 = 0;
         for i in 0..n {
-            sum_self += self.part(i);
-            sum_other += other.part(i);
+            sum_self = sum_self
+                .checked_add(self.part(i))
+                .expect("partition partial sum overflow");
+            sum_other = sum_other
+                .checked_add(other.part(i))
+                .expect("partition partial sum overflow");
             if sum_self > sum_other {
                 return false;
             }
@@ -135,7 +139,9 @@ impl Partition {
             if curr < prev {
                 let mut new_parts = self.0.clone();
                 if i < n {
-                    new_parts[i] += 1;
+                    new_parts[i] = new_parts[i]
+                        .checked_add(1)
+                        .expect("partition part overflow");
                 } else {
                     new_parts.push(1);
                 }
@@ -191,7 +197,11 @@ impl Partition {
     /// Hook length at box (r, c): arm + leg + 1.
     pub fn hook_length(&self, row: usize, col: usize) -> Option<u32> {
         match (self.partition_arm(row, col), self.partition_leg(row, col)) {
-            (Some(a), Some(l)) => Some(a + l + 1),
+            (Some(a), Some(l)) => Some(
+                a.checked_add(l)
+                    .and_then(|sum| sum.checked_add(1))
+                    .expect("hook length overflow"),
+            ),
             _ => None,
         }
     }
@@ -208,7 +218,9 @@ impl Partition {
                     .map(|c| {
                         let arm = part_r - c as u32 - 1;
                         let leg = conj.part(c) - r as u32 - 1;
-                        arm + leg + 1
+                        arm.checked_add(leg)
+                            .and_then(|sum| sum.checked_add(1))
+                            .expect("hook length overflow")
                     })
                     .collect()
             })
@@ -259,7 +271,15 @@ impl Partition {
     /// n(λ) = Σ (i) * λ_i (0-indexed i), equivalently Σ binom(λ'_j, 2).
     /// `PartitionN` in Mathematica.
     pub fn partition_n(&self) -> u32 {
-        self.0.iter().enumerate().map(|(i, &p)| i as u32 * p).sum()
+        self.0
+            .iter()
+            .enumerate()
+            .try_fold(0u32, |total, (i, &p)| {
+                let index = u32::try_from(i).expect("partition index overflow");
+                let term = index.checked_mul(p).expect("partition n overflow");
+                total.checked_add(term)
+            })
+            .expect("partition n overflow")
     }
 
     /// Part multiplicity vector: m_i = number of parts equal to i.
@@ -287,10 +307,10 @@ impl Partition {
             }
             // i^m * m!
             for _ in 0..m {
-                z *= i as u64;
+                z = z.checked_mul(i as u64).expect("z coefficient overflow");
             }
             for k in 1..=m as u64 {
-                z *= k;
+                z = z.checked_mul(k).expect("z coefficient overflow");
             }
         }
         z
@@ -314,7 +334,12 @@ impl Partition {
     /// β_i = λ_i + (ℓ(λ) - 1 - i) for i = 0..ℓ(λ)-1.
     fn to_beta_set(&self) -> Vec<u32> {
         let n = self.num_parts();
-        (0..n).map(|i| self.0[i] + (n - 1 - i) as u32).collect()
+        (0..n)
+            .map(|i| {
+                let shift = u32::try_from(n - 1 - i).expect("partition index overflow");
+                self.0[i].checked_add(shift).expect("beta-set overflow")
+            })
+            .collect()
     }
 
     /// Reconstruct partition from beta-set (sorted descending).
@@ -338,6 +363,7 @@ impl Partition {
     /// d-core of partition (remove all d-hooks).
     /// `PartitionCore` in Mathematica.
     pub fn partition_core(&self, d: u32) -> Partition {
+        assert!(d > 0, "core modulus must be positive");
         // Use beta-set approach: reduce each beta number mod d, then reconstruct
         let beta = self.to_beta_set();
         // Sort residues: for each residue class, collect and reassign minimally
@@ -349,7 +375,16 @@ impl Partition {
         let mut new_beta = Vec::new();
         for (r, class) in residue_classes.iter().enumerate() {
             for k in 0..class.len() {
-                new_beta.push(r as u32 + k as u32 * d);
+                let residue = u32::try_from(r).expect("partition residue overflow");
+                let multiple = u32::try_from(k)
+                    .expect("partition beta-set overflow")
+                    .checked_mul(d)
+                    .expect("partition beta-set overflow");
+                new_beta.push(
+                    residue
+                        .checked_add(multiple)
+                        .expect("partition beta-set overflow"),
+                );
             }
         }
         new_beta.sort_unstable_by(|a, b| b.cmp(a));
@@ -359,6 +394,7 @@ impl Partition {
     /// d-quotient of partition: a tuple of d partitions.
     /// `PartitionQuotient` in Mathematica.
     pub fn partition_quotient(&self, d: u32) -> Vec<Partition> {
+        assert!(d > 0, "quotient modulus must be positive");
         let beta = self.to_beta_set();
         let mut residue_classes: Vec<Vec<u32>> = vec![vec![]; d as usize];
         for &b in &beta {
@@ -483,22 +519,33 @@ impl Partition {
 
         let mut col_offsets = vec![0u32; shapes.len()];
         for k in (0..shapes.len() - 1).rev() {
-            col_offsets[k] = col_offsets[k + 1] + widths[k + 1];
+            col_offsets[k] = col_offsets[k + 1]
+                .checked_add(widths[k + 1])
+                .expect("skew-shape column offset overflow");
         }
 
         let mut row_offsets = vec![0usize; shapes.len()];
         for k in 1..shapes.len() {
-            row_offsets[k] = row_offsets[k - 1] + heights[k - 1];
+            row_offsets[k] = row_offsets[k - 1]
+                .checked_add(heights[k - 1])
+                .expect("skew-shape row offset overflow");
         }
 
-        let total_rows: usize = heights.iter().sum();
+        let total_rows = heights
+            .iter()
+            .try_fold(0usize, |total, &height| total.checked_add(height))
+            .expect("skew-shape row offset overflow");
         let mut rho_parts = vec![0u32; total_rows];
         let mut sigma_parts = vec![0u32; total_rows];
 
         for (k, (outer, inner)) in shapes.iter().enumerate() {
             for i in 0..heights[k] {
-                rho_parts[row_offsets[k] + i] = col_offsets[k] + outer.part(i);
-                sigma_parts[row_offsets[k] + i] = col_offsets[k] + inner.part(i);
+                rho_parts[row_offsets[k] + i] = col_offsets[k]
+                    .checked_add(outer.part(i))
+                    .expect("skew-shape part overflow");
+                sigma_parts[row_offsets[k] + i] = col_offsets[k]
+                    .checked_add(inner.part(i))
+                    .expect("skew-shape part overflow");
             }
         }
 
@@ -585,8 +632,12 @@ impl Partition {
             let mut sa = 0u32;
             let mut sb = 0u32;
             for i in 0..len {
-                sa += a.part(i);
-                sb += b.part(i);
+                sa = sa
+                    .checked_add(a.part(i))
+                    .expect("partition partial sum overflow");
+                sb = sb
+                    .checked_add(b.part(i))
+                    .expect("partition partial sum overflow");
                 if sa != sb {
                     return sb.cmp(&sa);
                 }
@@ -659,6 +710,13 @@ impl Partition {
     }
 }
 
+fn checked_part_sum(parts: &[u32]) -> u32 {
+    parts
+        .iter()
+        .try_fold(0u32, |total, &part| total.checked_add(part))
+        .expect("partition size overflow")
+}
+
 impl fmt::Display for Partition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.display())
@@ -679,6 +737,14 @@ mod tests {
         assert_eq!(p.parts(), &[5, 3, 1]);
         assert_eq!(p.size(), 9);
         assert_eq!(p.num_parts(), 3);
+    }
+
+    #[test]
+    #[should_panic(expected = "partition size overflow")]
+    fn test_size_rejects_overflow() {
+        let p = Partition::from_sorted(vec![u32::MAX, 1]);
+
+        let _ = p.size();
     }
 
     #[test]
@@ -731,9 +797,25 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "partition n overflow")]
+    fn test_partition_n_rejects_overflow() {
+        let p = Partition::from_sorted(vec![u32::MAX, u32::MAX, u32::MAX]);
+
+        let _ = p.partition_n();
+    }
+
+    #[test]
     fn test_z_coefficient() {
         let p = Partition::new(vec![2, 2, 1]);
         assert_eq!(p.z_coefficient(), 8);
+    }
+
+    #[test]
+    #[should_panic(expected = "z coefficient overflow")]
+    fn test_z_coefficient_rejects_overflow() {
+        let p = Partition::new(vec![1; 65]);
+
+        let _ = p.z_coefficient();
     }
 
     #[test]
@@ -761,6 +843,30 @@ mod tests {
                 assert!(h % 2 != 0, "2-core should have no even hooks, got {}", h);
             }
         }
+    }
+
+    #[test]
+    #[should_panic(expected = "core modulus must be positive")]
+    fn test_partition_core_rejects_zero_modulus() {
+        let p = Partition::new(vec![3, 2, 1]);
+
+        let _ = p.partition_core(0);
+    }
+
+    #[test]
+    #[should_panic(expected = "quotient modulus must be positive")]
+    fn test_partition_quotient_rejects_zero_modulus() {
+        let p = Partition::new(vec![3, 2, 1]);
+
+        let _ = p.partition_quotient(0);
+    }
+
+    #[test]
+    #[should_panic(expected = "beta-set overflow")]
+    fn test_beta_set_rejects_overflow() {
+        let p = Partition::from_sorted(vec![u32::MAX, 1]);
+
+        let _ = p.partition_core(2);
     }
 
     #[test]
@@ -798,6 +904,15 @@ mod tests {
         let (rho, sigma) = Partition::disjoint_union_skew_shapes(&shapes);
         assert_eq!(rho, Partition::new(vec![5, 2]));
         assert_eq!(sigma, Partition::new(vec![2]));
+    }
+
+    #[test]
+    #[should_panic(expected = "skew-shape part overflow")]
+    fn test_disjoint_union_rejects_part_overflow() {
+        let wide = (Partition::from_sorted(vec![u32::MAX]), Partition::empty());
+        let shift = (Partition::from_sorted(vec![1]), Partition::empty());
+
+        let _ = Partition::disjoint_union_skew_shapes(&[wide, shift]);
     }
 
     #[test]
