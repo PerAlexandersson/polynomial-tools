@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 use sym_poly_core::linear_algebra::{matrix_trace, Matrix};
 use sym_poly_core::{Partition, Ring};
 
-use crate::{Basis, SymmetricFunction};
+use crate::{z_coefficient_i64, Basis, SymmetricFunction};
 
 /// Build the Frobenius characteristic from character values by cycle type.
 ///
@@ -42,7 +42,7 @@ pub fn frobenius_from_character_values<C: Ring>(
         if value.is_zero() {
             continue;
         }
-        let coeff = value.exact_div_i64(cycle_type.z_coefficient() as i64);
+        let coeff = value.exact_div_i64(z_coefficient_i64(&cycle_type));
         if !coeff.is_zero() {
             terms.insert(cycle_type, coeff);
         }

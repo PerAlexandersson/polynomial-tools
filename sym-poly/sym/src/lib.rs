@@ -6,6 +6,8 @@
 //!
 //! Built on [`sym_poly_core`] for the Ring trait, Partition type, and matrix utilities.
 
+use sym_poly_core::Partition;
+
 pub mod basis;
 pub mod chromatic;
 pub mod frobenius;
@@ -60,3 +62,22 @@ pub use twin_gkm::{
     twin_gkm_dagger_action_matrices, twin_gkm_dagger_character_values_by_degree,
     twin_gkm_dagger_frobenius,
 };
+
+pub(crate) fn z_coefficient_i64(partition: &Partition) -> i64 {
+    i64::try_from(partition.z_coefficient()).expect("z coefficient does not fit in i64")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[should_panic(expected = "z coefficient does not fit in i64")]
+    fn test_z_coefficient_i64_rejects_overflow() {
+        let mut parts = vec![1; 20];
+        parts.push(4);
+        let partition = Partition::new(parts);
+
+        let _ = z_coefficient_i64(&partition);
+    }
+}

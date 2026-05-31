@@ -11,6 +11,7 @@ use sym_poly_core::{Partition, Ring, TransitionCache};
 use crate::basis::Basis;
 use crate::kostka;
 use crate::symmetric_function::SymmetricFunction;
+use crate::z_coefficient_i64;
 
 // ---------------------------------------------------------------------------
 // Global transition matrix cache (Sym-specific)
@@ -84,7 +85,7 @@ pub fn convert<C: Ring>(sf: &SymmetricFunction<C>, target: Basis) -> SymmetricFu
             }
 
             for j in 0..k {
-                let z_mu = partitions[j].z_coefficient() as i64;
+                let z_mu = z_coefficient_i64(&partitions[j]);
                 let mut numer = C::zero();
                 for i in 0..k {
                     if schur_vec[i].is_zero() {

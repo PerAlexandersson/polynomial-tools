@@ -6,6 +6,7 @@ use sym_poly_core::{Partition, Ring};
 
 use crate::basis::Basis;
 use crate::transition;
+use crate::z_coefficient_i64;
 
 /// A symmetric function expressed in a fixed basis with coefficients in a ring C.
 ///
@@ -278,7 +279,7 @@ impl<C: Ring> SymmetricFunction<C> {
         let mut result = C::zero();
         for (p, cf) in &f.terms {
             if let Some(cg) = g.terms.get(p) {
-                let z = C::from_i64(p.z_coefficient() as i64);
+                let z = C::from_i64(z_coefficient_i64(p));
                 result = result + cf.clone() * cg.clone() * z;
             }
         }
