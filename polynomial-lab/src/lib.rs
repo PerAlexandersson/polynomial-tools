@@ -140,6 +140,79 @@ pub struct WrittenEvaluation {
     pub record: LabRecord,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub struct WrittenRecord {
+    pub path: String,
+    pub record: LabRecord,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+pub struct ProjectDraft {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub main_objects: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub main_goals: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_notes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+pub struct GoalDraft {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    pub statement: String,
+    pub status: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub objects: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub motivation: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_best_route: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub depends_on: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+pub struct ConjectureDraft {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    pub statement: String,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relation: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub left: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub right: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub index_condition: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub depends_on: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+pub struct ImplicationDraft {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    pub status: String,
+    pub from: Vec<String>,
+    pub to: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub explanation: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub proof_tags: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 pub struct GeneratedFile {
     pub path: String,
@@ -348,6 +421,143 @@ impl LabStore {
         })
     }
 
+    pub fn create_project(&self, draft: ProjectDraft) -> Result<WrittenRecord> {
+        validate_record_id(&draft.id)?;
+        self.ensure_new_record_id(&draft.id)?;
+        for id in draft.main_objects.iter().chain(draft.main_goals.iter()) {
+            validate_record_id(id)?;
+        }
+
+        let project_dir = self.root.join("projects").join(&draft.id);
+        let path = project_dir.join("project.toml");
+        let value = serde_json::to_value(&draft)?;
+        let written = self.write_toml_record(
+            &path,
+            draft.id.clone(),
+            "project",
+            draft.label.clone(),
+            Some(draft.id.clone()),
+            value,
+        )?;
+        for directory in [
+            "definitions",
+            "goals",
+            "conjectures",
+            "implications",
+            "evidence",
+            "cache",
+            "generated",
+        ] {
+            fs::create_dir_all(project_dir.join(directory)).with_context(|| {
+                format!(
+                    "failed to create project subdirectory {}",
+                    project_dir.join(directory).display()
+                )
+            })?;
+        }
+        Ok(written)
+    }
+
+    pub fn append_goal(&self, project_id: &str, draft: GoalDraft) -> Result<WrittenRecord> {
+        self.require_project(project_id)?;
+        validate_record_id(&draft.id)?;
+        self.ensure_new_record_id(&draft.id)?;
+        validate_record_id(project_id)?;
+        for id in draft.objects.iter().chain(draft.depends_on.iter()) {
+            validate_record_id(id)?;
+        }
+        validate_known_status(&draft.status, GOAL_STATUSES, "goal")?;
+
+        let mut value = typed_record_value("goal", &draft)?;
+        ensure_project_id(&mut value, project_id);
+        let path = self
+            .root
+            .join("projects")
+            .join(project_id)
+            .join("goals")
+            .join(format!("{}.toml", draft.id));
+        self.write_toml_record(
+            &path,
+            draft.id,
+            "goal",
+            draft.label,
+            Some(project_id.to_string()),
+            value,
+        )
+    }
+
+    pub fn append_conjecture(
+        &self,
+        project_id: &str,
+        draft: ConjectureDraft,
+    ) -> Result<WrittenRecord> {
+        self.require_project(project_id)?;
+        validate_record_id(&draft.id)?;
+        self.ensure_new_record_id(&draft.id)?;
+        validate_record_id(project_id)?;
+        for id in draft
+            .left
+            .iter()
+            .chain(draft.right.iter())
+            .chain(draft.depends_on.iter())
+        {
+            validate_record_id(id)?;
+        }
+        validate_known_status(&draft.status, CONJECTURE_STATUSES, "conjecture")?;
+
+        let mut value = typed_record_value("conjecture", &draft)?;
+        ensure_project_id(&mut value, project_id);
+        let path = self
+            .root
+            .join("projects")
+            .join(project_id)
+            .join("conjectures")
+            .join(format!("{}.toml", draft.id));
+        self.write_toml_record(
+            &path,
+            draft.id,
+            "conjecture",
+            draft.label,
+            Some(project_id.to_string()),
+            value,
+        )
+    }
+
+    pub fn append_implication(
+        &self,
+        project_id: &str,
+        draft: ImplicationDraft,
+    ) -> Result<WrittenRecord> {
+        self.require_project(project_id)?;
+        validate_record_id(&draft.id)?;
+        self.ensure_new_record_id(&draft.id)?;
+        validate_record_id(project_id)?;
+        if draft.from.is_empty() {
+            anyhow::bail!("implication '{}' needs at least one prerequisite", draft.id);
+        }
+        for id in draft.from.iter().chain(std::iter::once(&draft.to)) {
+            validate_record_id(id)?;
+        }
+        validate_known_status(&draft.status, IMPLICATION_STATUSES, "implication")?;
+
+        let mut value = typed_record_value("implication", &draft)?;
+        ensure_project_id(&mut value, project_id);
+        let path = self
+            .root
+            .join("projects")
+            .join(project_id)
+            .join("implications")
+            .join(format!("{}.toml", draft.id));
+        self.write_toml_record(
+            &path,
+            draft.id,
+            "implication",
+            draft.label,
+            Some(project_id.to_string()),
+            value,
+        )
+    }
+
     pub fn render_project_html(&self, project_id: &str) -> String {
         let report = self.project_report(project_id);
         let title = self
@@ -430,6 +640,49 @@ impl LabStore {
         } else {
             anyhow::bail!("unknown project id '{project_id}'");
         }
+    }
+
+    fn ensure_new_record_id(&self, id: &str) -> Result<()> {
+        if self.record(id).is_some() {
+            anyhow::bail!("record id '{id}' already exists");
+        }
+        Ok(())
+    }
+
+    fn write_toml_record(
+        &self,
+        path: &Path,
+        id: String,
+        kind: &str,
+        label: Option<String>,
+        project_id: Option<String>,
+        data: Value,
+    ) -> Result<WrittenRecord> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("failed to create {}", parent.display()))?;
+        }
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)
+            .with_context(|| format!("failed to create TOML record {}", path.display()))?;
+        let text = toml::to_string_pretty(&data)
+            .with_context(|| format!("failed to serialize TOML record {}", path.display()))?;
+        writeln!(file, "{text}")
+            .with_context(|| format!("failed to write TOML record {}", path.display()))?;
+        let record = LabRecord {
+            id,
+            kind: kind.to_string(),
+            label,
+            project_id,
+            path: relative_path(&self.root, path),
+            data,
+        };
+        Ok(WrittenRecord {
+            path: record.path.clone(),
+            record,
+        })
     }
 
     fn generated_output_path(
@@ -815,6 +1068,23 @@ fn validate_record_id(id: &str) -> Result<()> {
         );
     }
     Ok(())
+}
+
+fn validate_known_status(status: &str, allowed: &[&str], record_kind: &str) -> Result<()> {
+    if allowed.contains(&status) {
+        Ok(())
+    } else {
+        anyhow::bail!("unknown {record_kind} status '{status}'");
+    }
+}
+
+fn typed_record_value<T: Serialize>(record_type: &str, draft: &T) -> Result<Value> {
+    let mut value = serde_json::to_value(draft)?;
+    let object = value
+        .as_object_mut()
+        .with_context(|| "record draft did not serialize to a TOML table")?;
+    object.insert("type".to_string(), Value::String(record_type.to_string()));
+    Ok(value)
 }
 
 fn draft_to_evaluation_json(project_id: &str, draft: &EvaluationDraft) -> Result<Value> {
@@ -1747,6 +2017,96 @@ mod tests {
                 },
             )
             .is_err());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn creates_project_and_appends_research_records() {
+        let root = writable_fixture_root();
+        let store = LabStore::load(&root).expect("writable fixture should load");
+        let project = store
+            .create_project(ProjectDraft {
+                id: "new_project".to_string(),
+                label: Some("New project".to_string()),
+                status: Some("active".to_string()),
+                description: Some("A writable fixture project.".to_string()),
+                main_objects: Vec::new(),
+                main_goals: Vec::new(),
+                source_notes: Vec::new(),
+            })
+            .expect("create project");
+        assert_eq!(project.path, "projects/new_project/project.toml");
+
+        let reloaded = LabStore::load(&root).expect("project should reload");
+        let goal = reloaded
+            .append_goal(
+                "new_project",
+                GoalDraft {
+                    id: "new_real_rootedness_goal".to_string(),
+                    label: Some("New real-rootedness goal".to_string()),
+                    statement: "F_n(t) is real-rooted.".to_string(),
+                    status: "open".to_string(),
+                    objects: vec!["future_family".to_string()],
+                    motivation: None,
+                    current_best_route: Some("Find an interlacing refinement.".to_string()),
+                    depends_on: Vec::new(),
+                },
+            )
+            .expect("append goal");
+        assert_eq!(
+            goal.path,
+            "projects/new_project/goals/new_real_rootedness_goal.toml"
+        );
+
+        let reloaded = LabStore::load(&root).expect("goal should reload");
+        let conjecture = reloaded
+            .append_conjecture(
+                "new_project",
+                ConjectureDraft {
+                    id: "new_interlacing_relation".to_string(),
+                    label: Some("New interlacing relation".to_string()),
+                    statement: "F_n(t) interlaces G_n(t).".to_string(),
+                    status: "plausible".to_string(),
+                    relation: Some("weak_interlaces".to_string()),
+                    left: Some("future_family".to_string()),
+                    right: Some("future_envelope".to_string()),
+                    index_condition: Some("n >= 1".to_string()),
+                    depends_on: Vec::new(),
+                },
+            )
+            .expect("append conjecture");
+        assert_eq!(
+            conjecture.path,
+            "projects/new_project/conjectures/new_interlacing_relation.toml"
+        );
+
+        let reloaded = LabStore::load(&root).expect("conjecture should reload");
+        let implication = reloaded
+            .append_implication(
+                "new_project",
+                ImplicationDraft {
+                    id: "new_interlacing_implies_goal".to_string(),
+                    label: Some("New implication".to_string()),
+                    status: "plausible".to_string(),
+                    from: vec!["new_interlacing_relation".to_string()],
+                    to: "new_real_rootedness_goal".to_string(),
+                    explanation: Some("Interlacing implies real-rootedness.".to_string()),
+                    proof_tags: vec!["interlacing_implies_real_rootedness".to_string()],
+                },
+            )
+            .expect("append implication");
+        assert_eq!(
+            implication.path,
+            "projects/new_project/implications/new_interlacing_implies_goal.toml"
+        );
+
+        let reloaded = LabStore::load(&root).expect("records should reload");
+        let trace = reloaded.trace_goal_support("new_project", "new_real_rootedness_goal");
+        assert_eq!(trace.incoming_implications.len(), 1);
+        assert_eq!(
+            trace.incoming_implications[0].prerequisites[0].id,
+            "new_interlacing_relation"
+        );
         let _ = fs::remove_dir_all(root);
     }
 

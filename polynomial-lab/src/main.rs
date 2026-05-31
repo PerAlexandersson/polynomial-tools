@@ -3,7 +3,8 @@ use clap::{Parser, Subcommand};
 use polynomial_lab::{
     default_family_registry, default_lab_root, format_project_overviews, format_records,
     format_trace, format_validation_report, real_rooted_evaluation_draft, real_rooted_evidence_id,
-    CheckedRange, EvaluationDraft, EvaluationFilter, LabStore, ValidationMode,
+    CheckedRange, ConjectureDraft, EvaluationDraft, EvaluationFilter, GoalDraft, ImplicationDraft,
+    LabStore, ProjectDraft, ValidationMode, WrittenRecord,
 };
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -26,6 +27,21 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    InitProject {
+        project_id: String,
+        #[arg(long)]
+        label: Option<String>,
+        #[arg(long, default_value = "active")]
+        status: String,
+        #[arg(long)]
+        description: Option<String>,
+        #[arg(long = "main-object")]
+        main_objects: Vec<String>,
+        #[arg(long = "main-goal")]
+        main_goals: Vec<String>,
+        #[arg(long = "source-note")]
+        source_notes: Vec<String>,
+    },
     Validate {
         #[arg(long)]
         strict: bool,
@@ -103,6 +119,60 @@ enum Command {
         #[arg(long)]
         n_max: Option<i64>,
     },
+    AppendGoal {
+        project_id: String,
+        id: String,
+        #[arg(long)]
+        statement: String,
+        #[arg(long)]
+        label: Option<String>,
+        #[arg(long, default_value = "open")]
+        status: String,
+        #[arg(long = "object")]
+        objects: Vec<String>,
+        #[arg(long)]
+        motivation: Option<String>,
+        #[arg(long)]
+        current_best_route: Option<String>,
+        #[arg(long = "depends-on")]
+        depends_on: Vec<String>,
+    },
+    AppendConjecture {
+        project_id: String,
+        id: String,
+        #[arg(long)]
+        statement: String,
+        #[arg(long)]
+        label: Option<String>,
+        #[arg(long, default_value = "plausible")]
+        status: String,
+        #[arg(long)]
+        relation: Option<String>,
+        #[arg(long)]
+        left: Option<String>,
+        #[arg(long)]
+        right: Option<String>,
+        #[arg(long)]
+        index_condition: Option<String>,
+        #[arg(long = "depends-on")]
+        depends_on: Vec<String>,
+    },
+    AppendImplication {
+        project_id: String,
+        id: String,
+        #[arg(long = "from", required = true)]
+        from: Vec<String>,
+        #[arg(long)]
+        to: String,
+        #[arg(long)]
+        label: Option<String>,
+        #[arg(long, default_value = "plausible")]
+        status: String,
+        #[arg(long)]
+        explanation: Option<String>,
+        #[arg(long = "proof-tag")]
+        proof_tags: Vec<String>,
+    },
     AppendCounterexample {
         project_id: String,
         id: String,
@@ -144,6 +214,26 @@ fn main() -> Result<()> {
         .with_context(|| format!("failed to load polynomial lab at {}", root.display()))?;
 
     match cli.command {
+        Command::InitProject {
+            project_id,
+            label,
+            status,
+            description,
+            main_objects,
+            main_goals,
+            source_notes,
+        } => {
+            let written = store.create_project(ProjectDraft {
+                id: project_id,
+                label,
+                status: Some(status),
+                description,
+                main_objects,
+                main_goals,
+                source_notes,
+            })?;
+            print_written_record(cli.json, &written)?;
+        }
         Command::Validate { strict } => {
             let mode = if strict {
                 ValidationMode::Strict
@@ -361,6 +451,84 @@ fn main() -> Result<()> {
             )?;
             print_written_evaluation(cli.json, &written)?;
         }
+        Command::AppendGoal {
+            project_id,
+            id,
+            statement,
+            label,
+            status,
+            objects,
+            motivation,
+            current_best_route,
+            depends_on,
+        } => {
+            let written = store.append_goal(
+                &project_id,
+                GoalDraft {
+                    id,
+                    label,
+                    statement,
+                    status,
+                    objects,
+                    motivation,
+                    current_best_route,
+                    depends_on,
+                },
+            )?;
+            print_written_record(cli.json, &written)?;
+        }
+        Command::AppendConjecture {
+            project_id,
+            id,
+            statement,
+            label,
+            status,
+            relation,
+            left,
+            right,
+            index_condition,
+            depends_on,
+        } => {
+            let written = store.append_conjecture(
+                &project_id,
+                ConjectureDraft {
+                    id,
+                    label,
+                    statement,
+                    status,
+                    relation,
+                    left,
+                    right,
+                    index_condition,
+                    depends_on,
+                },
+            )?;
+            print_written_record(cli.json, &written)?;
+        }
+        Command::AppendImplication {
+            project_id,
+            id,
+            from,
+            to,
+            label,
+            status,
+            explanation,
+            proof_tags,
+        } => {
+            let written = store.append_implication(
+                &project_id,
+                ImplicationDraft {
+                    id,
+                    label,
+                    status,
+                    from,
+                    to,
+                    explanation,
+                    proof_tags,
+                },
+            )?;
+            print_written_record(cli.json, &written)?;
+        }
         Command::AppendCounterexample {
             project_id,
             id,
@@ -440,6 +608,15 @@ fn first_failure_value(n: Option<i64>, first_failure_json: Option<String>) -> Re
 }
 
 fn print_written_evaluation(json: bool, written: &polynomial_lab::WrittenEvaluation) -> Result<()> {
+    if json {
+        print_json(written)
+    } else {
+        println!("wrote {}", written.path);
+        Ok(())
+    }
+}
+
+fn print_written_record(json: bool, written: &WrittenRecord) -> Result<()> {
     if json {
         print_json(written)
     } else {

@@ -1,9 +1,9 @@
 use polynomial_lab::{
     default_family_registry, default_lab_root, real_rooted_evaluation_draft,
     real_rooted_evidence_id, CheckFamilyRealRootednessReport, CheckedRange, ComputedPolynomial,
-    EvaluationDraft, EvaluationFilter, GeneratedFile, LabRecord, LabStore, PolynomialFamilyInfo,
-    ProjectOverview, ProjectReport, TraceGoalSupport, ValidationMode, ValidationReport,
-    WrittenEvaluation,
+    ConjectureDraft, EvaluationDraft, EvaluationFilter, GeneratedFile, GoalDraft, ImplicationDraft,
+    LabRecord, LabStore, PolynomialFamilyInfo, ProjectDraft, ProjectOverview, ProjectReport,
+    TraceGoalSupport, ValidationMode, ValidationReport, WrittenEvaluation, WrittenRecord,
 };
 use rmcp::{
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
@@ -57,6 +57,60 @@ pub struct EvaluationSearchRequest {
 pub struct TraceGoalRequest {
     pub project_id: String,
     pub goal_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CreateProjectRequest {
+    pub project_id: String,
+    pub label: Option<String>,
+    pub status: Option<String>,
+    pub description: Option<String>,
+    pub main_objects: Option<Vec<String>>,
+    pub main_goals: Option<Vec<String>>,
+    pub source_notes: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AppendGoalRequest {
+    pub project_id: String,
+    pub id: String,
+    pub statement: String,
+    pub label: Option<String>,
+    pub status: Option<String>,
+    pub objects: Option<Vec<String>>,
+    pub motivation: Option<String>,
+    pub current_best_route: Option<String>,
+    pub depends_on: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AppendConjectureRequest {
+    pub project_id: String,
+    pub id: String,
+    pub statement: String,
+    pub label: Option<String>,
+    pub status: Option<String>,
+    pub relation: Option<String>,
+    pub left: Option<String>,
+    pub right: Option<String>,
+    pub index_condition: Option<String>,
+    pub depends_on: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AppendImplicationRequest {
+    pub project_id: String,
+    pub id: String,
+    pub from: Vec<String>,
+    pub to: String,
+    pub label: Option<String>,
+    pub status: Option<String>,
+    pub explanation: Option<String>,
+    pub proof_tags: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
@@ -236,6 +290,94 @@ impl PolynomialLabServer {
             self.load_store()?
                 .trace_goal_support(&input.project_id, &input.goal_id),
         ))
+    }
+
+    #[tool(description = "Create a project skeleton with standard lab subdirectories.")]
+    pub fn create_project(
+        &self,
+        Parameters(input): Parameters<CreateProjectRequest>,
+    ) -> Result<Json<WrittenRecord>, McpError> {
+        self.load_store()?
+            .create_project(ProjectDraft {
+                id: input.project_id,
+                label: input.label,
+                status: Some(input.status.unwrap_or_else(|| "active".to_string())),
+                description: input.description,
+                main_objects: input.main_objects.unwrap_or_default(),
+                main_goals: input.main_goals.unwrap_or_default(),
+                source_notes: input.source_notes.unwrap_or_default(),
+            })
+            .map(Json)
+            .map_err(internal_error)
+    }
+
+    #[tool(description = "Append a goal TOML record to a project.")]
+    pub fn append_goal(
+        &self,
+        Parameters(input): Parameters<AppendGoalRequest>,
+    ) -> Result<Json<WrittenRecord>, McpError> {
+        self.load_store()?
+            .append_goal(
+                &input.project_id,
+                GoalDraft {
+                    id: input.id,
+                    label: input.label,
+                    statement: input.statement,
+                    status: input.status.unwrap_or_else(|| "open".to_string()),
+                    objects: input.objects.unwrap_or_default(),
+                    motivation: input.motivation,
+                    current_best_route: input.current_best_route,
+                    depends_on: input.depends_on.unwrap_or_default(),
+                },
+            )
+            .map(Json)
+            .map_err(internal_error)
+    }
+
+    #[tool(description = "Append a conjectural relation TOML record to a project.")]
+    pub fn append_conjecture(
+        &self,
+        Parameters(input): Parameters<AppendConjectureRequest>,
+    ) -> Result<Json<WrittenRecord>, McpError> {
+        self.load_store()?
+            .append_conjecture(
+                &input.project_id,
+                ConjectureDraft {
+                    id: input.id,
+                    label: input.label,
+                    statement: input.statement,
+                    status: input.status.unwrap_or_else(|| "plausible".to_string()),
+                    relation: input.relation,
+                    left: input.left,
+                    right: input.right,
+                    index_condition: input.index_condition,
+                    depends_on: input.depends_on.unwrap_or_default(),
+                },
+            )
+            .map(Json)
+            .map_err(internal_error)
+    }
+
+    #[tool(description = "Append an implication/dependency TOML record to a project.")]
+    pub fn append_implication(
+        &self,
+        Parameters(input): Parameters<AppendImplicationRequest>,
+    ) -> Result<Json<WrittenRecord>, McpError> {
+        self.load_store()?
+            .append_implication(
+                &input.project_id,
+                ImplicationDraft {
+                    id: input.id,
+                    label: input.label,
+                    status: input.status.unwrap_or_else(|| "plausible".to_string()),
+                    from: input.from,
+                    to: input.to,
+                    explanation: input.explanation,
+                    proof_tags: input.proof_tags.unwrap_or_default(),
+                },
+            )
+            .map(Json)
+            .map_err(internal_error)
     }
 
     #[tool(description = "List proof-rule records from the interlacing toolbox.")]

@@ -113,6 +113,10 @@ fn lists_tools_and_traces_derangement_goal() {
     assert!(tool_names.contains(&"list_projects"));
     assert!(tool_names.contains(&"compute_family"));
     assert!(tool_names.contains(&"check_family_real_rooted"));
+    assert!(tool_names.contains(&"create_project"));
+    assert!(tool_names.contains(&"append_goal"));
+    assert!(tool_names.contains(&"append_conjecture"));
+    assert!(tool_names.contains(&"append_implication"));
     assert!(tool_names.contains(&"trace_goal_support"));
     assert!(tool_names.contains(&"render_project_markdown"));
     assert!(tool_names.contains(&"append_timeout"));
@@ -199,6 +203,100 @@ fn lists_tools_and_traces_derangement_goal() {
             "id": 6,
             "method": "tools/call",
             "params": {
+                "name": "create_project",
+                "arguments": {
+                    "project_id": "mcp_created_project",
+                    "label": "MCP-created project",
+                    "description": "Created by the stdio smoke test."
+                }
+            }
+        }),
+    );
+    let created = read_response(&mut stdout, 6);
+    assert_eq!(
+        created["result"]["structuredContent"]["path"],
+        "projects/mcp_created_project/project.toml"
+    );
+
+    send(
+        &mut stdin,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 7,
+            "method": "tools/call",
+            "params": {
+                "name": "append_goal",
+                "arguments": {
+                    "project_id": "mcp_created_project",
+                    "id": "mcp_goal",
+                    "statement": "F_n(t) is real-rooted.",
+                    "current_best_route": "Find an interlacing refinement."
+                }
+            }
+        }),
+    );
+    let goal = read_response(&mut stdout, 7);
+    assert_eq!(
+        goal["result"]["structuredContent"]["path"],
+        "projects/mcp_created_project/goals/mcp_goal.toml"
+    );
+
+    send(
+        &mut stdin,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 8,
+            "method": "tools/call",
+            "params": {
+                "name": "append_conjecture",
+                "arguments": {
+                    "project_id": "mcp_created_project",
+                    "id": "mcp_relation",
+                    "statement": "F_n(t) interlaces G_n(t).",
+                    "relation": "weak_interlaces",
+                    "left": "mcp_family",
+                    "right": "mcp_envelope"
+                }
+            }
+        }),
+    );
+    let relation = read_response(&mut stdout, 8);
+    assert_eq!(
+        relation["result"]["structuredContent"]["path"],
+        "projects/mcp_created_project/conjectures/mcp_relation.toml"
+    );
+
+    send(
+        &mut stdin,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 9,
+            "method": "tools/call",
+            "params": {
+                "name": "append_implication",
+                "arguments": {
+                    "project_id": "mcp_created_project",
+                    "id": "mcp_relation_implies_goal",
+                    "from": ["mcp_relation"],
+                    "to": "mcp_goal",
+                    "explanation": "Interlacing implies real-rootedness."
+                }
+            }
+        }),
+    );
+    let implication = read_response(&mut stdout, 9);
+    assert_eq!(
+        implication["result"]["structuredContent"]["path"],
+        "projects/mcp_created_project/implications/mcp_relation_implies_goal.toml"
+    );
+
+    send(
+        &mut stdin,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 10,
+            "method": "tools/call",
+            "params": {
                 "name": "append_timeout",
                 "arguments": {
                     "project_id": "demo_project",
@@ -211,7 +309,7 @@ fn lists_tools_and_traces_derangement_goal() {
             }
         }),
     );
-    let append = read_response(&mut stdout, 6);
+    let append = read_response(&mut stdout, 10);
     assert_eq!(
         append["result"]["structuredContent"]["path"],
         "projects/demo_project/evidence/demo_mcp_timeout.json"
@@ -224,7 +322,7 @@ fn lists_tools_and_traces_derangement_goal() {
         &mut stdin,
         json!({
             "jsonrpc": "2.0",
-            "id": 7,
+            "id": 11,
             "method": "tools/call",
             "params": {
                 "name": "write_project_html",
@@ -234,7 +332,7 @@ fn lists_tools_and_traces_derangement_goal() {
             }
         }),
     );
-    let write = read_response(&mut stdout, 7);
+    let write = read_response(&mut stdout, 11);
     assert_eq!(
         write["result"]["structuredContent"]["path"],
         "projects/demo_project/generated/project-summary.html"

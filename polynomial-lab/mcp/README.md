@@ -35,6 +35,10 @@ Exposed tools:
 - `list_goals`
 - `list_evaluations`
 - `trace_goal_support`
+- `create_project`
+- `append_goal`
+- `append_conjecture`
+- `append_implication`
 - `list_proof_rules`
 - `list_search_recipes`
 - `list_families`
@@ -48,6 +52,6 @@ Exposed tools:
 - `append_counterexample`
 - `append_timeout`
 
-The append tools create new files under
-`projects/<project-id>/evidence/<record-id>.json` with create-new semantics.
-They never overwrite an existing evidence file.
+The record-writing tools create new TOML or JSON files with create-new
+semantics.  They never overwrite existing records.  Evidence append tools write
+under `projects/<project-id>/evidence/<record-id>.json`.

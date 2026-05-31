@@ -17,15 +17,6 @@ Examples:
 timeout 60s nice -n 10 cargo run -p polynomial-lab --bin poly-lab -- validate
 timeout 60s nice -n 10 cargo run -p polynomial-lab --bin poly-lab -- validate --strict
 timeout 60s nice -n 10 cargo run -p polynomial-lab --bin poly-lab -- list-projects
-timeout 60s nice -n 10 cargo run -p polynomial-lab --bin poly-lab -- list-families
-timeout 60s nice -n 10 cargo run -p polynomial-lab --bin poly-lab -- \
-  compute-family derangement_descent_polynomial --n 8
-timeout 60s nice -n 10 cargo run -p polynomial-lab --bin poly-lab -- \
-  check-family-real-rooted derangement_descent_polynomial \
-  --n-min 2 --n-max 30 \
-  --project derangement_descents \
-  --relation derangement_descent_real_rootedness_checked \
-  --append
 timeout 60s nice -n 10 cargo run -p polynomial-lab --bin poly-lab -- \
   trace-goal derangement_descents derangement_descent_real_rootedness
 timeout 60s nice -n 10 cargo run -p polynomial-lab --bin poly-lab -- \
@@ -34,6 +25,37 @@ timeout 60s nice -n 10 cargo run -p polynomial-lab --bin poly-lab -- \
   render-markdown derangement_descents --write
 timeout 60s nice -n 10 cargo run -p polynomial-lab --bin poly-lab -- \
   render-html derangement_descents --write
+```
+
+## Working Loop
+
+The main workflow is append-only project memory.  A project can be started and
+then extended with goals, conjectural relations, implication edges, and
+evidence records:
+
+```bash
+timeout 60s nice -n 10 cargo run -p polynomial-lab --bin poly-lab -- \
+  init-project circular_chromatics \
+  --label "Circular chromatics" \
+  --description "Interlacing and representation-theoretic experiments."
+
+timeout 60s nice -n 10 cargo run -p polynomial-lab --bin poly-lab -- \
+  append-goal circular_chromatics circular_chromatic_h_positivity \
+  --statement "The proposed circular chromatic construction is h-positive." \
+  --current-best-route "Find a permutation-style basis or interlacing lift."
+
+timeout 60s nice -n 10 cargo run -p polynomial-lab --bin poly-lab -- \
+  append-conjecture circular_chromatics circular_refinement_interlaces \
+  --statement "The first circular refinement forms an interlacing family." \
+  --relation weak_interlaces \
+  --left circular_refinement_family \
+  --right circular_envelope_family
+
+timeout 60s nice -n 10 cargo run -p polynomial-lab --bin poly-lab -- \
+  append-implication circular_chromatics circular_interlacing_implies_h_positive \
+  --from circular_refinement_interlaces \
+  --to circular_chromatic_h_positivity \
+  --explanation "A positive interlacing refinement would give the desired expansion."
 ```
 
 Append-only evidence records:
@@ -69,10 +91,22 @@ available.
 
 ## Family Registry
 
-The family registry deliberately lives in `polynomial-lab`, not
-`polynomial-tools`.  Stable standard families are backed by `polynomial-tools`;
-project-specific families remain in the lab namespace until they become broadly
-useful.
+The family registry is only convenience plumbing for generated evidence.
+It deliberately lives in `polynomial-lab`, not `polynomial-tools`.  Stable
+standard families are backed by `polynomial-tools`; project-specific families
+remain in the lab namespace until they become broadly useful.
+
+```bash
+timeout 60s nice -n 10 cargo run -p polynomial-lab --bin poly-lab -- list-families
+timeout 60s nice -n 10 cargo run -p polynomial-lab --bin poly-lab -- \
+  compute-family derangement_descent_polynomial --n 8
+timeout 60s nice -n 10 cargo run -p polynomial-lab --bin poly-lab -- \
+  check-family-real-rooted derangement_descent_polynomial \
+  --n-min 2 --n-max 30 \
+  --project derangement_descents \
+  --relation derangement_descent_real_rootedness_checked \
+  --append
+```
 
 Currently registered families:
 
