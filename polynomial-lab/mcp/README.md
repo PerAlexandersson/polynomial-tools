@@ -34,11 +34,13 @@ Exposed tools:
 - `get_project`
 - `list_goals`
 - `list_evaluations`
+- `list_experiments`
 - `trace_goal_support`
 - `create_project`
 - `append_goal`
 - `append_conjecture`
 - `append_implication`
+- `append_computed_refinement`
 - `list_proof_rules`
 - `list_search_recipes`
 - `list_families`

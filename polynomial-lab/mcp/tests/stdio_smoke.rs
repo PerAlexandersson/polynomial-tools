@@ -118,6 +118,8 @@ fn lists_tools_and_traces_derangement_goal() {
     assert!(tool_names.contains(&"append_goal"));
     assert!(tool_names.contains(&"append_conjecture"));
     assert!(tool_names.contains(&"append_implication"));
+    assert!(tool_names.contains(&"append_computed_refinement"));
+    assert!(tool_names.contains(&"list_experiments"));
     assert!(tool_names.contains(&"trace_goal_support"));
     assert!(tool_names.contains(&"render_project_markdown"));
     assert!(tool_names.contains(&"append_timeout"));
@@ -298,6 +300,52 @@ fn lists_tools_and_traces_derangement_goal() {
             "id": 10,
             "method": "tools/call",
             "params": {
+                "name": "append_computed_refinement",
+                "arguments": {
+                    "project_id": "mcp_created_project",
+                    "id": "mcp_refinement",
+                    "producer": "cargo run -p experiments --bin mcp_refinement",
+                    "output_kind": "polynomial_vector_by_n",
+                    "indices": ["n", "j"],
+                    "description": "Fixture computed refinement.",
+                    "depends_on": ["mcp_relation"]
+                }
+            }
+        }),
+    );
+    let refinement = read_response(&mut stdout, 10);
+    assert_eq!(
+        refinement["result"]["structuredContent"]["path"],
+        "projects/mcp_created_project/experiments/mcp_refinement.toml"
+    );
+
+    send(
+        &mut stdin,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 11,
+            "method": "tools/call",
+            "params": {
+                "name": "list_experiments",
+                "arguments": {
+                    "project_id": "mcp_created_project"
+                }
+            }
+        }),
+    );
+    let experiments = read_response(&mut stdout, 11);
+    assert_eq!(
+        experiments["result"]["structuredContent"]["records"][0]["id"],
+        "mcp_refinement"
+    );
+
+    send(
+        &mut stdin,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 12,
+            "method": "tools/call",
+            "params": {
                 "name": "append_timeout",
                 "arguments": {
                     "project_id": "demo_project",
@@ -310,7 +358,7 @@ fn lists_tools_and_traces_derangement_goal() {
             }
         }),
     );
-    let append = read_response(&mut stdout, 10);
+    let append = read_response(&mut stdout, 12);
     assert_eq!(
         append["result"]["structuredContent"]["path"],
         "projects/demo_project/evidence/demo_mcp_timeout.json"
@@ -323,7 +371,7 @@ fn lists_tools_and_traces_derangement_goal() {
         &mut stdin,
         json!({
             "jsonrpc": "2.0",
-            "id": 11,
+            "id": 13,
             "method": "tools/call",
             "params": {
                 "name": "write_project_html",
@@ -333,7 +381,7 @@ fn lists_tools_and_traces_derangement_goal() {
             }
         }),
     );
-    let write = read_response(&mut stdout, 11);
+    let write = read_response(&mut stdout, 13);
     assert_eq!(
         write["result"]["structuredContent"]["path"],
         "projects/demo_project/generated/project-summary.html"
@@ -346,7 +394,7 @@ fn lists_tools_and_traces_derangement_goal() {
         &mut stdin,
         json!({
             "jsonrpc": "2.0",
-            "id": 12,
+            "id": 14,
             "method": "tools/call",
             "params": {
                 "name": "check_family_interlacing",
@@ -363,7 +411,7 @@ fn lists_tools_and_traces_derangement_goal() {
             }
         }),
     );
-    let interlacing = read_response(&mut stdout, 12);
+    let interlacing = read_response(&mut stdout, 14);
     assert_eq!(
         interlacing["result"]["structuredContent"]["report"]["all_interlacing"],
         true
@@ -380,7 +428,7 @@ fn lists_tools_and_traces_derangement_goal() {
         &mut stdin,
         json!({
             "jsonrpc": "2.0",
-            "id": 13,
+            "id": 15,
             "method": "tools/call",
             "params": {
                 "name": "check_family_interlacing",
@@ -395,7 +443,7 @@ fn lists_tools_and_traces_derangement_goal() {
             }
         }),
     );
-    let offset_interlacing = read_response(&mut stdout, 13);
+    let offset_interlacing = read_response(&mut stdout, 15);
     assert_eq!(
         offset_interlacing["result"]["structuredContent"]["report"]["items"][0]["left_n"],
         1

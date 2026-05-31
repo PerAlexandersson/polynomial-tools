@@ -56,6 +56,17 @@ timeout 60s nice -n 10 cargo run -p polynomial-lab --bin poly-lab -- \
   --from circular_refinement_interlaces \
   --to circular_chromatic_h_positivity \
   --explanation "A positive interlacing refinement would give the desired expansion."
+
+timeout 60s nice -n 10 cargo run -p polynomial-lab --bin poly-lab -- \
+  append-computed-refinement circular_chromatics circular_last_value_refinement \
+  --producer "cargo run -p experiments --bin circular_last_value_refinement" \
+  --output-kind polynomial_vector_by_n \
+  --index n --index j \
+  --description "Refinement by a project-specific circular statistic." \
+  --depends-on circular_refinement_interlaces
+
+timeout 60s nice -n 10 cargo run -p polynomial-lab --bin poly-lab -- \
+  list-experiments --project circular_chromatics
 ```
 
 Append-only evidence records:

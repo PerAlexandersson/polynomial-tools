@@ -49,6 +49,7 @@ pub struct ProjectReport {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<LabRecord>,
     pub definitions: Vec<LabRecord>,
+    pub experiments: Vec<LabRecord>,
     pub goals: Vec<LabRecord>,
     pub conjectures: Vec<LabRecord>,
     pub implications: Vec<LabRecord>,
@@ -216,6 +217,26 @@ pub struct ImplicationDraft {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+pub struct ComputedRefinementDraft {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    pub status: String,
+    pub producer: String,
+    pub output_kind: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub indices: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_files: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub depends_on: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 pub struct GeneratedFile {
     pub path: String,
 }
@@ -288,6 +309,9 @@ impl LabStore {
                     "family" | "operator" | "relation" | "refinement" | "object"
                 )
             }),
+            experiments: self.records_for_project(project_id, |kind| {
+                matches!(kind, "computed_refinement" | "experiment")
+            }),
             goals: self.records_for_project(project_id, |kind| kind == "goal"),
             conjectures: self.records_for_project(project_id, |kind| kind == "conjecture"),
             implications: self.records_for_project(project_id, |kind| kind == "implication"),
@@ -311,6 +335,15 @@ impl LabStore {
 
     pub fn search_recipes(&self) -> Vec<LabRecord> {
         self.records_by_kind("search_recipe")
+    }
+
+    pub fn experiments(&self, project_id: Option<&str>) -> Vec<LabRecord> {
+        self.records
+            .iter()
+            .filter(|record| matches!(record.kind.as_str(), "computed_refinement" | "experiment"))
+            .filter(|record| project_matches(record, project_id))
+            .cloned()
+            .collect()
     }
 
     pub fn evaluations(&self, filter: &EvaluationFilter) -> Vec<LabRecord> {
@@ -446,6 +479,7 @@ impl LabStore {
             "goals",
             "conjectures",
             "implications",
+            "experiments",
             "evidence",
             "cache",
             "generated",
@@ -560,6 +594,50 @@ impl LabStore {
         )
     }
 
+    pub fn append_computed_refinement(
+        &self,
+        project_id: &str,
+        draft: ComputedRefinementDraft,
+    ) -> Result<WrittenRecord> {
+        self.require_project(project_id)?;
+        validate_record_id(&draft.id)?;
+        self.ensure_new_record_id(&draft.id)?;
+        validate_record_id(project_id)?;
+        if draft.producer.trim().is_empty() {
+            anyhow::bail!("computed refinement '{}' needs a producer", draft.id);
+        }
+        if draft.output_kind.trim().is_empty() {
+            anyhow::bail!("computed refinement '{}' needs an output_kind", draft.id);
+        }
+        if draft.indices.is_empty() {
+            anyhow::bail!(
+                "computed refinement '{}' needs at least one index",
+                draft.id
+            );
+        }
+        for id in &draft.depends_on {
+            validate_record_id(id)?;
+        }
+        validate_known_status(&draft.status, EXPERIMENT_STATUSES, "computed_refinement")?;
+
+        let mut value = typed_record_value("computed_refinement", &draft)?;
+        ensure_project_id(&mut value, project_id);
+        let path = self
+            .root
+            .join("projects")
+            .join(project_id)
+            .join("experiments")
+            .join(format!("{}.toml", draft.id));
+        self.write_toml_record(
+            &path,
+            draft.id,
+            "computed_refinement",
+            draft.label,
+            Some(project_id.to_string()),
+            value,
+        )
+    }
+
     pub fn render_project_html(&self, project_id: &str) -> String {
         let report = self.project_report(project_id);
         let title = self
@@ -601,6 +679,7 @@ impl LabStore {
 
         render_html_records_section(&mut html, "Goals", &report.goals);
         render_html_records_section(&mut html, "Definitions", &report.definitions);
+        render_html_records_section(&mut html, "Experiments", &report.experiments);
         render_html_records_section(&mut html, "Conjectures", &report.conjectures);
         render_html_implications_section(&mut html, &report.implications);
         render_html_evaluations_section(&mut html, &report.evaluations);
@@ -933,6 +1012,7 @@ impl LabStore {
 
         render_records_section(&mut out, "Goals", &report.goals);
         render_records_section(&mut out, "Definitions", &report.definitions);
+        render_records_section(&mut out, "Experiments", &report.experiments);
         render_records_section(&mut out, "Conjectures", &report.conjectures);
         render_implications_section(&mut out, &report.implications);
         render_evaluations_section(&mut out, &report.evaluations);
@@ -1000,6 +1080,15 @@ const CONJECTURE_STATUSES: &[&str] = &[
     "retired",
 ];
 
+const EXPERIMENT_STATUSES: &[&str] = &[
+    "planned",
+    "active",
+    "stable",
+    "failed",
+    "obsolete",
+    "superseded",
+];
+
 const HTML_STYLE: &str = "\
 body { margin: 0; font-family: system-ui, sans-serif; line-height: 1.5; color: #1f2933; background: #f7f8fa; }
 main { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
@@ -1040,6 +1129,7 @@ fn validate_record_status(
         "goal" => Some(GOAL_STATUSES),
         "implication" => Some(IMPLICATION_STATUSES),
         "conjecture" => Some(CONJECTURE_STATUSES),
+        "computed_refinement" | "experiment" => Some(EXPERIMENT_STATUSES),
         _ => None,
     };
     if let Some(allowed) = allowed {
@@ -1270,6 +1360,12 @@ impl LabLoader {
                 &project_id,
                 "implications",
                 "implication",
+            )?;
+            self.load_project_toml_directory(
+                &project_dir,
+                &project_id,
+                "experiments",
+                "experiment",
             )?;
             self.load_project_json_directory(&project_dir, &project_id, "evidence", "evaluation")?;
             self.load_project_json_directory(&project_dir, &project_id, "cache", "cache_record")?;
@@ -1565,6 +1661,14 @@ fn render_records_section(out: &mut String, title: &str, records: &[LabRecord]) 
             push_line(out, &format!("  Statement: {}", statement.trim()));
         } else if let Some(definition) = value_string(&record.data, "definition") {
             push_line(out, &format!("  Definition: {}", definition.trim()));
+        } else if let Some(description) = value_string(&record.data, "description") {
+            push_line(out, &format!("  Description: {}", description.trim()));
+        }
+        if let Some(producer) = value_string(&record.data, "producer") {
+            push_line(out, &format!("  Producer: `{producer}`"));
+        }
+        if let Some(output_kind) = value_string(&record.data, "output_kind") {
+            push_line(out, &format!("  Output kind: `{output_kind}`"));
         }
         if let Some(status) = value_string(&record.data, "status") {
             push_line(out, &format!("  Status: `{status}`"));
@@ -1647,6 +1751,23 @@ fn render_html_records_section(out: &mut String, title: &str, records: &[LabReco
             out.push_str(&format!(
                 "<p class=\"detail\">Definition: {}</p>",
                 escape_html(definition.trim())
+            ));
+        } else if let Some(description) = value_string(&record.data, "description") {
+            out.push_str(&format!(
+                "<p class=\"detail\">Description: {}</p>",
+                escape_html(description.trim())
+            ));
+        }
+        if let Some(producer) = value_string(&record.data, "producer") {
+            out.push_str(&format!(
+                "<p class=\"detail\">Producer: <code>{}</code></p>",
+                escape_html(&producer)
+            ));
+        }
+        if let Some(output_kind) = value_string(&record.data, "output_kind") {
+            out.push_str(&format!(
+                "<p class=\"detail\">Output kind: <code>{}</code></p>",
+                escape_html(&output_kind)
             ));
         }
         if let Some(status) = value_string(&record.data, "status") {
@@ -2102,7 +2223,39 @@ mod tests {
             "projects/new_project/implications/new_interlacing_implies_goal.toml"
         );
 
+        let reloaded = LabStore::load(&root).expect("implication should reload");
+        let experiment = reloaded
+            .append_computed_refinement(
+                "new_project",
+                ComputedRefinementDraft {
+                    id: "new_last_value_refinement".to_string(),
+                    label: Some("Last-value refinement".to_string()),
+                    status: "planned".to_string(),
+                    producer: "cargo run -p experiments --bin new_last_value_refinement"
+                        .to_string(),
+                    output_kind: "polynomial_vector_by_n".to_string(),
+                    indices: vec!["n".to_string(), "j".to_string()],
+                    description: Some("Refinement indexed by a final value statistic.".to_string()),
+                    command: Some(
+                        "timeout 60s nice -n 10 cargo run -p experiments --bin new_last_value_refinement -- --max-n 12"
+                            .to_string(),
+                    ),
+                    source_files: vec![
+                        "experiments/src/bin/new_last_value_refinement.rs".to_string(),
+                    ],
+                    depends_on: vec!["new_interlacing_relation".to_string()],
+                },
+            )
+            .expect("append computed refinement");
+        assert_eq!(
+            experiment.path,
+            "projects/new_project/experiments/new_last_value_refinement.toml"
+        );
+
         let reloaded = LabStore::load(&root).expect("records should reload");
+        let experiments = reloaded.experiments(Some("new_project"));
+        assert_eq!(experiments.len(), 1);
+        assert_eq!(experiments[0].kind, "computed_refinement");
         let trace = reloaded.trace_goal_support("new_project", "new_real_rootedness_goal");
         assert_eq!(trace.incoming_implications.len(), 1);
         assert_eq!(

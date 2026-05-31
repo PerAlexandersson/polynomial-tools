@@ -4,9 +4,9 @@ use polynomial_lab::{
     default_family_registry, default_lab_root, format_project_overviews, format_records,
     format_trace, format_validation_report, interlacing_evaluation_draft,
     interlacing_evidence_id_with_offsets, real_rooted_evaluation_draft, real_rooted_evidence_id,
-    CheckedRange, ConjectureDraft, EvaluationDraft, EvaluationFilter, FamilyIndexOffsets,
-    GoalDraft, ImplicationDraft, InterlacingMode, LabStore, ProjectDraft, ValidationMode,
-    WrittenRecord,
+    CheckedRange, ComputedRefinementDraft, ConjectureDraft, EvaluationDraft, EvaluationFilter,
+    FamilyIndexOffsets, GoalDraft, ImplicationDraft, InterlacingMode, LabStore, ProjectDraft,
+    ValidationMode, WrittenRecord,
 };
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -64,6 +64,10 @@ enum Command {
         status: Option<String>,
         #[arg(long)]
         relation: Option<String>,
+    },
+    ListExperiments {
+        #[arg(long)]
+        project: Option<String>,
     },
     ListProofRules,
     ListSearchRecipes,
@@ -200,6 +204,28 @@ enum Command {
         #[arg(long = "proof-tag")]
         proof_tags: Vec<String>,
     },
+    AppendComputedRefinement {
+        project_id: String,
+        id: String,
+        #[arg(long)]
+        producer: String,
+        #[arg(long)]
+        output_kind: String,
+        #[arg(long = "index", required = true)]
+        indices: Vec<String>,
+        #[arg(long)]
+        label: Option<String>,
+        #[arg(long, default_value = "planned")]
+        status: String,
+        #[arg(long)]
+        description: Option<String>,
+        #[arg(long)]
+        command: Option<String>,
+        #[arg(long = "source-file")]
+        source_files: Vec<String>,
+        #[arg(long = "depends-on")]
+        depends_on: Vec<String>,
+    },
     AppendCounterexample {
         project_id: String,
         id: String,
@@ -315,6 +341,14 @@ fn main() -> Result<()> {
                 print_json(&evaluations)?;
             } else {
                 print!("{}", format_records(&evaluations));
+            }
+        }
+        Command::ListExperiments { project } => {
+            let experiments = store.experiments(project.as_deref());
+            if cli.json {
+                print_json(&experiments)?;
+            } else {
+                print!("{}", format_records(&experiments));
             }
         }
         Command::ListProofRules => {
@@ -626,6 +660,36 @@ fn main() -> Result<()> {
                     to,
                     explanation,
                     proof_tags,
+                },
+            )?;
+            print_written_record(cli.json, &written)?;
+        }
+        Command::AppendComputedRefinement {
+            project_id,
+            id,
+            producer,
+            output_kind,
+            indices,
+            label,
+            status,
+            description,
+            command,
+            source_files,
+            depends_on,
+        } => {
+            let written = store.append_computed_refinement(
+                &project_id,
+                ComputedRefinementDraft {
+                    id,
+                    label,
+                    status,
+                    producer,
+                    output_kind,
+                    indices,
+                    description,
+                    command,
+                    source_files,
+                    depends_on,
                 },
             )?;
             print_written_record(cli.json, &written)?;

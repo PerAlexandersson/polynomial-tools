@@ -2,10 +2,11 @@ use polynomial_lab::{
     default_family_registry, default_lab_root, interlacing_evaluation_draft,
     interlacing_evidence_id_with_offsets, real_rooted_evaluation_draft, real_rooted_evidence_id,
     CheckFamilyInterlacingReport, CheckFamilyRealRootednessReport, CheckedRange,
-    ComputedPolynomial, ConjectureDraft, EvaluationDraft, EvaluationFilter, FamilyIndexOffsets,
-    GeneratedFile, GoalDraft, ImplicationDraft, InterlacingMode, LabRecord, LabStore,
-    PolynomialFamilyInfo, ProjectDraft, ProjectOverview, ProjectReport, TraceGoalSupport,
-    ValidationMode, ValidationReport, WrittenEvaluation, WrittenRecord,
+    ComputedPolynomial, ComputedRefinementDraft, ConjectureDraft, EvaluationDraft,
+    EvaluationFilter, FamilyIndexOffsets, GeneratedFile, GoalDraft, ImplicationDraft,
+    InterlacingMode, LabRecord, LabStore, PolynomialFamilyInfo, ProjectDraft, ProjectOverview,
+    ProjectReport, TraceGoalSupport, ValidationMode, ValidationReport, WrittenEvaluation,
+    WrittenRecord,
 };
 use rmcp::{
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
@@ -113,6 +114,22 @@ pub struct AppendImplicationRequest {
     pub status: Option<String>,
     pub explanation: Option<String>,
     pub proof_tags: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AppendComputedRefinementRequest {
+    pub project_id: String,
+    pub id: String,
+    pub producer: String,
+    pub output_kind: String,
+    pub indices: Vec<String>,
+    pub label: Option<String>,
+    pub status: Option<String>,
+    pub description: Option<String>,
+    pub command: Option<String>,
+    pub source_files: Option<Vec<String>>,
+    pub depends_on: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
@@ -306,6 +323,16 @@ impl PolynomialLabServer {
         }))
     }
 
+    #[tool(description = "List computed-refinement and experiment records.")]
+    pub fn list_experiments(
+        &self,
+        Parameters(input): Parameters<OptionalProjectRequest>,
+    ) -> Result<Json<RecordListResponse>, McpError> {
+        Ok(Json(RecordListResponse {
+            records: self.load_store()?.experiments(input.project_id.as_deref()),
+        }))
+    }
+
     #[tool(description = "Trace indexed implications and evidence that currently support a goal.")]
     pub fn trace_goal_support(
         &self,
@@ -399,6 +426,31 @@ impl PolynomialLabServer {
                     to: input.to,
                     explanation: input.explanation,
                     proof_tags: input.proof_tags.unwrap_or_default(),
+                },
+            )
+            .map(Json)
+            .map_err(internal_error)
+    }
+
+    #[tool(description = "Append a project-local computed-refinement metadata record.")]
+    pub fn append_computed_refinement(
+        &self,
+        Parameters(input): Parameters<AppendComputedRefinementRequest>,
+    ) -> Result<Json<WrittenRecord>, McpError> {
+        self.load_store()?
+            .append_computed_refinement(
+                &input.project_id,
+                ComputedRefinementDraft {
+                    id: input.id,
+                    label: input.label,
+                    status: input.status.unwrap_or_else(|| "planned".to_string()),
+                    producer: input.producer,
+                    output_kind: input.output_kind,
+                    indices: input.indices,
+                    description: input.description,
+                    command: input.command,
+                    source_files: input.source_files.unwrap_or_default(),
+                    depends_on: input.depends_on.unwrap_or_default(),
                 },
             )
             .map(Json)
@@ -794,6 +846,16 @@ mod tests {
             }))
             .expect("list evaluations should work");
         assert_eq!(response.records.len(), 1);
+    }
+
+    #[test]
+    fn lists_experiments() {
+        let Json(response) = server()
+            .list_experiments(Parameters(OptionalProjectRequest {
+                project_id: Some("demo_project".to_string()),
+            }))
+            .expect("list experiments should work");
+        assert!(response.records.is_empty());
     }
 
     #[test]
