@@ -320,9 +320,10 @@ fn leading_principal_hadamard_squared_bounds(mat: &[Vec<BigInt>]) -> Option<Vec<
 
 fn crt_modulus_certifies_bounds(modulus: &BigInt, squared_bounds: &[BigInt]) -> bool {
     let modulus_squared = modulus * modulus;
-    squared_bounds
-        .iter()
-        .all(|bound| &modulus_squared > &(BigInt::from(4) * bound))
+    squared_bounds.iter().all(|bound| {
+        let threshold = BigInt::from(4) * bound;
+        modulus_squared > threshold
+    })
 }
 
 fn symmetric_residue(residue: BigInt, modulus: &BigInt) -> BigInt {
@@ -495,7 +496,7 @@ fn previous_prime_at_or_below(mut n: u64) -> Option<u64> {
     if n == 2 {
         return Some(2);
     }
-    if n % 2 == 0 {
+    if n.is_multiple_of(2) {
         n -= 1;
     }
     while n >= 3 {
@@ -515,14 +516,14 @@ fn is_prime_u64(n: u64) -> bool {
         if n == p {
             return true;
         }
-        if n % p == 0 {
+        if n.is_multiple_of(p) {
             return false;
         }
     }
 
     let mut d = n - 1;
     let mut s = 0;
-    while d % 2 == 0 {
+    while d.is_multiple_of(2) {
         d /= 2;
         s += 1;
     }
