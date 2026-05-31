@@ -747,9 +747,11 @@ pub fn check_weak_interlacing(p: &[i64], q: &[i64]) -> Option<bool> {
     // Since R is far right, q_1 ≤ R holds automatically, and the rest
     // recovers the original same-degree interlacing p_i ≤ q_i.
     if dp == dq {
-        let all_p_pos = p.iter().all(|&c| c > 0);
-        let p_ext = if all_p_pos {
-            // All roots negative, so root at 0 is far right enough.
+        let p_ext = if has_nonzero_one_signed_trimmed_coefficients(p)
+            && has_nonzero_one_signed_trimmed_coefficients(q)
+        {
+            // Both polynomials have no nonnegative real roots, so root at 0 is
+            // far right enough if the pair is real-rooted.
             poly_mul_linear_factor(p, 0)
         } else {
             let bound_p = cauchy_root_bound(p);
@@ -770,6 +772,17 @@ pub fn check_weak_interlacing(p: &[i64], q: &[i64]) -> Option<bool> {
 
     // deg(p) > deg(q): invalid for p ≪ q.
     None
+}
+
+fn has_nonzero_one_signed_trimmed_coefficients(coeffs: &[i64]) -> bool {
+    let Some(degree) = poly_degree_trimmed(coeffs) else {
+        return false;
+    };
+    if coeffs.first().copied().unwrap_or(0) == 0 {
+        return false;
+    }
+    let active = &coeffs[..=degree];
+    active.iter().all(|&c| c >= 0) || active.iter().all(|&c| c <= 0)
 }
 
 /// Core weak interlacing check for deg(g) = deg(f) + 1.
@@ -1687,6 +1700,12 @@ mod tests {
         // Same-degree, positive coefficients (fast path via *t):
         // f = 1+t, g = 1+2t. Roots: -1 < -1/2. Alternating.
         assert_eq!(check_weak_interlacing(&[1, 1], &[1, 2]), Some(true));
+
+        // Same-degree, positive left polynomial but right polynomial has a
+        // positive root. The fast root-at-0 reduction is not valid here; the
+        // Cauchy-bound reduction must put the added root to the right of 1.
+        assert_eq!(check_weak_interlacing(&[1, 1], &[-1, 1]), Some(true));
+        assert_eq!(check_weak_interlacing(&[-1, 1], &[1, 1]), Some(false));
     }
 
     #[test]
