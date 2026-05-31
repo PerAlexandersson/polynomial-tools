@@ -60,9 +60,6 @@ use crate::{Basis, SymmetricFunction};
 /// n! / (m_1! m_2! ··· aut(λ)) — but we take the direct approach instead.
 pub fn chromatic_symmetric<C: Ring>(g: &Graph) -> SymmetricFunction<C> {
     let n = g.num_vertices();
-    if n == 0 {
-        return SymmetricFunction::zero(Basis::Monomial);
-    }
 
     // For each partition λ of n, generate all distinct permutations of a
     // coloring vector with color frequencies λ, and count proper ones.
@@ -261,9 +258,6 @@ pub fn q_chromatic_symmetric_with_ascent_edges(
     proper_edges: &[(usize, usize)],
     ascent_edges: &[(usize, usize)],
 ) -> BTreeMap<Partition, Vec<i64>> {
-    if n == 0 {
-        return BTreeMap::new();
-    }
     assert!(
         ascent_edges.iter().all(|&(u, v)| u < n && v < n && u != v),
         "ascent edge endpoint out of range"
@@ -647,5 +641,21 @@ mod tests {
         let x = chromatic_symmetric::<i64>(&Graph::empty(1));
         let m = x.to_monomial_basis();
         assert_eq!(m.coefficient(&Partition::new(vec![1])), 1);
+    }
+
+    #[test]
+    fn test_zero_vertex_chromatic_is_one() {
+        let x = chromatic_symmetric::<i64>(&Graph::empty(0));
+        let m = x.to_monomial_basis();
+        assert_eq!(m.coefficient(&Partition::empty()), 1);
+        assert_eq!(m.terms().len(), 1);
+        assert_eq!(m.trivial_specialization(5), 1);
+    }
+
+    #[test]
+    fn test_zero_vertex_q_chromatic_is_one() {
+        let qcs = q_chromatic_symmetric(&Graph::empty(0));
+
+        assert_eq!(qcs, BTreeMap::from([(Partition::empty(), vec![1])]));
     }
 }

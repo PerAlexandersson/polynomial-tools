@@ -142,6 +142,9 @@ impl<C: Field> PolynomialQuotientSnModule<C> {
                 .all(|polynomial| polynomial.num_vars() == variables.num_vars()),
             "all generators must use the indexed variable count"
         );
+        if ideal_generators.is_empty() && variables.num_vars() > 0 {
+            return Err(PolynomialQuotientSnModuleError::NonFiniteStandardMonomialBasis);
+        }
 
         let groebner_basis = GroebnerBasis::new(ideal_generators.clone(), order);
         let quotient_basis = quotient_basis(&groebner_basis)
@@ -236,6 +239,20 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             PolynomialQuotientSnModuleError::IdealNotSnInvariant
+        );
+    }
+
+    #[test]
+    fn test_rejects_empty_generators_in_positive_variables() {
+        let result = PolynomialQuotientSnModule::<Q>::new(
+            IndexedVariables::new(1, 2),
+            Vec::new(),
+            MonomialOrder::Lex,
+        );
+
+        assert_eq!(
+            result.unwrap_err(),
+            PolynomialQuotientSnModuleError::NonFiniteStandardMonomialBasis
         );
     }
 }

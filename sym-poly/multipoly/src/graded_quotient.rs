@@ -88,9 +88,11 @@ pub fn graded_quotient_component<C: Field>(
     let mut relations = Vec::new();
 
     for generator in generators {
-        let Some(generator_degree) = polynomial_multidegree(variables, generator) else {
+        if generator.is_zero() {
             continue;
         };
+        let generator_degree = polynomial_multidegree(variables, generator)
+            .expect("nonzero generators must be homogeneous in the indexed multigrading");
         let Some(complement_degree) = multidegree_difference(multidegree, &generator_degree) else {
             continue;
         };
@@ -307,5 +309,14 @@ mod tests {
 
         assert_eq!(component.ambient_monomials.len(), 2);
         assert_eq!(component.dimension(), 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "nonzero generators must be homogeneous")]
+    fn test_graded_quotient_component_rejects_inhomogeneous_generator() {
+        let variables = IndexedVariables::new(1, 2);
+        let inhomogeneous = mono(&[1, 0], 1) + mono(&[0, 0], -1);
+
+        let _ = graded_quotient_component(&variables, &[inhomogeneous], &[1]);
     }
 }

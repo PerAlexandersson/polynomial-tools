@@ -31,6 +31,10 @@ impl<C: Ring> MultiPoly<C> {
 
     /// Create from a map of exponent vectors to coefficients. Strips zeros.
     pub fn from_terms(num_vars: usize, terms: BTreeMap<Vec<u32>, C>) -> Self {
+        assert!(
+            terms.keys().all(|exponents| exponents.len() == num_vars),
+            "all exponent vectors must have length num_vars"
+        );
         let mut p = MultiPoly { num_vars, terms };
         p.strip_zeros();
         p
@@ -306,5 +310,14 @@ mod tests {
     fn test_constant() {
         let c: MultiPoly<i64> = MultiPoly::constant(2, 5);
         assert_eq!(c.coefficient(&[0, 0]), 5);
+    }
+
+    #[test]
+    #[should_panic(expected = "all exponent vectors must have length num_vars")]
+    fn test_from_terms_rejects_wrong_exponent_length() {
+        let mut terms = BTreeMap::new();
+        terms.insert(vec![1], 1i64);
+
+        let _ = MultiPoly::from_terms(2, terms);
     }
 }

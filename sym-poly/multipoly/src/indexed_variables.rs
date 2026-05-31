@@ -152,6 +152,9 @@ pub fn quotient_action_matrices_by_index_permutation_and_multidegree<C: Field>(
     );
     let variable_permutation = variables.variable_permutation(index_permutation);
     let action = quotient_action_matrix_by_permutation(gb, basis, &variable_permutation)?;
+    if !is_multidegree_preserving_action_matrix(variables, basis, &action) {
+        return None;
+    }
     Some(quotient_action_matrix_multidegree_blocks(
         variables, basis, &action,
     ))
@@ -329,5 +332,41 @@ mod tests {
         assert_eq!(matrix_trace(&by_cycle_type[&vec![0]][&p(&[2])]), q(1));
         assert_eq!(matrix_trace(&by_cycle_type[&vec![1]][&p(&[1, 1])]), q(1));
         assert_eq!(matrix_trace(&by_cycle_type[&vec![1]][&p(&[2])]), q(-1));
+    }
+
+    #[test]
+    fn test_quotient_multidegree_blocks_reject_non_preserving_action() {
+        let variables = IndexedVariables::new(1, 2);
+        let x1 = MultiPoly::<Q>::var(2, 0);
+        let x2 = MultiPoly::<Q>::var(2, 1);
+        let generators = vec![
+            x1.clone() + x2.clone() + MultiPoly::constant(2, q(-1)),
+            x1 * x2,
+        ];
+        let gb = GroebnerBasis::new(generators, MonomialOrder::Lex);
+        let basis = quotient_basis(&gb).unwrap();
+        let action = quotient_action_matrix_by_permutation(
+            &gb,
+            &basis,
+            &variables.variable_permutation(&[1, 0]),
+        )
+        .unwrap();
+
+        assert!(!is_multidegree_preserving_action_matrix(
+            &variables, &basis, &action
+        ));
+        assert!(
+            quotient_action_matrices_by_index_permutation_and_multidegree(
+                &variables,
+                &gb,
+                &basis,
+                &[1, 0],
+            )
+            .is_none()
+        );
+        assert!(
+            quotient_action_matrices_by_multidegree_and_cycle_type(&variables, &gb, &basis)
+                .is_none()
+        );
     }
 }

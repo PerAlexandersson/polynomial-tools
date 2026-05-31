@@ -37,6 +37,10 @@ impl<C: Ring> MultiPolyFunction<C> {
         num_vars: usize,
         terms: BTreeMap<WeakComposition, C>,
     ) -> Self {
+        assert!(
+            terms.keys().all(|alpha| alpha.num_vars() == num_vars),
+            "all weak compositions must have length num_vars"
+        );
         let mut f = MultiPolyFunction {
             basis,
             num_vars,
@@ -334,5 +338,19 @@ impl<C: Ring> fmt::Display for MultiPolyFunction<C> {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[should_panic(expected = "all weak compositions must have length num_vars")]
+    fn test_from_terms_rejects_wrong_weak_composition_length() {
+        let mut terms = BTreeMap::new();
+        terms.insert(WeakComposition::from_slice(&[1]), 1i64);
+
+        let _ = MultiPolyFunction::from_terms(MultiPolyBasis::Monomial, 2, terms);
     }
 }
