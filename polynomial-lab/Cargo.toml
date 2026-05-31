@@ -1,0 +1,20 @@
+[package]
+name = "polynomial-lab"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["Per Alexandersson <per.w.alexandersson@gmail.com>"]
+description = "Structured project data tools for polynomial real-rootedness and interlacing labs"
+readme = "README.md"
+
+[[bin]]
+name = "poly-lab"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive", "env"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+schemars = "1"
+toml = "1"

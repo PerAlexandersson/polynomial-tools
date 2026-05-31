@@ -9,6 +9,8 @@ members = [
     "KTT-search",
     "experiments",
     "flagged-lorentzian",
+    "polynomial-lab",
+    "polynomial-lab/mcp",
     "sym-poly/core",
     "sym-poly/sym",
     "sym-poly/qsym",
