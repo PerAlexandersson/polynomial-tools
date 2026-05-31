@@ -26,83 +26,6 @@ type Q = Ratio<BigInt>;
 /// from BigInt Bareiss to modular CRT reconstruction.
 pub const MODULAR_POSITIVE_DEFINITE_DIMENSION_THRESHOLD: usize = 30;
 
-// ---------------------------------------------------------------------------
-// Gaussian elimination core
-// ---------------------------------------------------------------------------
-
-/// Result of Gaussian elimination on a matrix over ℚ.
-///
-/// After elimination, the matrix is in row-echelon form. The diagonal
-/// entries are the pivots; their product (times the sign from row swaps)
-/// gives the determinant.
-struct EliminationResult {
-    /// Row-echelon form of the matrix.
-    matrix: Vec<Vec<Q>>,
-    /// Sign from row swaps: +1 or -1.
-    sign: i8,
-    /// Number of zero pivots encountered (rank deficiency).
-    zero_pivots: usize,
-    /// Indices of rows where the pivot was zero (for semi-definiteness).
-    #[allow(dead_code)]
-    zero_pivot_rows: Vec<usize>,
-}
-
-/// Gaussian elimination with partial pivoting over ℚ.
-///
-/// Operates in-place on the given matrix. Used for determinants; positive
-/// definiteness uses the fraction-free Bareiss/Sylvester path below.
-fn gaussian_elimination(mat: &[Vec<Q>]) -> EliminationResult {
-    let n = mat.len();
-    let ncols = if n > 0 { mat[0].len() } else { 0 };
-    let mut a: Vec<Vec<Q>> = mat.to_vec();
-    let mut sign: i8 = 1;
-    let mut zero_pivots = 0;
-    let mut zero_pivot_rows = Vec::new();
-
-    for k in 0..n.min(ncols) {
-        if a[k][k].is_zero() {
-            let mut found = false;
-            for i in (k + 1)..n {
-                if !a[i][k].is_zero() {
-                    a.swap(k, i);
-                    sign = -sign;
-                    found = true;
-                    break;
-                }
-            }
-            if !found {
-                zero_pivots += 1;
-                zero_pivot_rows.push(k);
-                continue;
-            }
-        }
-
-        let pivot = a[k][k].clone();
-        for i in (k + 1)..n {
-            if a[i][k].is_zero() {
-                continue;
-            }
-            let factor = a[i][k].clone() / pivot.clone();
-            for j in (k + 1)..ncols {
-                let sub = factor.clone() * a[k][j].clone();
-                a[i][j] -= sub;
-            }
-            a[i][k] = Q::zero();
-        }
-    }
-
-    EliminationResult {
-        matrix: a,
-        sign,
-        zero_pivots,
-        zero_pivot_rows,
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
 /// Check if a symmetric BigInt matrix is positive definite.
 ///
 /// Uses Sylvester's criterion.  Small matrices use fraction-free BigInt
@@ -180,7 +103,7 @@ pub fn is_positive_semidefinite(mat: &[Vec<BigInt>]) -> bool {
     true
 }
 
-/// Compute the determinant of a BigInt matrix using Gaussian elimination over ℚ.
+/// Compute the determinant of a BigInt matrix using fraction-free elimination.
 pub fn determinant(mat: &[Vec<BigInt>]) -> BigInt {
     assert!(
         is_square_bigint_matrix(mat),
@@ -190,18 +113,43 @@ pub fn determinant(mat: &[Vec<BigInt>]) -> BigInt {
     if n == 0 {
         return BigInt::one();
     }
-    let qmat = bigint_to_q(mat);
-    let result = gaussian_elimination(&qmat);
 
-    if result.zero_pivots > 0 {
-        return BigInt::zero();
+    let mut a = mat.to_vec();
+    let mut denom = BigInt::one();
+    let mut sign_is_negative = false;
+
+    for k in 0..(n - 1) {
+        if a[k][k].is_zero() {
+            let Some(pivot_row) = ((k + 1)..n).find(|&i| !a[i][k].is_zero()) else {
+                return BigInt::zero();
+            };
+            a.swap(k, pivot_row);
+            sign_is_negative = !sign_is_negative;
+        }
+
+        let pivot = a[k][k].clone();
+        let mut next_entries = Vec::with_capacity((n - k - 1) * (n - k - 1));
+        for i in (k + 1)..n {
+            for j in (k + 1)..n {
+                let numerator = &a[i][j] * &pivot - &a[i][k] * &a[k][j];
+                debug_assert!(
+                    (&numerator % &denom).is_zero(),
+                    "Bareiss division should be exact"
+                );
+                next_entries.push((i, j, numerator / &denom));
+            }
+        }
+        for (i, j, value) in next_entries {
+            a[i][j] = value;
+        }
+        denom = pivot;
     }
 
-    let mut det = Q::from_integer(BigInt::from(result.sign as i64));
-    for k in 0..n {
-        det *= result.matrix[k][k].clone();
+    if sign_is_negative {
+        -a[n - 1][n - 1].clone()
+    } else {
+        a[n - 1][n - 1].clone()
     }
-    det.to_integer()
 }
 
 fn is_square_bigint_matrix(mat: &[Vec<BigInt>]) -> bool {
@@ -1088,6 +1036,12 @@ mod tests {
         // [[1, 2, 3], [4, 5, 6], [7, 8, 10]] -> det = 1*(50-48) - 2*(40-42) + 3*(32-35) = 2+4-9 = -3
         let m = bi_mat(&[&[1, 2, 3], &[4, 5, 6], &[7, 8, 10]]);
         assert_eq!(determinant(&m), bi(-3));
+    }
+
+    #[test]
+    fn test_determinant_row_pivot_after_first_step() {
+        let m = bi_mat(&[&[1, 1, 0], &[1, 1, 1], &[0, 1, 1]]);
+        assert_eq!(determinant(&m), bi(-1));
     }
 
     #[test]
