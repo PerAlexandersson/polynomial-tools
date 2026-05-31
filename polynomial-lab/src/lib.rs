@@ -1,10 +1,12 @@
 use anyhow::{Context, Result};
+use chrono::{SecondsFormat, Utc};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 pub const DEFAULT_LAB_ROOT: &str = "/workspace/projects/polynomial-interlacing-lab";
@@ -87,6 +89,52 @@ pub struct EvaluationFilter {
     pub status: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub relation_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ValidationMode {
+    #[default]
+    Tolerant,
+    Strict,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+pub struct CheckedRange {
+    pub n_min: i64,
+    pub n_max: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub struct EvaluationDraft {
+    pub id: String,
+    pub relation_id: String,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub method: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub checked_range: Option<CheckedRange>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub first_failure: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeout_seconds: Option<u64>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub extra: BTreeMap<String, Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub struct WrittenEvaluation {
+    pub path: String,
+    pub record: LabRecord,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+pub struct GeneratedFile {
+    pub path: String,
 }
 
 #[derive(Debug, Clone)]
@@ -253,7 +301,160 @@ impl LabStore {
         }
     }
 
+    pub fn append_evaluation(
+        &self,
+        project_id: &str,
+        draft: EvaluationDraft,
+    ) -> Result<WrittenEvaluation> {
+        self.require_project(project_id)?;
+        validate_record_id(&draft.id)?;
+        validate_record_id(&draft.relation_id)?;
+        validate_record_id(project_id)?;
+
+        let evidence_dir = self.root.join("projects").join(project_id).join("evidence");
+        fs::create_dir_all(&evidence_dir)
+            .with_context(|| format!("failed to create {}", evidence_dir.display()))?;
+        let path = evidence_dir.join(format!("{}.json", draft.id));
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .with_context(|| format!("failed to create evidence file {}", path.display()))?;
+
+        let value = draft_to_evaluation_json(project_id, &draft)?;
+        let text = serde_json::to_string_pretty(&value)?;
+        writeln!(file, "{text}")
+            .with_context(|| format!("failed to write evidence file {}", path.display()))?;
+
+        let record = LabRecord {
+            id: draft.id,
+            kind: "evaluation".to_string(),
+            label: None,
+            project_id: Some(project_id.to_string()),
+            path: relative_path(&self.root, &path),
+            data: value,
+        };
+        Ok(WrittenEvaluation {
+            path: record.path.clone(),
+            record,
+        })
+    }
+
+    pub fn render_project_html(&self, project_id: &str) -> String {
+        let report = self.project_report(project_id);
+        let title = self
+            .project_report(project_id)
+            .project
+            .and_then(|record| record.label)
+            .unwrap_or_else(|| project_id.to_string());
+        let mut html = String::new();
+        html.push_str("<!doctype html>\n<html lang=\"en\">\n<head>\n");
+        html.push_str("  <meta charset=\"utf-8\">\n");
+        html.push_str(&format!("  <title>{}</title>\n", escape_html(&title)));
+        html.push_str(&format!("  <style>{}</style>\n", HTML_STYLE));
+        html.push_str("</head>\n<body>\n<main>\n");
+        html.push_str(&format!("<h1>{}</h1>\n", escape_html(&title)));
+
+        if let Some(project) = &report.project {
+            html.push_str("<dl class=\"metadata\">\n");
+            html.push_str(&format!(
+                "  <dt>id</dt><dd><code>{}</code></dd>\n",
+                escape_html(&project.id)
+            ));
+            if let Some(status) = value_string(&project.data, "status") {
+                html.push_str(&format!(
+                    "  <dt>status</dt><dd><code>{}</code></dd>\n",
+                    escape_html(&status)
+                ));
+            }
+            html.push_str(&format!(
+                "  <dt>source</dt><dd><code>{}</code></dd>\n",
+                escape_html(&project.path)
+            ));
+            html.push_str("</dl>\n");
+            if let Some(description) = value_string(&project.data, "description") {
+                html.push_str(&format!("<p>{}</p>\n", escape_html(description.trim())));
+            }
+        } else {
+            html.push_str("<p>Project record not found.</p>\n");
+        }
+
+        render_html_records_section(&mut html, "Goals", &report.goals);
+        render_html_records_section(&mut html, "Definitions", &report.definitions);
+        render_html_records_section(&mut html, "Conjectures", &report.conjectures);
+        render_html_implications_section(&mut html, &report.implications);
+        render_html_evaluations_section(&mut html, &report.evaluations);
+        html.push_str("</main>\n</body>\n</html>\n");
+        html
+    }
+
+    pub fn write_project_markdown(
+        &self,
+        project_id: &str,
+        output: Option<&Path>,
+    ) -> Result<GeneratedFile> {
+        let path = self.generated_output_path(project_id, output, "project-summary.md")?;
+        write_generated_file(&path, &self.render_project_markdown(project_id))?;
+        Ok(GeneratedFile {
+            path: relative_path(&self.root, &path),
+        })
+    }
+
+    pub fn write_project_html(
+        &self,
+        project_id: &str,
+        output: Option<&Path>,
+    ) -> Result<GeneratedFile> {
+        let path = self.generated_output_path(project_id, output, "project-summary.html")?;
+        write_generated_file(&path, &self.render_project_html(project_id))?;
+        Ok(GeneratedFile {
+            path: relative_path(&self.root, &path),
+        })
+    }
+
+    fn require_project(&self, project_id: &str) -> Result<()> {
+        if self
+            .records
+            .iter()
+            .any(|record| record.kind == "project" && record.id == project_id)
+        {
+            Ok(())
+        } else {
+            anyhow::bail!("unknown project id '{project_id}'");
+        }
+    }
+
+    fn generated_output_path(
+        &self,
+        project_id: &str,
+        output: Option<&Path>,
+        default_filename: &str,
+    ) -> Result<PathBuf> {
+        self.require_project(project_id)?;
+        let path = output.map_or_else(
+            || {
+                self.root
+                    .join("projects")
+                    .join(project_id)
+                    .join("generated")
+                    .join(default_filename)
+            },
+            |path| {
+                if path.is_absolute() {
+                    path.to_path_buf()
+                } else {
+                    self.root.join(path)
+                }
+            },
+        );
+        Ok(path)
+    }
+
     pub fn validate(&self) -> ValidationReport {
+        self.validate_with_mode(ValidationMode::Tolerant)
+    }
+
+    pub fn validate_with_mode(&self, mode: ValidationMode) -> ValidationReport {
         let mut warnings = Vec::new();
         let mut errors = Vec::new();
         let mut counts = BTreeMap::new();
@@ -272,7 +473,12 @@ impl LabStore {
                     .map(|record| record.path.as_str())
                     .collect::<Vec<_>>()
                     .join(", ");
-                warnings.push(format!("duplicate id '{id}' appears in {paths}"));
+                add_validation_issue(
+                    mode,
+                    &mut warnings,
+                    &mut errors,
+                    format!("duplicate id '{id}' appears in {paths}"),
+                );
             }
         }
 
@@ -283,47 +489,74 @@ impl LabStore {
         {
             for goal_id in value_string_array(&project.data, "main_goals") {
                 if self.record(&goal_id).is_none() {
-                    warnings.push(format!(
-                        "project '{}' references missing main goal '{}'",
-                        project.id, goal_id
-                    ));
+                    add_validation_issue(
+                        mode,
+                        &mut warnings,
+                        &mut errors,
+                        format!(
+                            "project '{}' references missing main goal '{}'",
+                            project.id, goal_id
+                        ),
+                    );
                 }
             }
             for object_id in value_string_array(&project.data, "main_objects") {
                 if self.record(&object_id).is_none() {
-                    warnings.push(format!(
-                        "project '{}' references missing main object '{}'",
-                        project.id, object_id
-                    ));
+                    add_validation_issue(
+                        mode,
+                        &mut warnings,
+                        &mut errors,
+                        format!(
+                            "project '{}' references missing main object '{}'",
+                            project.id, object_id
+                        ),
+                    );
                 }
             }
             for source_note in value_string_array(&project.data, "source_notes") {
                 if !Path::new(&source_note).exists() {
-                    warnings.push(format!(
-                        "project '{}' source note does not exist: {}",
-                        project.id, source_note
-                    ));
+                    add_validation_issue(
+                        mode,
+                        &mut warnings,
+                        &mut errors,
+                        format!(
+                            "project '{}' source note does not exist: {}",
+                            project.id, source_note
+                        ),
+                    );
                 }
             }
         }
 
         for record in &self.records {
+            validate_record_status(mode, record, &mut warnings, &mut errors);
+
             for dependency_id in value_string_array(&record.data, "depends_on") {
                 if self.record(&dependency_id).is_none() {
-                    warnings.push(format!(
-                        "record '{}' depends on missing id '{}'",
-                        record.id, dependency_id
-                    ));
+                    add_validation_issue(
+                        mode,
+                        &mut warnings,
+                        &mut errors,
+                        format!(
+                            "record '{}' depends on missing id '{}'",
+                            record.id, dependency_id
+                        ),
+                    );
                 }
             }
 
             if record.kind == "goal" {
                 for object_id in value_string_array(&record.data, "objects") {
                     if self.record(&object_id).is_none() {
-                        warnings.push(format!(
-                            "goal '{}' references missing object '{}'",
-                            record.id, object_id
-                        ));
+                        add_validation_issue(
+                            mode,
+                            &mut warnings,
+                            &mut errors,
+                            format!(
+                                "goal '{}' references missing object '{}'",
+                                record.id, object_id
+                            ),
+                        );
                     }
                 }
             }
@@ -332,10 +565,15 @@ impl LabStore {
                 for key in ["left", "right"] {
                     if let Some(id) = value_string(&record.data, key) {
                         if self.record(&id).is_none() {
-                            warnings.push(format!(
-                                "conjecture '{}' references missing {} '{}'",
-                                record.id, key, id
-                            ));
+                            add_validation_issue(
+                                mode,
+                                &mut warnings,
+                                &mut errors,
+                                format!(
+                                    "conjecture '{}' references missing {} '{}'",
+                                    record.id, key, id
+                                ),
+                            );
                         }
                     }
                 }
@@ -344,18 +582,28 @@ impl LabStore {
             if record.kind == "implication" {
                 for source_id in value_string_array(&record.data, "from") {
                     if self.record(&source_id).is_none() {
-                        warnings.push(format!(
-                            "implication '{}' has missing prerequisite '{}'",
-                            record.id, source_id
-                        ));
+                        add_validation_issue(
+                            mode,
+                            &mut warnings,
+                            &mut errors,
+                            format!(
+                                "implication '{}' has missing prerequisite '{}'",
+                                record.id, source_id
+                            ),
+                        );
                     }
                 }
                 if let Some(target_id) = value_string(&record.data, "to") {
                     if self.record(&target_id).is_none() {
-                        warnings.push(format!(
-                            "implication '{}' has missing target '{}'",
-                            record.id, target_id
-                        ));
+                        add_validation_issue(
+                            mode,
+                            &mut warnings,
+                            &mut errors,
+                            format!(
+                                "implication '{}' has missing target '{}'",
+                                record.id, target_id
+                            ),
+                        );
                     }
                 } else {
                     errors.push(format!("implication '{}' is missing field 'to'", record.id));
@@ -365,13 +613,23 @@ impl LabStore {
             if record.kind == "evaluation" {
                 if let Some(relation_id) = value_string(&record.data, "relation_id") {
                     if self.record(&relation_id).is_none() {
-                        warnings.push(format!(
-                            "evaluation '{}' references missing relation '{}'",
-                            record.id, relation_id
-                        ));
+                        add_validation_issue(
+                            mode,
+                            &mut warnings,
+                            &mut errors,
+                            format!(
+                                "evaluation '{}' references missing relation '{}'",
+                                record.id, relation_id
+                            ),
+                        );
                     }
                 } else {
-                    warnings.push(format!("evaluation '{}' has no relation_id", record.id));
+                    add_validation_issue(
+                        mode,
+                        &mut warnings,
+                        &mut errors,
+                        format!("evaluation '{}' has no relation_id", record.id),
+                    );
                 }
             }
         }
@@ -436,6 +694,207 @@ pub fn default_lab_root() -> PathBuf {
     env::var_os("POLY_LAB_ROOT")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(DEFAULT_LAB_ROOT))
+}
+
+const EVALUATION_STATUSES: &[&str] = &[
+    "holds_for_checked_domain",
+    "does_not_hold",
+    "counterexample_found",
+    "incomplete_scan",
+    "timeout",
+    "method_not_applicable",
+    "proof_strategy_failed",
+    "obsolete_or_superseded",
+    "proved",
+    "verified_range",
+];
+
+const GOAL_STATUSES: &[&str] = &[
+    "open",
+    "partially_proved",
+    "proved",
+    "false",
+    "retired",
+    "superseded",
+];
+
+const IMPLICATION_STATUSES: &[&str] = &[
+    "proved",
+    "standard",
+    "plausible",
+    "open",
+    "blocked",
+    "false",
+    "superseded",
+];
+
+const CONJECTURE_STATUSES: &[&str] = &[
+    "open",
+    "plausible",
+    "proved",
+    "false",
+    "superseded",
+    "retired",
+];
+
+const HTML_STYLE: &str = "\
+body { margin: 0; font-family: system-ui, sans-serif; line-height: 1.5; color: #1f2933; background: #f7f8fa; }
+main { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+h1 { margin: 0 0 16px; font-size: 2rem; }
+h2 { margin: 32px 0 12px; font-size: 1.25rem; }
+.metadata { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 16px 0; }
+.metadata dt { font-weight: 700; }
+section { background: #fff; border: 1px solid #d9dee7; border-radius: 6px; padding: 18px 20px; margin: 18px 0; }
+ul { padding-left: 22px; }
+li { margin: 10px 0; }
+code { background: #eef2f7; padding: 1px 4px; border-radius: 4px; }
+.detail { margin: 2px 0 0; color: #485465; }
+";
+
+fn add_validation_issue(
+    mode: ValidationMode,
+    warnings: &mut Vec<String>,
+    errors: &mut Vec<String>,
+    message: String,
+) {
+    match mode {
+        ValidationMode::Tolerant => warnings.push(message),
+        ValidationMode::Strict => errors.push(message),
+    }
+}
+
+fn validate_record_status(
+    mode: ValidationMode,
+    record: &LabRecord,
+    warnings: &mut Vec<String>,
+    errors: &mut Vec<String>,
+) {
+    let Some(status) = value_string(&record.data, "status") else {
+        return;
+    };
+    let allowed = match record.kind.as_str() {
+        "evaluation" => Some(EVALUATION_STATUSES),
+        "goal" => Some(GOAL_STATUSES),
+        "implication" => Some(IMPLICATION_STATUSES),
+        "conjecture" => Some(CONJECTURE_STATUSES),
+        _ => None,
+    };
+    if let Some(allowed) = allowed {
+        if !allowed.contains(&status.as_str()) {
+            add_validation_issue(
+                mode,
+                warnings,
+                errors,
+                format!(
+                    "record '{}' has unknown {} status '{}'",
+                    record.id, record.kind, status
+                ),
+            );
+        }
+    }
+}
+
+fn validate_record_id(id: &str) -> Result<()> {
+    if id.is_empty() {
+        anyhow::bail!("record id must not be empty");
+    }
+    if !id
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+    {
+        anyhow::bail!(
+            "record id '{id}' contains unsupported characters; use ASCII letters, digits, '_' or '-'"
+        );
+    }
+    Ok(())
+}
+
+fn draft_to_evaluation_json(project_id: &str, draft: &EvaluationDraft) -> Result<Value> {
+    if !EVALUATION_STATUSES.contains(&draft.status.as_str()) {
+        anyhow::bail!("unknown evaluation status '{}'", draft.status);
+    }
+    if let Some(range) = &draft.checked_range {
+        if range.n_min > range.n_max {
+            anyhow::bail!("checked_range must satisfy n_min <= n_max");
+        }
+    }
+
+    let mut object = serde_json::Map::new();
+    object.insert("id".to_string(), Value::String(draft.id.clone()));
+    object.insert(
+        "project_id".to_string(),
+        Value::String(project_id.to_string()),
+    );
+    object.insert(
+        "relation_id".to_string(),
+        Value::String(draft.relation_id.clone()),
+    );
+    object.insert("status".to_string(), Value::String(draft.status.clone()));
+    object.insert(
+        "created_utc".to_string(),
+        Value::String(Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)),
+    );
+    object.insert(
+        "software".to_string(),
+        json!({
+            "language": "rust",
+            "crate": "polynomial-lab"
+        }),
+    );
+    if let Some(method) = &draft.method {
+        object.insert("method".to_string(), Value::String(method.clone()));
+    }
+    if let Some(notes) = &draft.notes {
+        object.insert("notes".to_string(), Value::String(notes.clone()));
+    }
+    if let Some(range) = &draft.checked_range {
+        object.insert(
+            "checked_range".to_string(),
+            json!({
+                "n_min": range.n_min,
+                "n_max": range.n_max
+            }),
+        );
+    }
+    if let Some(first_failure) = &draft.first_failure {
+        object.insert("first_failure".to_string(), first_failure.clone());
+    }
+    if let Some(failure_reason) = &draft.failure_reason {
+        object.insert(
+            "failure_reason".to_string(),
+            Value::String(failure_reason.clone()),
+        );
+    }
+    if let Some(timeout_seconds) = draft.timeout_seconds {
+        object.insert("timeout_seconds".to_string(), json!(timeout_seconds));
+    }
+    for (key, extra_value) in &draft.extra {
+        object.insert(key.clone(), extra_value.clone());
+    }
+    Ok(Value::Object(object))
+}
+
+fn write_generated_file(path: &Path, content: &str) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create {}", parent.display()))?;
+    }
+    fs::write(path, content).with_context(|| format!("failed to write {}", path.display()))
+}
+
+fn escape_html(text: &str) -> String {
+    let mut escaped = String::with_capacity(text.len());
+    for ch in text.chars() {
+        match ch {
+            '&' => escaped.push_str("&amp;"),
+            '<' => escaped.push_str("&lt;"),
+            '>' => escaped.push_str("&gt;"),
+            '"' => escaped.push_str("&quot;"),
+            '\'' => escaped.push_str("&#39;"),
+            _ => escaped.push(ch),
+        }
+    }
+    escaped
 }
 
 fn project_matches(record: &LabRecord, project_id: Option<&str>) -> bool {
@@ -884,6 +1343,110 @@ fn render_evaluations_section(out: &mut String, records: &[LabRecord]) {
     }
 }
 
+fn render_html_records_section(out: &mut String, title: &str, records: &[LabRecord]) {
+    out.push_str(&format!("<section>\n<h2>{}</h2>\n", escape_html(title)));
+    if records.is_empty() {
+        out.push_str("<p>No records.</p>\n</section>\n");
+        return;
+    }
+    out.push_str("<ul>\n");
+    for record in records {
+        let label = record.label.as_deref().unwrap_or(&record.id);
+        out.push_str(&format!(
+            "  <li><code>{}</code> ({}) - {}",
+            escape_html(&record.id),
+            escape_html(&record.kind),
+            escape_html(label)
+        ));
+        if let Some(statement) = value_string(&record.data, "statement") {
+            out.push_str(&format!(
+                "<p class=\"detail\">Statement: {}</p>",
+                escape_html(statement.trim())
+            ));
+        } else if let Some(definition) = value_string(&record.data, "definition") {
+            out.push_str(&format!(
+                "<p class=\"detail\">Definition: {}</p>",
+                escape_html(definition.trim())
+            ));
+        }
+        if let Some(status) = value_string(&record.data, "status") {
+            out.push_str(&format!(
+                "<p class=\"detail\">Status: <code>{}</code></p>",
+                escape_html(&status)
+            ));
+        }
+        out.push_str("</li>\n");
+    }
+    out.push_str("</ul>\n</section>\n");
+}
+
+fn render_html_implications_section(out: &mut String, records: &[LabRecord]) {
+    out.push_str("<section>\n<h2>Implications</h2>\n");
+    if records.is_empty() {
+        out.push_str("<p>No records.</p>\n</section>\n");
+        return;
+    }
+    out.push_str("<ul>\n");
+    for record in records {
+        let sources = value_string_array(&record.data, "from")
+            .into_iter()
+            .map(|source| format!("<code>{}</code>", escape_html(&source)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let target = value_string(&record.data, "to").unwrap_or_else(|| "?".to_string());
+        let label = record.label.as_deref().unwrap_or(&record.id);
+        out.push_str(&format!(
+            "  <li><code>{}</code> - {}<p class=\"detail\">[{}] =&gt; \
+             <code>{}</code></p>",
+            escape_html(&record.id),
+            escape_html(label),
+            sources,
+            escape_html(&target)
+        ));
+        if let Some(status) = value_string(&record.data, "status") {
+            out.push_str(&format!(
+                "<p class=\"detail\">Status: <code>{}</code></p>",
+                escape_html(&status)
+            ));
+        }
+        out.push_str("</li>\n");
+    }
+    out.push_str("</ul>\n</section>\n");
+}
+
+fn render_html_evaluations_section(out: &mut String, records: &[LabRecord]) {
+    out.push_str("<section>\n<h2>Evidence</h2>\n");
+    if records.is_empty() {
+        out.push_str("<p>No records.</p>\n</section>\n");
+        return;
+    }
+    out.push_str("<ul>\n");
+    for record in records {
+        let relation = value_string(&record.data, "relation_id").unwrap_or_else(|| "?".to_string());
+        let status = value_string(&record.data, "status").unwrap_or_else(|| "?".to_string());
+        out.push_str(&format!(
+            "  <li><code>{}</code> for <code>{}</code>: <code>{}</code>",
+            escape_html(&record.id),
+            escape_html(&relation),
+            escape_html(&status)
+        ));
+        if let Some(checked_range) = record.data.get("checked_range") {
+            out.push_str(&format!(
+                "<p class=\"detail\">Checked range: <code>{}</code></p>",
+                escape_html(&checked_range.to_string())
+            ));
+        }
+        if let Some(method) = value_string(&record.data, "method") {
+            out.push_str(&format!(
+                "<p class=\"detail\">Method: <code>{}</code></p>",
+                escape_html(&method)
+            ));
+        }
+        out.push_str("</li>\n");
+    }
+    out.push_str("</ul>\n</section>\n");
+}
+
 fn push_line(out: &mut String, line: &str) {
     out.push_str(line);
     out.push('\n');
@@ -1010,29 +1573,58 @@ pub fn known_ids(records: &[LabRecord]) -> BTreeSet<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::{Path, PathBuf};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn fixture_root() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/minimal_lab")
+    }
 
     fn fixture_store() -> LabStore {
-        LabStore::load(DEFAULT_LAB_ROOT).expect("fixture lab root should load")
+        LabStore::load(fixture_root()).expect("fixture lab root should load")
+    }
+
+    fn writable_fixture_root() -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time")
+            .as_nanos();
+        let root = env::temp_dir().join(format!("polynomial-lab-fixture-{nonce}"));
+        copy_directory(&fixture_root(), &root).expect("copy fixture");
+        root
+    }
+
+    fn copy_directory(source: &Path, destination: &Path) -> Result<()> {
+        fs::create_dir_all(destination)?;
+        for entry in fs::read_dir(source)? {
+            let entry = entry?;
+            let source_path = entry.path();
+            let destination_path = destination.join(entry.file_name());
+            if source_path.is_dir() {
+                copy_directory(&source_path, &destination_path)?;
+            } else {
+                fs::copy(&source_path, &destination_path)?;
+            }
+        }
+        Ok(())
     }
 
     #[test]
-    fn loads_derangement_descents_project() {
+    fn loads_demo_project() {
         let store = fixture_store();
         let projects = store.project_overviews();
-        assert!(projects
-            .iter()
-            .any(|project| project.id == "derangement_descents"));
+        assert!(projects.iter().any(|project| project.id == "demo_project"));
 
-        let report = store.project_report("derangement_descents");
+        let report = store.project_report("demo_project");
         assert!(report.project.is_some());
         assert!(report
             .definitions
             .iter()
-            .any(|record| record.id == "normalized_derangement_descent_polynomial"));
+            .any(|record| record.id == "demo_polynomial_family"));
         assert!(report
             .goals
             .iter()
-            .any(|record| record.id == "derangement_descent_real_rootedness"));
+            .any(|record| record.id == "demo_real_rootedness_goal"));
     }
 
     #[test]
@@ -1044,41 +1636,42 @@ mod tests {
         assert!(report
             .warnings
             .iter()
-            .any(|warning| { warning.contains("reciprocal_eulerian_derivative_real_rooted") }));
+            .any(|warning| { warning.contains("demo_envelope_real_rooted") }));
+    }
+
+    #[test]
+    fn strict_validation_promotes_dangling_links_to_errors() {
+        let store = fixture_store();
+        let report = store.validate_with_mode(ValidationMode::Strict);
+        assert!(!report.ok);
+        assert!(report
+            .errors
+            .iter()
+            .any(|error| error.contains("demo_envelope_real_rooted")));
     }
 
     #[test]
     fn traces_goal_to_interlacing_evidence() {
         let store = fixture_store();
-        let trace = store.trace_goal_support(
-            "derangement_descents",
-            "derangement_descent_real_rootedness",
-        );
-        assert_eq!(trace.goal_id, "derangement_descent_real_rootedness");
+        let trace = store.trace_goal_support("demo_project", "demo_real_rootedness_goal");
+        assert_eq!(trace.goal_id, "demo_real_rootedness_goal");
         assert_eq!(trace.incoming_implications.len(), 1);
         let prereq = &trace.incoming_implications[0].prerequisites[0];
-        assert_eq!(
-            prereq.id,
-            "normalized_derangement_descent_interlaces_reciprocal_eulerian_derivative"
-        );
+        assert_eq!(prereq.id, "demo_interlaces_envelope");
         assert!(prereq
             .evaluations
             .iter()
-            .any(
-                |record| value_string(&record.data, "status").as_deref() == Some("verified_range")
-            ));
+            .any(|record| value_string(&record.data, "status").as_deref()
+                == Some("holds_for_checked_domain")));
     }
 
     #[test]
     fn filters_evaluations_by_status_and_relation() {
         let store = fixture_store();
         let evaluations = store.evaluations(&EvaluationFilter {
-            project_id: Some("derangement_descents".to_string()),
-            status: Some("verified_range".to_string()),
-            relation_id: Some(
-                "normalized_derangement_descent_interlaces_reciprocal_eulerian_derivative"
-                    .to_string(),
-            ),
+            project_id: Some("demo_project".to_string()),
+            status: Some("holds_for_checked_domain".to_string()),
+            relation_id: Some("demo_interlaces_envelope".to_string()),
         });
         assert_eq!(evaluations.len(), 1);
     }
@@ -1086,9 +1679,89 @@ mod tests {
     #[test]
     fn renders_project_markdown() {
         let store = fixture_store();
-        let markdown = store.render_project_markdown("derangement_descents");
-        assert!(markdown.contains("# Derangement descent real-rootedness"));
+        let markdown = store.render_project_markdown("demo_project");
+        assert!(markdown.contains("# Demo interlacing project"));
         assert!(markdown.contains("## Goals"));
-        assert!(markdown.contains("derangement_descent_real_rootedness"));
+        assert!(markdown.contains("demo_real_rootedness_goal"));
+    }
+
+    #[test]
+    fn appends_evaluation_without_overwriting_existing_files() {
+        let root = writable_fixture_root();
+        let store = LabStore::load(&root).expect("writable fixture should load");
+        let written = store
+            .append_evaluation(
+                "demo_project",
+                EvaluationDraft {
+                    id: "demo_new_timeout".to_string(),
+                    relation_id: "demo_interlaces_envelope".to_string(),
+                    status: "timeout".to_string(),
+                    method: Some("fixture_timeout".to_string()),
+                    notes: None,
+                    checked_range: Some(CheckedRange { n_min: 5, n_max: 8 }),
+                    first_failure: None,
+                    failure_reason: None,
+                    timeout_seconds: Some(60),
+                    extra: BTreeMap::new(),
+                },
+            )
+            .expect("append evaluation");
+        assert_eq!(
+            written.path,
+            "projects/demo_project/evidence/demo_new_timeout.json"
+        );
+
+        let reloaded = LabStore::load(&root).expect("reloaded fixture should load");
+        assert_eq!(
+            reloaded
+                .evaluations(&EvaluationFilter {
+                    project_id: Some("demo_project".to_string()),
+                    status: Some("timeout".to_string()),
+                    relation_id: Some("demo_interlaces_envelope".to_string()),
+                })
+                .len(),
+            1
+        );
+        assert!(store
+            .append_evaluation(
+                "demo_project",
+                EvaluationDraft {
+                    id: "demo_new_timeout".to_string(),
+                    relation_id: "demo_interlaces_envelope".to_string(),
+                    status: "timeout".to_string(),
+                    method: None,
+                    notes: None,
+                    checked_range: None,
+                    first_failure: None,
+                    failure_reason: None,
+                    timeout_seconds: Some(60),
+                    extra: BTreeMap::new(),
+                },
+            )
+            .is_err());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn writes_generated_markdown_and_html() {
+        let root = writable_fixture_root();
+        let store = LabStore::load(&root).expect("writable fixture should load");
+        let markdown = store
+            .write_project_markdown("demo_project", None)
+            .expect("write markdown");
+        let html = store
+            .write_project_html("demo_project", None)
+            .expect("write html");
+        assert_eq!(
+            markdown.path,
+            "projects/demo_project/generated/project-summary.md"
+        );
+        assert_eq!(
+            html.path,
+            "projects/demo_project/generated/project-summary.html"
+        );
+        assert!(root.join(&markdown.path).exists());
+        assert!(root.join(&html.path).exists());
+        let _ = fs::remove_dir_all(root);
     }
 }

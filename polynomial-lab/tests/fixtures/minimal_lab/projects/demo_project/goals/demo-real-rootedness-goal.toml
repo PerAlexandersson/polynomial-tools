@@ -1,0 +1,13 @@
+id = "demo_real_rootedness_goal"
+type = "goal"
+label = "Demo real-rootedness goal"
+statement = "F_n(t) is real-rooted for every n >= 1."
+status = "open"
+
+objects = [
+  "demo_polynomial_family"
+]
+
+motivation = "Fixture goal for testing goal traces."
+current_best_route = "Prove an interlacing comparison with G_n(t)."
+

@@ -1,11 +1,42 @@
-use polynomial_lab::DEFAULT_LAB_ROOT;
 use serde_json::{json, Value};
+use std::fs;
 use std::io::{BufRead, BufReader, Write};
+use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
+use std::time::{SystemTime, UNIX_EPOCH};
 
-fn start_server() -> (Child, ChildStdin, BufReader<std::process::ChildStdout>) {
+fn fixture_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tests/fixtures/minimal_lab")
+}
+
+fn writable_fixture_root() -> PathBuf {
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system time")
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!("polynomial-lab-mcp-fixture-{nonce}"));
+    copy_directory(&fixture_root(), &root).expect("copy fixture");
+    root
+}
+
+fn copy_directory(source: &Path, destination: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(destination)?;
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let source_path = entry.path();
+        let destination_path = destination.join(entry.file_name());
+        if source_path.is_dir() {
+            copy_directory(&source_path, &destination_path)?;
+        } else {
+            fs::copy(&source_path, &destination_path)?;
+        }
+    }
+    Ok(())
+}
+
+fn start_server(root: &Path) -> (Child, ChildStdin, BufReader<std::process::ChildStdout>) {
     let mut child = Command::new(env!("CARGO_BIN_EXE_poly-lab-mcp"))
-        .env("POLY_LAB_ROOT", DEFAULT_LAB_ROOT)
+        .env("POLY_LAB_ROOT", root)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -36,7 +67,8 @@ fn read_response(stdout: &mut BufReader<std::process::ChildStdout>, id: i64) -> 
 
 #[test]
 fn lists_tools_and_traces_derangement_goal() {
-    let (mut child, mut stdin, mut stdout) = start_server();
+    let root = writable_fixture_root();
+    let (mut child, mut stdin, mut stdout) = start_server(&root);
 
     send(
         &mut stdin,
@@ -81,6 +113,8 @@ fn lists_tools_and_traces_derangement_goal() {
     assert!(tool_names.contains(&"list_projects"));
     assert!(tool_names.contains(&"trace_goal_support"));
     assert!(tool_names.contains(&"render_project_markdown"));
+    assert!(tool_names.contains(&"append_timeout"));
+    assert!(tool_names.contains(&"write_project_html"));
 
     send(
         &mut stdin,
@@ -91,22 +125,74 @@ fn lists_tools_and_traces_derangement_goal() {
             "params": {
                 "name": "trace_goal_support",
                 "arguments": {
-                    "project_id": "derangement_descents",
-                    "goal_id": "derangement_descent_real_rootedness"
+                    "project_id": "demo_project",
+                    "goal_id": "demo_real_rootedness_goal"
                 }
             }
         }),
     );
     let result = read_response(&mut stdout, 3);
     let structured = &result["result"]["structuredContent"];
-    assert_eq!(structured["project_id"], "derangement_descents");
-    assert_eq!(structured["goal_id"], "derangement_descent_real_rootedness");
+    assert_eq!(structured["project_id"], "demo_project");
+    assert_eq!(structured["goal_id"], "demo_real_rootedness_goal");
     assert_eq!(
         structured["incoming_implications"][0]["implication"]["id"],
-        "normalized_interlacing_implies_derangement_real_rootedness"
+        "demo_interlacing_implies_real_rootedness"
     );
+
+    send(
+        &mut stdin,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "tools/call",
+            "params": {
+                "name": "append_timeout",
+                "arguments": {
+                    "project_id": "demo_project",
+                    "id": "demo_mcp_timeout",
+                    "relation_id": "demo_interlaces_envelope",
+                    "seconds": 30,
+                    "method": "stdio_smoke",
+                    "checked_range": { "n_min": 5, "n_max": 7 }
+                }
+            }
+        }),
+    );
+    let append = read_response(&mut stdout, 4);
+    assert_eq!(
+        append["result"]["structuredContent"]["path"],
+        "projects/demo_project/evidence/demo_mcp_timeout.json"
+    );
+    assert!(root
+        .join("projects/demo_project/evidence/demo_mcp_timeout.json")
+        .exists());
+
+    send(
+        &mut stdin,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 5,
+            "method": "tools/call",
+            "params": {
+                "name": "write_project_html",
+                "arguments": {
+                    "project_id": "demo_project"
+                }
+            }
+        }),
+    );
+    let write = read_response(&mut stdout, 5);
+    assert_eq!(
+        write["result"]["structuredContent"]["path"],
+        "projects/demo_project/generated/project-summary.html"
+    );
+    assert!(root
+        .join("projects/demo_project/generated/project-summary.html")
+        .exists());
 
     drop(stdin);
     let _ = child.kill();
     let _ = child.wait();
+    let _ = fs::remove_dir_all(root);
 }

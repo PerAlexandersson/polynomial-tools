@@ -1,0 +1,12 @@
+{
+  "id": "demo_false_strengthening_n_0",
+  "relation_id": "demo_false_strengthening",
+  "status": "counterexample_found",
+  "method": "fixture_check",
+  "first_failure": {
+    "n": 0
+  },
+  "failure_reason": "The fixture strengthening is false at n=0.",
+  "created_utc": "2026-05-31T00:00:00Z"
+}
+

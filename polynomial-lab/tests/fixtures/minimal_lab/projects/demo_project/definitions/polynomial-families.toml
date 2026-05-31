@@ -1,0 +1,33 @@
+project_id = "demo_project"
+label = "Demo polynomial families"
+
+[[families]]
+id = "demo_polynomial_family"
+type = "polynomial_family"
+label = "Demo polynomial family"
+symbol = "F_n(t)"
+definition = "F_n(t) is a fixture polynomial family."
+variables = ["t"]
+indices = ["n"]
+coefficient_ring = "Z"
+valid_range = "n >= 1"
+
+[[families]]
+id = "demo_envelope_family"
+type = "polynomial_family"
+label = "Demo envelope family"
+symbol = "G_n(t)"
+definition = "G_n(t) is a fixture envelope family."
+variables = ["t"]
+indices = ["n"]
+coefficient_ring = "Z"
+valid_range = "n >= 1"
+
+[[operators]]
+id = "demo_transport_operator"
+type = "linear_operator"
+label = "Demo transport operator"
+symbol = "T_n"
+definition = "A fixture operator used in tests."
+parameters = ["n"]
+

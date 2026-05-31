@@ -1,0 +1,11 @@
+source_reference = "fixture"
+purpose = "Fixture proof rules."
+
+[[rules]]
+id = "demo_wagner_rule"
+label = "Demo Wagner rule"
+input_relations = ["weak_interlaces"]
+output_relations = ["real_rooted"]
+hypotheses = ["Fixture hypothesis."]
+conclusion = "Fixture conclusion."
+

@@ -1,0 +1,14 @@
+id = "demo_interlacing_implies_real_rootedness"
+type = "implication"
+label = "Demo interlacing implies real-rootedness"
+status = "standard"
+
+from = [
+  "demo_interlaces_envelope",
+  "demo_envelope_real_rooted"
+]
+
+to = "demo_real_rootedness_goal"
+explanation = "Fixture implication with one missing prerequisite."
+proof_tags = ["interlacing_implies_real_rootedness"]
+

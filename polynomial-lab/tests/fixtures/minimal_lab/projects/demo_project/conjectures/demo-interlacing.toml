@@ -1,0 +1,11 @@
+id = "demo_interlaces_envelope"
+project_id = "demo_project"
+type = "conjecture"
+label = "Demo family interlaces envelope"
+statement = "F_n(t) \\ll G_n(t) for n >= 1."
+relation = "weak_interlaces"
+left = "demo_polynomial_family"
+right = "demo_envelope_family"
+index_condition = "n >= 1"
+status = "plausible"
+

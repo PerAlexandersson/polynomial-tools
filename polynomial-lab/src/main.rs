@@ -2,9 +2,12 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use polynomial_lab::{
     default_lab_root, format_project_overviews, format_records, format_trace,
-    format_validation_report, EvaluationFilter, LabStore,
+    format_validation_report, CheckedRange, EvaluationDraft, EvaluationFilter, LabStore,
+    ValidationMode,
 };
 use serde::Serialize;
+use serde_json::Value;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
@@ -23,7 +26,10 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    Validate,
+    Validate {
+        #[arg(long)]
+        strict: bool,
+    },
     ListProjects,
     GetProject {
         project_id: String,
@@ -48,6 +54,65 @@ enum Command {
     },
     RenderMarkdown {
         project_id: String,
+        #[arg(long)]
+        write: bool,
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+    RenderHtml {
+        project_id: String,
+        #[arg(long)]
+        write: bool,
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+    AppendEvaluation {
+        project_id: String,
+        id: String,
+        #[arg(long)]
+        relation: String,
+        #[arg(long)]
+        status: String,
+        #[arg(long)]
+        method: Option<String>,
+        #[arg(long)]
+        notes: Option<String>,
+        #[arg(long)]
+        n_min: Option<i64>,
+        #[arg(long)]
+        n_max: Option<i64>,
+    },
+    AppendCounterexample {
+        project_id: String,
+        id: String,
+        #[arg(long)]
+        relation: String,
+        #[arg(long)]
+        method: Option<String>,
+        #[arg(long)]
+        notes: Option<String>,
+        #[arg(long)]
+        n: Option<i64>,
+        #[arg(long)]
+        first_failure_json: Option<String>,
+        #[arg(long)]
+        failure_reason: Option<String>,
+    },
+    AppendTimeout {
+        project_id: String,
+        id: String,
+        #[arg(long)]
+        relation: String,
+        #[arg(long)]
+        seconds: u64,
+        #[arg(long)]
+        method: Option<String>,
+        #[arg(long)]
+        notes: Option<String>,
+        #[arg(long)]
+        n_min: Option<i64>,
+        #[arg(long)]
+        n_max: Option<i64>,
     },
 }
 
@@ -58,8 +123,13 @@ fn main() -> Result<()> {
         .with_context(|| format!("failed to load polynomial lab at {}", root.display()))?;
 
     match cli.command {
-        Command::Validate => {
-            let report = store.validate();
+        Command::Validate { strict } => {
+            let mode = if strict {
+                ValidationMode::Strict
+            } else {
+                ValidationMode::Tolerant
+            };
+            let report = store.validate_with_mode(mode);
             if cli.json {
                 print_json(&report)?;
             } else {
@@ -136,11 +206,150 @@ fn main() -> Result<()> {
                 print!("{}", format_trace(&trace));
             }
         }
-        Command::RenderMarkdown { project_id } => {
-            print!("{}", store.render_project_markdown(&project_id));
+        Command::RenderMarkdown {
+            project_id,
+            write,
+            output,
+        } => {
+            if write || output.is_some() {
+                let generated = store.write_project_markdown(&project_id, output.as_deref())?;
+                if cli.json {
+                    print_json(&generated)?;
+                } else {
+                    println!("wrote {}", generated.path);
+                }
+            } else {
+                print!("{}", store.render_project_markdown(&project_id));
+            }
+        }
+        Command::RenderHtml {
+            project_id,
+            write,
+            output,
+        } => {
+            if write || output.is_some() {
+                let generated = store.write_project_html(&project_id, output.as_deref())?;
+                if cli.json {
+                    print_json(&generated)?;
+                } else {
+                    println!("wrote {}", generated.path);
+                }
+            } else {
+                print!("{}", store.render_project_html(&project_id));
+            }
+        }
+        Command::AppendEvaluation {
+            project_id,
+            id,
+            relation,
+            status,
+            method,
+            notes,
+            n_min,
+            n_max,
+        } => {
+            let written = store.append_evaluation(
+                &project_id,
+                EvaluationDraft {
+                    id,
+                    relation_id: relation,
+                    status,
+                    method,
+                    notes,
+                    checked_range: checked_range(n_min, n_max)?,
+                    first_failure: None,
+                    failure_reason: None,
+                    timeout_seconds: None,
+                    extra: BTreeMap::new(),
+                },
+            )?;
+            print_written_evaluation(cli.json, &written)?;
+        }
+        Command::AppendCounterexample {
+            project_id,
+            id,
+            relation,
+            method,
+            notes,
+            n,
+            first_failure_json,
+            failure_reason,
+        } => {
+            let first_failure = first_failure_value(n, first_failure_json)?;
+            let written = store.append_evaluation(
+                &project_id,
+                EvaluationDraft {
+                    id,
+                    relation_id: relation,
+                    status: "counterexample_found".to_string(),
+                    method,
+                    notes,
+                    checked_range: None,
+                    first_failure: Some(first_failure),
+                    failure_reason,
+                    timeout_seconds: None,
+                    extra: BTreeMap::new(),
+                },
+            )?;
+            print_written_evaluation(cli.json, &written)?;
+        }
+        Command::AppendTimeout {
+            project_id,
+            id,
+            relation,
+            seconds,
+            method,
+            notes,
+            n_min,
+            n_max,
+        } => {
+            let written = store.append_evaluation(
+                &project_id,
+                EvaluationDraft {
+                    id,
+                    relation_id: relation,
+                    status: "timeout".to_string(),
+                    method,
+                    notes,
+                    checked_range: checked_range(n_min, n_max)?,
+                    first_failure: None,
+                    failure_reason: None,
+                    timeout_seconds: Some(seconds),
+                    extra: BTreeMap::new(),
+                },
+            )?;
+            print_written_evaluation(cli.json, &written)?;
         }
     }
     Ok(())
+}
+
+fn checked_range(n_min: Option<i64>, n_max: Option<i64>) -> Result<Option<CheckedRange>> {
+    match (n_min, n_max) {
+        (Some(n_min), Some(n_max)) if n_min <= n_max => Ok(Some(CheckedRange { n_min, n_max })),
+        (Some(_), Some(_)) => anyhow::bail!("expected --n-min <= --n-max"),
+        (None, None) => Ok(None),
+        _ => anyhow::bail!("expected both --n-min and --n-max, or neither"),
+    }
+}
+
+fn first_failure_value(n: Option<i64>, first_failure_json: Option<String>) -> Result<Value> {
+    match (n, first_failure_json) {
+        (Some(n), None) => Ok(serde_json::json!({ "n": n })),
+        (None, Some(text)) => serde_json::from_str(&text)
+            .with_context(|| "failed to parse --first-failure-json as JSON"),
+        (Some(_), Some(_)) => anyhow::bail!("use either --n or --first-failure-json, not both"),
+        (None, None) => anyhow::bail!("counterexample records require --n or --first-failure-json"),
+    }
+}
+
+fn print_written_evaluation(json: bool, written: &polynomial_lab::WrittenEvaluation) -> Result<()> {
+    if json {
+        print_json(written)
+    } else {
+        println!("wrote {}", written.path);
+        Ok(())
+    }
 }
 
 fn print_json(value: &impl Serialize) -> Result<()> {

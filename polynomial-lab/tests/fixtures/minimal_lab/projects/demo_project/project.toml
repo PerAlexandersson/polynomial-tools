@@ -1,0 +1,17 @@
+id = "demo_project"
+label = "Demo interlacing project"
+status = "fixture"
+
+description = """
+Small fixture project for polynomial-lab tests.
+"""
+
+main_objects = [
+  "demo_polynomial_family",
+  "demo_envelope_family"
+]
+
+main_goals = [
+  "demo_real_rootedness_goal"
+]
+

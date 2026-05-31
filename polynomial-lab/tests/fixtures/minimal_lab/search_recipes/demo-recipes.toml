@@ -1,0 +1,9 @@
+source_reference = "fixture"
+purpose = "Fixture search recipes."
+
+[[recipes]]
+id = "demo_interlacing_recipe"
+label = "Demo interlacing recipe"
+goal = "Find fixture interlacing relations."
+steps = ["Generate examples.", "Check interlacing."]
+

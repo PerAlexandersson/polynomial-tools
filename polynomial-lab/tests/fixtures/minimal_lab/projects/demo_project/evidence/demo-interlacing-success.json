@@ -1,0 +1,17 @@
+{
+  "id": "demo_interlaces_envelope_n_1_4",
+  "relation_id": "demo_interlaces_envelope",
+  "status": "holds_for_checked_domain",
+  "checked_range": {
+    "n_min": 1,
+    "n_max": 4
+  },
+  "method": "fixture_check",
+  "coefficient_ring": "Z",
+  "software": {
+    "language": "rust",
+    "crate": "polynomial-lab"
+  },
+  "created_utc": "2026-05-31T00:00:00Z"
+}
+
