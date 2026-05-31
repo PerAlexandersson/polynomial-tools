@@ -38,32 +38,33 @@ pub fn eulerian_polynomials(max_n: usize) -> Vec<Vec<i64>> {
         // Derivative of prev
         let mut dp = vec![0i64; d.saturating_sub(1)];
         for k in 1..d {
-            dp[k - 1] = prev[k] * k as i64;
+            dp[k - 1] = checked_mul(prev[k], usize_to_i64(k));
         }
 
         // (1 + (n-1)t) * prev
         let mut term1 = vec![0i64; d + 1];
+        let n_minus_one = checked_sub(usize_to_i64(n), 1);
         for k in 0..d {
-            term1[k] += prev[k];
-            term1[k + 1] += prev[k] * (n as i64 - 1);
+            term1[k] = checked_add(term1[k], prev[k]);
+            term1[k + 1] = checked_add(term1[k + 1], checked_mul(prev[k], n_minus_one));
         }
 
         // t(1-t) * dp = t*dp - t^2*dp
         let dp_len = dp.len();
         let mut term2 = vec![0i64; dp_len + 2];
         for k in 0..dp_len {
-            term2[k + 1] += dp[k];
-            term2[k + 2] -= dp[k];
+            term2[k + 1] = checked_add(term2[k + 1], dp[k]);
+            term2[k + 2] = checked_sub(term2[k + 2], dp[k]);
         }
 
         // Sum
         let len = term1.len().max(term2.len());
         let mut result = vec![0i64; len];
         for k in 0..term1.len() {
-            result[k] += term1[k];
+            result[k] = checked_add(result[k], term1[k]);
         }
         for k in 0..term2.len() {
-            result[k] += term2[k];
+            result[k] = checked_add(result[k], term2[k]);
         }
         while result.last() == Some(&0) {
             result.pop();
@@ -95,12 +96,16 @@ pub fn narayana_polynomials(max_n: usize) -> Vec<Vec<i64>> {
         // N(n, k+1) for k = 0, ..., n-1
         // N(n, j) = C(n, j) * C(n, j-1) / n  for j = 1, ..., n
         let mut binom_n = vec![1i64; n + 1]; // C(n, j)
+        let n_i64 = usize_to_i64(n);
         for j in 1..=n {
-            binom_n[j] = binom_n[j - 1] * (n as i64 - j as i64 + 1) / j as i64;
+            let numerator = i128::from(binom_n[j - 1])
+                * i128::from(checked_add(checked_sub(n_i64, usize_to_i64(j)), 1));
+            binom_n[j] = checked_exact_i128_div_to_i64(numerator, i128::from(usize_to_i64(j)));
         }
         for k in 0..n {
             let j = k + 1; // Narayana number N(n, j)
-            let nar = binom_n[j] * binom_n[j - 1] / n as i64;
+            let numerator = i128::from(binom_n[j]) * i128::from(binom_n[j - 1]);
+            let nar = checked_exact_i128_div_to_i64(numerator, i128::from(n_i64));
             coeffs.push(nar);
         }
         while coeffs.last() == Some(&0) {
@@ -132,31 +137,33 @@ pub fn type_b_eulerian_polynomials(max_n: usize) -> Vec<Vec<i64>> {
         // Derivative of prev
         let mut dp = vec![0i64; d.saturating_sub(1)];
         for k in 1..d {
-            dp[k - 1] = prev[k] * k as i64;
+            dp[k - 1] = checked_mul(prev[k], usize_to_i64(k));
         }
 
         // (1 + (2n-1)t) * prev
         let mut term1 = vec![0i64; d + 1];
+        let two_n_minus_one = checked_sub(checked_mul(usize_to_i64(n), 2), 1);
         for k in 0..d {
-            term1[k] += prev[k];
-            term1[k + 1] += prev[k] * (2 * n as i64 - 1);
+            term1[k] = checked_add(term1[k], prev[k]);
+            term1[k + 1] = checked_add(term1[k + 1], checked_mul(prev[k], two_n_minus_one));
         }
 
         // 2t(1-t) * dp = 2t*dp - 2t^2*dp
         let dp_len = dp.len();
         let mut term2 = vec![0i64; dp_len + 2];
         for k in 0..dp_len {
-            term2[k + 1] += 2 * dp[k];
-            term2[k + 2] -= 2 * dp[k];
+            let twice = checked_mul(2, dp[k]);
+            term2[k + 1] = checked_add(term2[k + 1], twice);
+            term2[k + 2] = checked_sub(term2[k + 2], twice);
         }
 
         let len = term1.len().max(term2.len());
         let mut result = vec![0i64; len];
         for k in 0..term1.len() {
-            result[k] += term1[k];
+            result[k] = checked_add(result[k], term1[k]);
         }
         for k in 0..term2.len() {
-            result[k] += term2[k];
+            result[k] = checked_add(result[k], term2[k]);
         }
         while result.last() == Some(&0) {
             result.pop();
@@ -188,17 +195,17 @@ pub fn chebyshev_polynomials_t(max_n: usize) -> Vec<Vec<i64>> {
         // 2t * prev
         let mut term1 = vec![0i64; prev.len() + 1];
         for (k, &c) in prev.iter().enumerate() {
-            term1[k + 1] += 2 * c;
+            term1[k + 1] = checked_add(term1[k + 1], checked_mul(2, c));
         }
 
         // - pprev
         let len = term1.len().max(pprev.len());
         let mut result = vec![0i64; len];
         for k in 0..term1.len() {
-            result[k] += term1[k];
+            result[k] = checked_add(result[k], term1[k]);
         }
         for (k, &c) in pprev.iter().enumerate() {
-            result[k] -= c;
+            result[k] = checked_sub(result[k], c);
         }
         while result.last() == Some(&0) {
             result.pop();
@@ -230,16 +237,16 @@ pub fn chebyshev_polynomials_u(max_n: usize) -> Vec<Vec<i64>> {
 
         let mut term1 = vec![0i64; prev.len() + 1];
         for (k, &c) in prev.iter().enumerate() {
-            term1[k + 1] += 2 * c;
+            term1[k + 1] = checked_add(term1[k + 1], checked_mul(2, c));
         }
 
         let len = term1.len().max(pprev.len());
         let mut result = vec![0i64; len];
         for k in 0..term1.len() {
-            result[k] += term1[k];
+            result[k] = checked_add(result[k], term1[k]);
         }
         for (k, &c) in pprev.iter().enumerate() {
-            result[k] -= c;
+            result[k] = checked_sub(result[k], c);
         }
         while result.last() == Some(&0) {
             result.pop();
@@ -272,17 +279,18 @@ pub fn hermite_polynomials(max_n: usize) -> Vec<Vec<i64>> {
         // t * prev
         let mut term1 = vec![0i64; prev.len() + 1];
         for (k, &c) in prev.iter().enumerate() {
-            term1[k + 1] += c;
+            term1[k + 1] = checked_add(term1[k + 1], c);
         }
 
         // -(n-1) * pprev
         let len = term1.len().max(pprev.len());
         let mut result = vec![0i64; len];
         for k in 0..term1.len() {
-            result[k] += term1[k];
+            result[k] = checked_add(result[k], term1[k]);
         }
+        let n_minus_one = checked_sub(usize_to_i64(n), 1);
         for (k, &c) in pprev.iter().enumerate() {
-            result[k] -= (n as i64 - 1) * c;
+            result[k] = checked_sub(result[k], checked_mul(n_minus_one, c));
         }
         while result.last() == Some(&0) {
             result.pop();
@@ -290,6 +298,32 @@ pub fn hermite_polynomials(max_n: usize) -> Vec<Vec<i64>> {
         polys.push(result);
     }
     polys
+}
+
+fn usize_to_i64(value: usize) -> i64 {
+    i64::try_from(value).expect("sequence index overflow")
+}
+
+fn checked_add(lhs: i64, rhs: i64) -> i64 {
+    lhs.checked_add(rhs).expect("sequence coefficient overflow")
+}
+
+fn checked_sub(lhs: i64, rhs: i64) -> i64 {
+    lhs.checked_sub(rhs).expect("sequence coefficient overflow")
+}
+
+fn checked_mul(lhs: i64, rhs: i64) -> i64 {
+    lhs.checked_mul(rhs).expect("sequence coefficient overflow")
+}
+
+fn checked_exact_i128_div_to_i64(numerator: i128, denominator: i128) -> i64 {
+    assert_ne!(denominator, 0, "sequence denominator must be nonzero");
+    assert_eq!(
+        numerator % denominator,
+        0,
+        "sequence recurrence division must be exact"
+    );
+    i64::try_from(numerator / denominator).expect("sequence coefficient overflow")
 }
 
 // ---------------------------------------------------------------------------
@@ -359,6 +393,12 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "sequence coefficient overflow")]
+    fn test_narayana_rejects_i64_overflow() {
+        let _ = narayana_polynomials(67);
+    }
+
+    #[test]
     fn test_type_b_eulerian_values() {
         let polys = type_b_eulerian_polynomials(4);
         assert_eq!(polys[0], vec![1]); // B_0 = 1
@@ -405,6 +445,12 @@ mod tests {
         for (i, p) in u_polys.iter().enumerate() {
             assert!(is_real_rooted(p), "U_{} not real-rooted", i);
         }
+    }
+
+    #[test]
+    #[should_panic(expected = "sequence coefficient overflow")]
+    fn test_chebyshev_t_rejects_i64_overflow() {
+        let _ = chebyshev_polynomials_t(64);
     }
 
     #[test]
