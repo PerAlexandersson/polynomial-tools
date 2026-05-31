@@ -1,11 +1,11 @@
 use polynomial_lab::{
     default_family_registry, default_lab_root, interlacing_evaluation_draft,
-    interlacing_evidence_id, real_rooted_evaluation_draft, real_rooted_evidence_id,
+    interlacing_evidence_id_with_offsets, real_rooted_evaluation_draft, real_rooted_evidence_id,
     CheckFamilyInterlacingReport, CheckFamilyRealRootednessReport, CheckedRange,
-    ComputedPolynomial, ConjectureDraft, EvaluationDraft, EvaluationFilter, GeneratedFile,
-    GoalDraft, ImplicationDraft, InterlacingMode, LabRecord, LabStore, PolynomialFamilyInfo,
-    ProjectDraft, ProjectOverview, ProjectReport, TraceGoalSupport, ValidationMode,
-    ValidationReport, WrittenEvaluation, WrittenRecord,
+    ComputedPolynomial, ConjectureDraft, EvaluationDraft, EvaluationFilter, FamilyIndexOffsets,
+    GeneratedFile, GoalDraft, ImplicationDraft, InterlacingMode, LabRecord, LabStore,
+    PolynomialFamilyInfo, ProjectDraft, ProjectOverview, ProjectReport, TraceGoalSupport,
+    ValidationMode, ValidationReport, WrittenEvaluation, WrittenRecord,
 };
 use rmcp::{
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
@@ -141,6 +141,8 @@ pub struct CheckFamilyInterlacingRequest {
     pub right_family_id: String,
     pub n_min: usize,
     pub n_max: usize,
+    pub left_offset: Option<isize>,
+    pub right_offset: Option<isize>,
     pub mode: Option<InterlacingMode>,
     pub project_id: Option<String>,
     pub relation_id: Option<String>,
@@ -503,13 +505,19 @@ impl PolynomialLabServer {
         Parameters(input): Parameters<CheckFamilyInterlacingRequest>,
     ) -> Result<Json<CheckFamilyInterlacingResponse>, McpError> {
         let mode = input.mode.unwrap_or(InterlacingMode::Weak);
+        let left_offset = input.left_offset.unwrap_or(0);
+        let right_offset = input.right_offset.unwrap_or(0);
         let registry = default_family_registry();
         let report = registry
-            .check_interlacing(
+            .check_interlacing_with_offsets(
                 &input.left_family_id,
                 &input.right_family_id,
                 input.n_min,
                 input.n_max,
+                FamilyIndexOffsets {
+                    left: left_offset,
+                    right: right_offset,
+                },
                 mode,
             )
             .map_err(internal_error)?;
@@ -523,12 +531,14 @@ impl PolynomialLabServer {
                 .as_deref()
                 .ok_or_else(|| invalid_params("`append` requires `relation_id`"))?;
             let id = input.id.unwrap_or_else(|| {
-                interlacing_evidence_id(
+                interlacing_evidence_id_with_offsets(
                     relation_id,
                     mode,
                     report.first_failure_n,
                     input.n_min,
                     input.n_max,
+                    left_offset,
+                    right_offset,
                 )
             });
             let draft = interlacing_evaluation_draft(id, relation_id.to_string(), &report)
@@ -805,6 +815,8 @@ mod tests {
                 right_family_id: "reciprocal_eulerian_derivative_polynomial".to_string(),
                 n_min: 5,
                 n_max: 7,
+                left_offset: None,
+                right_offset: None,
                 mode: Some(InterlacingMode::Weak),
                 project_id: None,
                 relation_id: None,
@@ -814,5 +826,27 @@ mod tests {
             .expect("check interlacing should work");
         assert!(response.report.all_interlacing);
         assert!(response.written_evidence.is_none());
+    }
+
+    #[test]
+    fn checks_offset_family_interlacing() {
+        let Json(response) = server()
+            .check_family_interlacing(Parameters(CheckFamilyInterlacingRequest {
+                left_family_id: "chebyshev_u_polynomial".to_string(),
+                right_family_id: "chebyshev_t_polynomial".to_string(),
+                n_min: 2,
+                n_max: 4,
+                left_offset: Some(-1),
+                right_offset: None,
+                mode: Some(InterlacingMode::Strict),
+                project_id: None,
+                relation_id: None,
+                id: None,
+                append: None,
+            }))
+            .expect("check offset interlacing should work");
+        assert!(response.report.all_interlacing);
+        assert_eq!(response.report.items[0].left_n, 1);
+        assert_eq!(response.report.items[0].right_n, 2);
     }
 }

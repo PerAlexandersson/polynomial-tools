@@ -376,6 +376,35 @@ fn lists_tools_and_traces_derangement_goal() {
         .join("projects/demo_project/evidence/demo_interlaces_envelope_weak_n_5_6.json")
         .exists());
 
+    send(
+        &mut stdin,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 13,
+            "method": "tools/call",
+            "params": {
+                "name": "check_family_interlacing",
+                "arguments": {
+                    "left_family_id": "chebyshev_u_polynomial",
+                    "right_family_id": "chebyshev_t_polynomial",
+                    "left_offset": -1,
+                    "n_min": 2,
+                    "n_max": 3,
+                    "mode": "strict"
+                }
+            }
+        }),
+    );
+    let offset_interlacing = read_response(&mut stdout, 13);
+    assert_eq!(
+        offset_interlacing["result"]["structuredContent"]["report"]["items"][0]["left_n"],
+        1
+    );
+    assert_eq!(
+        offset_interlacing["result"]["structuredContent"]["report"]["all_interlacing"],
+        true
+    );
+
     drop(stdin);
     let _ = child.kill();
     let _ = child.wait();

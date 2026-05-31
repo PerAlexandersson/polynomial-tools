@@ -56,3 +56,6 @@ Exposed tools:
 The record-writing tools create new TOML or JSON files with create-new
 semantics.  They never overwrite existing records.  Evidence append tools write
 under `projects/<project-id>/evidence/<record-id>.json`.
+
+`check_family_interlacing` supports optional `left_offset` and `right_offset`
+integer fields, so one can check relations such as `F_{n-1} \ll G_n`.

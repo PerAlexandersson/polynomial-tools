@@ -2,10 +2,11 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use polynomial_lab::{
     default_family_registry, default_lab_root, format_project_overviews, format_records,
-    format_trace, format_validation_report, interlacing_evaluation_draft, interlacing_evidence_id,
-    real_rooted_evaluation_draft, real_rooted_evidence_id, CheckedRange, ConjectureDraft,
-    EvaluationDraft, EvaluationFilter, GoalDraft, ImplicationDraft, InterlacingMode, LabStore,
-    ProjectDraft, ValidationMode, WrittenRecord,
+    format_trace, format_validation_report, interlacing_evaluation_draft,
+    interlacing_evidence_id_with_offsets, real_rooted_evaluation_draft, real_rooted_evidence_id,
+    CheckedRange, ConjectureDraft, EvaluationDraft, EvaluationFilter, FamilyIndexOffsets,
+    GoalDraft, ImplicationDraft, InterlacingMode, LabStore, ProjectDraft, ValidationMode,
+    WrittenRecord,
 };
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -92,6 +93,10 @@ enum Command {
         left: String,
         #[arg(long)]
         right: String,
+        #[arg(long, default_value_t = 0, allow_hyphen_values = true)]
+        left_offset: isize,
+        #[arg(long, default_value_t = 0, allow_hyphen_values = true)]
+        right_offset: isize,
         #[arg(long)]
         n_min: usize,
         #[arg(long)]
@@ -406,6 +411,8 @@ fn main() -> Result<()> {
         Command::CheckFamilyInterlacing {
             left,
             right,
+            left_offset,
+            right_offset,
             n_min,
             n_max,
             mode,
@@ -416,7 +423,17 @@ fn main() -> Result<()> {
         } => {
             let mode = InterlacingMode::from_str(&mode)?;
             let registry = default_family_registry();
-            let report = registry.check_interlacing(&left, &right, n_min, n_max, mode)?;
+            let report = registry.check_interlacing_with_offsets(
+                &left,
+                &right,
+                n_min,
+                n_max,
+                FamilyIndexOffsets {
+                    left: left_offset,
+                    right: right_offset,
+                },
+                mode,
+            )?;
             let written = if append {
                 let project = project
                     .as_deref()
@@ -425,7 +442,15 @@ fn main() -> Result<()> {
                     .as_deref()
                     .ok_or_else(|| anyhow::anyhow!("--append requires --relation"))?;
                 let evidence_id = id.unwrap_or_else(|| {
-                    interlacing_evidence_id(relation, mode, report.first_failure_n, n_min, n_max)
+                    interlacing_evidence_id_with_offsets(
+                        relation,
+                        mode,
+                        report.first_failure_n,
+                        n_min,
+                        n_max,
+                        left_offset,
+                        right_offset,
+                    )
                 });
                 let draft =
                     interlacing_evaluation_draft(evidence_id, relation.to_string(), &report)?;
@@ -442,9 +467,9 @@ fn main() -> Result<()> {
             } else {
                 println!(
                     "{} {}-interlaces {} for n={}..{}: {}",
-                    report.left_family_id,
+                    cli_indexed_family(&report.left_family_id, report.left_offset),
                     report.mode,
-                    report.right_family_id,
+                    cli_indexed_family(&report.right_family_id, report.right_offset),
                     report.n_min,
                     report.n_max,
                     report.all_interlacing
@@ -680,6 +705,14 @@ fn first_failure_value(n: Option<i64>, first_failure_json: Option<String>) -> Re
             .with_context(|| "failed to parse --first-failure-json as JSON"),
         (Some(_), Some(_)) => anyhow::bail!("use either --n or --first-failure-json, not both"),
         (None, None) => anyhow::bail!("counterexample records require --n or --first-failure-json"),
+    }
+}
+
+fn cli_indexed_family(family_id: &str, offset: isize) -> String {
+    match offset.cmp(&0) {
+        std::cmp::Ordering::Greater => format!("{family_id}[n+{offset}]"),
+        std::cmp::Ordering::Less => format!("{family_id}[n-{}]", offset.unsigned_abs()),
+        std::cmp::Ordering::Equal => format!("{family_id}[n]"),
     }
 }
 

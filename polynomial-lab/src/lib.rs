@@ -13,9 +13,10 @@ pub mod families;
 
 pub use families::{
     default_family_registry, interlacing_evaluation_draft, interlacing_evidence_id,
-    real_rooted_evaluation_draft, real_rooted_evidence_id, CheckFamilyInterlacingReport,
-    CheckFamilyRealRootednessReport, ComputedPolynomial, FamilyCheckItem,
-    FamilyInterlacingCheckItem, InterlacingMode, PolynomialFamilyInfo, PolynomialFamilyRegistry,
+    interlacing_evidence_id_with_offsets, real_rooted_evaluation_draft, real_rooted_evidence_id,
+    CheckFamilyInterlacingReport, CheckFamilyRealRootednessReport, ComputedPolynomial,
+    FamilyCheckItem, FamilyIndexOffsets, FamilyInterlacingCheckItem, InterlacingMode,
+    PolynomialFamilyInfo, PolynomialFamilyRegistry,
 };
 
 pub const DEFAULT_LAB_ROOT: &str = "/workspace/projects/polynomial-interlacing-lab";

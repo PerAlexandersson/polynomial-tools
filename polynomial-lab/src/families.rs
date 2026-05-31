@@ -80,9 +80,23 @@ impl FromStr for InterlacingMode {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq, Default)]
+pub struct FamilyIndexOffsets {
+    pub left: isize,
+    pub right: isize,
+}
+
+impl FamilyIndexOffsets {
+    pub fn zero() -> Self {
+        Self { left: 0, right: 0 }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 pub struct FamilyInterlacingCheckItem {
     pub n: usize,
+    pub left_n: usize,
+    pub right_n: usize,
     pub mode: InterlacingMode,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub interlaces: Option<bool>,
@@ -97,6 +111,8 @@ pub struct CheckFamilyInterlacingReport {
     pub right_family_id: String,
     pub n_min: usize,
     pub n_max: usize,
+    pub left_offset: isize,
+    pub right_offset: isize,
     pub mode: InterlacingMode,
     pub all_interlacing: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -217,14 +233,35 @@ impl PolynomialFamilyRegistry {
         n_max: usize,
         mode: InterlacingMode,
     ) -> Result<CheckFamilyInterlacingReport> {
+        self.check_interlacing_with_offsets(
+            left_family_id,
+            right_family_id,
+            n_min,
+            n_max,
+            FamilyIndexOffsets::zero(),
+            mode,
+        )
+    }
+
+    pub fn check_interlacing_with_offsets(
+        &self,
+        left_family_id: &str,
+        right_family_id: &str,
+        n_min: usize,
+        n_max: usize,
+        offsets: FamilyIndexOffsets,
+        mode: InterlacingMode,
+    ) -> Result<CheckFamilyInterlacingReport> {
         if n_min > n_max {
             anyhow::bail!("expected n_min <= n_max");
         }
         let mut items = Vec::new();
         let mut first_failure_n = None;
         for n in n_min..=n_max {
-            let left = self.compute(left_family_id, n)?;
-            let right = self.compute(right_family_id, n)?;
+            let left_n = apply_offset(n, offsets.left, "left")?;
+            let right_n = apply_offset(n, offsets.right, "right")?;
+            let left = self.compute(left_family_id, left_n)?;
+            let right = self.compute(right_family_id, right_n)?;
             let left_coefficients = bigint_coefficients(&left)?;
             let right_coefficients = bigint_coefficients(&right)?;
             let interlaces = match mode {
@@ -242,6 +279,8 @@ impl PolynomialFamilyRegistry {
             }
             items.push(FamilyInterlacingCheckItem {
                 n,
+                left_n,
+                right_n,
                 mode,
                 interlaces,
                 status: interlacing_item_status(interlaces).to_string(),
@@ -254,6 +293,8 @@ impl PolynomialFamilyRegistry {
             right_family_id: right_family_id.to_string(),
             n_min,
             n_max,
+            left_offset: offsets.left,
+            right_offset: offsets.right,
             mode,
             all_interlacing: first_failure_n.is_none(),
             first_failure_n,
@@ -427,9 +468,30 @@ pub fn interlacing_evidence_id(
     n_min: usize,
     n_max: usize,
 ) -> String {
+    interlacing_evidence_id_with_offsets(relation, mode, first_failure_n, n_min, n_max, 0, 0)
+}
+
+pub fn interlacing_evidence_id_with_offsets(
+    relation: &str,
+    mode: InterlacingMode,
+    first_failure_n: Option<usize>,
+    n_min: usize,
+    n_max: usize,
+    left_offset: isize,
+    right_offset: isize,
+) -> String {
+    let offset_part = if left_offset == 0 && right_offset == 0 {
+        String::new()
+    } else {
+        format!(
+            "_left_{}_right_{}",
+            offset_id(left_offset),
+            offset_id(right_offset)
+        )
+    };
     match first_failure_n {
-        Some(n) => format!("{relation}_{mode}_first_failure_n_{n}"),
-        None => format!("{relation}_{mode}_n_{n_min}_{n_max}"),
+        Some(n) => format!("{relation}_{mode}{offset_part}_first_failure_n_{n}"),
+        None => format!("{relation}_{mode}{offset_part}_n_{n_min}_{n_max}"),
     }
 }
 
@@ -452,6 +514,8 @@ pub fn interlacing_evaluation_draft(
         Value::String(report.right_family_id.clone()),
     );
     extra.insert("mode".to_string(), Value::String(report.mode.to_string()));
+    extra.insert("left_offset".to_string(), json!(report.left_offset));
+    extra.insert("right_offset".to_string(), json!(report.right_offset));
     extra.insert("item_count".to_string(), json!(report.items.len()));
     extra.insert(
         "all_interlacing".to_string(),
@@ -474,6 +538,11 @@ pub fn interlacing_evaluation_draft(
             status.to_string(),
             Some(json!({
                 "n": n,
+                "base_n": n,
+                "left_n": item.left_n,
+                "right_n": item.right_n,
+                "left_offset": report.left_offset,
+                "right_offset": report.right_offset,
                 "mode": report.mode.to_string(),
                 "result_status": &item.status,
                 "left_family_id": &report.left_family_id,
@@ -499,7 +568,11 @@ pub fn interlacing_evaluation_draft(
         method: Some("polynomial-lab family registry + polynomial-tools interlacing".to_string()),
         notes: Some(format!(
             "Checked {} interlacing {} << {} for n={}..{}.",
-            report.mode, report.left_family_id, report.right_family_id, report.n_min, report.n_max
+            report.mode,
+            indexed_family_label(&report.left_family_id, report.left_offset),
+            indexed_family_label(&report.right_family_id, report.right_offset),
+            report.n_min,
+            report.n_max
         )),
         checked_range,
         first_failure,
@@ -533,6 +606,32 @@ fn bigint_coefficients(computed: &ComputedPolynomial) -> Result<Vec<BigInt>> {
         .map(|coefficient| coefficient.parse::<BigInt>())
         .collect::<Result<Vec<_>, _>>()
         .with_context(|| "internal coefficient serialization failure")
+}
+
+fn apply_offset(n: usize, offset: isize, side: &str) -> Result<usize> {
+    if offset >= 0 {
+        n.checked_add(offset as usize)
+            .with_context(|| format!("{side} index overflowed for n={n}, offset={offset}"))
+    } else {
+        n.checked_sub(offset.unsigned_abs())
+            .with_context(|| format!("{side} index is negative for n={n}, offset={offset}"))
+    }
+}
+
+fn offset_id(offset: isize) -> String {
+    match offset.cmp(&0) {
+        std::cmp::Ordering::Greater => format!("p{offset}"),
+        std::cmp::Ordering::Less => format!("m{}", offset.unsigned_abs()),
+        std::cmp::Ordering::Equal => "z".to_string(),
+    }
+}
+
+fn indexed_family_label(family_id: &str, offset: isize) -> String {
+    match offset.cmp(&0) {
+        std::cmp::Ordering::Greater => format!("{family_id}(n+{offset})"),
+        std::cmp::Ordering::Less => format!("{family_id}(n-{})", offset.unsigned_abs()),
+        std::cmp::Ordering::Equal => format!("{family_id}(n)"),
+    }
 }
 
 fn interlacing_item_status(interlaces: Option<bool>) -> &'static str {
@@ -819,5 +918,37 @@ mod tests {
         .expect("draft evidence");
         assert_eq!(draft.status, "counterexample_found");
         assert!(draft.first_failure.is_some());
+    }
+
+    #[test]
+    fn checks_offset_family_interlacing() {
+        let registry = default_family_registry();
+        let report = registry
+            .check_interlacing_with_offsets(
+                "chebyshev_u_polynomial",
+                "chebyshev_t_polynomial",
+                2,
+                5,
+                FamilyIndexOffsets { left: -1, right: 0 },
+                InterlacingMode::Strict,
+            )
+            .expect("check offset interlacing");
+        assert!(report.all_interlacing);
+        assert_eq!(report.left_offset, -1);
+        assert_eq!(report.right_offset, 0);
+        assert_eq!(report.items[0].n, 2);
+        assert_eq!(report.items[0].left_n, 1);
+        assert_eq!(report.items[0].right_n, 2);
+
+        let id = interlacing_evidence_id_with_offsets(
+            "chebyshev_u_interlaces_t",
+            InterlacingMode::Strict,
+            report.first_failure_n,
+            report.n_min,
+            report.n_max,
+            report.left_offset,
+            report.right_offset,
+        );
+        assert_eq!(id, "chebyshev_u_interlaces_t_strict_left_m1_right_z_n_2_5");
     }
 }

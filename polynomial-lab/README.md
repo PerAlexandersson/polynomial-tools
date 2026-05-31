@@ -115,6 +115,12 @@ timeout 60s nice -n 10 cargo run -p polynomial-lab --bin poly-lab -- \
   --project derangement_descents \
   --relation normalized_derangement_descent_interlaces_reciprocal_eulerian_derivative \
   --append
+timeout 60s nice -n 10 cargo run -p polynomial-lab --bin poly-lab -- \
+  check-family-interlacing \
+  --left chebyshev_u_polynomial --left-offset -1 \
+  --right chebyshev_t_polynomial \
+  --mode strict \
+  --n-min 2 --n-max 8
 ```
 
 Currently registered families:
