@@ -65,6 +65,11 @@ assert!(is_real_rooted(&[1, 11, 11, 1]));
 assert_eq!(check_weak_interlacing(&[2, -3, 1], &[-1, 1]), Some(true));
 ```
 
+Coefficient vectors are always in ascending degree order. Most convenience
+functions accept `&[i64]`; use the `*_bigint_coeffs` variants when coefficients
+may exceed `i64`. Interlacing functions return `Option<bool>`: `None` means the
+directed degree relation is not valid for that test, not that interlacing failed.
+
 To build the MCP server from the workspace root:
 
 ```sh
@@ -229,6 +234,23 @@ assert_eq!(check_weak_interlacing(&[3, -4, 1], &[8, -6, 1]), Some(true));
 
 // Nested roots do NOT interlace: (t-1)(t-4) vs (t-2)(t-3)
 assert_eq!(check_weak_interlacing(&[4, -5, 1], &[6, -5, 1]), Some(false));
+```
+
+For large exact coefficients, use the `BigInt` APIs:
+
+```rust
+use num_bigint::BigInt;
+use polynomial_tools::check_interlacing_bigint_coeffs;
+
+let center = BigInt::from(10).pow(20);
+let f = vec![-&center, BigInt::from(1)]; // t - center
+let g = vec![
+    (&center - 1u32) * (&center + 1u32),
+    -BigInt::from(2) * &center,
+    BigInt::from(1),
+];
+
+assert_eq!(check_interlacing_bigint_coeffs(&f, &g), Some(true));
 ```
 
 ### Athanasiadis--Wagner interlacing matrices
