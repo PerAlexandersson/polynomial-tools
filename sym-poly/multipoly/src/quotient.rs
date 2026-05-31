@@ -59,6 +59,13 @@ pub fn standard_monomials_from_leading_monomials(
     num_vars: usize,
     leading_monomials: &[Vec<u32>],
 ) -> Option<Vec<Vec<u32>>> {
+    if leading_monomials
+        .iter()
+        .any(|monomial| monomial.iter().all(|&exponent| exponent == 0))
+    {
+        return Some(Vec::new());
+    }
+
     let bounds = pure_power_bounds(num_vars, leading_monomials)?;
     let mut monomials = Vec::new();
     let mut current = vec![0u32; num_vars];
@@ -353,6 +360,33 @@ mod tests {
             standard_monomials_from_leading_monomials(2, &leading),
             Some(vec![vec![0, 0], vec![0, 1]])
         );
+    }
+
+    #[test]
+    fn test_standard_monomials_for_unit_ideal_are_empty() {
+        assert_eq!(
+            standard_monomials_from_leading_monomials(2, &[vec![0, 0]]),
+            Some(Vec::new())
+        );
+    }
+
+    #[test]
+    fn test_zero_ideal_is_not_reported_finite() {
+        let gb = GroebnerBasis::new(vec![MultiPoly::<Q>::zero(2)], MonomialOrder::Lex);
+
+        assert_eq!(gb.num_vars, 2);
+        assert!(quotient_basis(&gb).is_none());
+    }
+
+    #[test]
+    fn test_unit_ideal_has_zero_dimensional_quotient_basis() {
+        let gb = GroebnerBasis::new(vec![constant(1)], MonomialOrder::Lex);
+        let basis = quotient_basis(&gb).expect("unit quotient is finite");
+
+        assert_eq!(gb.num_vars, 2);
+        assert_eq!(basis.num_vars, 2);
+        assert!(basis.monomials.is_empty());
+        assert_eq!(basis.dimension(), 0);
     }
 
     #[test]

@@ -39,6 +39,10 @@ impl PackedSparseRow {
         I: IntoIterator<Item = (usize, u8)>,
     {
         assert!(P > 1, "field modulus must be greater than 1");
+        assert!(
+            num_cols <= u32::MAX as usize + 1,
+            "packed sparse rows support at most u32::MAX + 1 columns"
+        );
         let mut terms: BTreeMap<usize, u8> = BTreeMap::new();
         for (col, value) in entries {
             assert!(col < num_cols, "sparse row column out of range");
@@ -79,8 +83,11 @@ impl PackedSparseRow {
     }
 
     pub fn coefficient(&self, col: usize) -> u8 {
+        let Ok(col) = u32::try_from(col) else {
+            return 0;
+        };
         self.cols
-            .binary_search(&(col as u32))
+            .binary_search(&col)
             .map(|index| self.vals[index])
             .unwrap_or(0)
     }
@@ -510,6 +517,29 @@ mod tests {
         let row = PackedSparseRow::new::<251, _>(5, vec![(2, 10), (1, 7), (2, 241)]);
 
         assert_eq!(row.to_pairs(), vec![(1, 7)]);
+    }
+
+    #[test]
+    fn test_packed_sparse_row_rejects_columns_that_cannot_be_stored() {
+        let Some(too_many_columns) = (u32::MAX as usize).checked_add(2) else {
+            return;
+        };
+
+        let result = std::panic::catch_unwind(|| {
+            PackedSparseRow::new::<251, _>(too_many_columns, Vec::<(usize, u8)>::new());
+        });
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_packed_sparse_row_large_lookup_is_zero() {
+        let Some(too_large_column) = (u32::MAX as usize).checked_add(1) else {
+            return;
+        };
+        let row = PackedSparseRow::new::<251, _>(3, vec![(1, 7)]);
+
+        assert_eq!(row.coefficient(too_large_column), 0);
     }
 
     #[test]

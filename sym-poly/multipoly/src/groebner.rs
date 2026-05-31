@@ -78,6 +78,7 @@ impl<C: Field> GroebnerBasis<C> {
         order: MonomialOrder,
         options: GroebnerOptions,
     ) -> Self {
+        let input_num_vars = generators.first().map(MultiPoly::num_vars).unwrap_or(0);
         let computation = reduced_groebner_basis_with_stats(&generators, order, options);
         let leading_terms = computation
             .basis
@@ -88,7 +89,7 @@ impl<C: Field> GroebnerBasis<C> {
             .basis
             .first()
             .map(MultiPoly::num_vars)
-            .unwrap_or(0);
+            .unwrap_or(input_num_vars);
         Self {
             num_vars,
             order,
@@ -588,6 +589,18 @@ mod tests {
         let basis = buchberger_basis(&[g1, g2], MonomialOrder::Lex);
 
         assert!(is_groebner_basis(&basis, MonomialOrder::Lex));
+    }
+
+    #[test]
+    fn test_groebner_basis_preserves_variable_count_for_zero_ideal() {
+        let zero = MultiPoly::<Q>::zero(3);
+        let gb = GroebnerBasis::new(vec![zero], MonomialOrder::Lex);
+        let polynomial = mono_n(3, &[1, 0, 0], 1) + mono_n(3, &[0, 1, 0], 2);
+
+        assert_eq!(gb.num_vars, 3);
+        assert!(gb.generators.is_empty());
+        assert!(gb.leading_terms.is_empty());
+        assert_eq!(gb.normal_form(&polynomial), polynomial);
     }
 
     #[test]

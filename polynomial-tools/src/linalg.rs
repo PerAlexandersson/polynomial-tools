@@ -107,12 +107,15 @@ fn gaussian_elimination(mat: &[Vec<Q>]) -> EliminationResult {
 ///
 /// Uses Sylvester's criterion.  Small matrices use fraction-free BigInt
 /// Bareiss elimination; matrices of size
-/// [`MODULAR_POSITIVE_DEFINITE_DIMENSION_THRESHOLD`] or larger use the modular
-/// CRT path.  The explicit [`is_positive_definite_bareiss`] and
+/// [`MODULAR_POSITIVE_DEFINITE_DIMENSION_THRESHOLD`] or larger try the modular
+/// CRT path first and fall back to Bareiss if the CRT bounds do not certify in
+/// time. The explicit [`is_positive_definite_bareiss`] and
 /// [`is_positive_definite_modular`] entry points are kept for benchmarking.
 pub fn is_positive_definite(mat: &[Vec<BigInt>]) -> bool {
     if mat.len() >= MODULAR_POSITIVE_DEFINITE_DIMENSION_THRESHOLD {
-        is_positive_definite_modular(mat)
+        modular_leading_principal_minors_bigint(mat)
+            .map(|minors| minors.into_iter().all(|minor| minor > BigInt::zero()))
+            .unwrap_or_else(|| is_positive_definite_bareiss(mat))
     } else {
         is_positive_definite_bareiss(mat)
     }
@@ -1146,6 +1149,15 @@ mod tests {
         mat
     }
 
+    fn large_positive_diagonal_matrix(size: usize) -> Vec<Vec<BigInt>> {
+        let diagonal = BigInt::one() << 700usize;
+        let mut mat = vec![vec![BigInt::zero(); size]; size];
+        for (i, row) in mat.iter_mut().enumerate() {
+            row[i] = diagonal.clone();
+        }
+        mat
+    }
+
     #[test]
     fn test_bareiss_polynomial_bigint_2x2() {
         // [[1+z, z], [z, 1+z]] has leading minors 1+z and 1+2z.
@@ -1228,6 +1240,15 @@ mod tests {
             assert_eq!(bareiss, modular);
             assert_eq!(is_positive_definite(&m), modular);
         }
+    }
+
+    #[test]
+    fn test_pd_default_falls_back_when_modular_bounds_do_not_certify() {
+        let m = large_positive_diagonal_matrix(MODULAR_POSITIVE_DEFINITE_DIMENSION_THRESHOLD);
+
+        assert!(modular_leading_principal_minors_bigint(&m).is_none());
+        assert!(is_positive_definite_bareiss(&m));
+        assert!(is_positive_definite(&m));
     }
 
     #[test]
