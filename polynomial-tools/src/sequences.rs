@@ -23,7 +23,7 @@
 /// Properties: palindromic, gamma-positive, real-rooted (all roots negative),
 /// and consecutive Eulerian polynomials interlace.
 ///
-/// Returns `polys[i]` = A_{i+1}(t), so `polys[0]` = A_1 = [1].
+/// Returns `polys[i]` = A_{i+1}(t), so `polys[0]` = A_1 = `[1]`.
 pub fn eulerian_polynomials(max_n: usize) -> Vec<Vec<i64>> {
     if max_n == 0 {
         return vec![];
@@ -84,7 +84,7 @@ pub fn eulerian_polynomials(max_n: usize) -> Vec<Vec<i64>> {
 /// Properties: palindromic, gamma-positive, real-rooted (all roots negative),
 /// and row sums are the Catalan numbers.
 ///
-/// Returns `polys[i]` = N_{i+1}(t), so `polys[0]` = N_1 = [1].
+/// Returns `polys[i]` = N_{i+1}(t), so `polys[0]` = N_1 = `[1]`.
 pub fn narayana_polynomials(max_n: usize) -> Vec<Vec<i64>> {
     if max_n == 0 {
         return vec![];
@@ -125,7 +125,7 @@ pub fn narayana_polynomials(max_n: usize) -> Vec<Vec<i64>> {
 ///
 /// Properties: palindromic, gamma-positive, real-rooted.
 ///
-/// Returns `polys[i]` = B_i(t), so `polys[0]` = B_0 = [1].
+/// Returns `polys[i]` = B_i(t), so `polys[0]` = B_0 = `[1]`.
 pub fn type_b_eulerian_polynomials(max_n: usize) -> Vec<Vec<i64>> {
     let mut polys = Vec::with_capacity(max_n + 1);
     polys.push(vec![1i64]); // B_0 = 1

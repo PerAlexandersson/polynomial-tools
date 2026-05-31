@@ -76,7 +76,7 @@
 //!   forms in the theory of the separation of the roots of algebraic
 //!   equations*, Linear and Multilinear Algebra 10 (1981), §2.2.
 //! - MathOverflow discussion of the common-factor caveat:
-//!   https://mathoverflow.net/questions/403708/bezout-matrices-and-interlacing-roots
+//!   <https://mathoverflow.net/questions/403708/bezout-matrices-and-interlacing-roots>
 
 use crate::sturm::SturmChain;
 use crate::Polynomial;
