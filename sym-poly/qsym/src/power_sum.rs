@@ -99,8 +99,10 @@ fn pi_value(block: &[u32]) -> i64 {
     let mut sum = 0i64;
     let mut product = 1i64;
     for &b in block {
-        sum += b as i64;
-        product *= sum;
+        sum = sum
+            .checked_add(i64::from(b))
+            .expect("pi block weight overflow");
+        product = product.checked_mul(sum).expect("pi block weight overflow");
     }
     product
 }
@@ -109,13 +111,15 @@ fn pi_value(block: &[u32]) -> i64 {
 ///
 /// For B = (b_1, ..., b_m): sp(B) = m! · b_1 · b_2 · ... · b_m.
 fn sp_value(block: &[u32]) -> i64 {
-    let m = block.len() as i64;
+    let m = i64::try_from(block.len()).expect("block length overflow");
     let mut result = 1i64;
     for k in 1..=m {
-        result *= k;
+        result = result.checked_mul(k).expect("sp block weight overflow");
     }
     for &b in block {
-        result *= b as i64;
+        result = result
+            .checked_mul(i64::from(b))
+            .expect("sp block weight overflow");
     }
     result
 }
@@ -141,8 +145,10 @@ fn normalized_power_sum_in_monomial_basis<C: Ring>(
         let mut denom: i64 = 1;
 
         for block in &coarsening {
-            result_parts.push(block.iter().sum::<u32>());
-            denom *= block_weight(block);
+            result_parts.push(checked_block_sum(block));
+            denom = denom
+                .checked_mul(block_weight(block))
+                .expect("power-sum denominator overflow");
         }
 
         let comp = Composition::new(result_parts);
@@ -174,8 +180,10 @@ fn power_sum_in_monomial_basis<C: Ring>(
         let mut denom: i64 = 1;
 
         for block in &coarsening {
-            result_parts.push(block.iter().sum::<u32>());
-            denom *= block_weight(block);
+            result_parts.push(checked_block_sum(block));
+            denom = denom
+                .checked_mul(block_weight(block))
+                .expect("power-sum denominator overflow");
         }
 
         let comp = Composition::new(result_parts);
@@ -278,18 +286,28 @@ fn monomial_to_power_sum<C: Ring>(
 fn z_coefficient(parts: &[u32]) -> i64 {
     let mut counts: BTreeMap<u32, u32> = BTreeMap::new();
     for &p in parts {
-        *counts.entry(p).or_insert(0) += 1;
+        let count = counts.entry(p).or_insert(0);
+        *count = count.checked_add(1).expect("z coefficient overflow");
     }
     let mut z: i64 = 1;
     for (&val, &mult) in &counts {
         for _ in 0..mult {
-            z *= val as i64;
+            z = z
+                .checked_mul(i64::from(val))
+                .expect("z coefficient overflow");
         }
-        for k in 1..=mult as i64 {
-            z *= k;
+        for k in 1..=i64::from(mult) {
+            z = z.checked_mul(k).expect("z coefficient overflow");
         }
     }
     z
+}
+
+fn checked_block_sum(block: &[u32]) -> u32 {
+    block
+        .iter()
+        .try_fold(0u32, |total, &part| total.checked_add(part))
+        .expect("composition block sum overflow")
 }
 
 /// All coarsenings of a composition (merging adjacent parts).
@@ -302,13 +320,17 @@ fn composition_coarsenings(parts: &[u32]) -> Vec<Vec<Vec<u32>>> {
         return vec![vec![]];
     }
     let num_gaps = k - 1;
-    let mut result = Vec::with_capacity(1 << num_gaps);
+    assert!(
+        num_gaps < usize::BITS as usize,
+        "too many composition gaps to enumerate"
+    );
+    let mut result = Vec::with_capacity(1usize << num_gaps);
 
-    for mask in 0..(1u32 << num_gaps) {
+    for mask in 0..(1usize << num_gaps) {
         let mut coarsening = Vec::new();
         let mut block = vec![parts[0]];
         for i in 0..num_gaps {
-            if mask & (1 << i) != 0 {
+            if mask & (1usize << i) != 0 {
                 block.push(parts[i + 1]);
             } else {
                 coarsening.push(block);
@@ -344,16 +366,29 @@ fn build_transition_matrix(
             let mut denom: i64 = 1;
 
             for block in &coarsening {
-                result_parts.push(block.iter().sum::<u32>());
-                denom *= block_weight(block);
+                result_parts.push(checked_block_sum(block));
+                denom = denom
+                    .checked_mul(block_weight(block))
+                    .expect("power-sum denominator overflow");
             }
 
             let comp = Composition::new(result_parts);
             if let Some(&i) = comp_index.get(&comp) {
                 let (ref mut num, ref mut den) = matrix[j][i];
-                *num = (*num) * denom + z * (*den);
-                *den = (*den) * denom;
-                let g = gcd(num.unsigned_abs(), den.unsigned_abs()) as i64;
+                let left = (*num)
+                    .checked_mul(denom)
+                    .expect("power-sum transition coefficient overflow");
+                let right = z
+                    .checked_mul(*den)
+                    .expect("power-sum transition coefficient overflow");
+                *num = left
+                    .checked_add(right)
+                    .expect("power-sum transition coefficient overflow");
+                *den = (*den)
+                    .checked_mul(denom)
+                    .expect("power-sum transition coefficient overflow");
+                let g = i64::try_from(gcd(num.unsigned_abs(), den.unsigned_abs()))
+                    .expect("rational gcd overflow");
                 if g > 1 {
                     *num /= g;
                     *den /= g;
@@ -463,10 +498,22 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "pi block weight overflow")]
+    fn test_pi_value_rejects_overflow() {
+        let _ = pi_value(&[u32::MAX, 1]);
+    }
+
+    #[test]
     fn test_sp_value() {
         assert_eq!(sp_value(&[2, 1]), 2 * 2 * 1); // 2! * 2 * 1 = 4
         assert_eq!(sp_value(&[3]), 1 * 3); // 1! * 3 = 3
         assert_eq!(sp_value(&[1, 1, 1]), 6 * 1 * 1 * 1); // 3! * 1 * 1 * 1 = 6
+    }
+
+    #[test]
+    #[should_panic(expected = "sp block weight overflow")]
+    fn test_sp_value_rejects_overflow() {
+        let _ = sp_value(&vec![1; 21]);
     }
 
     #[test]
@@ -478,10 +525,24 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "z coefficient overflow")]
+    fn test_z_coefficient_rejects_overflow() {
+        let _ = z_coefficient(&vec![1; 21]);
+    }
+
+    #[test]
     fn test_coarsenings_count() {
         assert_eq!(composition_coarsenings(&[2, 1]).len(), 2);
         assert_eq!(composition_coarsenings(&[1, 1, 1]).len(), 4);
         assert_eq!(composition_coarsenings(&[3]).len(), 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "too many composition gaps to enumerate")]
+    fn test_coarsenings_reject_too_many_gaps() {
+        let parts = vec![1; usize::BITS as usize + 1];
+
+        let _ = composition_coarsenings(&parts);
     }
 
     // -- Ψ tests --
