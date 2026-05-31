@@ -113,9 +113,7 @@ fn gaussian_elimination(mat: &[Vec<Q>]) -> EliminationResult {
 /// [`is_positive_definite_modular`] entry points are kept for benchmarking.
 pub fn is_positive_definite(mat: &[Vec<BigInt>]) -> bool {
     if mat.len() >= MODULAR_POSITIVE_DEFINITE_DIMENSION_THRESHOLD {
-        modular_leading_principal_minors_bigint(mat)
-            .map(|minors| minors.into_iter().all(|minor| minor > BigInt::zero()))
-            .unwrap_or_else(|| is_positive_definite_bareiss(mat))
+        is_positive_definite_modular(mat).unwrap_or_else(|| is_positive_definite_bareiss(mat))
     } else {
         is_positive_definite_bareiss(mat)
     }
@@ -128,17 +126,17 @@ pub fn is_positive_definite_bareiss(mat: &[Vec<BigInt>]) -> bool {
         .unwrap_or(false)
 }
 
-/// Check if a symmetric BigInt matrix is positive definite via modular CRT.
+/// Try to check positive definiteness via modular CRT.
 ///
 /// This is a second implementation of Sylvester's criterion.  It reconstructs
 /// the leading principal minors from determinants computed over prime fields,
 /// using Hadamard bounds to certify when CRT reconstruction is exact.
 ///
-/// Use this function for benchmarking or when BigInt coefficient swell dominates.
-pub fn is_positive_definite_modular(mat: &[Vec<BigInt>]) -> bool {
+/// Returns `None` when the matrix is not square or when the accumulated CRT
+/// modulus does not certify all leading minors within the prime budget.
+pub fn is_positive_definite_modular(mat: &[Vec<BigInt>]) -> Option<bool> {
     modular_leading_principal_minors_bigint(mat)
         .map(|minors| minors.into_iter().all(|minor| minor > BigInt::zero()))
-        .unwrap_or(false)
 }
 
 /// Check if a symmetric BigInt matrix is positive semi-definite.
@@ -147,6 +145,9 @@ pub fn is_positive_definite_modular(mat: &[Vec<BigInt>]) -> bool {
 /// are non-negative, and zero pivots have zero entries in their column below.
 pub fn is_positive_semidefinite(mat: &[Vec<BigInt>]) -> bool {
     let n = mat.len();
+    if !is_square_bigint_matrix(mat) {
+        return false;
+    }
     let qmat = bigint_to_q(mat);
     let mut a = qmat;
 
@@ -181,6 +182,10 @@ pub fn is_positive_semidefinite(mat: &[Vec<BigInt>]) -> bool {
 
 /// Compute the determinant of a BigInt matrix using Gaussian elimination over ℚ.
 pub fn determinant(mat: &[Vec<BigInt>]) -> BigInt {
+    assert!(
+        is_square_bigint_matrix(mat),
+        "determinant requires a square matrix"
+    );
     let n = mat.len();
     if n == 0 {
         return BigInt::one();
@@ -197,6 +202,11 @@ pub fn determinant(mat: &[Vec<BigInt>]) -> BigInt {
         det *= result.matrix[k][k].clone();
     }
     det.to_integer()
+}
+
+fn is_square_bigint_matrix(mat: &[Vec<BigInt>]) -> bool {
+    let n = mat.len();
+    mat.iter().all(|row| row.len() == n)
 }
 
 /// Compute the leading principal determinants by fraction-free Bareiss
@@ -1088,6 +1098,14 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "determinant requires a square matrix")]
+    fn test_determinant_rejects_nonsquare_matrix() {
+        let m = bi_mat(&[&[1, 2, 3], &[4, 5, 6]]);
+
+        let _ = determinant(&m);
+    }
+
+    #[test]
     fn test_determinant_identity() {
         let m = bi_mat(&[&[1, 0, 0], &[0, 1, 0], &[0, 0, 1]]);
         assert_eq!(determinant(&m), bi(1));
@@ -1225,7 +1243,7 @@ mod tests {
         let m = bi_mat(&[&[2, 1], &[1, 2]]);
         assert!(is_positive_definite(&m));
         assert!(is_positive_definite_bareiss(&m));
-        assert!(is_positive_definite_modular(&m));
+        assert_eq!(is_positive_definite_modular(&m), Some(true));
     }
 
     #[test]
@@ -1236,7 +1254,7 @@ mod tests {
         ] {
             let m = shifted_hilbert_like_matrix(size);
             let bareiss = is_positive_definite_bareiss(&m);
-            let modular = is_positive_definite_modular(&m);
+            let modular = is_positive_definite_modular(&m).unwrap();
             assert_eq!(bareiss, modular);
             assert_eq!(is_positive_definite(&m), modular);
         }
@@ -1247,6 +1265,7 @@ mod tests {
         let m = large_positive_diagonal_matrix(MODULAR_POSITIVE_DEFINITE_DIMENSION_THRESHOLD);
 
         assert!(modular_leading_principal_minors_bigint(&m).is_none());
+        assert_eq!(is_positive_definite_modular(&m), None);
         assert!(is_positive_definite_bareiss(&m));
         assert!(is_positive_definite(&m));
     }
@@ -1256,7 +1275,7 @@ mod tests {
         // [[-1, 0], [0, -1]] -> first pivot = -1 < 0
         let m = bi_mat(&[&[-1, 0], &[0, -1]]);
         assert!(!is_positive_definite(&m));
-        assert!(!is_positive_definite_modular(&m));
+        assert_eq!(is_positive_definite_modular(&m), Some(false));
     }
 
     #[test]
@@ -1270,7 +1289,7 @@ mod tests {
         // [[1, 0], [0, -1]]
         let m = bi_mat(&[&[1, 0], &[0, -1]]);
         assert!(!is_positive_definite(&m));
-        assert!(!is_positive_definite_modular(&m));
+        assert_eq!(is_positive_definite_modular(&m), Some(false));
     }
 
     // -----------------------------------------------------------------------
@@ -1300,6 +1319,13 @@ mod tests {
     fn test_psd_indefinite() {
         // [[1, 2], [2, 1]] -> eigenvalues 3, -1 -> not PSD
         let m = bi_mat(&[&[1, 2], &[2, 1]]);
+        assert!(!is_positive_semidefinite(&m));
+    }
+
+    #[test]
+    fn test_psd_rejects_nonsquare_matrix() {
+        let m = bi_mat(&[&[1, 0, 0], &[0, 1, 0]]);
+
         assert!(!is_positive_semidefinite(&m));
     }
 
