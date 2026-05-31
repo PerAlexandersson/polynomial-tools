@@ -2,7 +2,7 @@
 
 use sym_poly_core::{Composition, Ring};
 
-use crate::multipoly::MultiPoly;
+use crate::multipoly::{checked_total_degree, MultiPoly};
 
 /// Compute the monomial slide polynomial M_α for a weak composition α.
 ///
@@ -14,7 +14,7 @@ pub fn monomial_slide_polynomial<C: Ring>(alpha: &[u32]) -> MultiPoly<C> {
         return MultiPoly::constant(0, C::one());
     }
 
-    let total: u32 = alpha.iter().sum();
+    let total = checked_total_degree(alpha);
     let flat_alpha: Vec<u32> = alpha.iter().copied().filter(|&x| x > 0).collect();
     let mut result = MultiPoly::zero(n);
 
@@ -43,7 +43,7 @@ pub fn fundamental_slide_polynomial<C: Ring>(alpha: &[u32]) -> MultiPoly<C> {
         return MultiPoly::constant(0, C::one());
     }
 
-    let total: u32 = alpha.iter().sum();
+    let total = checked_total_degree(alpha);
     let flat_alpha: Vec<u32> = alpha.iter().copied().filter(|&x| x > 0).collect();
     let mut result = MultiPoly::zero(n);
 
@@ -69,8 +69,12 @@ fn prefix_dominates(beta: &[u32], alpha: &[u32]) -> bool {
     let mut a_sum = 0u32;
     let mut b_sum = 0u32;
     for i in 0..alpha.len() {
-        a_sum += alpha[i];
-        b_sum += beta[i];
+        a_sum = a_sum
+            .checked_add(alpha[i])
+            .expect("composition weight overflow");
+        b_sum = b_sum
+            .checked_add(beta[i])
+            .expect("composition weight overflow");
         if b_sum < a_sum {
             return false;
         }
@@ -88,7 +92,9 @@ fn is_refinement(flat_beta: &[u32], flat_alpha: &[u32]) -> bool {
     let mut running = 0u32;
 
     while i < flat_beta.len() && j < flat_alpha.len() {
-        running += flat_beta[i];
+        running = running
+            .checked_add(flat_beta[i])
+            .expect("composition weight overflow");
         if running == flat_alpha[j] {
             j += 1;
             running = 0;
@@ -156,5 +162,11 @@ mod tests {
         let f: MultiPoly<i64> = fundamental_slide_polynomial(&[1, 1]);
         assert_eq!(f.coefficient(&[1, 1]), 1);
         assert_eq!(f.terms().len(), 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "total degree overflow")]
+    fn test_slide_rejects_weight_overflow() {
+        let _: MultiPoly<i64> = monomial_slide_polynomial(&[u32::MAX, 1]);
     }
 }

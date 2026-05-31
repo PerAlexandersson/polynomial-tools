@@ -8,6 +8,7 @@ use sym_poly_core::Field;
 
 use crate::groebner::GroebnerBasis;
 use crate::monomial_order::monomial_divides;
+use crate::multipoly::checked_total_degree;
 use crate::MultiPoly;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -75,7 +76,7 @@ pub fn standard_monomials_from_leading_monomials(
             .iter()
             .any(|leading| monomial_divides(leading, monomial))
     });
-    monomials.sort_by_key(|monomial| (monomial.iter().sum::<u32>(), monomial.clone()));
+    monomials.sort_by_key(|monomial| (checked_total_degree(monomial), monomial.clone()));
     Some(monomials)
 }
 
@@ -227,7 +228,7 @@ pub fn quotient_basis_degrees(basis: &QuotientBasis) -> BTreeMap<u32, Vec<usize>
     let mut by_degree = BTreeMap::new();
     for (i, monomial) in basis.monomials.iter().enumerate() {
         by_degree
-            .entry(monomial.iter().sum::<u32>())
+            .entry(checked_total_degree(monomial))
             .or_insert_with(Vec::new)
             .push(i);
     }
@@ -302,7 +303,7 @@ pub fn is_degree_preserving_action_matrix<C: Field>(
     let degrees: Vec<u32> = basis
         .monomials
         .iter()
-        .map(|monomial| monomial.iter().sum())
+        .map(|monomial| checked_total_degree(monomial))
         .collect();
     for row in 0..basis.dimension() {
         for col in 0..basis.dimension() {

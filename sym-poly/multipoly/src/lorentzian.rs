@@ -21,7 +21,7 @@ use num_bigint::BigInt;
 use num_rational::Ratio;
 use num_traits::Zero;
 
-use crate::multipoly::MultiPoly;
+use crate::multipoly::{checked_total_degree, MultiPoly};
 
 /// Result of a Lorentzian check with diagnostic information.
 #[derive(Debug, Clone)]
@@ -76,7 +76,11 @@ pub fn is_lorentzian(f: &MultiPoly<i64>) -> LorentzianResult {
     }
 
     // Check homogeneity.
-    let degrees: Vec<u32> = f.terms().keys().map(|e| e.iter().sum::<u32>()).collect();
+    let degrees: Vec<u32> = f
+        .terms()
+        .keys()
+        .map(|exponents| checked_total_degree(exponents))
+        .collect();
     let d = degrees[0];
     if degrees.iter().any(|&deg| deg != d) {
         return LorentzianResult::NotHomogeneous;
@@ -352,7 +356,11 @@ pub fn is_normalized_lorentzian(f: &MultiPoly<i64>) -> LorentzianResult {
     }
 
     // Homogeneity.
-    let degrees: Vec<u32> = f.terms().keys().map(|e| e.iter().sum::<u32>()).collect();
+    let degrees: Vec<u32> = f
+        .terms()
+        .keys()
+        .map(|exponents| checked_total_degree(exponents))
+        .collect();
     let d = degrees[0];
     if degrees.iter().any(|&deg| deg != d) {
         return LorentzianResult::NotHomogeneous;
@@ -484,9 +492,9 @@ pub fn is_m_convex(set: &[Vec<u32>]) -> bool {
     let n = set[0].len();
 
     // All vectors must have the same length and the same coordinate sum.
-    let total: u32 = set[0].iter().sum();
+    let total = checked_total_degree(&set[0]);
     for v in set {
-        if v.len() != n || v.iter().sum::<u32>() != total {
+        if v.len() != n || checked_total_degree(v) != total {
             return false;
         }
     }

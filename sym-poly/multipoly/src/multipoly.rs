@@ -93,7 +93,10 @@ impl<C: Ring> MultiPoly<C> {
 
     /// Total degree of the polynomial.
     pub fn total_degree(&self) -> Option<u32> {
-        self.terms.keys().map(|e| e.iter().sum::<u32>()).max()
+        self.terms
+            .keys()
+            .map(|exponents| checked_total_degree(exponents))
+            .max()
     }
 
     pub(crate) fn strip_zeros(&mut self) {
@@ -130,7 +133,9 @@ impl<C: Ring> MultiPoly<C> {
             .iter()
             .map(|(exp, c)| {
                 let mut new_exp = exp.clone();
-                new_exp[i] += 1;
+                new_exp[i] = new_exp[i]
+                    .checked_add(1)
+                    .expect("monomial exponent overflow");
                 (new_exp, c.clone())
             })
             .collect();
@@ -199,7 +204,13 @@ impl<C: Ring> Mul for MultiPoly<C> {
                 continue;
             }
             for (e2, c2) in &rhs.terms {
-                let exp: Vec<u32> = (0..n).map(|i| e1[i] + e2[i]).collect();
+                let exp: Vec<u32> = (0..n)
+                    .map(|i| {
+                        e1[i]
+                            .checked_add(e2[i])
+                            .expect("monomial exponent overflow")
+                    })
+                    .collect();
                 let coeff = c1.clone() * c2.clone();
                 let entry = terms.entry(exp).or_insert_with(C::zero);
                 *entry = entry.clone() + coeff;
@@ -215,6 +226,13 @@ impl<C: Ring> PartialEq for MultiPoly<C> {
     }
 }
 impl<C: Ring> Eq for MultiPoly<C> {}
+
+pub(crate) fn checked_total_degree(exponents: &[u32]) -> u32 {
+    exponents
+        .iter()
+        .try_fold(0u32, |total, &exponent| total.checked_add(exponent))
+        .expect("total degree overflow")
+}
 
 impl<C: Ring> fmt::Display for MultiPoly<C> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -319,5 +337,30 @@ mod tests {
         terms.insert(vec![1], 1i64);
 
         let _ = MultiPoly::from_terms(2, terms);
+    }
+
+    #[test]
+    #[should_panic(expected = "monomial exponent overflow")]
+    fn test_mul_var_rejects_exponent_overflow() {
+        let f: MultiPoly<i64> = MultiPoly::x_power(1, vec![u32::MAX]);
+
+        let _ = f.mul_var(0);
+    }
+
+    #[test]
+    #[should_panic(expected = "monomial exponent overflow")]
+    fn test_mul_rejects_exponent_overflow() {
+        let f: MultiPoly<i64> = MultiPoly::x_power(1, vec![u32::MAX]);
+        let g: MultiPoly<i64> = MultiPoly::x_power(1, vec![1]);
+
+        let _ = f * g;
+    }
+
+    #[test]
+    #[should_panic(expected = "total degree overflow")]
+    fn test_total_degree_rejects_overflow() {
+        let f: MultiPoly<i64> = MultiPoly::x_power(2, vec![u32::MAX, 1]);
+
+        let _ = f.total_degree();
     }
 }

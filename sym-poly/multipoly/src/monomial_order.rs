@@ -6,6 +6,7 @@ use std::str::FromStr;
 
 use sym_poly_core::Ring;
 
+use crate::multipoly::checked_total_degree;
 use crate::MultiPoly;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -131,7 +132,7 @@ pub fn monomial_quotient(dividend: &[u32], divisor: &[u32]) -> Option<Vec<u32>> 
 }
 
 fn compare_total_degree(a: &[u32], b: &[u32]) -> Ordering {
-    a.iter().sum::<u32>().cmp(&b.iter().sum::<u32>())
+    checked_total_degree(a).cmp(&checked_total_degree(b))
 }
 
 fn compare_lex(a: &[u32], b: &[u32]) -> Ordering {
@@ -213,6 +214,14 @@ mod tests {
 
         let error = "not-an-order".parse::<MonomialOrder>().unwrap_err();
         assert_eq!(error.input(), "not-an-order");
+    }
+
+    #[test]
+    #[should_panic(expected = "total degree overflow")]
+    fn test_graded_order_rejects_total_degree_overflow() {
+        let order = MonomialOrder::GrLex;
+
+        let _ = order.compare(&[u32::MAX, 1], &[0, 0]);
     }
 
     #[test]
