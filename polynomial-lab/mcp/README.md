@@ -44,6 +44,7 @@ Exposed tools:
 - `list_families`
 - `compute_family`
 - `check_family_real_rooted`
+- `check_family_interlacing`
 - `render_project_markdown`
 - `render_project_html`
 - `write_project_markdown`

@@ -113,6 +113,7 @@ fn lists_tools_and_traces_derangement_goal() {
     assert!(tool_names.contains(&"list_projects"));
     assert!(tool_names.contains(&"compute_family"));
     assert!(tool_names.contains(&"check_family_real_rooted"));
+    assert!(tool_names.contains(&"check_family_interlacing"));
     assert!(tool_names.contains(&"create_project"));
     assert!(tool_names.contains(&"append_goal"));
     assert!(tool_names.contains(&"append_conjecture"));
@@ -339,6 +340,40 @@ fn lists_tools_and_traces_derangement_goal() {
     );
     assert!(root
         .join("projects/demo_project/generated/project-summary.html")
+        .exists());
+
+    send(
+        &mut stdin,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 12,
+            "method": "tools/call",
+            "params": {
+                "name": "check_family_interlacing",
+                "arguments": {
+                    "left_family_id": "normalized_derangement_descent_polynomial",
+                    "right_family_id": "reciprocal_eulerian_derivative_polynomial",
+                    "n_min": 5,
+                    "n_max": 6,
+                    "mode": "weak",
+                    "append": true,
+                    "project_id": "demo_project",
+                    "relation_id": "demo_interlaces_envelope"
+                }
+            }
+        }),
+    );
+    let interlacing = read_response(&mut stdout, 12);
+    assert_eq!(
+        interlacing["result"]["structuredContent"]["report"]["all_interlacing"],
+        true
+    );
+    assert_eq!(
+        interlacing["result"]["structuredContent"]["written_evidence"]["path"],
+        "projects/demo_project/evidence/demo_interlaces_envelope_weak_n_5_6.json"
+    );
+    assert!(root
+        .join("projects/demo_project/evidence/demo_interlaces_envelope_weak_n_5_6.json")
         .exists());
 
     drop(stdin);

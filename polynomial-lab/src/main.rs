@@ -2,14 +2,16 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use polynomial_lab::{
     default_family_registry, default_lab_root, format_project_overviews, format_records,
-    format_trace, format_validation_report, real_rooted_evaluation_draft, real_rooted_evidence_id,
-    CheckedRange, ConjectureDraft, EvaluationDraft, EvaluationFilter, GoalDraft, ImplicationDraft,
-    LabStore, ProjectDraft, ValidationMode, WrittenRecord,
+    format_trace, format_validation_report, interlacing_evaluation_draft, interlacing_evidence_id,
+    real_rooted_evaluation_draft, real_rooted_evidence_id, CheckedRange, ConjectureDraft,
+    EvaluationDraft, EvaluationFilter, GoalDraft, ImplicationDraft, InterlacingMode, LabStore,
+    ProjectDraft, ValidationMode, WrittenRecord,
 };
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 #[derive(Debug, Parser)]
 #[command(name = "poly-lab")]
@@ -76,6 +78,26 @@ enum Command {
         n_min: usize,
         #[arg(long)]
         n_max: usize,
+        #[arg(long)]
+        project: Option<String>,
+        #[arg(long)]
+        relation: Option<String>,
+        #[arg(long)]
+        id: Option<String>,
+        #[arg(long)]
+        append: bool,
+    },
+    CheckFamilyInterlacing {
+        #[arg(long)]
+        left: String,
+        #[arg(long)]
+        right: String,
+        #[arg(long)]
+        n_min: usize,
+        #[arg(long)]
+        n_max: usize,
+        #[arg(long, default_value = "weak")]
+        mode: String,
         #[arg(long)]
         project: Option<String>,
         #[arg(long)]
@@ -372,6 +394,60 @@ fn main() -> Result<()> {
                 println!(
                     "{} real-rooted for n={}..{}: {}",
                     report.family_id, report.n_min, report.n_max, report.all_real_rooted
+                );
+                if let Some(first_failure_n) = report.first_failure_n {
+                    println!("first failure: n={first_failure_n}");
+                }
+                if let Some(written) = written {
+                    println!("wrote {}", written.path);
+                }
+            }
+        }
+        Command::CheckFamilyInterlacing {
+            left,
+            right,
+            n_min,
+            n_max,
+            mode,
+            project,
+            relation,
+            id,
+            append,
+        } => {
+            let mode = InterlacingMode::from_str(&mode)?;
+            let registry = default_family_registry();
+            let report = registry.check_interlacing(&left, &right, n_min, n_max, mode)?;
+            let written = if append {
+                let project = project
+                    .as_deref()
+                    .ok_or_else(|| anyhow::anyhow!("--append requires --project"))?;
+                let relation = relation
+                    .as_deref()
+                    .ok_or_else(|| anyhow::anyhow!("--append requires --relation"))?;
+                let evidence_id = id.unwrap_or_else(|| {
+                    interlacing_evidence_id(relation, mode, report.first_failure_n, n_min, n_max)
+                });
+                let draft =
+                    interlacing_evaluation_draft(evidence_id, relation.to_string(), &report)?;
+                Some(store.append_evaluation(project, draft)?)
+            } else {
+                None
+            };
+
+            if cli.json {
+                print_json(&json!({
+                    "report": report,
+                    "written_evidence": written,
+                }))?;
+            } else {
+                println!(
+                    "{} {}-interlaces {} for n={}..{}: {}",
+                    report.left_family_id,
+                    report.mode,
+                    report.right_family_id,
+                    report.n_min,
+                    report.n_max,
+                    report.all_interlacing
                 );
                 if let Some(first_failure_n) = report.first_failure_n {
                     println!("first failure: n={first_failure_n}");

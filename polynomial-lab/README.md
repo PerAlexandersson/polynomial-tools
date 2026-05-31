@@ -106,6 +106,15 @@ timeout 60s nice -n 10 cargo run -p polynomial-lab --bin poly-lab -- \
   --project derangement_descents \
   --relation derangement_descent_real_rootedness_checked \
   --append
+timeout 60s nice -n 10 cargo run -p polynomial-lab --bin poly-lab -- \
+  check-family-interlacing \
+  --left normalized_derangement_descent_polynomial \
+  --right reciprocal_eulerian_derivative_polynomial \
+  --mode weak \
+  --n-min 5 --n-max 30 \
+  --project derangement_descents \
+  --relation normalized_derangement_descent_interlaces_reciprocal_eulerian_derivative \
+  --append
 ```
 
 Currently registered families:

@@ -6,7 +6,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
+use std::fmt;
 use std::panic::{catch_unwind, UnwindSafe};
+use std::str::FromStr;
 
 type ComputeFn = fn(usize) -> Result<Vec<BigInt>>;
 
@@ -48,6 +50,58 @@ pub struct CheckFamilyRealRootednessReport {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub first_failure_n: Option<usize>,
     pub items: Vec<FamilyCheckItem>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum InterlacingMode {
+    Weak,
+    Strict,
+}
+
+impl fmt::Display for InterlacingMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Weak => f.write_str("weak"),
+            Self::Strict => f.write_str("strict"),
+        }
+    }
+}
+
+impl FromStr for InterlacingMode {
+    type Err = anyhow::Error;
+
+    fn from_str(value: &str) -> Result<Self> {
+        match value {
+            "weak" => Ok(Self::Weak),
+            "strict" => Ok(Self::Strict),
+            other => anyhow::bail!("unknown interlacing mode '{other}'; use 'weak' or 'strict'"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+pub struct FamilyInterlacingCheckItem {
+    pub n: usize,
+    pub mode: InterlacingMode,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interlaces: Option<bool>,
+    pub status: String,
+    pub left: ComputedPolynomial,
+    pub right: ComputedPolynomial,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+pub struct CheckFamilyInterlacingReport {
+    pub left_family_id: String,
+    pub right_family_id: String,
+    pub n_min: usize,
+    pub n_max: usize,
+    pub mode: InterlacingMode,
+    pub all_interlacing: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub first_failure_n: Option<usize>,
+    pub items: Vec<FamilyInterlacingCheckItem>,
 }
 
 #[derive(Clone)]
@@ -132,12 +186,7 @@ impl PolynomialFamilyRegistry {
         let mut first_failure_n = None;
         for n in n_min..=n_max {
             let computed = self.compute(family_id, n)?;
-            let bigint_coeffs = computed
-                .coefficients
-                .iter()
-                .map(|coefficient| coefficient.parse::<BigInt>())
-                .collect::<Result<Vec<_>, _>>()
-                .with_context(|| "internal coefficient serialization failure")?;
+            let bigint_coeffs = bigint_coefficients(&computed)?;
             let real_rooted = polynomial_tools::is_real_rooted_bigint_coeffs(&bigint_coeffs);
             if !real_rooted && first_failure_n.is_none() {
                 first_failure_n = Some(n);
@@ -155,6 +204,58 @@ impl PolynomialFamilyRegistry {
             n_min,
             n_max,
             all_real_rooted: first_failure_n.is_none(),
+            first_failure_n,
+            items,
+        })
+    }
+
+    pub fn check_interlacing(
+        &self,
+        left_family_id: &str,
+        right_family_id: &str,
+        n_min: usize,
+        n_max: usize,
+        mode: InterlacingMode,
+    ) -> Result<CheckFamilyInterlacingReport> {
+        if n_min > n_max {
+            anyhow::bail!("expected n_min <= n_max");
+        }
+        let mut items = Vec::new();
+        let mut first_failure_n = None;
+        for n in n_min..=n_max {
+            let left = self.compute(left_family_id, n)?;
+            let right = self.compute(right_family_id, n)?;
+            let left_coefficients = bigint_coefficients(&left)?;
+            let right_coefficients = bigint_coefficients(&right)?;
+            let interlaces = match mode {
+                InterlacingMode::Weak => polynomial_tools::check_weak_interlacing_bigint_coeffs(
+                    &left_coefficients,
+                    &right_coefficients,
+                ),
+                InterlacingMode::Strict => polynomial_tools::check_interlacing_bigint_coeffs(
+                    &left_coefficients,
+                    &right_coefficients,
+                ),
+            };
+            if interlaces != Some(true) && first_failure_n.is_none() {
+                first_failure_n = Some(n);
+            }
+            items.push(FamilyInterlacingCheckItem {
+                n,
+                mode,
+                interlaces,
+                status: interlacing_item_status(interlaces).to_string(),
+                left,
+                right,
+            });
+        }
+        Ok(CheckFamilyInterlacingReport {
+            left_family_id: left_family_id.to_string(),
+            right_family_id: right_family_id.to_string(),
+            n_min,
+            n_max,
+            mode,
+            all_interlacing: first_failure_n.is_none(),
             first_failure_n,
             items,
         })
@@ -319,6 +420,95 @@ pub fn real_rooted_evaluation_draft(
     })
 }
 
+pub fn interlacing_evidence_id(
+    relation: &str,
+    mode: InterlacingMode,
+    first_failure_n: Option<usize>,
+    n_min: usize,
+    n_max: usize,
+) -> String {
+    match first_failure_n {
+        Some(n) => format!("{relation}_{mode}_first_failure_n_{n}"),
+        None => format!("{relation}_{mode}_n_{n_min}_{n_max}"),
+    }
+}
+
+pub fn interlacing_evaluation_draft(
+    id: String,
+    relation_id: String,
+    report: &CheckFamilyInterlacingReport,
+) -> Result<EvaluationDraft> {
+    let checked_range = Some(CheckedRange {
+        n_min: i64::try_from(report.n_min)?,
+        n_max: i64::try_from(report.n_max)?,
+    });
+    let mut extra = BTreeMap::new();
+    extra.insert(
+        "left_family_id".to_string(),
+        Value::String(report.left_family_id.clone()),
+    );
+    extra.insert(
+        "right_family_id".to_string(),
+        Value::String(report.right_family_id.clone()),
+    );
+    extra.insert("mode".to_string(), Value::String(report.mode.to_string()));
+    extra.insert("item_count".to_string(), json!(report.items.len()));
+    extra.insert(
+        "all_interlacing".to_string(),
+        Value::Bool(report.all_interlacing),
+    );
+
+    let (status, first_failure, failure_reason) = if let Some(n) = report.first_failure_n {
+        let item = report
+            .items
+            .iter()
+            .find(|item| item.n == n)
+            .with_context(|| "internal interlacing report missing first failure item")?;
+        extra.insert("first_failure_n".to_string(), json!(n));
+        let status = if item.interlaces == Some(false) {
+            "counterexample_found"
+        } else {
+            "method_not_applicable"
+        };
+        (
+            status.to_string(),
+            Some(json!({
+                "n": n,
+                "mode": report.mode.to_string(),
+                "result_status": &item.status,
+                "left_family_id": &report.left_family_id,
+                "right_family_id": &report.right_family_id,
+                "left_polynomial": &item.left.polynomial,
+                "right_polynomial": &item.right.polynomial,
+                "left_coefficients": &item.left.coefficients,
+                "right_coefficients": &item.right.coefficients,
+            })),
+            Some(format!(
+                "{} does not pass the {} interlacing check against {} at n={n}",
+                report.left_family_id, report.mode, report.right_family_id
+            )),
+        )
+    } else {
+        ("holds_for_checked_domain".to_string(), None, None)
+    };
+
+    Ok(EvaluationDraft {
+        id,
+        relation_id,
+        status,
+        method: Some("polynomial-lab family registry + polynomial-tools interlacing".to_string()),
+        notes: Some(format!(
+            "Checked {} interlacing {} << {} for n={}..{}.",
+            report.mode, report.left_family_id, report.right_family_id, report.n_min, report.n_max
+        )),
+        checked_range,
+        first_failure,
+        failure_reason,
+        timeout_seconds: None,
+        extra,
+    })
+}
+
 fn computed_polynomial(
     entry: &FamilyEntry,
     n: usize,
@@ -333,6 +523,23 @@ fn computed_polynomial(
         degree: degree_bigint(&coefficients),
         polynomial: format_bigint_poly(&coefficients),
         coefficients: coefficients.iter().map(ToString::to_string).collect(),
+    }
+}
+
+fn bigint_coefficients(computed: &ComputedPolynomial) -> Result<Vec<BigInt>> {
+    computed
+        .coefficients
+        .iter()
+        .map(|coefficient| coefficient.parse::<BigInt>())
+        .collect::<Result<Vec<_>, _>>()
+        .with_context(|| "internal coefficient serialization failure")
+}
+
+fn interlacing_item_status(interlaces: Option<bool>) -> &'static str {
+    match interlaces {
+        Some(true) => "interlaces",
+        Some(false) => "does_not_interlace",
+        None => "not_applicable",
     }
 }
 
@@ -568,5 +775,49 @@ mod tests {
             .expect("check real-rootedness");
         assert!(report.all_real_rooted);
         assert_eq!(report.items.len(), 7);
+    }
+
+    #[test]
+    fn checks_family_interlacing_range() {
+        let registry = default_family_registry();
+        let report = registry
+            .check_interlacing(
+                "normalized_derangement_descent_polynomial",
+                "reciprocal_eulerian_derivative_polynomial",
+                5,
+                8,
+                InterlacingMode::Weak,
+            )
+            .expect("check interlacing");
+        assert!(report.all_interlacing);
+        assert_eq!(report.items.len(), 4);
+        assert!(report
+            .items
+            .iter()
+            .all(|item| item.interlaces == Some(true)));
+    }
+
+    #[test]
+    fn reports_first_interlacing_failure() {
+        let registry = default_family_registry();
+        let report = registry
+            .check_interlacing(
+                "normalized_derangement_descent_polynomial",
+                "reciprocal_eulerian_derivative_polynomial",
+                4,
+                6,
+                InterlacingMode::Weak,
+            )
+            .expect("check interlacing");
+        assert!(!report.all_interlacing);
+        assert_eq!(report.first_failure_n, Some(4));
+        let draft = interlacing_evaluation_draft(
+            "normalized_derangement_failure".to_string(),
+            "normalized_derangement_interlacing".to_string(),
+            &report,
+        )
+        .expect("draft evidence");
+        assert_eq!(draft.status, "counterexample_found");
+        assert!(draft.first_failure.is_some());
     }
 }

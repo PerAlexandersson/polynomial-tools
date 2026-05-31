@@ -1,9 +1,11 @@
 use polynomial_lab::{
-    default_family_registry, default_lab_root, real_rooted_evaluation_draft,
-    real_rooted_evidence_id, CheckFamilyRealRootednessReport, CheckedRange, ComputedPolynomial,
-    ConjectureDraft, EvaluationDraft, EvaluationFilter, GeneratedFile, GoalDraft, ImplicationDraft,
-    LabRecord, LabStore, PolynomialFamilyInfo, ProjectDraft, ProjectOverview, ProjectReport,
-    TraceGoalSupport, ValidationMode, ValidationReport, WrittenEvaluation, WrittenRecord,
+    default_family_registry, default_lab_root, interlacing_evaluation_draft,
+    interlacing_evidence_id, real_rooted_evaluation_draft, real_rooted_evidence_id,
+    CheckFamilyInterlacingReport, CheckFamilyRealRootednessReport, CheckedRange,
+    ComputedPolynomial, ConjectureDraft, EvaluationDraft, EvaluationFilter, GeneratedFile,
+    GoalDraft, ImplicationDraft, InterlacingMode, LabRecord, LabStore, PolynomialFamilyInfo,
+    ProjectDraft, ProjectOverview, ProjectReport, TraceGoalSupport, ValidationMode,
+    ValidationReport, WrittenEvaluation, WrittenRecord,
 };
 use rmcp::{
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
@@ -134,6 +136,20 @@ pub struct CheckFamilyRealRootedRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub struct CheckFamilyInterlacingRequest {
+    pub left_family_id: String,
+    pub right_family_id: String,
+    pub n_min: usize,
+    pub n_max: usize,
+    pub mode: Option<InterlacingMode>,
+    pub project_id: Option<String>,
+    pub relation_id: Option<String>,
+    pub id: Option<String>,
+    pub append: Option<bool>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct GeneratedProjectRequest {
     pub project_id: String,
     pub output: Option<String>,
@@ -195,6 +211,13 @@ pub struct FamilyListResponse {
 #[derive(Debug, Clone, Serialize, JsonSchema)]
 pub struct CheckFamilyRealRootedResponse {
     pub report: CheckFamilyRealRootednessReport,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub written_evidence: Option<WrittenEvaluation>,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+pub struct CheckFamilyInterlacingResponse {
+    pub report: CheckFamilyInterlacingReport,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub written_evidence: Option<WrittenEvaluation>,
 }
@@ -472,6 +495,58 @@ impl PolynomialLabServer {
         }))
     }
 
+    #[tool(
+        description = "Check directed strict or weak interlacing between two registered polynomial families over a range, optionally appending evidence."
+    )]
+    pub fn check_family_interlacing(
+        &self,
+        Parameters(input): Parameters<CheckFamilyInterlacingRequest>,
+    ) -> Result<Json<CheckFamilyInterlacingResponse>, McpError> {
+        let mode = input.mode.unwrap_or(InterlacingMode::Weak);
+        let registry = default_family_registry();
+        let report = registry
+            .check_interlacing(
+                &input.left_family_id,
+                &input.right_family_id,
+                input.n_min,
+                input.n_max,
+                mode,
+            )
+            .map_err(internal_error)?;
+        let written_evidence = if input.append.unwrap_or(false) {
+            let project_id = input
+                .project_id
+                .as_deref()
+                .ok_or_else(|| invalid_params("`append` requires `project_id`"))?;
+            let relation_id = input
+                .relation_id
+                .as_deref()
+                .ok_or_else(|| invalid_params("`append` requires `relation_id`"))?;
+            let id = input.id.unwrap_or_else(|| {
+                interlacing_evidence_id(
+                    relation_id,
+                    mode,
+                    report.first_failure_n,
+                    input.n_min,
+                    input.n_max,
+                )
+            });
+            let draft = interlacing_evaluation_draft(id, relation_id.to_string(), &report)
+                .map_err(internal_error)?;
+            Some(
+                self.load_store()?
+                    .append_evaluation(project_id, draft)
+                    .map_err(internal_error)?,
+            )
+        } else {
+            None
+        };
+        Ok(Json(CheckFamilyInterlacingResponse {
+            report,
+            written_evidence,
+        }))
+    }
+
     #[tool(description = "Render a project summary as Markdown.")]
     pub fn render_project_markdown(
         &self,
@@ -720,5 +795,24 @@ mod tests {
             }))
             .expect("compute family should work");
         assert_eq!(response.coefficients, vec!["0", "4", "4", "1"]);
+    }
+
+    #[test]
+    fn checks_registered_family_interlacing() {
+        let Json(response) = server()
+            .check_family_interlacing(Parameters(CheckFamilyInterlacingRequest {
+                left_family_id: "normalized_derangement_descent_polynomial".to_string(),
+                right_family_id: "reciprocal_eulerian_derivative_polynomial".to_string(),
+                n_min: 5,
+                n_max: 7,
+                mode: Some(InterlacingMode::Weak),
+                project_id: None,
+                relation_id: None,
+                id: None,
+                append: None,
+            }))
+            .expect("check interlacing should work");
+        assert!(response.report.all_interlacing);
+        assert!(response.written_evidence.is_none());
     }
 }

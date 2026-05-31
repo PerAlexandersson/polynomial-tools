@@ -12,9 +12,10 @@ use std::path::{Path, PathBuf};
 pub mod families;
 
 pub use families::{
-    default_family_registry, real_rooted_evaluation_draft, real_rooted_evidence_id,
-    CheckFamilyRealRootednessReport, ComputedPolynomial, FamilyCheckItem, PolynomialFamilyInfo,
-    PolynomialFamilyRegistry,
+    default_family_registry, interlacing_evaluation_draft, interlacing_evidence_id,
+    real_rooted_evaluation_draft, real_rooted_evidence_id, CheckFamilyInterlacingReport,
+    CheckFamilyRealRootednessReport, ComputedPolynomial, FamilyCheckItem,
+    FamilyInterlacingCheckItem, InterlacingMode, PolynomialFamilyInfo, PolynomialFamilyRegistry,
 };
 
 pub const DEFAULT_LAB_ROOT: &str = "/workspace/projects/polynomial-interlacing-lab";
