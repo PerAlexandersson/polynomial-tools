@@ -635,61 +635,47 @@ fn is_positive_semidefinite_bigint(mat: &[Vec<BigInt>]) -> bool {
 /// For same-degree interlacing, shared roots, or either argument order, use
 /// [`check_weak_interlacing`].
 pub fn check_interlacing(f: &[i64], g: &[i64]) -> Option<bool> {
-    let df = poly_degree_trimmed(f);
-    let dg = poly_degree_trimmed(g);
+    let f_big: Vec<BigInt> = f.iter().map(|&c| BigInt::from(c)).collect();
+    let g_big: Vec<BigInt> = g.iter().map(|&c| BigInt::from(c)).collect();
+    check_interlacing_bigint_coeffs(&f_big, &g_big)
+}
+
+/// Check **strict** interlacing f ≪ g for `BigInt` coefficient vectors.
+///
+/// This has the same convention as [`check_interlacing`], but avoids all
+/// coefficient overflow. The leading coefficients are normalized to be
+/// positive before the Bézout matrix is formed, so the result is invariant
+/// under multiplying either input polynomial by a nonzero scalar.
+pub fn check_interlacing_bigint_coeffs(f: &[BigInt], g: &[BigInt]) -> Option<bool> {
+    let df = poly_degree_trimmed_bigint(f);
+    let dg = poly_degree_trimmed_bigint(g);
 
     // 0 ≪ g for any real-rooted g (vacuously true).
     if df.is_none() {
-        return Some(is_real_rooted(g));
+        return Some(is_real_rooted_bigint_coeffs(g));
     }
 
-    match (df, dg) {
-        (Some(df), Some(dg)) if dg == df + 1 => {}
+    let (df, dg) = match (df, dg) {
+        (Some(df), Some(dg)) if dg == df + 1 => (df, dg),
         _ => return None,
     };
 
-    let mat = bezout_matrix_bigint(g, f)?;
+    let f = normalize_positive_leading_bigint(f, df);
+    let g = normalize_positive_leading_bigint(g, dg);
+    let mat = bezout_matrix_bigint_coeffs(&g, &f)?;
     Some(is_positive_definite_bigint(&mat))
 }
 
-/// Cauchy bound for root radius: all roots of `coeffs` lie in |z| < bound.
-///
-/// For f(t) = a_n t^n + ... + a_0, the Cauchy bound is
-/// 1 + max(|a_0|, ..., |a_{n-1}|) / |a_n|.
-/// Returns 2 for constant or zero polynomials.
-fn cauchy_root_bound(coeffs: &[i64]) -> i64 {
-    let deg = match poly_degree_trimmed(coeffs) {
-        Some(d) if d > 0 => d,
-        _ => return 2,
-    };
-    let lc = u128::from(coeffs[deg].unsigned_abs());
-    let max_other = coeffs[..deg]
-        .iter()
-        .map(|c| u128::from(c.unsigned_abs()))
-        .max()
-        .unwrap_or(0);
-    // ceil(1 + max_other / lc)
-    let bound = 1 + max_other.div_ceil(lc);
-    i64::try_from(bound).unwrap_or(i64::MAX)
-}
-
-/// Multiply polynomial by (t + r) in i64 coefficients.
-fn poly_mul_linear_factor(coeffs: &[i64], r: i64) -> Vec<i64> {
-    // (t + r) * (a_0 + a_1 t + ... + a_n t^n) = r*a_0 + (a_0 + r*a_1)t + ... + a_n t^{n+1}
-    let n = coeffs.len();
-    let mut result = vec![0i64; n + 1];
-    for i in 0..n {
-        let scaled = r
-            .checked_mul(coeffs[i])
-            .expect("linear factor multiplication overflow");
-        result[i] = result[i]
-            .checked_add(scaled)
-            .expect("linear factor multiplication overflow");
-        result[i + 1] = result[i + 1]
-            .checked_add(coeffs[i])
-            .expect("linear factor multiplication overflow");
+fn normalize_positive_leading_bigint(coeffs: &[BigInt], degree: usize) -> Vec<BigInt> {
+    let leading = coeffs[degree].clone();
+    debug_assert!(!leading.is_zero());
+    let mut normalized: Vec<BigInt> = coeffs.iter().take(degree + 1).cloned().collect();
+    if leading.is_negative() {
+        for coeff in &mut normalized {
+            *coeff = -coeff.clone();
+        }
     }
-    result
+    normalized
 }
 
 /// Check **directed weak** interlacing `p ≪ q` via the Bézout matrix.
@@ -725,17 +711,28 @@ fn poly_mul_linear_factor(coeffs: &[i64], r: i64) -> Vec<i64> {
 /// Returns `Some(true)` if `p ≪ q`, `Some(false)` if not, or `None`
 /// if the degree relationship is invalid (deg(p) > deg(q) or deg(q) > deg(p) + 1).
 pub fn check_weak_interlacing(p: &[i64], q: &[i64]) -> Option<bool> {
+    let p_big: Vec<BigInt> = p.iter().map(|&c| BigInt::from(c)).collect();
+    let q_big: Vec<BigInt> = q.iter().map(|&c| BigInt::from(c)).collect();
+    check_weak_interlacing_bigint_coeffs(&p_big, &q_big)
+}
+
+/// Check **directed weak** interlacing `p ≪ q` for `BigInt` coefficients.
+///
+/// This has the same convention as [`check_weak_interlacing`], but avoids
+/// overflow in the same-degree Cauchy-bound reduction and in the reduced
+/// Bézout matrix after common factors are removed.
+pub fn check_weak_interlacing_bigint_coeffs(p: &[BigInt], q: &[BigInt]) -> Option<bool> {
     // 0 ≪ q for any real-rooted q (vacuously true).
-    if poly_degree_trimmed(p).is_none() {
-        return Some(is_real_rooted(q));
+    if poly_degree_trimmed_bigint(p).is_none() {
+        return Some(is_real_rooted_bigint_coeffs(q));
     }
     // p ≪ 0 only if p is also zero (already handled above).
-    if poly_degree_trimmed(q).is_none() {
+    if poly_degree_trimmed_bigint(q).is_none() {
         return Some(false);
     }
 
-    let dp = poly_degree_trimmed(p).unwrap();
-    let dq = poly_degree_trimmed(q).unwrap();
+    let dp = poly_degree_trimmed_bigint(p).unwrap();
+    let dq = poly_degree_trimmed_bigint(q).unwrap();
 
     // Same-degree case: p ≪ q means p's roots are to the LEFT of q's roots.
     // The alternation pattern is: p_d ≤ q_d ≤ ... ≤ p_1 ≤ q_1 ≤ 0.
@@ -747,20 +744,15 @@ pub fn check_weak_interlacing(p: &[i64], q: &[i64]) -> Option<bool> {
     // Since R is far right, q_1 ≤ R holds automatically, and the rest
     // recovers the original same-degree interlacing p_i ≤ q_i.
     if dp == dq {
-        let p_ext = if has_nonzero_one_signed_trimmed_coefficients(p)
-            && has_nonzero_one_signed_trimmed_coefficients(q)
+        let p_ext = if has_nonzero_one_signed_trimmed_coefficients_bigint(p)
+            && has_nonzero_one_signed_trimmed_coefficients_bigint(q)
         {
             // Both polynomials have no nonnegative real roots, so root at 0 is
             // far right enough if the pair is real-rooted.
-            poly_mul_linear_factor(p, 0)
+            poly_mul_linear_factor_bigint(p, &BigInt::zero())
         } else {
-            let bound_p = cauchy_root_bound(p);
-            let bound_q = cauchy_root_bound(q);
-            let r = bound_p
-                .max(bound_q)
-                .checked_add(1)
-                .expect("Cauchy bound too large for i64 interlacing reduction");
-            poly_mul_linear_factor(p, -r)
+            let r = cauchy_root_bound_bigint(p).max(cauchy_root_bound_bigint(q)) + BigInt::from(1);
+            poly_mul_linear_factor_bigint(p, &(-r))
         };
         return check_weak_interlacing_impl(q, &p_ext);
     }
@@ -774,24 +766,52 @@ pub fn check_weak_interlacing(p: &[i64], q: &[i64]) -> Option<bool> {
     None
 }
 
-fn has_nonzero_one_signed_trimmed_coefficients(coeffs: &[i64]) -> bool {
-    let Some(degree) = poly_degree_trimmed(coeffs) else {
+/// Cauchy bound for root radius: all roots of `coeffs` lie in |z| < bound.
+///
+/// For f(t) = a_n t^n + ... + a_0, the Cauchy bound is
+/// 1 + max(|a_0|, ..., |a_{n-1}|) / |a_n|.
+/// Returns 2 for constant or zero polynomials.
+fn cauchy_root_bound_bigint(coeffs: &[BigInt]) -> BigInt {
+    let deg = match poly_degree_trimmed_bigint(coeffs) {
+        Some(d) if d > 0 => d,
+        _ => return BigInt::from(2),
+    };
+    let lc = coeffs[deg].abs();
+    let max_other = coeffs[..deg]
+        .iter()
+        .map(|c| c.abs())
+        .max()
+        .unwrap_or_else(BigInt::zero);
+    BigInt::from(1) + (&max_other + &lc - BigInt::from(1)) / lc
+}
+
+/// Multiply polynomial by (t + r) in BigInt coefficients.
+fn poly_mul_linear_factor_bigint(coeffs: &[BigInt], r: &BigInt) -> Vec<BigInt> {
+    // (t + r) * (a_0 + a_1 t + ... + a_n t^n) = r*a_0 + (a_0 + r*a_1)t + ... + a_n t^{n+1}
+    let n = coeffs.len();
+    let mut result = vec![BigInt::zero(); n + 1];
+    for i in 0..n {
+        result[i] = &result[i] + r * &coeffs[i];
+        result[i + 1] = &result[i + 1] + &coeffs[i];
+    }
+    result
+}
+
+fn has_nonzero_one_signed_trimmed_coefficients_bigint(coeffs: &[BigInt]) -> bool {
+    let Some(degree) = poly_degree_trimmed_bigint(coeffs) else {
         return false;
     };
-    if coeffs.first().copied().unwrap_or(0) == 0 {
+    if coeffs.first().is_none_or(BigInt::is_zero) {
         return false;
     }
     let active = &coeffs[..=degree];
-    active.iter().all(|&c| c >= 0) || active.iter().all(|&c| c <= 0)
+    active.iter().all(|c| c >= &BigInt::zero()) || active.iter().all(|c| c <= &BigInt::zero())
 }
 
 /// Core weak interlacing check for deg(g) = deg(f) + 1.
-fn check_weak_interlacing_impl(f: &[i64], g: &[i64]) -> Option<bool> {
-    let to_q = |coeffs: &[i64]| -> Vec<Q> {
-        coeffs
-            .iter()
-            .map(|&c| Q::from_integer(BigInt::from(c)))
-            .collect()
+fn check_weak_interlacing_impl(f: &[BigInt], g: &[BigInt]) -> Option<bool> {
+    let to_q = |coeffs: &[BigInt]| -> Vec<Q> {
+        coeffs.iter().map(|c| Q::from_integer(c.clone())).collect()
     };
 
     let pq = to_q(f);
@@ -802,15 +822,15 @@ fn check_weak_interlacing_impl(f: &[i64], g: &[i64]) -> Option<bool> {
 
     // If GCD is trivial (constant), just do strict interlacing
     if gcd_deg == 0 {
-        return check_interlacing(f, g);
+        return check_interlacing_bigint_coeffs(f, g);
     }
 
     // The shared roots (given by the GCD) must themselves be real. PSD of the
     // Bézoutian does not certify this: e.g. f=t(t^2+1), g=t^2+1 has a non-real
     // common factor, so the original pair cannot weakly interlace even though
     // the reduced pair is harmless.
-    let gcd_i64 = q_poly_to_i64(&gcd);
-    if !is_real_rooted(&gcd_i64) {
+    let gcd_big = q_poly_to_primitive_bigint(&gcd);
+    if !is_real_rooted_bigint_coeffs(&gcd_big) {
         return Some(false);
     }
 
@@ -831,12 +851,9 @@ fn check_weak_interlacing_impl(f: &[i64], g: &[i64]) -> Option<bool> {
         return None;
     }
 
-    // Convert back to i64 coefficients (clear denominators first)
-    let f_i64 = q_poly_to_i64(&f_red);
-    let g_i64 = q_poly_to_i64(&g_red);
-
-    let mat = bezout_matrix_bigint(&g_i64, &f_i64)?;
-    Some(is_positive_definite_bigint(&mat))
+    let f_big = q_poly_to_primitive_bigint(&f_red);
+    let g_big = q_poly_to_primitive_bigint(&g_red);
+    check_interlacing_bigint_coeffs(&f_big, &g_big)
 }
 
 // ---------------------------------------------------------------------------
@@ -959,9 +976,8 @@ fn poly_exact_div_q(a: &[Q], b: &[Q]) -> Vec<Q> {
     quot
 }
 
-/// Convert a Q polynomial to i64 by clearing denominators.
-fn q_poly_to_i64(p: &[Q]) -> Vec<i64> {
-    use num_integer::Integer;
+/// Convert a Q polynomial to primitive BigInt coefficients by clearing denominators.
+fn q_poly_to_primitive_bigint(p: &[Q]) -> Vec<BigInt> {
     let zero = Q::from_integer(BigInt::from(0));
     // LCM of all denominators
     let lcm = p
@@ -970,23 +986,38 @@ fn q_poly_to_i64(p: &[Q]) -> Vec<i64> {
         .fold(BigInt::from(1), |acc, c| acc.lcm(c.denom()));
 
     let lcm_q = Q::from_integer(lcm);
-    let result: Vec<i64> = p
+    let mut result: Vec<BigInt> = p
         .iter()
         .map(|c| {
             let scaled = c * &lcm_q;
-            // Should be an integer now
-            let n = scaled.to_integer();
-            // Convert to i64 (may panic on overflow for huge polynomials)
-            i64::try_from(&n).unwrap_or_else(|_| {
-                // If it doesn't fit, try with sign
-                if n.is_negative() {
-                    -(i64::try_from(&(-n)).expect("coefficient too large for i64"))
-                } else {
-                    panic!("coefficient too large for i64: {}", n)
-                }
-            })
+            debug_assert_eq!(scaled.denom(), &BigInt::from(1));
+            scaled.to_integer()
         })
         .collect();
+    while result.last().is_some_and(BigInt::is_zero) {
+        result.pop();
+    }
+    if result.is_empty() {
+        return vec![BigInt::zero()];
+    }
+
+    let mut content = BigInt::zero();
+    for coeff in &result {
+        if coeff.is_zero() {
+            continue;
+        }
+        let abs_coeff = coeff.abs();
+        content = if content.is_zero() {
+            abs_coeff
+        } else {
+            content.gcd(&abs_coeff)
+        };
+    }
+    if content > BigInt::from(1) {
+        for coeff in &mut result {
+            *coeff /= &content;
+        }
+    }
     result
 }
 
@@ -1591,6 +1622,31 @@ mod tests {
         assert_eq!(check_interlacing(&[1, 1], &[1, 0, 1]), Some(false));
     }
 
+    #[test]
+    fn test_interlacing_is_invariant_under_scalar_signs() {
+        // (t-2) interlaces (t-1)(t-3), independent of multiplying either
+        // polynomial by -1.
+        assert_eq!(check_interlacing(&[-2, 1], &[3, -4, 1]), Some(true));
+        assert_eq!(check_interlacing(&[2, -1], &[3, -4, 1]), Some(true));
+        assert_eq!(check_interlacing(&[-2, 1], &[-3, 4, -1]), Some(true));
+        assert_eq!(check_interlacing(&[2, -1], &[-3, 4, -1]), Some(true));
+    }
+
+    #[test]
+    fn test_interlacing_bigint_coeffs() {
+        let scale = BigInt::from(10u64).pow(40);
+        let f: Vec<BigInt> = [2_i64, -1]
+            .into_iter()
+            .map(|c| BigInt::from(c) * &scale)
+            .collect();
+        let g: Vec<BigInt> = [-3_i64, 4, -1]
+            .into_iter()
+            .map(|c| BigInt::from(c) * &scale)
+            .collect();
+
+        assert_eq!(check_interlacing_bigint_coeffs(&f, &g), Some(true));
+    }
+
     // -- Bézout matrix tests --
 
     #[test]
@@ -1715,6 +1771,22 @@ mod tests {
             check_weak_interlacing_bezout(&[2, -3, 1], &[2, -3, 1]),
             Some(true)
         );
+    }
+
+    #[test]
+    fn test_weak_interlacing_bigint_coeffs() {
+        let scale = BigInt::from(10u64).pow(40);
+        let p: Vec<BigInt> = [1_i64, 1]
+            .into_iter()
+            .map(|c| BigInt::from(c) * &scale)
+            .collect();
+        let q: Vec<BigInt> = [-1_i64, 1]
+            .into_iter()
+            .map(|c| BigInt::from(c) * &scale)
+            .collect();
+
+        assert_eq!(check_weak_interlacing_bigint_coeffs(&p, &q), Some(true));
+        assert_eq!(check_weak_interlacing_bigint_coeffs(&q, &p), Some(false));
     }
 
     #[test]
