@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 //! Dense univariate polynomial toolkit for combinatorial research.
 //!
 //! Provides [`Polynomial<C>`] with generic coefficients, plus specialized routines
@@ -30,6 +32,32 @@
 //! let q = p.clone() * p.clone(); // 1 + 2t + t^2
 //! assert_eq!(format!("{}", q), "1 + 2t + t^2");
 //! assert!(q.is_palindromic());
+//! ```
+//!
+//! # API conventions
+//!
+//! Coefficient vectors are always in ascending degree order. Public `i64`
+//! functions are ergonomic wrappers around exact integer implementations where
+//! practical; use the `*_bigint_coeffs` variants when coefficients may exceed
+//! `i64`.
+//!
+//! Interlacing checks return `Option<bool>` because the degree relation is part
+//! of the contract. `Some(true)` and `Some(false)` mean the degree relation is
+//! valid and the property was decided exactly; `None` means the input degrees
+//! are not valid for that directed interlacing test.
+//!
+//! ```
+//! use num_bigint::BigInt;
+//! use polynomial_tools::check_interlacing_bigint_coeffs;
+//!
+//! let center = BigInt::from(10).pow(20);
+//! let f = vec![-&center, BigInt::from(1)]; // t - center
+//! let g = vec![
+//!     (&center - 1u32) * (&center + 1u32),
+//!     -BigInt::from(2) * &center,
+//!     BigInt::from(1),
+//! ]; // (t - center + 1)(t - center - 1)
+//! assert_eq!(check_interlacing_bigint_coeffs(&f, &g), Some(true));
 //! ```
 //!
 //! # Modules
