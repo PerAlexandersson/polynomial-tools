@@ -9,6 +9,14 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+pub mod families;
+
+pub use families::{
+    default_family_registry, real_rooted_evaluation_draft, real_rooted_evidence_id,
+    CheckFamilyRealRootednessReport, ComputedPolynomial, FamilyCheckItem, PolynomialFamilyInfo,
+    PolynomialFamilyRegistry,
+};
+
 pub const DEFAULT_LAB_ROOT: &str = "/workspace/projects/polynomial-interlacing-lab";
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]

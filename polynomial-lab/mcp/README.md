@@ -37,6 +37,9 @@ Exposed tools:
 - `trace_goal_support`
 - `list_proof_rules`
 - `list_search_recipes`
+- `list_families`
+- `compute_family`
+- `check_family_real_rooted`
 - `render_project_markdown`
 - `render_project_html`
 - `write_project_markdown`

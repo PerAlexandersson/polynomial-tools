@@ -15,6 +15,9 @@ path = "src/main.rs"
 anyhow = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 clap = { version = "4", features = ["derive", "env"] }
+num-bigint = "0.4"
+num-traits = "0.2"
+polynomial-tools = { path = "../polynomial-tools" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 schemars = "1"

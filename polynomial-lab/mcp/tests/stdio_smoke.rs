@@ -111,6 +111,8 @@ fn lists_tools_and_traces_derangement_goal() {
         .filter_map(|tool| tool["name"].as_str())
         .collect();
     assert!(tool_names.contains(&"list_projects"));
+    assert!(tool_names.contains(&"compute_family"));
+    assert!(tool_names.contains(&"check_family_real_rooted"));
     assert!(tool_names.contains(&"trace_goal_support"));
     assert!(tool_names.contains(&"render_project_markdown"));
     assert!(tool_names.contains(&"append_timeout"));
@@ -147,6 +149,56 @@ fn lists_tools_and_traces_derangement_goal() {
             "id": 4,
             "method": "tools/call",
             "params": {
+                "name": "compute_family",
+                "arguments": {
+                    "family_id": "derangement_descent_polynomial",
+                    "n": 4
+                }
+            }
+        }),
+    );
+    let family = read_response(&mut stdout, 4);
+    assert_eq!(
+        family["result"]["structuredContent"]["coefficients"],
+        json!(["0", "4", "4", "1"])
+    );
+
+    send(
+        &mut stdin,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 5,
+            "method": "tools/call",
+            "params": {
+                "name": "check_family_real_rooted",
+                "arguments": {
+                    "family_id": "derangement_descent_polynomial",
+                    "n_min": 2,
+                    "n_max": 6,
+                    "append": true,
+                    "project_id": "demo_project",
+                    "relation_id": "demo_derangement_real_rooted"
+                }
+            }
+        }),
+    );
+    let check = read_response(&mut stdout, 5);
+    assert_eq!(
+        check["result"]["structuredContent"]["report"]["all_real_rooted"],
+        true
+    );
+    assert_eq!(
+        check["result"]["structuredContent"]["written_evidence"]["path"],
+        "projects/demo_project/evidence/demo_derangement_real_rooted_n_2_6.json"
+    );
+
+    send(
+        &mut stdin,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 6,
+            "method": "tools/call",
+            "params": {
                 "name": "append_timeout",
                 "arguments": {
                     "project_id": "demo_project",
@@ -159,7 +211,7 @@ fn lists_tools_and_traces_derangement_goal() {
             }
         }),
     );
-    let append = read_response(&mut stdout, 4);
+    let append = read_response(&mut stdout, 6);
     assert_eq!(
         append["result"]["structuredContent"]["path"],
         "projects/demo_project/evidence/demo_mcp_timeout.json"
@@ -172,7 +224,7 @@ fn lists_tools_and_traces_derangement_goal() {
         &mut stdin,
         json!({
             "jsonrpc": "2.0",
-            "id": 5,
+            "id": 7,
             "method": "tools/call",
             "params": {
                 "name": "write_project_html",
@@ -182,7 +234,7 @@ fn lists_tools_and_traces_derangement_goal() {
             }
         }),
     );
-    let write = read_response(&mut stdout, 5);
+    let write = read_response(&mut stdout, 7);
     assert_eq!(
         write["result"]["structuredContent"]["path"],
         "projects/demo_project/generated/project-summary.html"

@@ -1,12 +1,12 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use polynomial_lab::{
-    default_lab_root, format_project_overviews, format_records, format_trace,
-    format_validation_report, CheckedRange, EvaluationDraft, EvaluationFilter, LabStore,
-    ValidationMode,
+    default_family_registry, default_lab_root, format_project_overviews, format_records,
+    format_trace, format_validation_report, real_rooted_evaluation_draft, real_rooted_evidence_id,
+    CheckedRange, EvaluationDraft, EvaluationFilter, LabStore, ValidationMode,
 };
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
@@ -48,6 +48,27 @@ enum Command {
     },
     ListProofRules,
     ListSearchRecipes,
+    ListFamilies,
+    ComputeFamily {
+        family_id: String,
+        #[arg(long)]
+        n: usize,
+    },
+    CheckFamilyRealRooted {
+        family_id: String,
+        #[arg(long)]
+        n_min: usize,
+        #[arg(long)]
+        n_max: usize,
+        #[arg(long)]
+        project: Option<String>,
+        #[arg(long)]
+        relation: Option<String>,
+        #[arg(long)]
+        id: Option<String>,
+        #[arg(long)]
+        append: bool,
+    },
     TraceGoal {
         project_id: String,
         goal_id: String,
@@ -193,6 +214,81 @@ fn main() -> Result<()> {
                 print_json(&recipes)?;
             } else {
                 print!("{}", format_records(&recipes));
+            }
+        }
+        Command::ListFamilies => {
+            let registry = default_family_registry();
+            let families = registry.list();
+            if cli.json {
+                print_json(&families)?;
+            } else {
+                for family in families {
+                    println!(
+                        "{}\t{}\t{}\tn >= {}\t{}",
+                        family.id, family.symbol, family.label, family.min_n, family.source
+                    );
+                }
+            }
+        }
+        Command::ComputeFamily { family_id, n } => {
+            let registry = default_family_registry();
+            let computed = registry.compute(&family_id, n)?;
+            if cli.json {
+                print_json(&computed)?;
+            } else {
+                println!("{} at n={}", computed.family_id, computed.n);
+                println!("coefficients: [{}]", computed.coefficients.join(", "));
+                println!("polynomial: {}", computed.polynomial);
+            }
+        }
+        Command::CheckFamilyRealRooted {
+            family_id,
+            n_min,
+            n_max,
+            project,
+            relation,
+            id,
+            append,
+        } => {
+            let registry = default_family_registry();
+            let report = registry.check_real_rooted(&family_id, n_min, n_max)?;
+            let written = if append {
+                let project = project
+                    .as_deref()
+                    .ok_or_else(|| anyhow::anyhow!("--append requires --project"))?;
+                let relation = relation
+                    .as_deref()
+                    .ok_or_else(|| anyhow::anyhow!("--append requires --relation"))?;
+                let evidence_id = id.unwrap_or_else(|| {
+                    real_rooted_evidence_id(relation, report.first_failure_n, n_min, n_max)
+                });
+                let draft = real_rooted_evaluation_draft(
+                    evidence_id,
+                    relation.to_string(),
+                    &family_id,
+                    &report,
+                )?;
+                Some(store.append_evaluation(project, draft)?)
+            } else {
+                None
+            };
+
+            if cli.json {
+                print_json(&json!({
+                    "report": report,
+                    "written_evidence": written,
+                }))?;
+            } else {
+                println!(
+                    "{} real-rooted for n={}..{}: {}",
+                    report.family_id, report.n_min, report.n_max, report.all_real_rooted
+                );
+                if let Some(first_failure_n) = report.first_failure_n {
+                    println!("first failure: n={first_failure_n}");
+                }
+                if let Some(written) = written {
+                    println!("wrote {}", written.path);
+                }
             }
         }
         Command::TraceGoal {

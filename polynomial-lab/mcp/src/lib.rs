@@ -1,6 +1,8 @@
 use polynomial_lab::{
-    default_lab_root, CheckedRange, EvaluationDraft, EvaluationFilter, GeneratedFile, LabRecord,
-    LabStore, ProjectOverview, ProjectReport, TraceGoalSupport, ValidationMode, ValidationReport,
+    default_family_registry, default_lab_root, real_rooted_evaluation_draft,
+    real_rooted_evidence_id, CheckFamilyRealRootednessReport, CheckedRange, ComputedPolynomial,
+    EvaluationDraft, EvaluationFilter, GeneratedFile, LabRecord, LabStore, PolynomialFamilyInfo,
+    ProjectOverview, ProjectReport, TraceGoalSupport, ValidationMode, ValidationReport,
     WrittenEvaluation,
 };
 use rmcp::{
@@ -59,6 +61,25 @@ pub struct TraceGoalRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub struct ComputeFamilyRequest {
+    pub family_id: String,
+    pub n: usize,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CheckFamilyRealRootedRequest {
+    pub family_id: String,
+    pub n_min: usize,
+    pub n_max: usize,
+    pub project_id: Option<String>,
+    pub relation_id: Option<String>,
+    pub id: Option<String>,
+    pub append: Option<bool>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct GeneratedProjectRequest {
     pub project_id: String,
     pub output: Option<String>,
@@ -110,6 +131,18 @@ pub struct ProjectListResponse {
 #[derive(Debug, Clone, Serialize, JsonSchema)]
 pub struct RecordListResponse {
     pub records: Vec<LabRecord>,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+pub struct FamilyListResponse {
+    pub families: Vec<PolynomialFamilyInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+pub struct CheckFamilyRealRootedResponse {
+    pub report: CheckFamilyRealRootednessReport,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub written_evidence: Option<WrittenEvaluation>,
 }
 
 #[derive(Debug, Clone, Serialize, JsonSchema)]
@@ -224,6 +257,76 @@ impl PolynomialLabServer {
     ) -> Result<Json<RecordListResponse>, McpError> {
         Ok(Json(RecordListResponse {
             records: self.load_store()?.search_recipes(),
+        }))
+    }
+
+    #[tool(description = "List registered computable polynomial families.")]
+    pub fn list_families(
+        &self,
+        Parameters(_input): Parameters<EmptyRequest>,
+    ) -> Result<Json<FamilyListResponse>, McpError> {
+        Ok(Json(FamilyListResponse {
+            families: default_family_registry().list(),
+        }))
+    }
+
+    #[tool(description = "Compute one registered polynomial family at a given n.")]
+    pub fn compute_family(
+        &self,
+        Parameters(input): Parameters<ComputeFamilyRequest>,
+    ) -> Result<Json<ComputedPolynomial>, McpError> {
+        default_family_registry()
+            .compute(&input.family_id, input.n)
+            .map(Json)
+            .map_err(internal_error)
+    }
+
+    #[tool(
+        description = "Check real-rootedness of a registered polynomial family over a range, optionally appending evidence."
+    )]
+    pub fn check_family_real_rooted(
+        &self,
+        Parameters(input): Parameters<CheckFamilyRealRootedRequest>,
+    ) -> Result<Json<CheckFamilyRealRootedResponse>, McpError> {
+        let registry = default_family_registry();
+        let report = registry
+            .check_real_rooted(&input.family_id, input.n_min, input.n_max)
+            .map_err(internal_error)?;
+        let written_evidence = if input.append.unwrap_or(false) {
+            let project_id = input
+                .project_id
+                .as_deref()
+                .ok_or_else(|| invalid_params("`append` requires `project_id`"))?;
+            let relation_id = input
+                .relation_id
+                .as_deref()
+                .ok_or_else(|| invalid_params("`append` requires `relation_id`"))?;
+            let id = input.id.unwrap_or_else(|| {
+                real_rooted_evidence_id(
+                    relation_id,
+                    report.first_failure_n,
+                    input.n_min,
+                    input.n_max,
+                )
+            });
+            let draft = real_rooted_evaluation_draft(
+                id,
+                relation_id.to_string(),
+                &input.family_id,
+                &report,
+            )
+            .map_err(internal_error)?;
+            Some(
+                self.load_store()?
+                    .append_evaluation(project_id, draft)
+                    .map_err(internal_error)?,
+            )
+        } else {
+            None
+        };
+        Ok(Json(CheckFamilyRealRootedResponse {
+            report,
+            written_evidence,
         }))
     }
 
@@ -464,5 +567,16 @@ mod tests {
             }))
             .expect("list evaluations should work");
         assert_eq!(response.records.len(), 1);
+    }
+
+    #[test]
+    fn computes_registered_family() {
+        let Json(response) = server()
+            .compute_family(Parameters(ComputeFamilyRequest {
+                family_id: "derangement_descent_polynomial".to_string(),
+                n: 4,
+            }))
+            .expect("compute family should work");
+        assert_eq!(response.coefficients, vec!["0", "4", "4", "1"]);
     }
 }
