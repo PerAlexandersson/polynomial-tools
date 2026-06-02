@@ -486,10 +486,8 @@ pub fn is_real_rooted_one_signed_bigint_coeffs(coeffs: &[BigInt]) -> Option<bool
 
 /// Exact real-rootedness with a fast one-signed path and PRS fallback.
 ///
-/// This avoids constructing Bézout/PSD matrices entirely.  The public
-/// `real_rootedness::is_real_rooted_bigint_coeffs` function currently uses the
-/// one-signed part of this path and keeps Bézout as the mixed-sign fallback,
-/// because Bézout also supports the interlacing routines.
+/// This avoids constructing Bézout/PSD matrices entirely.  It is the backend
+/// used by the public `real_rootedness::is_real_rooted_bigint_coeffs` default.
 pub fn is_real_rooted_fast_bigint_coeffs(coeffs: &[BigInt]) -> bool {
     if let Some(rr) = is_real_rooted_one_signed_bigint_coeffs(coeffs) {
         rr

@@ -68,13 +68,13 @@
 //!   modular/CRT determinant reconstruction, Gaussian elimination over ℚ,
 //!   positive definiteness/semi-definiteness, determinants, linear system
 //!   solving, total non-negativity via Neville elimination
-//! - [`real_rootedness`] — Bézout matrix (default) and Sturm chain real-rootedness,
-//!   strict/weak interlacing (including same-degree via Cauchy bound reduction),
-//!   log-concavity, ultra-log-concavity, palindromic check, gamma-positivity,
-//!   Stapledon decomposition, resultant, discriminant, Ehrhart ↔ h*-vector,
-//!   display utilities
-//! - [`root_count`] — primitive integer PRS root counting and a fast exact
-//!   real-rootedness path for one-signed/positive coefficient polynomials
+//! - [`real_rootedness`] — exact real-rootedness wrappers, Bézout/Hermite
+//!   comparison paths, strict/weak interlacing (including same-degree via
+//!   Cauchy bound reduction), log-concavity, ultra-log-concavity, palindromic
+//!   check, gamma-positivity, Stapledon decomposition, resultant,
+//!   discriminant, Ehrhart ↔ h*-vector, display utilities
+//! - [`root_count`] — primitive integer PRS root counting and the default exact
+//!   real-rootedness backend
 //! - [`sturm`] — Sturm chains for exact root isolation (used internally)
 //! - [`recurrence`] — Adaptive recurrence search for polynomial sequences
 //! - [`sequences`] — Standard sequences: Eulerian, Narayana, type B Eulerian,
