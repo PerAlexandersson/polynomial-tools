@@ -409,6 +409,33 @@ pub fn satisfies_newton_inequalities_bigint(coeffs: &[BigInt]) -> bool {
     true
 }
 
+/// Check Kurtz's sufficient condition for distinct real roots.
+///
+/// If `f(t)=sum a_i t^i` has positive coefficients and
+/// `a_i^2 > 4 a_{i-1} a_{i+1}` for every `1 <= i < d`, then all roots of `f`
+/// are distinct and real.  Since all coefficients are positive, those roots
+/// are automatically negative.  The condition is sufficient, not necessary.
+///
+/// This returns `false` for degree `0` and `1`, where the criterion has no
+/// inequalities to check.
+pub fn satisfies_kurtz_condition_bigint(coeffs: &[BigInt]) -> bool {
+    let p = trim_slice(strip_initial_zeros_bigint(coeffs));
+    let d = match degree(&p) {
+        Some(d) if d >= 2 => d,
+        _ => return false,
+    };
+    if p.iter().take(d + 1).any(|c| !c.is_positive()) {
+        return false;
+    }
+
+    for i in 1..d {
+        if p[i].pow(2) <= BigInt::from(4) * &p[i - 1] * &p[i + 1] {
+            return false;
+        }
+    }
+    true
+}
+
 /// Exact real-rootedness via primitive integer Sturm/PRS root counting.
 ///
 /// This is a general method: it works for mixed-sign coefficients as well as
@@ -444,6 +471,9 @@ pub fn is_real_rooted_one_signed_bigint_coeffs(coeffs: &[BigInt]) -> Option<bool
     }
 
     let p = make_nonnegative(p);
+    if satisfies_kurtz_condition_bigint(&p) {
+        return Some(true);
+    }
     if !satisfies_newton_inequalities_bigint(&p) {
         return Some(false);
     }
@@ -570,6 +600,26 @@ mod tests {
     fn test_newton_filter() {
         assert!(satisfies_newton_inequalities_bigint(&b(&[1, 4, 6, 4, 1])));
         assert!(!satisfies_newton_inequalities_bigint(&b(&[1, 1, 10, 1])));
+    }
+
+    #[test]
+    fn test_kurtz_condition_filter() {
+        // (t + 1)(t + 10)(t + 100) = 1000 + 1110t + 111t^2 + t^3.
+        let widely_spaced = b(&[1000, 1110, 111, 1]);
+        assert!(satisfies_kurtz_condition_bigint(&widely_spaced));
+        assert_eq!(
+            is_real_rooted_one_signed_bigint_coeffs(&widely_spaced),
+            Some(true)
+        );
+
+        // (1+t)^4 is real-rooted, but the Kurtz condition is intentionally
+        // much stronger than real-rootedness.
+        assert!(!satisfies_kurtz_condition_bigint(&b(&[1, 4, 6, 4, 1])));
+        assert!(!satisfies_kurtz_condition_bigint(&b(&[1, 0, 1])));
+        assert!(!satisfies_kurtz_condition_bigint(&b(&[
+            -1000, -1110, -111, -1
+        ])));
+        assert!(!satisfies_kurtz_condition_bigint(&b(&[1, 10])));
     }
 
     #[test]
