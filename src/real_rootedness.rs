@@ -1021,6 +1021,185 @@ fn q_poly_to_primitive_bigint(p: &[Q]) -> Vec<BigInt> {
     result
 }
 
+fn derivative_bigint_coeffs(coeffs: &[BigInt]) -> Vec<BigInt> {
+    let Some(degree) = poly_degree_trimmed_bigint(coeffs) else {
+        return vec![BigInt::zero()];
+    };
+    if degree == 0 {
+        return vec![BigInt::zero()];
+    }
+    let mut derivative = Vec::with_capacity(degree);
+    for k in 0..degree {
+        derivative.push(&coeffs[k + 1] * BigInt::from((k + 1) as u64));
+    }
+    derivative
+}
+
+/// Return the squarefree part `p / gcd(p, p')`, with primitive integer
+/// coefficients.
+///
+/// This is useful for boolean real-rootedness checks: a polynomial is weakly
+/// real-rooted if and only if its squarefree part is strictly real-rooted.
+/// The zero polynomial is returned as `0`.
+pub fn squarefree_part_bigint_coeffs(coeffs: &[BigInt]) -> Vec<BigInt> {
+    let Some(degree) = poly_degree_trimmed_bigint(coeffs) else {
+        return vec![BigInt::zero()];
+    };
+    let trimmed: Vec<BigInt> = coeffs.iter().take(degree + 1).cloned().collect();
+    if degree <= 1 {
+        return q_poly_to_primitive_bigint(
+            &trimmed
+                .iter()
+                .map(|c| Q::from_integer(c.clone()))
+                .collect::<Vec<_>>(),
+        );
+    }
+
+    let p_q: Vec<Q> = trimmed.iter().map(|c| Q::from_integer(c.clone())).collect();
+    let dp_q: Vec<Q> = derivative_bigint_coeffs(&trimmed)
+        .iter()
+        .map(|c| Q::from_integer(c.clone()))
+        .collect();
+    let gcd = poly_gcd_q(&p_q, &dp_q);
+    let squarefree = poly_exact_div_q(&p_q, &gcd);
+    q_poly_to_primitive_bigint(&squarefree)
+}
+
+fn newton_sums_rational_bigint_coeffs(coeffs: &[BigInt], max_power: usize) -> Option<Vec<Q>> {
+    let degree = poly_degree_trimmed_bigint(coeffs)?;
+    let lc = coeffs[degree].clone();
+    if lc.is_zero() {
+        return None;
+    }
+
+    let lc_q = Q::from_integer(lc);
+    let monic_coeffs: Vec<Q> = coeffs
+        .iter()
+        .take(degree)
+        .map(|c| Q::from_integer(c.clone()) / lc_q.clone())
+        .collect();
+
+    let mut sums = vec![Q::from_integer(BigInt::zero()); max_power + 1];
+    sums[0] = Q::from_integer(BigInt::from(degree as u64));
+
+    for k in 1..=max_power {
+        let mut total = Q::from_integer(BigInt::zero());
+        let upper = (k - 1).min(degree);
+        for i in 1..=upper {
+            total += monic_coeffs[degree - i].clone() * sums[k - i].clone();
+        }
+        if k <= degree {
+            total += Q::from_integer(BigInt::from(k as u64)) * monic_coeffs[degree - k].clone();
+        }
+        sums[k] = -total;
+    }
+
+    Some(sums)
+}
+
+/// Build the Hermite/Newton-sum matrix for a polynomial.
+///
+/// For a degree `d` polynomial with roots `alpha_i`, the rational Hermite
+/// matrix has entry `s_{i+j}`, where `s_k=sum_i alpha_i^k`.  This function
+/// clears denominators by a single positive scalar and returns an integer
+/// matrix with the same definiteness.
+pub fn hermite_matrix_bigint_coeffs(coeffs: &[BigInt]) -> Option<Vec<Vec<BigInt>>> {
+    let degree = poly_degree_trimmed_bigint(coeffs)?;
+    if degree == 0 {
+        return Some(Vec::new());
+    }
+
+    let sums = newton_sums_rational_bigint_coeffs(coeffs, 2 * degree - 2)?;
+    let zero = Q::from_integer(BigInt::zero());
+    let denominator_lcm = sums
+        .iter()
+        .take(2 * degree - 1)
+        .filter(|s| **s != zero)
+        .fold(BigInt::from(1), |acc, s| acc.lcm(s.denom()));
+    let scale = Q::from_integer(denominator_lcm);
+
+    let mut matrix = vec![vec![BigInt::zero(); degree]; degree];
+    for i in 0..degree {
+        for j in 0..degree {
+            let scaled = sums[i + j].clone() * scale.clone();
+            debug_assert_eq!(scaled.denom(), &BigInt::from(1));
+            matrix[i][j] = scaled.to_integer();
+        }
+    }
+    Some(matrix)
+}
+
+/// Check real-rootedness by first taking the squarefree part, then checking
+/// strict real-rootedness with the Bézout positive-definite criterion.
+///
+/// This is kept separate from [`is_real_rooted_bezout_bigint_coeffs`] so the
+/// old semidefinite Bézout implementation remains available for comparison.
+pub fn is_real_rooted_bezout_squarefree_bigint_coeffs(coeffs: &[BigInt]) -> bool {
+    let squarefree = squarefree_part_bigint_coeffs(coeffs);
+    is_strictly_real_rooted_bezout_bigint_coeffs(&squarefree)
+}
+
+/// Check strict real-rootedness with the Bézout positive-definite criterion,
+/// without removing repeated factors first.
+pub fn is_strictly_real_rooted_bezout_bigint_coeffs(coeffs: &[BigInt]) -> bool {
+    let Some(degree) = poly_degree_trimmed_bigint(coeffs) else {
+        return true;
+    };
+    if degree <= 1 {
+        return true;
+    }
+    let derivative = derivative_bigint_coeffs(coeffs);
+    check_interlacing_bigint_coeffs(&derivative, coeffs).unwrap_or(false)
+}
+
+/// Check real-rootedness by first taking the squarefree part, then checking
+/// positive definiteness of the Hermite/Newton-sum matrix.
+pub fn is_real_rooted_hermite_bigint_coeffs(coeffs: &[BigInt]) -> bool {
+    let squarefree = squarefree_part_bigint_coeffs(coeffs);
+    is_strictly_real_rooted_hermite_bigint_coeffs(&squarefree)
+}
+
+/// Check strict real-rootedness with the Hermite/Newton-sum positive-definite
+/// criterion, without removing repeated factors first.
+pub fn is_strictly_real_rooted_hermite_bigint_coeffs(coeffs: &[BigInt]) -> bool {
+    let Some(degree) = poly_degree_trimmed_bigint(coeffs) else {
+        return true;
+    };
+    if degree <= 1 {
+        return true;
+    }
+    let Some(matrix) = hermite_matrix_bigint_coeffs(coeffs) else {
+        return false;
+    };
+    is_positive_definite_bigint(&matrix)
+}
+
+/// Explicit squarefree+Bézout real-rootedness check for `i64` coefficients.
+pub fn is_real_rooted_bezout_squarefree(coeffs: &[i64]) -> bool {
+    let big: Vec<BigInt> = coeffs.iter().map(|&c| BigInt::from(c)).collect();
+    is_real_rooted_bezout_squarefree_bigint_coeffs(&big)
+}
+
+/// Explicit squarefree+Hermite/Newton real-rootedness check for `i64`
+/// coefficients.
+pub fn is_real_rooted_hermite(coeffs: &[i64]) -> bool {
+    let big: Vec<BigInt> = coeffs.iter().map(|&c| BigInt::from(c)).collect();
+    is_real_rooted_hermite_bigint_coeffs(&big)
+}
+
+/// Explicit strict Bézout real-rootedness check for `i64` coefficients.
+pub fn is_strictly_real_rooted_bezout(coeffs: &[i64]) -> bool {
+    let big: Vec<BigInt> = coeffs.iter().map(|&c| BigInt::from(c)).collect();
+    is_strictly_real_rooted_bezout_bigint_coeffs(&big)
+}
+
+/// Explicit strict Hermite/Newton real-rootedness check for `i64`
+/// coefficients.
+pub fn is_strictly_real_rooted_hermite(coeffs: &[i64]) -> bool {
+    let big: Vec<BigInt> = coeffs.iter().map(|&c| BigInt::from(c)).collect();
+    is_strictly_real_rooted_hermite_bigint_coeffs(&big)
+}
+
 /// Check if a polynomial is real-rooted.
 ///
 /// One-signed coefficient polynomials use the primitive integer PRS path from
@@ -1708,6 +1887,83 @@ mod tests {
             .map(|c| BigInt::from(c) * &huge_scale)
             .collect();
         assert!(is_real_rooted_bigint_coeffs(&scaled));
+    }
+
+    #[test]
+    fn test_squarefree_part_bigint_coeffs() {
+        let repeated: Vec<BigInt> = [0_i64, 0, 1, -2, 1].into_iter().map(BigInt::from).collect();
+        assert_eq!(
+            squarefree_part_bigint_coeffs(&repeated),
+            vec![BigInt::from(0), BigInt::from(-1), BigInt::from(1)]
+        );
+
+        let complex_repeated: Vec<BigInt> =
+            [1_i64, 0, 2, 0, 1].into_iter().map(BigInt::from).collect();
+        assert_eq!(
+            squarefree_part_bigint_coeffs(&complex_repeated),
+            vec![BigInt::from(1), BigInt::from(0), BigInt::from(1)]
+        );
+    }
+
+    #[test]
+    fn test_hermite_matrix_bigint_coeffs() {
+        // (t - 1)(t - 2) has Newton sums s_0=2, s_1=3, s_2=5.
+        let p: Vec<BigInt> = [2_i64, -3, 1].into_iter().map(BigInt::from).collect();
+        assert_eq!(
+            hermite_matrix_bigint_coeffs(&p),
+            Some(vec![
+                vec![BigInt::from(2), BigInt::from(3)],
+                vec![BigInt::from(3), BigInt::from(5)],
+            ])
+        );
+
+        // Non-monic example: roots are still 1 and 2, and denominators are
+        // cleared by a positive scalar.
+        let scaled: Vec<BigInt> = [4_i64, -6, 2].into_iter().map(BigInt::from).collect();
+        assert_eq!(
+            hermite_matrix_bigint_coeffs(&scaled),
+            Some(vec![
+                vec![BigInt::from(2), BigInt::from(3)],
+                vec![BigInt::from(3), BigInt::from(5)],
+            ])
+        );
+    }
+
+    #[test]
+    fn test_squarefree_real_rootedness_paths() {
+        let cases: Vec<(&[i64], bool)> = vec![
+            (&[1, 2, 1], true),        // repeated real root
+            (&[4, -4, 1], true),       // non-monic repeated real root
+            (&[0, 0, 1, -2, 1], true), // t^2(t-1)^2
+            (&[-2, 3, -1], true),      // negative scalar times (t-1)(t-2)
+            (&[1, 0, 1], false),       // t^2+1
+            (&[1, 0, 2, 0, 1], false), // (t^2+1)^2
+            (&[1, 43, 196, 168, 23, 1], false),
+            (&[1, 11, 11, 1], true),
+        ];
+
+        for (coeffs, expected) in cases {
+            assert_eq!(
+                is_real_rooted_bezout_squarefree(coeffs),
+                expected,
+                "squarefree Bézout disagrees on {coeffs:?}"
+            );
+            assert_eq!(
+                is_real_rooted_hermite(coeffs),
+                expected,
+                "Hermite/Newton disagrees on {coeffs:?}"
+            );
+            assert_eq!(
+                is_real_rooted_bezout(coeffs),
+                expected,
+                "old Bézout disagrees on {coeffs:?}"
+            );
+        }
+
+        assert!(!is_strictly_real_rooted_bezout(&[1, 2, 1]));
+        assert!(!is_strictly_real_rooted_hermite(&[1, 2, 1]));
+        assert!(is_strictly_real_rooted_bezout(&[2, -3, 1]));
+        assert!(is_strictly_real_rooted_hermite(&[2, -3, 1]));
     }
 
     #[test]

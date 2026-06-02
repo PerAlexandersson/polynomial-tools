@@ -162,6 +162,7 @@ pub use real_rootedness::{
     has_simple_roots,
     has_simple_roots_bigint_coeffs,
     hermite_biehler_parts,
+    hermite_matrix_bigint_coeffs,
     // Ehrhart polynomial <-> h*-vector
     hstar_to_ehrhart,
     is_gamma_positive,
@@ -172,14 +173,23 @@ pub use real_rootedness::{
     // Default methods and explicit Bézout path
     is_real_rooted,
     is_real_rooted_bezout_bigint_coeffs,
+    is_real_rooted_bezout_squarefree,
+    is_real_rooted_bezout_squarefree_bigint_coeffs,
     is_real_rooted_bigint_coeffs,
+    is_real_rooted_hermite,
+    is_real_rooted_hermite_bigint_coeffs,
     // Sturm-chain methods (slower, but can isolate roots)
     is_real_rooted_sturm,
     is_real_rooted_sturm_bigint_coeffs,
+    is_strictly_real_rooted_bezout,
+    is_strictly_real_rooted_bezout_bigint_coeffs,
+    is_strictly_real_rooted_hermite,
+    is_strictly_real_rooted_hermite_bigint_coeffs,
     is_ultra_log_concave,
     real_roots,
     // Resultant and discriminant
     resultant,
+    squarefree_part_bigint_coeffs,
     stapledon_decomposition,
     strip_initial_zeros,
     sylvester_matrix,
