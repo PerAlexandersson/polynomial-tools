@@ -199,10 +199,12 @@ pub use real_rootedness::{
 };
 pub use root_count::{
     bigint_coeffs_to_i64, count_positive_roots_prs_bigint_coeffs,
-    count_real_roots_prs_bigint_coeffs, is_real_rooted_fast_bigint_coeffs, is_real_rooted_fast_i64,
+    count_real_roots_prs_bigint_coeffs, count_root_signs_prs_bigint_coeffs,
+    is_real_rooted_fast_bigint_coeffs, is_real_rooted_fast_i64,
     is_real_rooted_one_signed_bigint_coeffs, is_real_rooted_prs_bigint_coeffs,
     primitive_sturm_max_coefficient_bits, satisfies_kurtz_condition_bigint,
     satisfies_newton_inequalities_bigint, squarefree_degree_bigint_coeffs,
+    tarski_query_prs_bigint_coeffs, RootSignCounts,
 };
 pub use tnn_network::{
     build_tnn_certificate_from_monic_polynomials, coefficient_matrix_from_monic_polynomials,
