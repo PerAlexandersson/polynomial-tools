@@ -1203,16 +1203,17 @@ pub fn is_strictly_real_rooted_hermite(coeffs: &[i64]) -> bool {
 /// Check if a polynomial is real-rooted.
 ///
 /// One-signed coefficient polynomials use the primitive integer PRS path from
-/// [`crate::root_count`].  Other polynomials use the Bézout criterion: a
-/// polynomial f of degree d is real-rooted if and only if its derivative f'
-/// interlaces it, so we compute B(f, f') and check positive semi-definiteness
-/// (semi- rather than strict because repeated roots make the matrix singular).
+/// [`crate::root_count`].  Other polynomials first pass to their squarefree
+/// part, then use the Bézout criterion: a squarefree polynomial f of degree d
+/// is real-rooted if and only if its derivative f' strictly interlaces it, so
+/// we compute B(f, f') and check positive definiteness.
 ///
 /// The leading coefficients of f and f' are aligned to the same sign before
 /// computing B, since the positive-definiteness criterion assumes both leading
 /// coefficients are positive.
 ///
-/// Use [`is_real_rooted_bezout`] to force the Bézout path for benchmarking.
+/// Use [`is_real_rooted_bezout`] to force the old semidefinite Bézout path for
+/// benchmarking.
 pub fn is_real_rooted(coeffs: &[i64]) -> bool {
     let d = match poly_degree_trimmed(coeffs) {
         Some(d) => d,
@@ -1235,7 +1236,7 @@ pub fn is_real_rooted(coeffs: &[i64]) -> bool {
         }
     }
 
-    is_real_rooted_bezout_i64_impl(coeffs)
+    is_real_rooted_bezout_squarefree(coeffs)
 }
 
 fn is_real_rooted_bezout_i64_impl(coeffs: &[i64]) -> bool {
@@ -1301,7 +1302,8 @@ fn is_real_rooted_bezout_i64_impl(coeffs: &[i64]) -> bool {
 /// Check if a polynomial with `BigInt` coefficients is real-rooted.
 ///
 /// This uses the primitive integer PRS path for one-signed coefficient
-/// polynomials and falls back to the Bézout-matrix criterion otherwise.
+/// polynomials and falls back to the squarefree+Bézout positive-definite
+/// criterion otherwise.
 ///
 /// Coefficients are given in ascending degree order.
 pub fn is_real_rooted_bigint_coeffs(coeffs: &[BigInt]) -> bool {
@@ -1317,7 +1319,7 @@ pub fn is_real_rooted_bigint_coeffs(coeffs: &[BigInt]) -> bool {
         return rr;
     }
 
-    is_real_rooted_bezout_bigint_coeffs(coeffs)
+    is_real_rooted_bezout_squarefree_bigint_coeffs(coeffs)
 }
 
 /// Check if a polynomial with `BigInt` coefficients is real-rooted using the
