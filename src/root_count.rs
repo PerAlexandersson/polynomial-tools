@@ -20,6 +20,19 @@ use num_bigint::BigInt;
 use num_integer::Integer;
 use num_traits::{One, Signed, ToPrimitive, Zero};
 
+/// Exact sign distribution of one polynomial evaluated at the real roots of another.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RootSignCounts {
+    /// Number of distinct real roots `r` of the root polynomial with `q(r)>0`.
+    pub positive: usize,
+    /// Number of distinct real roots `r` of the root polynomial with `q(r)<0`.
+    pub negative: usize,
+    /// Number of distinct real roots `r` of the root polynomial with `q(r)=0`.
+    pub zero: usize,
+    /// Total number of distinct real roots of the square-free part of the root polynomial.
+    pub total: usize,
+}
+
 fn trim(mut p: Vec<BigInt>) -> Vec<BigInt> {
     while p.last().is_some_and(|c| c.is_zero()) {
         p.pop();
@@ -102,6 +115,24 @@ fn poly_scale(p: &[BigInt], a: &BigInt) -> Vec<BigInt> {
         return vec![];
     }
     trim(p.iter().map(|c| c * a).collect())
+}
+
+fn poly_mul(a: &[BigInt], b: &[BigInt]) -> Vec<BigInt> {
+    if a.is_empty() || b.is_empty() {
+        return vec![];
+    }
+    let mut r = vec![BigInt::zero(); a.len() + b.len() - 1];
+    for (i, ca) in a.iter().enumerate() {
+        if ca.is_zero() {
+            continue;
+        }
+        for (j, cb) in b.iter().enumerate() {
+            if !cb.is_zero() {
+                r[i + j] += ca * cb;
+            }
+        }
+    }
+    trim(r)
 }
 
 fn poly_sub_shifted_scaled(
@@ -260,6 +291,32 @@ fn sturm_chain_squarefree(coeffs: &[BigInt]) -> Vec<Vec<BigInt>> {
     chain
 }
 
+fn signed_remainder_sequence(a: &[BigInt], b: &[BigInt]) -> Vec<Vec<BigInt>> {
+    let p0 = primitive_positive(trim_slice(a));
+    if p0.is_empty() || degree(&p0).unwrap_or(0) == 0 {
+        return vec![p0];
+    }
+    let p1 = primitive_keep_sign(trim_slice(b));
+    if p1.is_empty() {
+        return vec![p0];
+    }
+
+    let mut chain = vec![p0, p1];
+    loop {
+        let n = chain.len();
+        let prem = pseudo_remainder_positive_multiplier(&chain[n - 2], &chain[n - 1]);
+        if prem.is_empty() {
+            break;
+        }
+        let next = primitive_keep_sign(poly_neg(&primitive_keep_sign(prem)));
+        if next.is_empty() {
+            break;
+        }
+        chain.push(next);
+    }
+    chain
+}
+
 fn sign_at_pos_infinity(p: &[BigInt]) -> i8 {
     sign_i8(&leading(p))
 }
@@ -377,6 +434,72 @@ pub fn count_positive_roots_prs_bigint_coeffs(coeffs: &[BigInt]) -> usize {
         return 0;
     }
     variations_at_zero_plus(&chain).saturating_sub(variations_at_pos_infinity(&chain))
+}
+
+/// Compute the Sturm--Tarski query of `query` at the real roots of `root_poly`.
+///
+/// This returns `# {r : query(r)>0} - # {r : query(r)<0}`, where `r` runs over
+/// the distinct real roots of the square-free part of `root_poly`.  The
+/// implementation uses the signed pseudo-remainder sequence of
+/// `P` and `P' * query`, so it avoids isolating roots.
+pub fn tarski_query_prs_bigint_coeffs(root_poly: &[BigInt], query: &[BigInt]) -> isize {
+    let p = squarefree_part_bigint(root_poly);
+    if p.is_empty() || degree(&p).unwrap_or(0) == 0 || trim_slice(query).is_empty() {
+        return 0;
+    }
+    let p_prime_query = poly_mul(&poly_derivative(&p), query);
+    if p_prime_query.is_empty() {
+        return 0;
+    }
+    let chain = signed_remainder_sequence(&p, &p_prime_query);
+    let variations_neg = variations_at_neg_infinity(&chain);
+    let variations_pos = variations_at_pos_infinity(&chain);
+    variations_neg as isize - variations_pos as isize
+}
+
+/// Count how `test_poly` signs distribute over the distinct real roots of `root_poly`.
+///
+/// The returned counts are exact.  Roots are not isolated: the function uses
+/// Sturm--Tarski queries for `test_poly` and `test_poly^2`.
+pub fn count_root_signs_prs_bigint_coeffs(
+    root_poly: &[BigInt],
+    test_poly: &[BigInt],
+) -> RootSignCounts {
+    let total = count_real_roots_prs_bigint_coeffs(root_poly);
+    if total == 0 {
+        return RootSignCounts {
+            positive: 0,
+            negative: 0,
+            zero: 0,
+            total: 0,
+        };
+    }
+    let query = trim_slice(test_poly);
+    if query.is_empty() {
+        return RootSignCounts {
+            positive: 0,
+            negative: 0,
+            zero: total,
+            total,
+        };
+    }
+
+    let signed = tarski_query_prs_bigint_coeffs(root_poly, &query);
+    let nonzero = tarski_query_prs_bigint_coeffs(root_poly, &poly_mul(&query, &query));
+    debug_assert!(nonzero >= 0);
+    debug_assert!(nonzero >= signed.abs());
+    debug_assert_eq!((nonzero + signed) % 2, 0);
+    debug_assert!(usize::try_from(nonzero).is_ok_and(|n| n <= total));
+
+    let positive = usize::try_from((nonzero + signed) / 2).unwrap_or(0);
+    let negative = usize::try_from((nonzero - signed) / 2).unwrap_or(0);
+    let zero = total.saturating_sub(positive + negative);
+    RootSignCounts {
+        positive,
+        negative,
+        zero,
+        total,
+    }
 }
 
 /// Check Newton's inequalities for a nonnegative coefficient sequence.
@@ -575,6 +698,63 @@ mod tests {
             2
         );
         assert_eq!(count_positive_roots_prs_bigint_coeffs(&b(&[1, 2, 1])), 0);
+    }
+
+    #[test]
+    fn test_tarski_query_constant_is_real_root_count() {
+        let p = b(&[-6, 11, -6, 1]); // (x-1)(x-2)(x-3)
+        assert_eq!(tarski_query_prs_bigint_coeffs(&p, &b(&[1])), 3);
+        assert_eq!(tarski_query_prs_bigint_coeffs(&p, &b(&[-1])), -3);
+
+        let q = b(&[1, 0, 1]); // x^2+1 has no real roots.
+        assert_eq!(tarski_query_prs_bigint_coeffs(&q, &b(&[1])), 0);
+    }
+
+    #[test]
+    fn test_root_sign_counts_basic() {
+        let p = b(&[-6, 11, -6, 1]); // roots 1,2,3
+
+        assert_eq!(
+            count_root_signs_prs_bigint_coeffs(&p, &b(&[-2, 1])), // x-2
+            RootSignCounts {
+                positive: 1,
+                negative: 1,
+                zero: 1,
+                total: 3,
+            }
+        );
+        assert_eq!(
+            count_root_signs_prs_bigint_coeffs(&p, &b(&[-4, 1])), // x-4
+            RootSignCounts {
+                positive: 0,
+                negative: 3,
+                zero: 0,
+                total: 3,
+            }
+        );
+        assert_eq!(
+            count_root_signs_prs_bigint_coeffs(&p, &b(&[2, -3, 1])), // (x-1)(x-2)
+            RootSignCounts {
+                positive: 1,
+                negative: 0,
+                zero: 2,
+                total: 3,
+            }
+        );
+    }
+
+    #[test]
+    fn test_root_sign_counts_squarefree_root_part() {
+        let repeated = b(&[4, -12, 13, -6, 1]); // (x-1)^2 (x-2)^2
+        assert_eq!(
+            count_root_signs_prs_bigint_coeffs(&repeated, &b(&[-1, 1])), // x-1
+            RootSignCounts {
+                positive: 1,
+                negative: 0,
+                zero: 1,
+                total: 2,
+            }
+        );
     }
 
     #[test]
