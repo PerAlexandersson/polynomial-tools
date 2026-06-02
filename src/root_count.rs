@@ -1,11 +1,10 @@
 //! Exact real-root counting over the integers.
 //!
-//! This module is a lightweight integer alternative to the rational Sturm code
-//! and the Bézout-matrix real-rootedness test.  It uses a primitive
-//! pseudo-remainder Sturm sequence: every Euclidean remainder is computed by
-//! pseudo-division and then made primitive.  That keeps intermediate coefficient
-//! growth much smaller than a naive rational PRS, while avoiding the large exact
-//! PSD matrices used by the Bézout criterion.
+//! This module is the default exact backend for boolean real-rootedness.  It
+//! uses a primitive pseudo-remainder Sturm sequence: every Euclidean remainder
+//! is computed by pseudo-division and then made primitive.  That keeps
+//! intermediate coefficient growth much smaller than a naive rational PRS,
+//! while avoiding the large exact PSD matrices used by the Bézout criterion.
 //!
 //! The positive-coefficient path is intended for combinatorial polynomials.  If
 //! all coefficients have one sign, roots can only be non-positive; after

@@ -1,4 +1,9 @@
-# Bézout matrix for interlacing and real-rootedness
+# Bézout matrix for interlacing
+
+The public default real-rootedness backend in this crate is primitive integer
+PRS/root counting.  The Bézout routines remain the main interlacing backend and
+are also available as explicit matrix-certificate checks for real-rootedness
+comparisons.
 
 ## Theory
 
@@ -18,7 +23,9 @@ There are two standard oriented versions of the criterion.
   Section 9.21, Corollary 9.145 gives the positive definite/no-common-root
   form.
 
-For real-rootedness: f is real-rooted iff B(f, f') is positive semi-definite (semi-definite because repeated roots make B singular).
+For real-rootedness comparisons: f is real-rooted iff B(f, f') is positive
+semi-definite (semi-definite because repeated roots make B singular).  The
+default boolean real-rootedness API uses PRS/root counting instead.
 
 When f and g share roots, B(f,g) is singular. Divide out gcd(f,g) first,
 verify that the gcd is real-rooted, then check strict interlacing of the
