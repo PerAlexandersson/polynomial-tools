@@ -178,6 +178,8 @@ pub use real_rootedness::{
     is_real_rooted_bigint_coeffs,
     is_real_rooted_hermite,
     is_real_rooted_hermite_bigint_coeffs,
+    is_real_rooted_shifted_one_signed,
+    is_real_rooted_shifted_one_signed_bigint_coeffs,
     // Sturm-chain methods (slower, but can isolate roots)
     is_real_rooted_sturm,
     is_real_rooted_sturm_bigint_coeffs,
