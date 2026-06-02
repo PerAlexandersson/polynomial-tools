@@ -3,13 +3,14 @@
 //! All functions accept polynomials as `i64` coefficient vectors in ascending degree order:
 //! `coeffs[i]` is the coefficient of t^i.
 //!
-//! # Default algorithm: Bézout matrices
+//! # Default algorithm: primitive integer root counting
 //!
-//! The default real-rootedness functions first use the primitive integer PRS
-//! path in [`crate::root_count`] when the coefficients are one-signed (the
-//! common positive-coefficient combinatorial case), then fall back to Bézout
-//! matrices.  Interlacing still uses Bézout matrices, which are dramatically
-//! faster than the older rational Sturm chains (100–400× at degree 15+).
+//! The default real-rootedness functions use the primitive integer PRS path in
+//! [`crate::root_count`].  For one-signed coefficient polynomials, this first
+//! tries cheap coefficient tests and then counts positive roots after the
+//! transformation `t ↦ -t`; otherwise it counts all real roots of the
+//! squarefree part directly.  Interlacing uses Bézout matrices, which are
+//! dramatically faster than older rational Sturm chains for that task.
 //!
 //! ## Bézout matrix for interlacing
 //!
@@ -1202,41 +1203,13 @@ pub fn is_strictly_real_rooted_hermite(coeffs: &[i64]) -> bool {
 
 /// Check if a polynomial is real-rooted.
 ///
-/// One-signed coefficient polynomials use the primitive integer PRS path from
-/// [`crate::root_count`].  Other polynomials first pass to their squarefree
-/// part, then use the Bézout criterion: a squarefree polynomial f of degree d
-/// is real-rooted if and only if its derivative f' strictly interlaces it, so
-/// we compute B(f, f') and check positive definiteness.
-///
-/// The leading coefficients of f and f' are aligned to the same sign before
-/// computing B, since the positive-definiteness criterion assumes both leading
-/// coefficients are positive.
-///
-/// Use [`is_real_rooted_bezout`] to force the old semidefinite Bézout path for
-/// benchmarking.
+/// This is the public default exact path.  It delegates to the primitive
+/// integer PRS root-counting implementation in [`crate::root_count`].  Use
+/// [`is_real_rooted_bezout`], [`is_real_rooted_bezout_squarefree`], or
+/// [`is_real_rooted_hermite`] when an explicit matrix-based comparison or
+/// certificate is desired.
 pub fn is_real_rooted(coeffs: &[i64]) -> bool {
-    let d = match poly_degree_trimmed(coeffs) {
-        Some(d) => d,
-        None => return true,
-    };
-    if d <= 1 {
-        return true;
-    }
-
-    let one_signed =
-        coeffs.iter().take(d + 1).all(|&c| c >= 0) || coeffs.iter().take(d + 1).all(|&c| c <= 0);
-    if one_signed {
-        let big: Vec<BigInt> = coeffs
-            .iter()
-            .take(d + 1)
-            .map(|&c| BigInt::from(c))
-            .collect();
-        if let Some(rr) = crate::root_count::is_real_rooted_one_signed_bigint_coeffs(&big) {
-            return rr;
-        }
-    }
-
-    is_real_rooted_bezout_squarefree(coeffs)
+    crate::root_count::is_real_rooted_fast_i64(coeffs)
 }
 
 fn is_real_rooted_bezout_i64_impl(coeffs: &[i64]) -> bool {
@@ -1301,29 +1274,17 @@ fn is_real_rooted_bezout_i64_impl(coeffs: &[i64]) -> bool {
 
 /// Check if a polynomial with `BigInt` coefficients is real-rooted.
 ///
-/// This uses the primitive integer PRS path for one-signed coefficient
-/// polynomials and falls back to the squarefree+Bézout positive-definite
-/// criterion otherwise.
+/// This is the public default exact path.  It uses the primitive integer PRS
+/// root-counting implementation in [`crate::root_count`], with a specialized
+/// one-signed shortcut when applicable.
 ///
 /// Coefficients are given in ascending degree order.
 pub fn is_real_rooted_bigint_coeffs(coeffs: &[BigInt]) -> bool {
-    let d = match poly_degree_trimmed_bigint(coeffs) {
-        Some(d) => d,
-        None => return true,
-    };
-    if d <= 1 {
-        return true;
-    }
-
-    if let Some(rr) = crate::root_count::is_real_rooted_one_signed_bigint_coeffs(coeffs) {
-        return rr;
-    }
-
-    is_real_rooted_bezout_squarefree_bigint_coeffs(coeffs)
+    crate::root_count::is_real_rooted_fast_bigint_coeffs(coeffs)
 }
 
 /// Check if a polynomial with `BigInt` coefficients is real-rooted using the
-/// same Bézout-matrix criterion as [`is_real_rooted`].
+/// old semidefinite Bézout-matrix criterion.
 ///
 /// This is the old exact BigInt implementation and is kept public for
 /// benchmarking and cases where the matrix certificate itself is desired.
@@ -1876,7 +1837,7 @@ mod tests {
     }
 
     #[test]
-    fn test_bezout_real_rooted_bigint_coeffs() {
+    fn test_default_real_rooted_bigint_coeffs() {
         let rr: Vec<BigInt> = [1_i64, 3, 3, 1].into_iter().map(BigInt::from).collect();
         assert!(is_real_rooted_bigint_coeffs(&rr));
 
@@ -1889,6 +1850,35 @@ mod tests {
             .map(|c| BigInt::from(c) * &huge_scale)
             .collect();
         assert!(is_real_rooted_bigint_coeffs(&scaled));
+    }
+
+    #[test]
+    fn test_default_real_rootedness_uses_prs_for_mixed_signs() {
+        let cases: Vec<(&[i64], bool)> = vec![
+            (&[-6, 11, -6, 1], true),  // (t-1)(t-2)(t-3)
+            (&[-2, 1, -2, 1], false),  // (t-2)(t^2+1)
+            (&[0, 0, 1, -2, 1], true), // t^2(t-1)^2
+            (&[1, 0, 2, 0, 1], false), // (t^2+1)^2
+        ];
+
+        for (coeffs, expected) in cases {
+            let big: Vec<BigInt> = coeffs.iter().copied().map(BigInt::from).collect();
+            assert_eq!(
+                is_real_rooted_bigint_coeffs(&big),
+                crate::root_count::is_real_rooted_fast_bigint_coeffs(&big),
+                "default should delegate to PRS backend for {coeffs:?}"
+            );
+            assert_eq!(
+                is_real_rooted(coeffs),
+                expected,
+                "i64 default disagrees on {coeffs:?}"
+            );
+            assert_eq!(
+                is_real_rooted_bigint_coeffs(&big),
+                expected,
+                "BigInt default disagrees on {coeffs:?}"
+            );
+        }
     }
 
     #[test]

@@ -212,7 +212,7 @@ use polynomial_tools::*;
 // Coefficients in ascending degree order: coeffs[i] = coeff of t^i
 let eulerian_4 = [1, 11, 11, 1];
 
-// Bézout matrix method (default, fast)
+// Default exact PRS/root-counting method
 assert!(is_real_rooted(&eulerian_4));
 
 // Sturm chain method (slower, gives root locations)
