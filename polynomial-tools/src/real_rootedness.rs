@@ -1065,6 +1065,26 @@ pub fn squarefree_part_bigint_coeffs(coeffs: &[BigInt]) -> Vec<BigInt> {
     q_poly_to_primitive_bigint(&squarefree)
 }
 
+fn shift_bigint_coeffs(coeffs: &[BigInt], shift: &BigInt) -> Vec<BigInt> {
+    let Some(degree) = poly_degree_trimmed_bigint(coeffs) else {
+        return vec![BigInt::zero()];
+    };
+    let mut shifted = vec![coeffs[degree].clone()];
+    for k in (0..degree).rev() {
+        let mut next = vec![BigInt::zero(); shifted.len() + 1];
+        for (i, coeff) in shifted.iter().enumerate() {
+            next[i] += coeff * shift;
+            next[i + 1] += coeff;
+        }
+        next[0] += &coeffs[k];
+        while next.last().is_some_and(BigInt::is_zero) {
+            next.pop();
+        }
+        shifted = next;
+    }
+    shifted
+}
+
 fn newton_sums_rational_bigint_coeffs(coeffs: &[BigInt], max_power: usize) -> Option<Vec<Q>> {
     let degree = poly_degree_trimmed_bigint(coeffs)?;
     let lc = coeffs[degree].clone();
@@ -1159,6 +1179,33 @@ pub fn is_real_rooted_hermite_bigint_coeffs(coeffs: &[BigInt]) -> bool {
     is_strictly_real_rooted_hermite_bigint_coeffs(&squarefree)
 }
 
+/// Check real-rootedness by first taking the squarefree part, translating it
+/// far enough to make any real roots negative, and then using the one-signed
+/// coefficient PRS path.
+///
+/// The translation is `q(t)=p(t+R)`, where `R` is an integer Cauchy root bound.
+/// If `p` is real-rooted and has positive leading coefficient, then `q` has
+/// positive coefficients.  The one-signed path still performs an exact root
+/// count, so this remains a deterministic boolean test, not a coefficient-sign
+/// heuristic.
+pub fn is_real_rooted_shifted_one_signed_bigint_coeffs(coeffs: &[BigInt]) -> bool {
+    let squarefree = squarefree_part_bigint_coeffs(coeffs);
+    let Some(degree) = poly_degree_trimmed_bigint(&squarefree) else {
+        return true;
+    };
+    if degree <= 1 {
+        return true;
+    }
+
+    let squarefree = normalize_positive_leading_bigint(&squarefree, degree);
+    let shift = cauchy_root_bound_bigint(&squarefree);
+    let shifted = shift_bigint_coeffs(&squarefree, &shift);
+    match crate::root_count::is_real_rooted_one_signed_bigint_coeffs(&shifted) {
+        Some(rr) => rr,
+        None => is_strictly_real_rooted_bezout_bigint_coeffs(&squarefree),
+    }
+}
+
 /// Check strict real-rootedness with the Hermite/Newton-sum positive-definite
 /// criterion, without removing repeated factors first.
 pub fn is_strictly_real_rooted_hermite_bigint_coeffs(coeffs: &[BigInt]) -> bool {
@@ -1185,6 +1232,13 @@ pub fn is_real_rooted_bezout_squarefree(coeffs: &[i64]) -> bool {
 pub fn is_real_rooted_hermite(coeffs: &[i64]) -> bool {
     let big: Vec<BigInt> = coeffs.iter().map(|&c| BigInt::from(c)).collect();
     is_real_rooted_hermite_bigint_coeffs(&big)
+}
+
+/// Explicit squarefree+shifted one-signed real-rootedness check for `i64`
+/// coefficients.
+pub fn is_real_rooted_shifted_one_signed(coeffs: &[i64]) -> bool {
+    let big: Vec<BigInt> = coeffs.iter().map(|&c| BigInt::from(c)).collect();
+    is_real_rooted_shifted_one_signed_bigint_coeffs(&big)
 }
 
 /// Explicit strict Bézout real-rootedness check for `i64` coefficients.
@@ -1956,6 +2010,11 @@ mod tests {
                 "Hermite/Newton disagrees on {coeffs:?}"
             );
             assert_eq!(
+                is_real_rooted_shifted_one_signed(coeffs),
+                expected,
+                "shifted one-signed disagrees on {coeffs:?}"
+            );
+            assert_eq!(
                 is_real_rooted_bezout(coeffs),
                 expected,
                 "old Bézout disagrees on {coeffs:?}"
@@ -1966,6 +2025,36 @@ mod tests {
         assert!(!is_strictly_real_rooted_hermite(&[1, 2, 1]));
         assert!(is_strictly_real_rooted_bezout(&[2, -3, 1]));
         assert!(is_strictly_real_rooted_hermite(&[2, -3, 1]));
+    }
+
+    #[test]
+    fn test_shifted_one_signed_translation_backend() {
+        let mixed_real: Vec<BigInt> = [-6_i64, 11, -6, 1].into_iter().map(BigInt::from).collect();
+        let squarefree = squarefree_part_bigint_coeffs(&mixed_real);
+        let degree = poly_degree_trimmed_bigint(&squarefree).unwrap();
+        let normalized = normalize_positive_leading_bigint(&squarefree, degree);
+        let shifted = shift_bigint_coeffs(&normalized, &cauchy_root_bound_bigint(&normalized));
+        assert!(shifted.iter().all(|c| c >= &BigInt::zero()));
+        assert!(is_real_rooted_shifted_one_signed_bigint_coeffs(&mixed_real));
+
+        let repeated_mixed: Vec<BigInt> = [1_i64, -2, 1].into_iter().map(BigInt::from).collect();
+        assert!(is_real_rooted_shifted_one_signed_bigint_coeffs(
+            &repeated_mixed
+        ));
+
+        let nonreal_shifted_positive: Vec<BigInt> =
+            [1_i64, 0, 1].into_iter().map(BigInt::from).collect();
+        assert!(!is_real_rooted_shifted_one_signed_bigint_coeffs(
+            &nonreal_shifted_positive
+        ));
+
+        let negative_leading: Vec<BigInt> = [2_i64, -3, 1]
+            .into_iter()
+            .map(|c| -BigInt::from(c))
+            .collect();
+        assert!(is_real_rooted_shifted_one_signed_bigint_coeffs(
+            &negative_leading
+        ));
     }
 
     #[test]
