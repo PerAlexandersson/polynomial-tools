@@ -9,7 +9,8 @@ crate is currently test-clean and clippy-clean for `polynomial-tools`.
   gamma-positivity, resultant, discriminant, and Ehrhart helpers.  It is the
   main file that could use future splitting.
 - `root_count.rs` owns the primitive integer PRS/Sturm implementation.  This is
-  the preferred exact path for one-signed combinatorial polynomials.
+  the default exact boolean real-rootedness backend, with a special fast path
+  for one-signed combinatorial polynomials.
 - `linalg.rs` owns exact determinant, definiteness, and TNN checks.  The
   index-heavy loops are intentional matrix elimination code; the module has a
   local clippy allowance for `needless_range_loop`.
@@ -24,9 +25,9 @@ crate is currently test-clean and clippy-clean for `polynomial-tools`.
 - Move the private rational-polynomial helpers in `real_rootedness.rs`
   (`poly_gcd_q`, `poly_rem_q`, `poly_exact_div_q`, `q_poly_to_i64`) into a
   small internal module.  They are not conceptually tied to interlacing.
-- Consider using `root_count::is_real_rooted_fast_bigint_coeffs` as the general
-  mixed-sign fallback for default real-rootedness once it has benchmark coverage
-  against the Bézout path on the examples that matter for current projects.
+- Keep the public real-rootedness wrappers thin over
+  `root_count::is_real_rooted_fast_bigint_coeffs`; use the explicit
+  Bézout/Hermite entry points for matrix-certificate comparisons.
 - Add focused benchmarks for positive-coefficient families of degree 20-80:
   Eulerian, Narayana, h*-vectors, and known counterexamples.  The existing
   examples are useful, but they do not yet define a regression benchmark suite.

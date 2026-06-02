@@ -1,10 +1,11 @@
 # polynomial-tools
 
 Dense univariate polynomial toolkit for combinatorial research. Provides
-real-rootedness testing (Bézout matrices), interlacing, log-concavity,
-gamma-positivity, resultants, Ehrhart/h\*-vector conversion, recurrence
-search for polynomial sequences, finite Athanasiadis--Wagner interlacing
-matrices, and standard sequences — all with exact arithmetic.
+real-rootedness testing by primitive integer root counting, Bézout-matrix
+interlacing checks, log-concavity, gamma-positivity, resultants,
+Ehrhart/h\*-vector conversion, recurrence search for polynomial sequences,
+finite Athanasiadis--Wagner interlacing matrices, and standard sequences —
+all with exact arithmetic.
 
 ## Installation
 
@@ -446,28 +447,34 @@ Report issues in the Git repository, or contact Per Alexandersson
 
 ### Real-rootedness algorithms
 
-The default real-rootedness check first uses the primitive integer PRS path
-from `root_count` for one-signed coefficient polynomials.  This is the common
-combinatorial case: after removing powers of `t`, a one-signed polynomial has
-only non-positive roots iff `f(-t)` has the right number of positive roots.
-The PRS code counts roots of the square-free part exactly over `BigInt`.
+The default real-rootedness check uses the primitive integer PRS path from
+`root_count`.  It replaces the polynomial by its square-free part and counts
+distinct real roots exactly over `BigInt`; the polynomial is real-rooted
+precisely when this count equals the square-free degree.  For one-signed
+coefficient polynomials, the backend first tries cheap coefficient filters and
+then counts positive roots of `f(-t)`, since such polynomials can only have
+non-positive real roots.
 
-Mixed-sign real-rootedness and all interlacing checks use the **Bézout matrix**
-(Fisk, Cor. 9.145). For polynomials f (degree d) and g (degree d−1), the
-Bézout matrix B(f,g) is the d×d symmetric matrix with (i,j) entry equal to the
-coefficient of x^i y^j in `(f(x)g(y) - f(y)g(x)) / (x-y)`.
+Explicit matrix comparison paths remain available as
+`is_real_rooted_bezout`, `is_real_rooted_bezout_squarefree`, and
+`is_real_rooted_hermite`.
+
+All interlacing checks use the **Bézout matrix** (Fisk, Cor. 9.145). For
+polynomials f (degree d) and g (degree d−1), the Bézout matrix B(f,g) is the
+d×d symmetric matrix with (i,j) entry equal to the coefficient of x^i y^j in
+`(f(x)g(y) - f(y)g(x)) / (x-y)`.
 
 **Theorem:** f and g are both real-rooted and g strictly interlaces f
 if and only if B(f,g) is positive definite.
 
 This reduces interlacing to a single exact matrix definiteness check, avoiding
-root isolation entirely. It is 100–400× faster than Sturm chains at degree 15+.
-The default implementation uses fraction-free BigInt Bareiss elimination below
-dimension `30`, and switches to a CRT-over-prime-fields path for larger
-matrices.  The modular path reconstructs the leading principal minors exactly
-using Hadamard bounds.  For speed comparisons, the explicit entry points are
-`is_positive_definite_bareiss`, `is_positive_definite_modular`, and
-`modular_leading_principal_minors_bigint`.
+root isolation entirely. It is 100–400× faster than Sturm chains at degree 15+
+for interlacing checks.  The definiteness implementation uses fraction-free
+BigInt Bareiss elimination below dimension `30`, and switches to a
+CRT-over-prime-fields path for larger matrices.  The modular path reconstructs
+the leading principal minors exactly using Hadamard bounds.  For speed
+comparisons, the explicit entry points are `is_positive_definite_bareiss`,
+`is_positive_definite_modular`, and `modular_leading_principal_minors_bigint`.
 
 Run the local comparison example with:
 

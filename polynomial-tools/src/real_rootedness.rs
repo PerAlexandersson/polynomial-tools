@@ -144,8 +144,8 @@ pub fn format_poly_var(coeffs: &[i64], var: &str) -> String {
 
 /// Check if a polynomial is real-rooted using Sturm chains with exact arithmetic.
 ///
-/// This is the slower Sturm-chain method. Prefer [`is_real_rooted`] (Bézout-based)
-/// unless you need root isolation.
+/// This is the slower rational Sturm-chain method. Prefer
+/// [`is_real_rooted`] unless you need the older Sturm-chain route explicitly.
 ///
 /// Returns true for the zero polynomial and for constant/linear polynomials.
 pub fn is_real_rooted_sturm(coeffs: &[i64]) -> bool {

@@ -56,16 +56,21 @@ over `Ring` coefficients (i64, BigInt, Ratio<BigInt>, Ratio<i64>).
 - Key polynomials κ_α via operator recursion
 
 ### polynomial-tools/
-Univariate polynomial toolkit for combinatorial research. Uses Bézout matrices
-(not Sturm chains) as the default for real-rootedness and interlacing (100-400x faster).
+Univariate polynomial toolkit for combinatorial research. Uses primitive
+integer PRS/root counting as the default exact real-rootedness backend, with
+Bézout matrices as the main backend for interlacing and explicit matrix
+certificates.
 
 **Modules:**
 - `polynomial` — `Polynomial<C>` with `CoeffRing`/`FieldRing` traits, arithmetic,
   derivative, evaluate, shift, reverse, dilate, GCD, division, Lagrange interpolation
-- `real_rootedness` — Bézout/Sturm real-rootedness, strict/weak interlacing,
-  log-concavity, ultra-log-concavity, palindromic, gamma-positivity,
-  resultant, discriminant, Ehrhart h*-vector conversion, format_poly
-- `sturm` — Sturm chains (internal, used as fallback)
+- `real_rootedness` — public real-rootedness wrappers, explicit
+  Bézout/Hermite comparison checks, strict/weak interlacing, log-concavity,
+  ultra-log-concavity, palindromic, gamma-positivity, resultant,
+  discriminant, Ehrhart h*-vector conversion, format_poly
+- `root_count` — primitive integer PRS root counting and the default exact
+  real-rootedness backend
+- `sturm` — Sturm chains for exact root isolation
 - `recurrence` — Adaptive recurrence search for polynomial sequences
 - `sequences` — Eulerian, Narayana, type B Eulerian, Chebyshev T/U, Hermite
 
