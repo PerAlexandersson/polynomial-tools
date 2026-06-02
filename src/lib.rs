@@ -178,8 +178,6 @@ pub use real_rootedness::{
     is_real_rooted_bigint_coeffs,
     is_real_rooted_hermite,
     is_real_rooted_hermite_bigint_coeffs,
-    is_real_rooted_shifted_one_signed,
-    is_real_rooted_shifted_one_signed_bigint_coeffs,
     // Sturm-chain methods (slower, but can isolate roots)
     is_real_rooted_sturm,
     is_real_rooted_sturm_bigint_coeffs,
@@ -203,8 +201,8 @@ pub use root_count::{
     bigint_coeffs_to_i64, count_positive_roots_prs_bigint_coeffs,
     count_real_roots_prs_bigint_coeffs, is_real_rooted_fast_bigint_coeffs, is_real_rooted_fast_i64,
     is_real_rooted_one_signed_bigint_coeffs, is_real_rooted_prs_bigint_coeffs,
-    primitive_sturm_max_coefficient_bits, satisfies_newton_inequalities_bigint,
-    squarefree_degree_bigint_coeffs,
+    primitive_sturm_max_coefficient_bits, satisfies_kurtz_condition_bigint,
+    satisfies_newton_inequalities_bigint, squarefree_degree_bigint_coeffs,
 };
 pub use tnn_network::{
     build_tnn_certificate_from_monic_polynomials, coefficient_matrix_from_monic_polynomials,
