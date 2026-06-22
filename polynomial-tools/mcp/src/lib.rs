@@ -1,4 +1,6 @@
-use polynomial_tools::recurrence::{find_recurrence_adaptive, AdaptiveSearchOptions};
+use polynomial_tools::recurrence::{
+    find_recurrence_adaptive, find_recurrence_adaptive_rational, AdaptiveSearchOptions,
+};
 use polynomial_tools::sequences::{
     chebyshev_polynomials_t, chebyshev_polynomials_u, eulerian_polynomials, hermite_polynomials,
     narayana_polynomials, type_b_eulerian_polynomials,
@@ -9,19 +11,43 @@ use rmcp::{
     model::{Implementation, ServerCapabilities, ServerInfo},
     tool, tool_handler, tool_router, ErrorData as McpError, Json, ServerHandler,
 };
-use schemars::JsonSchema;
+use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
+use std::borrow::Cow;
 
 #[derive(Debug, Clone)]
 pub struct PolynomialToolsServer {
     tool_router: ToolRouter<Self>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PolynomialInput {
     pub coefficients: Option<Vec<i64>>,
     pub expression: Option<String>,
+}
+
+impl JsonSchema for PolynomialInput {
+    fn schema_name() -> Cow<'static, str> {
+        "PolynomialInput".into()
+    }
+
+    fn json_schema(generator: &mut SchemaGenerator) -> Schema {
+        Schema::try_from(json!({
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "coefficients": <Vec<i64>>::json_schema(generator),
+                "expression": String::json_schema(generator)
+            },
+            "oneOf": [
+                { "required": ["coefficients"] },
+                { "required": ["expression"] }
+            ]
+        }))
+        .expect("valid PolynomialInput schema")
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
@@ -97,12 +123,78 @@ pub struct RecurrenceSearchOptionsInput {
     pub min_margin: Option<usize>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum RationalCoefficientInput {
+    Integer(i64),
+    Text(String),
+}
+
+impl From<i64> for RationalCoefficientInput {
+    fn from(value: i64) -> Self {
+        Self::Integer(value)
+    }
+}
+
+impl JsonSchema for RationalCoefficientInput {
+    fn schema_name() -> Cow<'static, str> {
+        "RationalCoefficientInput".into()
+    }
+
+    fn json_schema(_generator: &mut SchemaGenerator) -> Schema {
+        Schema::try_from(json!({
+            "anyOf": [
+                { "type": "integer" },
+                {
+                    "type": "string",
+                    "description": "Exact rational coefficient, e.g. \"42\", \"-17\", or \"3/7\"."
+                }
+            ]
+        }))
+        .expect("valid RationalCoefficientInput schema")
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct FindRecurrenceRequest {
     pub polynomials: Option<Vec<PolynomialInput>>,
+    pub coefficients: Option<Vec<Vec<RationalCoefficientInput>>>,
+    pub expressions: Option<Vec<String>>,
     pub text: Option<String>,
     pub options: Option<RecurrenceSearchOptionsInput>,
+}
+
+impl JsonSchema for FindRecurrenceRequest {
+    fn schema_name() -> Cow<'static, str> {
+        "FindRecurrenceRequest".into()
+    }
+
+    fn json_schema(generator: &mut SchemaGenerator) -> Schema {
+        Schema::try_from(json!({
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "polynomials": <Vec<PolynomialInput>>::json_schema(generator),
+                "coefficients": <Vec<Vec<RationalCoefficientInput>>>::json_schema(generator),
+                "expressions": <Vec<String>>::json_schema(generator),
+                "text": String::json_schema(generator),
+                "options": {
+                    "anyOf": [
+                        generator.subschema_for::<RecurrenceSearchOptionsInput>(),
+                        { "type": "null" }
+                    ]
+                }
+            },
+            "oneOf": [
+                { "required": ["polynomials"] },
+                { "required": ["coefficients"] },
+                { "required": ["expressions"] },
+                { "required": ["text"] }
+            ]
+        }))
+        .expect("valid FindRecurrenceRequest schema")
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
@@ -404,6 +496,7 @@ pub struct CheckPolynomialFamilyResponse {
 }
 
 type ParsedBatch = Vec<Result<NormalizedPolynomial, String>>;
+type RationalParsedBatch = Vec<Result<Vec<BigRational>, String>>;
 type FamilySourceParse = (
     String,
     Result<Vec<NormalizedPolynomial>, Vec<ParsePolynomialItem>>,
@@ -434,6 +527,17 @@ fn normalize_coefficients(mut coefficients: Vec<i64>) -> Vec<i64> {
     }
     if coefficients.is_empty() {
         coefficients.push(0);
+    }
+    coefficients
+}
+
+fn normalize_rational_coefficients(mut coefficients: Vec<BigRational>) -> Vec<BigRational> {
+    let zero = parse_rational("0").expect("0 parses as BigRational");
+    while coefficients.len() > 1 && coefficients.last() == Some(&zero) {
+        coefficients.pop();
+    }
+    if coefficients.is_empty() {
+        coefficients.push(zero);
     }
     coefficients
 }
@@ -470,11 +574,102 @@ fn parse_batch(input: &PolynomialBatchInput) -> Result<ParsedBatch, McpError> {
     }
 }
 
-fn parse_recurrence_batch(input: &FindRecurrenceRequest) -> Result<ParsedBatch, McpError> {
-    parse_batch(&PolynomialBatchInput {
-        polynomials: input.polynomials.clone(),
+fn i64_coefficients_to_rational(coefficients: &[i64]) -> Vec<BigRational> {
+    coefficients
+        .iter()
+        .map(|coeff| parse_rational(&coeff.to_string()).expect("i64 parses as BigRational"))
+        .collect()
+}
+
+fn parse_rational_coefficient(input: &RationalCoefficientInput) -> Result<BigRational, String> {
+    match input {
+        RationalCoefficientInput::Integer(value) => parse_rational(&value.to_string()),
+        RationalCoefficientInput::Text(value) => parse_rational(value),
+    }
+}
+
+fn parse_rational_coefficients(
+    coefficients: &[RationalCoefficientInput],
+) -> Result<Vec<BigRational>, String> {
+    coefficients
+        .iter()
+        .enumerate()
+        .map(|(index, coefficient)| {
+            parse_rational_coefficient(coefficient)
+                .map_err(|error| format!("coefficient {index}: {error}"))
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map(normalize_rational_coefficients)
+}
+
+fn parse_recurrence_batch_rational(
+    input: &FindRecurrenceRequest,
+) -> Result<RationalParsedBatch, McpError> {
+    let source_count = [
+        input.polynomials.is_some(),
+        input.coefficients.is_some(),
+        input.expressions.is_some(),
+        input.text.is_some(),
+    ]
+    .into_iter()
+    .filter(|present| *present)
+    .count();
+
+    if source_count != 1 {
+        return Err(invalid_params(
+            "expected exactly one of `polynomials`, `coefficients`, `expressions`, or `text`",
+        ));
+    }
+
+    if let Some(polynomials) = &input.polynomials {
+        let batch = parse_batch(&PolynomialBatchInput {
+            polynomials: Some(polynomials.clone()),
+            text: None,
+        })?;
+        return Ok(batch
+            .into_iter()
+            .map(|item| {
+                item.map(|polynomial| i64_coefficients_to_rational(&polynomial.coefficients))
+            })
+            .collect());
+    }
+
+    if let Some(coefficients) = &input.coefficients {
+        return Ok(coefficients
+            .iter()
+            .map(|coefficients| parse_rational_coefficients(coefficients))
+            .collect());
+    }
+
+    if let Some(expressions) = &input.expressions {
+        let polynomials = expressions
+            .iter()
+            .cloned()
+            .map(|expression| PolynomialInput {
+                coefficients: None,
+                expression: Some(expression),
+            })
+            .collect();
+        let batch = parse_batch(&PolynomialBatchInput {
+            polynomials: Some(polynomials),
+            text: None,
+        })?;
+        return Ok(batch
+            .into_iter()
+            .map(|item| {
+                item.map(|polynomial| i64_coefficients_to_rational(&polynomial.coefficients))
+            })
+            .collect());
+    }
+
+    let batch = parse_batch(&PolynomialBatchInput {
+        polynomials: None,
         text: input.text.clone(),
-    })
+    })?;
+    Ok(batch
+        .into_iter()
+        .map(|item| item.map(|polynomial| i64_coefficients_to_rational(&polynomial.coefficients)))
+        .collect())
 }
 
 fn parse_items(batch: &ParsedBatch) -> Vec<ParsePolynomialItem> {
@@ -505,6 +700,31 @@ fn parse_items(batch: &ParsedBatch) -> Vec<ParsePolynomialItem> {
 fn collect_polynomials_or_errors(
     batch: ParsedBatch,
 ) -> Result<Vec<NormalizedPolynomial>, Vec<ParsePolynomialItem>> {
+    let errors: Vec<ParsePolynomialItem> = batch
+        .iter()
+        .enumerate()
+        .filter_map(|(index, item)| match item {
+            Ok(_) => None,
+            Err(error) => Some(ParsePolynomialItem {
+                index,
+                ok: false,
+                polynomial: None,
+                coefficients: None,
+                degree: None,
+                error: Some(error.clone()),
+            }),
+        })
+        .collect();
+    if errors.is_empty() {
+        Ok(batch.into_iter().map(Result::unwrap).collect())
+    } else {
+        Err(errors)
+    }
+}
+
+fn collect_rational_polynomials_or_errors(
+    batch: RationalParsedBatch,
+) -> Result<Vec<Vec<BigRational>>, Vec<ParsePolynomialItem>> {
     let errors: Vec<ParsePolynomialItem> = batch
         .iter()
         .enumerate()
@@ -1279,14 +1499,14 @@ impl PolynomialToolsServer {
     }
 
     #[tool(
-        description = "Search adaptively for a polynomial recurrence in a sequence of polynomials."
+        description = "Search adaptively for a polynomial recurrence. Provide exactly one of `polynomials`, `coefficients`, `expressions`, or `text`."
     )]
     pub fn find_recurrence(
         &self,
         Parameters(input): Parameters<FindRecurrenceRequest>,
     ) -> Result<Json<FindRecurrenceResponse>, McpError> {
-        let batch = parse_recurrence_batch(&input)?;
-        let polynomials = match collect_polynomials_or_errors(batch) {
+        let batch = parse_recurrence_batch_rational(&input)?;
+        let polynomials = match collect_rational_polynomials_or_errors(batch) {
             Ok(polynomials) => polynomials,
             Err(parse_errors) => {
                 return Ok(Json(FindRecurrenceResponse {
@@ -1317,16 +1537,18 @@ impl PolynomialToolsServer {
                 parse_errors: Vec::new(),
             }));
         }
-        let coefficients: Vec<Vec<i64>> =
-            polynomials.iter().map(|p| p.coefficients.clone()).collect();
         let search = apply_recurrence_options(input.options);
-        match find_recurrence_adaptive(&coefficients, &search) {
+        match find_recurrence_adaptive_rational(&polynomials, &search) {
             Some(result) => Ok(Json(FindRecurrenceResponse {
                 found: true,
                 recurrence: Some(format!("{}", result.recurrence)),
                 latex: Some(result.recurrence.to_latex()),
-                mathematica: Some(result.recurrence.to_mathematica_definition(&coefficients)),
-                sage: Some(result.recurrence.to_sage_definition(&coefficients)),
+                mathematica: Some(
+                    result
+                        .recurrence
+                        .to_mathematica_definition_rational(&polynomials),
+                ),
+                sage: Some(result.recurrence.to_sage_definition_rational(&polynomials)),
                 unknowns: Some(result.num_unknowns),
                 equations: Some(result.num_equations),
                 candidates_tried: Some(result.candidates_tried),
@@ -1722,6 +1944,8 @@ mod tests {
                     coeffs(&[8]),
                     coeffs(&[16]),
                 ]),
+                coefficients: None,
+                expressions: None,
                 text: None,
                 options: None,
             }))
@@ -1730,14 +1954,16 @@ mod tests {
 
         let Json(fibonacci) = server
             .find_recurrence(Parameters(FindRecurrenceRequest {
-                polynomials: Some(vec![
-                    coeffs(&[1]),
-                    coeffs(&[1]),
-                    coeffs(&[2]),
-                    coeffs(&[3]),
-                    coeffs(&[5]),
-                    coeffs(&[8]),
+                polynomials: None,
+                coefficients: Some(vec![
+                    vec![1.into()],
+                    vec![1.into()],
+                    vec![2.into()],
+                    vec![3.into()],
+                    vec![5.into()],
+                    vec![8.into()],
                 ]),
+                expressions: None,
                 text: None,
                 options: None,
             }))
@@ -1746,6 +1972,78 @@ mod tests {
             fibonacci.recurrence.as_deref(),
             Some("P(n) = P(n-1) + P(n-2)")
         );
+
+        let Json(expression_geometric) = server
+            .find_recurrence(Parameters(FindRecurrenceRequest {
+                polynomials: None,
+                coefficients: None,
+                expressions: Some(vec![
+                    "1".to_string(),
+                    "2".to_string(),
+                    "4".to_string(),
+                    "8".to_string(),
+                    "16".to_string(),
+                ]),
+                text: None,
+                options: None,
+            }))
+            .unwrap();
+        assert_eq!(
+            expression_geometric.recurrence.as_deref(),
+            Some("P(n) = 2 P(n-1)")
+        );
+
+        let Json(rational_geometric) = server
+            .find_recurrence(Parameters(FindRecurrenceRequest {
+                polynomials: None,
+                coefficients: Some(vec![
+                    vec![RationalCoefficientInput::Text("1/2".to_string())],
+                    vec![RationalCoefficientInput::Text("1/4".to_string())],
+                    vec![RationalCoefficientInput::Text("1/8".to_string())],
+                    vec![RationalCoefficientInput::Text("1/16".to_string())],
+                    vec![RationalCoefficientInput::Text("1/32".to_string())],
+                ]),
+                expressions: None,
+                text: None,
+                options: None,
+            }))
+            .unwrap();
+        assert_eq!(
+            rational_geometric.recurrence.as_deref(),
+            Some("P(n) = 1/2 P(n-1)")
+        );
+
+        let large = "1267650600228229401496703205376";
+        let double_large = "2535301200456458802993406410752";
+        let Json(large_geometric) = server
+            .find_recurrence(Parameters(FindRecurrenceRequest {
+                polynomials: None,
+                coefficients: Some(vec![
+                    vec![RationalCoefficientInput::Text(large.to_string())],
+                    vec![RationalCoefficientInput::Text(double_large.to_string())],
+                    vec![RationalCoefficientInput::Text(
+                        "5070602400912917605986812821504".to_string(),
+                    )],
+                    vec![RationalCoefficientInput::Text(
+                        "10141204801825835211973625643008".to_string(),
+                    )],
+                    vec![RationalCoefficientInput::Text(
+                        "20282409603651670423947251286016".to_string(),
+                    )],
+                ]),
+                expressions: None,
+                text: None,
+                options: None,
+            }))
+            .unwrap();
+        assert_eq!(
+            large_geometric.recurrence.as_deref(),
+            Some("P(n) = 2 P(n-1)")
+        );
+        assert!(large_geometric
+            .sage
+            .as_deref()
+            .is_some_and(|sage| sage.contains(large)));
 
         let eulerian = vec![
             coeffs(&[1]),
@@ -1758,11 +2056,23 @@ mod tests {
         let Json(eulerian_result) = server
             .find_recurrence(Parameters(FindRecurrenceRequest {
                 polynomials: Some(eulerian),
+                coefficients: None,
+                expressions: None,
                 text: None,
                 options: None,
             }))
             .unwrap();
         assert!(eulerian_result.found);
+
+        let conflict = parse_recurrence_batch_rational(&FindRecurrenceRequest {
+            polynomials: Some(vec![coeffs(&[1]), coeffs(&[2]), coeffs(&[4])]),
+            coefficients: Some(vec![vec![1.into()], vec![2.into()], vec![4.into()]]),
+            expressions: None,
+            text: None,
+            options: None,
+        })
+        .unwrap_err();
+        assert!(format!("{conflict:?}").contains("expected exactly one"));
     }
 
     #[test]

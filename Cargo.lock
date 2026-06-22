@@ -1115,7 +1115,7 @@ dependencies = [
 
 [[package]]
 name = "polynomial-tools"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "num-bigint",
  "num-integer",
@@ -1125,7 +1125,7 @@ dependencies = [
 
 [[package]]
 name = "polynomial-tools-mcp"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "polynomial-tools",
