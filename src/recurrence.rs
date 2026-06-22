@@ -14,7 +14,7 @@ use num_rational::Ratio;
 use num_traits::{One, Zero};
 use std::fmt;
 
-type BigRational = Ratio<BigInt>;
+pub type BigRational = Ratio<BigInt>;
 
 // ---------------------------------------------------------------------------
 // Options
@@ -101,38 +101,54 @@ pub struct Recurrence {
 // Polynomial helpers (univariate, coefficient-vector representation)
 // ---------------------------------------------------------------------------
 
-/// d-th derivative of a polynomial given as a coefficient vector.
-fn poly_nth_derivative(coeffs: &[i64], d: usize) -> Vec<i64> {
+/// Convert an `i64` coefficient vector to exact rational coefficients.
+fn i64_poly_to_rational(coeffs: &[i64]) -> Vec<BigRational> {
+    coeffs
+        .iter()
+        .map(|&c| BigRational::from_integer(BigInt::from(c)))
+        .collect()
+}
+
+fn i64_polys_to_rational(polys: &[Vec<i64>]) -> Vec<Vec<BigRational>> {
+    polys.iter().map(|p| i64_poly_to_rational(p)).collect()
+}
+
+fn rational_zero_poly() -> Vec<BigRational> {
+    vec![BigRational::zero()]
+}
+
+/// d-th derivative of a polynomial given as a rational coefficient vector.
+fn poly_nth_derivative_rational(coeffs: &[BigRational], d: usize) -> Vec<BigRational> {
     let mut result = coeffs.to_vec();
     for _ in 0..d {
         if result.len() <= 1 {
-            return vec![0];
+            return rational_zero_poly();
         }
         result = result[1..]
             .iter()
             .enumerate()
-            .map(|(i, &c)| c * (i as i64 + 1))
+            .map(|(i, c)| c.clone() * BigRational::from_integer(BigInt::from(i + 1)))
             .collect();
     }
     if result.is_empty() {
-        vec![0]
+        rational_zero_poly()
     } else {
         result
     }
 }
 
 /// Coefficient of t^k (0 when k is out of range).
-fn poly_coeff(coeffs: &[i64], k: usize) -> i64 {
+fn poly_coeff_rational(coeffs: &[BigRational], k: usize) -> BigRational {
     if k < coeffs.len() {
-        coeffs[k]
+        coeffs[k].clone()
     } else {
-        0
+        BigRational::zero()
     }
 }
 
 /// Degree of a polynomial (returns 0 for the zero polynomial).
-fn poly_degree(coeffs: &[i64]) -> usize {
-    coeffs.iter().rposition(|&c| c != 0).unwrap_or(0)
+fn poly_degree_rational(coeffs: &[BigRational]) -> usize {
+    coeffs.iter().rposition(|c| !c.is_zero()).unwrap_or(0)
 }
 
 use crate::linalg;
@@ -145,8 +161,8 @@ use crate::linalg;
 ///
 /// `polys[i]` is P_{i+1}(t) given as a coefficient vector (index = power of t).
 /// Returns `None` if no recurrence is found with the given options.
-pub fn find_polynomial_recurrence(
-    polys: &[Vec<i64>],
+pub fn find_polynomial_recurrence_rational(
+    polys: &[Vec<BigRational>],
     opts: &RecurrenceOptions,
 ) -> Option<Recurrence> {
     let m = polys.len();
@@ -155,11 +171,11 @@ pub fn find_polynomial_recurrence(
     }
 
     // Pre-compute all needed derivatives.
-    let derivs: Vec<Vec<Vec<i64>>> = polys
+    let derivs: Vec<Vec<Vec<BigRational>>> = polys
         .iter()
         .map(|p| {
             (0..=opts.diff_deg)
-                .map(|d| poly_nth_derivative(p, d))
+                .map(|d| poly_nth_derivative_rational(p, d))
                 .collect()
         })
         .collect();
@@ -206,7 +222,11 @@ pub fn find_polynomial_recurrence(
     }
 
     // --- Determine max t-degree across all equations ---
-    let max_poly_deg = polys.iter().map(|p| poly_degree(p)).max().unwrap_or(0);
+    let max_poly_deg = polys
+        .iter()
+        .map(|p| poly_degree_rational(p))
+        .max()
+        .unwrap_or(0);
     let max_j = opts
         .var_deg
         .max(opts.denom_var_deg)
@@ -234,8 +254,8 @@ pub fn find_polynomial_recurrence(
             let row = eq_idx * eqs_per_nn + l;
 
             // RHS = coefficient of t^l in P_nn(t)  (moved to RHS with negation).
-            let cur_l = poly_coeff(current, l);
-            rhs[row] = BigRational::from(BigInt::from(-cur_l));
+            let cur_l = poly_coeff_rational(current, l);
+            rhs[row] = -cur_l;
 
             // Denominator unknowns: d[i][j] * nn^i * (coeff of t^{l-j} in P_nn).
             if num_denom_vars > 0 {
@@ -247,12 +267,12 @@ pub fn find_polynomial_recurrence(
                         if l < j {
                             continue;
                         }
-                        let pc = poly_coeff(current, l - j);
-                        if pc == 0 {
+                        let pc = poly_coeff_rational(current, l - j);
+                        if pc.is_zero() {
                             continue;
                         }
-                        let val = BigRational::from(BigInt::from(pc))
-                            * BigRational::from(num_traits::pow::pow(BigInt::from(nn as i64), i));
+                        let val = pc
+                            * BigRational::from_integer(num_traits::pow::pow(BigInt::from(nn), i));
                         matrix[row][denom_col(i, j)] = val;
                     }
                 }
@@ -268,12 +288,11 @@ pub fn find_polynomial_recurrence(
                             if l < j {
                                 continue;
                             }
-                            let rc = poly_coeff(ref_poly, l - j);
-                            if rc == 0 {
+                            let rc = poly_coeff_rational(ref_poly, l - j);
+                            if rc.is_zero() {
                                 continue;
                             }
-                            let val = BigRational::from(BigInt::from(-rc))
-                                * BigRational::from(ni.clone());
+                            let val = -rc * BigRational::from_integer(ni.clone());
                             matrix[row][coeff_col(r, d, i, j)] = val;
                         }
                     }
@@ -285,7 +304,7 @@ pub fn find_polynomial_recurrence(
                 for i in 0..=opts.inhomo_idx_deg {
                     if l <= opts.inhomo_var_deg {
                         let val =
-                            BigRational::from(-num_traits::pow::pow(BigInt::from(nn as i64), i));
+                            -BigRational::from_integer(num_traits::pow::pow(BigInt::from(nn), i));
                         matrix[row][inhomo_col(i, l)] += val;
                     }
                 }
@@ -374,6 +393,18 @@ pub fn find_polynomial_recurrence(
         denominator,
         inhomogeneous,
     })
+}
+
+/// Search for a polynomial recurrence satisfied by an integer-coefficient
+/// polynomial sequence.
+///
+/// This is a convenience wrapper around [`find_polynomial_recurrence_rational`].
+pub fn find_polynomial_recurrence(
+    polys: &[Vec<i64>],
+    opts: &RecurrenceOptions,
+) -> Option<Recurrence> {
+    let rational_polys = i64_polys_to_rational(polys);
+    find_polynomial_recurrence_rational(&rational_polys, opts)
 }
 
 // ---------------------------------------------------------------------------
@@ -692,31 +723,19 @@ fn wrap_if_sum(expr: &str) -> String {
     }
 }
 
-fn fmt_univariate_poly_mathematica(coeffs: &[i64]) -> String {
+fn fmt_univariate_poly_rational_code(style: CodeStyle, coeffs: &[BigRational]) -> String {
     let mut terms = Vec::new();
-    for (pow, &coeff) in coeffs.iter().enumerate() {
-        if coeff == 0 {
+    for (pow, coeff) in coeffs.iter().enumerate() {
+        if coeff.is_zero() {
             continue;
         }
-        let negative = coeff < 0;
-        let abs_coeff = coeff.abs();
-        let body = match pow {
-            0 => abs_coeff.to_string(),
-            1 => {
-                if abs_coeff == 1 {
-                    "t".to_string()
-                } else {
-                    format!("{abs_coeff}*t")
-                }
-            }
-            _ => {
-                if abs_coeff == 1 {
-                    format!("t^{pow}")
-                } else {
-                    format!("{abs_coeff}*t^{pow}")
-                }
-            }
+        let negative = coeff < &BigRational::zero();
+        let abs_coeff = if negative {
+            -coeff.clone()
+        } else {
+            coeff.clone()
         };
+        let body = fmt_monomial_code_abs(style, &abs_coeff, 0, pow);
         terms.push((negative, body));
     }
     join_signed_terms(&terms)
@@ -817,7 +836,7 @@ impl Recurrence {
         }
     }
 
-    pub fn to_mathematica_definition(&self, initial_polys: &[Vec<i64>]) -> String {
+    pub fn to_mathematica_definition_rational(&self, initial_polys: &[Vec<BigRational>]) -> String {
         let base_count = self.max_offset().min(initial_polys.len());
         let start_n = base_count + 1;
         let mut lines = vec!["ClearAll[P];".to_string()];
@@ -825,7 +844,7 @@ impl Recurrence {
             lines.push(format!(
                 "P[{}, t_] := {};",
                 idx + 1,
-                fmt_univariate_poly_mathematica(coeffs)
+                fmt_univariate_poly_rational_code(CodeStyle::Mathematica, coeffs)
             ));
         }
         lines.push(format!(
@@ -837,7 +856,12 @@ impl Recurrence {
         lines.join("\n")
     }
 
-    pub fn to_sage_definition(&self, initial_polys: &[Vec<i64>]) -> String {
+    pub fn to_mathematica_definition(&self, initial_polys: &[Vec<i64>]) -> String {
+        let rational_polys = i64_polys_to_rational(initial_polys);
+        self.to_mathematica_definition_rational(&rational_polys)
+    }
+
+    pub fn to_sage_definition_rational(&self, initial_polys: &[Vec<BigRational>]) -> String {
         let base_count = self.max_offset().min(initial_polys.len());
         let mut lines = vec![
             "R.<t> = PolynomialRing(QQ)".to_string(),
@@ -847,7 +871,7 @@ impl Recurrence {
         for (idx, coeffs) in initial_polys.iter().take(base_count).enumerate() {
             let coeff_list = coeffs
                 .iter()
-                .map(ToString::to_string)
+                .map(|coeff| fmt_rational_code(CodeStyle::Sage, coeff))
                 .collect::<Vec<_>>()
                 .join(", ");
             lines.push(format!("    {}: R([{}]),", idx + 1, coeff_list));
@@ -865,6 +889,11 @@ impl Recurrence {
         lines.push(String::new());
         lines.push("# Example: [P(n) for n in range(1, 11)]".to_string());
         lines.join("\n")
+    }
+
+    pub fn to_sage_definition(&self, initial_polys: &[Vec<i64>]) -> String {
+        let rational_polys = i64_polys_to_rational(initial_polys);
+        self.to_sage_definition_rational(&rational_polys)
     }
 
     /// Format the recurrence as a LaTeX expression.
@@ -1037,13 +1066,17 @@ pub fn count_unknowns(opts: &RecurrenceOptions) -> usize {
 }
 
 /// Count the total number of equations for a given set of recurrence options
-/// and input polynomials.
-pub fn count_equations(polys: &[Vec<i64>], opts: &RecurrenceOptions) -> usize {
+/// and rational input polynomials.
+pub fn count_equations_rational(polys: &[Vec<BigRational>], opts: &RecurrenceOptions) -> usize {
     let m = polys.len();
     if m <= opts.rec_len {
         return 0;
     }
-    let max_poly_deg = polys.iter().map(|p| poly_degree(p)).max().unwrap_or(0);
+    let max_poly_deg = polys
+        .iter()
+        .map(|p| poly_degree_rational(p))
+        .max()
+        .unwrap_or(0);
     let max_j = opts
         .var_deg
         .max(opts.denom_var_deg)
@@ -1054,6 +1087,12 @@ pub fn count_equations(polys: &[Vec<i64>], opts: &RecurrenceOptions) -> usize {
         });
     let eqs_per_nn = max_j + max_poly_deg + 1;
     (m - opts.rec_len) * eqs_per_nn
+}
+
+/// Count the total number of equations for integer input polynomials.
+pub fn count_equations(polys: &[Vec<i64>], opts: &RecurrenceOptions) -> usize {
+    let rational_polys = i64_polys_to_rational(polys);
+    count_equations_rational(&rational_polys, opts)
 }
 
 // ---------------------------------------------------------------------------
@@ -1237,8 +1276,8 @@ fn generate_candidates(m: usize, search: &AdaptiveSearchOptions) -> Vec<Recurren
 
 /// Search for the simplest polynomial recurrence by trying parameter
 /// combinations in order of ascending complexity.
-pub fn find_recurrence_adaptive(
-    polys: &[Vec<i64>],
+pub fn find_recurrence_adaptive_rational(
+    polys: &[Vec<BigRational>],
     search: &AdaptiveSearchOptions,
 ) -> Option<AdaptiveSearchResult> {
     let polys = polys.get(search.skip_prefix..).unwrap_or(&[]);
@@ -1253,7 +1292,7 @@ pub fn find_recurrence_adaptive(
 
     for opts in &candidates {
         let unknowns = count_unknowns(opts);
-        let equations = count_equations(polys, opts);
+        let equations = count_equations_rational(polys, opts);
 
         if equations < unknowns + search.min_margin {
             continue;
@@ -1280,7 +1319,7 @@ pub fn find_recurrence_adaptive(
             );
         }
 
-        if let Some(rec) = find_polynomial_recurrence(polys, opts) {
+        if let Some(rec) = find_polynomial_recurrence_rational(polys, opts) {
             if search.require_all_offsets && !recurrence_uses_all_offsets(&rec, opts.rec_len) {
                 continue;
             }
@@ -1316,7 +1355,7 @@ pub fn find_recurrence_adaptive(
             }
 
             let unknowns = count_unknowns(opts);
-            let equations = count_equations(polys, opts);
+            let equations = count_equations_rational(polys, opts);
 
             if equations < unknowns + search.min_margin {
                 continue;
@@ -1339,7 +1378,7 @@ pub fn find_recurrence_adaptive(
                 );
             }
 
-            if let Some(rec) = find_polynomial_recurrence(polys, opts) {
+            if let Some(rec) = find_polynomial_recurrence_rational(polys, opts) {
                 if search.require_all_offsets && !recurrence_uses_all_offsets(&rec, opts.rec_len) {
                     continue;
                 }
@@ -1360,6 +1399,18 @@ pub fn find_recurrence_adaptive(
     None
 }
 
+/// Search for the simplest polynomial recurrence for an integer-coefficient
+/// polynomial sequence.
+///
+/// This is a convenience wrapper around [`find_recurrence_adaptive_rational`].
+pub fn find_recurrence_adaptive(
+    polys: &[Vec<i64>],
+    search: &AdaptiveSearchOptions,
+) -> Option<AdaptiveSearchResult> {
+    let rational_polys = i64_polys_to_rational(polys);
+    find_recurrence_adaptive_rational(&rational_polys, search)
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -1374,6 +1425,51 @@ mod tests {
             .unwrap_or_else(|| panic!("Expected recurrence, got None"));
         let display = format!("{rec}");
         assert_eq!(display, expected, "\npolys: {:?}\nopts: {:?}", polys, opts);
+    }
+
+    fn br(n: i64, d: i64) -> BigRational {
+        BigRational::new(BigInt::from(n), BigInt::from(d))
+    }
+
+    #[test]
+    fn rational_input_geometric() {
+        let polys: Vec<Vec<BigRational>> = vec![
+            vec![br(1, 2)],
+            vec![br(1, 4)],
+            vec![br(1, 8)],
+            vec![br(1, 16)],
+            vec![br(1, 32)],
+        ];
+        let opts = RecurrenceOptions {
+            var_deg: 0,
+            idx_deg: 0,
+            diff_deg: 0,
+            rec_len: 1,
+            homogeneous: true,
+            ..Default::default()
+        };
+        let rec = find_polynomial_recurrence_rational(&polys, &opts)
+            .expect("should find rational recurrence");
+        assert_eq!(format!("{rec}"), "P(n) = 1/2 P(n-1)");
+    }
+
+    #[test]
+    fn rational_input_large_coefficients() {
+        let base = BigInt::one() << 100usize;
+        let polys: Vec<Vec<BigRational>> = (0..5)
+            .map(|i| vec![BigRational::from_integer(&base << i)])
+            .collect();
+        let opts = RecurrenceOptions {
+            var_deg: 0,
+            idx_deg: 0,
+            diff_deg: 0,
+            rec_len: 1,
+            homogeneous: true,
+            ..Default::default()
+        };
+        let rec = find_polynomial_recurrence_rational(&polys, &opts)
+            .expect("should find recurrence with large coefficients");
+        assert_eq!(format!("{rec}"), "P(n) = 2 P(n-1)");
     }
 
     #[test]
