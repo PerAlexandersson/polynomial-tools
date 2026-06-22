@@ -841,6 +841,9 @@ Lines starting with # are ignored."></textarea>
 
     <label><input type="checkbox" id="tryDenominator"> rational coefficients</label>
     <span class="info">i<span class="tip">Allow a common denominator f(n, t) on the left-hand side: f(n, t) P(n) = &sum; a_k(n, t) P(n&minus;k). Finds recurrences with rational function coefficients in n and t.</span></span>
+
+    <label><input type="checkbox" id="tryAlternatingSign"> (-1)<sup>n</sup> terms</label>
+    <span class="info">i<span class="tip">Also allow right-hand-side terms multiplied by (-1)^n, such as (-1)^n a_k(n, t) P(n&minus;k). Useful for alternating or parity-sensitive sequences.</span></span>
   </div>
   <button class="run" onclick="run('recurrence')" id="btnRec">Find recurrence</button>
   <button class="cancel" onclick="cancelRecurrence()" id="btnCancel" style="display:none">Cancel</button>
@@ -855,9 +858,9 @@ Lines starting with # are ignored."></textarea>
   Built with Rust + WebAssembly.
 </footer>
 
-<script src="pkg/polynomial_tools_web.js?v=20260413a"></script>
+<script src="pkg/polynomial_tools_web.js?v=20260622a"></script>
 <script>
-const ASSET_VERSION = '20260413a';
+const ASSET_VERSION = '20260622a';
 const EXAMPLES = {
   eulerian: {
     label: 'Eulerian polynomials A_n(t) \u2014 descent generating function on S_n',
@@ -1702,7 +1705,8 @@ function createWorker() {
         const result = wasm_bindgen.find_recurrence(
           e.data.input, e.data.max_rec_len, e.data.max_var_deg,
           e.data.max_idx_deg, e.data.max_diff_deg,
-          e.data.try_inhomogeneous, e.data.try_denominator
+          e.data.try_inhomogeneous, e.data.try_denominator,
+          e.data.try_alternating_sign
         );
         postMessage({type: 'result', data: result});
       }
@@ -1734,6 +1738,7 @@ function startRecurrence(text) {
     max_diff_deg: adaptive ? 1 : readInt('maxDiffDeg', 1),
     try_inhomogeneous: document.getElementById('tryInhomogeneous').checked,
     try_denominator: document.getElementById('tryDenominator').checked,
+    try_alternating_sign: document.getElementById('tryAlternatingSign').checked,
   };
 
   if (worker) worker.terminate();

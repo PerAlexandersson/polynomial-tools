@@ -145,7 +145,9 @@ Output includes all properties for each polynomial:
 ### Search for a recurrence
 
 Given a sequence of polynomials (one per line), search for a polynomial
-recurrence `f(n,t) P_n(t) = Σ c_{r,d}(n,t) D^d P_{n-r}(t)`:
+recurrence `f(n,t) P_n(t) = Σ c_{r,d}(n,t) D^d P_{n-r}(t)`. With
+`--alternating-sign`, the search also allows terms
+`(-1)^n c_{r,d}(n,t) D^d P_{n-r}(t)`:
 
 ```sh
 polytool recurrence < polys.txt
@@ -170,6 +172,7 @@ Options:
 --min-inhomo-idx-deg Minimum degree in n for the inhomogeneous term
 --max-inhomo-idx-deg Maximum degree in n for the inhomogeneous term
 --denominator        Allow a nontrivial LHS factor f(n,t)
+--alternating-sign   Also allow right-hand-side terms multiplied by (-1)^n
 --max-denom-var-deg  Max degree in t for f(n,t) (default: 2, implies --denominator)
 --max-denom-idx-deg  Max degree in n for f(n,t) (default: 2, implies --denominator)
 --verbose            Print each candidate tried
@@ -327,10 +330,8 @@ let opts = RecurrenceOptions {
     var_deg: 1,
     idx_deg: 1,
     diff_deg: 1,
-    homogeneous: true,
-    denom_var_deg: 0,
-    denom_idx_deg: 0,
-};
+    ..Default::default()
+}.with_alternating_sign(true);
 if let Some(rec) = find_polynomial_recurrence(&polys, &opts) {
     println!("{}", rec);
 }

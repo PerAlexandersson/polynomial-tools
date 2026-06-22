@@ -161,6 +161,9 @@ fn cmd_recurrence(args: &[String]) {
             "--denominator" => {
                 search.try_denominator = true;
             }
+            "--alternating-sign" => {
+                search.try_alternating_sign = true;
+            }
             "--max-denom-var-deg" => {
                 i += 1;
                 search.try_denominator = true;
