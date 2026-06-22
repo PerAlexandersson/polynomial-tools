@@ -347,6 +347,7 @@ Important option fields:
 - `min_inhomo_var_deg`, `max_inhomo_var_deg`
 - `min_inhomo_idx_deg`, `max_inhomo_idx_deg`
 - `try_denominator`
+- `try_alternating_sign`
 - `max_denom_var_deg`, `max_denom_idx_deg`
 - `min_margin`
 

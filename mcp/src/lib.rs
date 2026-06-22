@@ -118,6 +118,7 @@ pub struct RecurrenceSearchOptionsInput {
     pub min_inhomo_idx_deg: Option<usize>,
     pub max_inhomo_idx_deg: Option<usize>,
     pub try_denominator: Option<bool>,
+    pub try_alternating_sign: Option<bool>,
     pub max_denom_var_deg: Option<usize>,
     pub max_denom_idx_deg: Option<usize>,
     pub min_margin: Option<usize>,
@@ -1204,6 +1205,9 @@ fn apply_recurrence_options(input: Option<RecurrenceSearchOptionsInput>) -> Adap
     if let Some(value) = input.try_denominator {
         options.try_denominator = value;
     }
+    if let Some(value) = input.try_alternating_sign {
+        options.try_alternating_sign = value;
+    }
     if let Some(value) = input.max_denom_var_deg {
         options.try_denominator = true;
         options.max_denom_var_deg = value;
@@ -2044,6 +2048,42 @@ mod tests {
             .sage
             .as_deref()
             .is_some_and(|sage| sage.contains(large)));
+
+        let Json(alternating) = server
+            .find_recurrence(Parameters(FindRecurrenceRequest {
+                polynomials: None,
+                coefficients: Some(vec![
+                    vec![1.into()],
+                    vec![1.into()],
+                    vec![(-1).into()],
+                    vec![(-1).into()],
+                    vec![1.into()],
+                    vec![1.into()],
+                    vec![(-1).into()],
+                    vec![(-1).into()],
+                ]),
+                expressions: None,
+                text: None,
+                options: Some(
+                    serde_json::from_value(json!({
+                        "try_alternating_sign": true,
+                        "max_rec_len": 1,
+                        "max_var_deg": 0,
+                        "max_idx_deg": 0,
+                        "max_diff_deg": 0
+                    }))
+                    .unwrap(),
+                ),
+            }))
+            .unwrap();
+        assert_eq!(
+            alternating.recurrence.as_deref(),
+            Some("P(n) = (-1)^n P(n-1)")
+        );
+        assert!(alternating
+            .sage
+            .as_deref()
+            .is_some_and(|sage| sage.contains("(-1)**n*P(n - 1)")));
 
         let eulerian = vec![
             coeffs(&[1]),

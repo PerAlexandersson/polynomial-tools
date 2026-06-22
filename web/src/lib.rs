@@ -248,6 +248,7 @@ pub fn find_recurrence(
     max_diff_deg: u32,
     try_inhomogeneous: bool,
     try_denominator: bool,
+    try_alternating_sign: bool,
 ) -> String {
     let (polys, _) = parse_ok(input);
     if polys.len() < 3 {
@@ -272,6 +273,7 @@ pub fn find_recurrence(
         max_diff_deg: max_diff_deg as usize,
         try_inhomogeneous,
         try_denominator,
+        try_alternating_sign,
         ..Default::default()
     };
 

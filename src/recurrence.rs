@@ -5,7 +5,9 @@
 //!   f(n,t) P_n(t) = sum_{r,d} c_{r,d}(n,t) D^d P_{n-r}(t)  [+ g(n,t)]
 //!
 //! where c_{r,d}(n,t) are polynomial coefficients in n and t, D^d is the
-//! d-th derivative in t, and f(n,t) is an optional LHS denominator.
+//! d-th derivative in t, and f(n,t) is an optional LHS denominator.  When
+//! `alternating_sign` is enabled, the search also allows terms of the form
+//! (-1)^n c_{r,d}(n,t) D^d P_{n-r}(t).
 //!
 //! This reduces to solving a linear system over the rationals.
 
@@ -45,6 +47,8 @@ pub struct RecurrenceOptions {
     pub denom_var_deg: usize,
     /// Degree in n of the LHS factor f(n,t) beyond the implicit constant 1.
     pub denom_idx_deg: usize,
+    /// Also allow recurrence coefficient terms multiplied by (-1)^n.
+    pub alternating_sign: bool,
 }
 
 impl Default for RecurrenceOptions {
@@ -59,7 +63,17 @@ impl Default for RecurrenceOptions {
             inhomo_idx_deg: 1,
             denom_var_deg: 0,
             denom_idx_deg: 0,
+            alternating_sign: false,
         }
+    }
+}
+
+impl RecurrenceOptions {
+    /// Return these options with alternating `(-1)^n` recurrence terms enabled
+    /// or disabled.
+    pub fn with_alternating_sign(mut self, alternating_sign: bool) -> Self {
+        self.alternating_sign = alternating_sign;
+        self
     }
 }
 
@@ -75,15 +89,65 @@ pub struct BivarPoly {
     pub coeffs: Vec<Vec<BigRational>>,
 }
 
-/// One term in a recurrence: coeff(n,t) * D^d P_{n-r}(t).
+/// Extra sign factor attached to one recurrence term.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecurrenceSign {
+    /// No extra sign factor.
+    None,
+    /// Multiply the term by (-1)^n.
+    AlternatingN,
+}
+
+impl Default for RecurrenceSign {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+impl RecurrenceSign {
+    fn from_family_index(sign_idx: usize) -> Self {
+        match sign_idx {
+            0 => Self::None,
+            1 => Self::AlternatingN,
+            _ => unreachable!("invalid recurrence sign family"),
+        }
+    }
+}
+
+/// One term in a recurrence: sign(n) * coeff(n,t) * D^d P_{n-r}(t).
 #[derive(Debug, Clone)]
 pub struct RecurrenceTerm {
     /// Recurrence offset r (P_{n-r}).
     pub offset: usize,
     /// Derivative order d.
     pub deriv_order: usize,
+    /// Optional multiplicative sign factor.
+    pub sign: RecurrenceSign,
     /// Coefficient polynomial c(n,t).
     pub coeff: BivarPoly,
+}
+
+impl RecurrenceTerm {
+    /// Construct an ordinary non-alternating recurrence term.
+    pub fn new(offset: usize, deriv_order: usize, coeff: BivarPoly) -> Self {
+        Self {
+            offset,
+            deriv_order,
+            sign: RecurrenceSign::None,
+            coeff,
+        }
+    }
+
+    /// Return this term with a different sign factor.
+    pub fn with_sign(mut self, sign: RecurrenceSign) -> Self {
+        self.sign = sign;
+        self
+    }
+
+    /// True when this term is multiplied by `(-1)^n`.
+    pub fn is_alternating(&self) -> bool {
+        self.sign == RecurrenceSign::AlternatingN
+    }
 }
 
 /// A polynomial recurrence found by `find_polynomial_recurrence`.
@@ -193,14 +257,15 @@ pub fn find_polynomial_recurrence_rational(
         denom_start + flat - 1 // skip (0,0)
     };
 
-    // 2) Recurrence coefficient unknowns c[r][d][i][j].
+    // 2) Recurrence coefficient unknowns c[r][d][sign][i][j].
     let coeff_start = denom_start + num_denom_vars;
     let vars_per_coeff = (opts.idx_deg + 1) * (opts.var_deg + 1);
-    let num_coeff_vars = opts.rec_len * (opts.diff_deg + 1) * vars_per_coeff;
+    let sign_family_count = if opts.alternating_sign { 2 } else { 1 };
+    let num_coeff_vars = opts.rec_len * (opts.diff_deg + 1) * sign_family_count * vars_per_coeff;
 
-    let coeff_col = |r: usize, d: usize, i: usize, j: usize| -> usize {
+    let coeff_col = |r: usize, d: usize, sign_idx: usize, i: usize, j: usize| -> usize {
         coeff_start
-            + ((r - 1) * (opts.diff_deg + 1) + d) * vars_per_coeff
+            + (((r - 1) * (opts.diff_deg + 1) + d) * sign_family_count + sign_idx) * vars_per_coeff
             + i * (opts.var_deg + 1)
             + j
     };
@@ -278,22 +343,29 @@ pub fn find_polynomial_recurrence_rational(
                 }
             }
 
-            // Recurrence coefficients: −c[r][d][i][j] * nn^i * (coeff of t^{l-j} in D^d P_{nn-r}).
+            // Recurrence coefficients:
+            // −sign(nn) * c[r][d][sign][i][j] * nn^i
+            //     * (coeff of t^{l-j} in D^d P_{nn-r}).
             for r in 1..=opts.rec_len {
                 for d in 0..=opts.diff_deg {
                     let ref_poly = &derivs[nn - 1 - r][d];
-                    for i in 0..=opts.idx_deg {
-                        let ni = num_traits::pow::pow(BigInt::from(nn as i64), i);
-                        for j in 0..=opts.var_deg {
-                            if l < j {
-                                continue;
+                    for sign_idx in 0..sign_family_count {
+                        for i in 0..=opts.idx_deg {
+                            let mut ni = num_traits::pow::pow(BigInt::from(nn), i);
+                            if sign_idx == 1 && nn % 2 == 1 {
+                                ni = -ni;
                             }
-                            let rc = poly_coeff_rational(ref_poly, l - j);
-                            if rc.is_zero() {
-                                continue;
+                            for j in 0..=opts.var_deg {
+                                if l < j {
+                                    continue;
+                                }
+                                let rc = poly_coeff_rational(ref_poly, l - j);
+                                if rc.is_zero() {
+                                    continue;
+                                }
+                                let val = -rc * BigRational::from_integer(ni.clone());
+                                matrix[row][coeff_col(r, d, sign_idx, i, j)] = val;
                             }
-                            let val = -rc * BigRational::from_integer(ni.clone());
-                            matrix[row][coeff_col(r, d, i, j)] = val;
                         }
                     }
                 }
@@ -330,18 +402,21 @@ pub fn find_polynomial_recurrence_rational(
     let mut terms = Vec::new();
     for r in 1..=opts.rec_len {
         for d in 0..=opts.diff_deg {
-            let bv = extract_bivar(
-                &solution,
-                |i, j| coeff_col(r, d, i, j),
-                opts.idx_deg,
-                opts.var_deg,
-            );
-            if !bv.is_zero() {
-                terms.push(RecurrenceTerm {
-                    offset: r,
-                    deriv_order: d,
-                    coeff: bv,
-                });
+            for sign_idx in 0..sign_family_count {
+                let bv = extract_bivar(
+                    &solution,
+                    |i, j| coeff_col(r, d, sign_idx, i, j),
+                    opts.idx_deg,
+                    opts.var_deg,
+                );
+                if !bv.is_zero() {
+                    terms.push(RecurrenceTerm {
+                        offset: r,
+                        deriv_order: d,
+                        sign: RecurrenceSign::from_family_index(sign_idx),
+                        coeff: bv,
+                    });
+                }
             }
         }
     }
@@ -621,10 +696,26 @@ fn fmt_poly_ref_latex(offset: usize, deriv_order: usize) -> String {
     }
 }
 
+fn fmt_poly_ref_latex_with_sign(sign: RecurrenceSign, offset: usize, deriv_order: usize) -> String {
+    let pref = fmt_poly_ref_latex(offset, deriv_order);
+    match sign {
+        RecurrenceSign::None => pref,
+        RecurrenceSign::AlternatingN => format!("(-1)^n {pref}"),
+    }
+}
+
 #[derive(Copy, Clone)]
 enum CodeStyle {
     Mathematica,
     Sage,
+}
+
+fn recurrence_sign_code(style: CodeStyle, sign: RecurrenceSign) -> Option<&'static str> {
+    match (style, sign) {
+        (_, RecurrenceSign::None) => None,
+        (CodeStyle::Mathematica, RecurrenceSign::AlternatingN) => Some("(-1)^n"),
+        (CodeStyle::Sage, RecurrenceSign::AlternatingN) => Some("(-1)**n"),
+    }
 }
 
 fn fmt_rational_code(style: CodeStyle, r: &BigRational) -> String {
@@ -758,11 +849,22 @@ impl Recurrence {
             1 => format!("D[P[{idx}, t], t]"),
             d => format!("D[P[{idx}, t], {{t, {d}}}]"),
         };
+        let sign = recurrence_sign_code(CodeStyle::Mathematica, term.sign);
 
         if term.coeff.is_one() {
-            pref
+            if let Some(sign) = sign {
+                format!("{sign}*{pref}")
+            } else {
+                pref
+            }
         } else if coeff == "-1" {
-            format!("-{pref}")
+            if let Some(sign) = sign {
+                format!("-{sign}*{pref}")
+            } else {
+                format!("-{pref}")
+            }
+        } else if let Some(sign) = sign {
+            format!("{sign}*{}*{pref}", wrap_if_sum(&coeff))
         } else {
             format!("{}*{pref}", wrap_if_sum(&coeff))
         }
@@ -780,11 +882,22 @@ impl Recurrence {
             1 => format!("P({idx}).derivative(t)"),
             d => format!("P({idx}).derivative(t, {d})"),
         };
+        let sign = recurrence_sign_code(CodeStyle::Sage, term.sign);
 
         if term.coeff.is_one() {
-            pref
+            if let Some(sign) = sign {
+                format!("{sign}*{pref}")
+            } else {
+                pref
+            }
         } else if coeff == "-1" {
-            format!("-{pref}")
+            if let Some(sign) = sign {
+                format!("-{sign}*{pref}")
+            } else {
+                format!("-{pref}")
+            }
+        } else if let Some(sign) = sign {
+            format!("{sign}*{}*{pref}", wrap_if_sum(&coeff))
         } else {
             format!("{}*{pref}", wrap_if_sum(&coeff))
         }
@@ -912,7 +1025,7 @@ impl Recurrence {
         let mut first = true;
         for term in &self.terms {
             let cl = term.coeff.to_latex();
-            let pref = fmt_poly_ref_latex(term.offset, term.deriv_order);
+            let pref = fmt_poly_ref_latex_with_sign(term.sign, term.offset, term.deriv_order);
 
             if first {
                 first = false;
@@ -993,6 +1106,14 @@ fn fmt_poly_ref(offset: usize, deriv_order: usize) -> String {
     }
 }
 
+fn fmt_poly_ref_with_sign(sign: RecurrenceSign, offset: usize, deriv_order: usize) -> String {
+    let pref = fmt_poly_ref(offset, deriv_order);
+    match sign {
+        RecurrenceSign::None => pref,
+        RecurrenceSign::AlternatingN => format!("(-1)^n {pref}"),
+    }
+}
+
 impl fmt::Display for Recurrence {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // LHS
@@ -1004,7 +1125,7 @@ impl fmt::Display for Recurrence {
         let mut first = true;
         for term in &self.terms {
             let cs = format!("{}", term.coeff);
-            let pref = fmt_poly_ref(term.offset, term.deriv_order);
+            let pref = fmt_poly_ref_with_sign(term.sign, term.offset, term.deriv_order);
 
             if first {
                 first = false;
@@ -1056,7 +1177,8 @@ impl fmt::Display for Recurrence {
 pub fn count_unknowns(opts: &RecurrenceOptions) -> usize {
     let num_denom_vars = (opts.denom_idx_deg + 1) * (opts.denom_var_deg + 1) - 1;
     let vars_per_coeff = (opts.idx_deg + 1) * (opts.var_deg + 1);
-    let num_coeff_vars = opts.rec_len * (opts.diff_deg + 1) * vars_per_coeff;
+    let sign_family_count = if opts.alternating_sign { 2 } else { 1 };
+    let num_coeff_vars = opts.rec_len * (opts.diff_deg + 1) * sign_family_count * vars_per_coeff;
     let num_inhomo_vars = if opts.homogeneous {
         0
     } else {
@@ -1134,6 +1256,8 @@ pub struct AdaptiveSearchOptions {
     pub max_inhomo_idx_deg: usize,
     /// Also search with LHS denominators.
     pub try_denominator: bool,
+    /// Also search recurrence terms multiplied by (-1)^n.
+    pub try_alternating_sign: bool,
     /// Maximum denom_var_deg when try_denominator is true.
     pub max_denom_var_deg: usize,
     /// Maximum denom_idx_deg when try_denominator is true.
@@ -1163,11 +1287,21 @@ impl Default for AdaptiveSearchOptions {
             min_inhomo_idx_deg: 0,
             max_inhomo_idx_deg: 3,
             try_denominator: false,
+            try_alternating_sign: false,
             max_denom_var_deg: 2,
             max_denom_idx_deg: 2,
             min_margin: 1,
             verbose: false,
         }
+    }
+}
+
+impl AdaptiveSearchOptions {
+    /// Return these search options with alternating `(-1)^n` terms enabled or
+    /// disabled.
+    pub fn with_alternating_sign(mut self, try_alternating_sign: bool) -> Self {
+        self.try_alternating_sign = try_alternating_sign;
+        self
     }
 }
 
@@ -1190,7 +1324,12 @@ pub struct AdaptiveSearchResult {
     pub candidates_tried: usize,
 }
 
-/// Generate candidate parameter sets, sorted by (unknowns, diff_deg, rec_len, idx_deg, var_deg).
+/// Generate candidate parameter sets.
+///
+/// Candidates are sorted by total unknowns, derivative order, and recurrence
+/// length. Thus a shorter alternating recurrence may be reported before a
+/// longer ordinary recurrence with the same number of unknowns. For the same
+/// shape, ordinary candidates are tried before alternating candidates.
 fn generate_candidates(m: usize, search: &AdaptiveSearchOptions) -> Vec<RecurrenceOptions> {
     let min_rl = search.min_rec_len.max(1).min(m.saturating_sub(1));
     let max_rl = search.max_rec_len.min(m.saturating_sub(1));
@@ -1204,56 +1343,67 @@ fn generate_candidates(m: usize, search: &AdaptiveSearchOptions) -> Vec<Recurren
         for diff_deg in search.min_diff_deg..=search.max_diff_deg {
             for idx_deg in search.min_idx_deg..=search.max_idx_deg {
                 for var_deg in search.min_var_deg..=search.max_var_deg {
-                    candidates.push(RecurrenceOptions {
-                        rec_len,
-                        var_deg,
-                        idx_deg,
-                        diff_deg,
-                        homogeneous: true,
-                        inhomo_var_deg: 0,
-                        inhomo_idx_deg: 0,
-                        denom_var_deg: 0,
-                        denom_idx_deg: 0,
-                    });
+                    let alternating_choices = if search.try_alternating_sign {
+                        vec![false, true]
+                    } else {
+                        vec![false]
+                    };
+                    for alternating_sign in alternating_choices {
+                        candidates.push(RecurrenceOptions {
+                            rec_len,
+                            var_deg,
+                            idx_deg,
+                            diff_deg,
+                            homogeneous: true,
+                            inhomo_var_deg: 0,
+                            inhomo_idx_deg: 0,
+                            denom_var_deg: 0,
+                            denom_idx_deg: 0,
+                            alternating_sign,
+                        });
 
-                    if search.try_inhomogeneous {
-                        for inhomo_idx_deg in search.min_inhomo_idx_deg..=search.max_inhomo_idx_deg
-                        {
-                            for inhomo_var_deg in
-                                search.min_inhomo_var_deg..=search.max_inhomo_var_deg
+                        if search.try_inhomogeneous {
+                            for inhomo_idx_deg in
+                                search.min_inhomo_idx_deg..=search.max_inhomo_idx_deg
                             {
-                                candidates.push(RecurrenceOptions {
-                                    rec_len,
-                                    var_deg,
-                                    idx_deg,
-                                    diff_deg,
-                                    homogeneous: false,
-                                    inhomo_var_deg,
-                                    inhomo_idx_deg,
-                                    denom_var_deg: 0,
-                                    denom_idx_deg: 0,
-                                });
+                                for inhomo_var_deg in
+                                    search.min_inhomo_var_deg..=search.max_inhomo_var_deg
+                                {
+                                    candidates.push(RecurrenceOptions {
+                                        rec_len,
+                                        var_deg,
+                                        idx_deg,
+                                        diff_deg,
+                                        homogeneous: false,
+                                        inhomo_var_deg,
+                                        inhomo_idx_deg,
+                                        denom_var_deg: 0,
+                                        denom_idx_deg: 0,
+                                        alternating_sign,
+                                    });
+                                }
                             }
                         }
-                    }
 
-                    if search.try_denominator {
-                        for dvd in 0..=search.max_denom_var_deg {
-                            for did in 0..=search.max_denom_idx_deg {
-                                if dvd == 0 && did == 0 {
-                                    continue; // already covered above
+                        if search.try_denominator {
+                            for dvd in 0..=search.max_denom_var_deg {
+                                for did in 0..=search.max_denom_idx_deg {
+                                    if dvd == 0 && did == 0 {
+                                        continue; // already covered above
+                                    }
+                                    candidates.push(RecurrenceOptions {
+                                        rec_len,
+                                        var_deg,
+                                        idx_deg,
+                                        diff_deg,
+                                        homogeneous: true,
+                                        inhomo_var_deg: 0,
+                                        inhomo_idx_deg: 0,
+                                        denom_var_deg: dvd,
+                                        denom_idx_deg: did,
+                                        alternating_sign,
+                                    });
                                 }
-                                candidates.push(RecurrenceOptions {
-                                    rec_len,
-                                    var_deg,
-                                    idx_deg,
-                                    diff_deg,
-                                    homogeneous: true,
-                                    inhomo_var_deg: 0,
-                                    inhomo_idx_deg: 0,
-                                    denom_var_deg: dvd,
-                                    denom_idx_deg: did,
-                                });
                             }
                         }
                     }
@@ -1267,6 +1417,7 @@ fn generate_candidates(m: usize, search: &AdaptiveSearchOptions) -> Vec<Recurren
             count_unknowns(opts),
             opts.diff_deg,
             opts.rec_len,
+            opts.alternating_sign,
             opts.idx_deg,
             opts.var_deg,
         )
@@ -1303,13 +1454,14 @@ pub fn find_recurrence_adaptive_rational(
         if search.verbose {
             eprintln!(
                 "  try #{tried}: rec_len={} var_deg={} idx_deg={} diff_deg={} \
-                 denom=({},{}) homog={} \
+                 alternating={} denom=({},{}) homog={} \
                  inhomo=({},{}) \
                  (unknowns={unknowns}, equations={equations}, margin={})",
                 opts.rec_len,
                 opts.var_deg,
                 opts.idx_deg,
                 opts.diff_deg,
+                opts.alternating_sign,
                 opts.denom_var_deg,
                 opts.denom_idx_deg,
                 opts.homogeneous,
@@ -1366,12 +1518,13 @@ pub fn find_recurrence_adaptive_rational(
             if search.verbose {
                 eprintln!(
                     "  try #{tried} (rational): rec_len={} var_deg={} idx_deg={} diff_deg={} \
-                     denom=({},{}) \
+                     alternating={} denom=({},{}) \
                      (unknowns={unknowns}, equations={equations}, margin={})",
                     opts.rec_len,
                     opts.var_deg,
                     opts.idx_deg,
                     opts.diff_deg,
+                    opts.alternating_sign,
                     opts.denom_var_deg,
                     opts.denom_idx_deg,
                     equations - unknowns,
@@ -1665,6 +1818,45 @@ mod tests {
     }
 
     #[test]
+    fn alternating_sign_terms() {
+        // P_n = (-1)^n P_{n-1}; with P_1=1 this gives pairs 1,1,-1,-1,...
+        let polys: Vec<Vec<i64>> = vec![
+            vec![1],
+            vec![1],
+            vec![-1],
+            vec![-1],
+            vec![1],
+            vec![1],
+            vec![-1],
+            vec![-1],
+        ];
+        let ordinary_opts = RecurrenceOptions {
+            var_deg: 0,
+            idx_deg: 0,
+            diff_deg: 0,
+            rec_len: 1,
+            homogeneous: true,
+            ..Default::default()
+        };
+        assert!(find_polynomial_recurrence(&polys, &ordinary_opts).is_none());
+
+        let alternating_opts = RecurrenceOptions {
+            alternating_sign: true,
+            ..ordinary_opts
+        };
+        let rec = find_polynomial_recurrence(&polys, &alternating_opts)
+            .expect("should find alternating-sign recurrence");
+        assert_eq!(format!("{rec}"), "P(n) = (-1)^n P(n-1)");
+        assert_eq!(rec.to_latex(), "P(n) = (-1)^n P(n-1)");
+        assert!(rec
+            .to_mathematica_definition(&polys)
+            .contains("Expand[(-1)^n*P[n - 1, t]]"));
+        assert!(rec
+            .to_sage_definition(&polys)
+            .contains("value = R((-1)**n*P(n - 1))"));
+    }
+
+    #[test]
     fn constant_coeffs_with_separate_inhomogeneous_bounds() {
         // P_n = P_{n-1} + n + t^2
         let polys: Vec<Vec<i64>> = vec![
@@ -1880,6 +2072,31 @@ mod tests {
     }
 
     #[test]
+    fn adaptive_alternating_sign() {
+        let polys: Vec<Vec<i64>> = vec![
+            vec![1],
+            vec![1],
+            vec![-1],
+            vec![-1],
+            vec![1],
+            vec![1],
+            vec![-1],
+            vec![-1],
+        ];
+        let search = AdaptiveSearchOptions {
+            try_alternating_sign: true,
+            max_rec_len: 1,
+            max_var_deg: 0,
+            max_idx_deg: 0,
+            max_diff_deg: 0,
+            ..Default::default()
+        };
+        let result = find_recurrence_adaptive(&polys, &search).unwrap();
+        assert_eq!(format!("{}", result.recurrence), "P(n) = (-1)^n P(n-1)");
+        assert!(result.opts.alternating_sign);
+    }
+
+    #[test]
     fn adaptive_short_sequence() {
         // m=3 with constant polys: too few equations for any 2-term recurrence.
         let polys: Vec<Vec<i64>> = vec![vec![1], vec![1], vec![2]];
@@ -1899,6 +2116,7 @@ mod tests {
             inhomo_idx_deg: 0,
             denom_var_deg: 0,
             denom_idx_deg: 0,
+            alternating_sign: false,
         };
         // vars_per_coeff = 2*2 = 4, num_coeff_vars = 2*1*4 = 8, denom = 0
         assert_eq!(count_unknowns(&opts), 8);
@@ -1925,6 +2143,7 @@ mod tests {
             inhomo_idx_deg: 0,
             denom_var_deg: 0,
             denom_idx_deg: 0,
+            alternating_sign: false,
         };
         // m=7, rec_len=2, num_nn=5, max_poly_deg=0, max_j=0, eqs_per_nn=1
         assert_eq!(count_equations(&polys, &opts), 5);
