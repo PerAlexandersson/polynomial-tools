@@ -3,6 +3,8 @@
 //! Reads polynomials from stdin as comma-separated integer coefficients
 //! in ascending degree order, one polynomial per line.
 
+use num_bigint::BigInt;
+use polynomial_tools::recurrence::BigRational as RecurrenceBigRational;
 use polynomial_tools::recurrence::*;
 use polynomial_tools::*;
 use std::io::{self, Read};
@@ -20,6 +22,84 @@ fn read_polys() -> Vec<Vec<i64>> {
             }
         })
         .collect()
+}
+
+fn read_polys_rational() -> Vec<Vec<RecurrenceBigRational>> {
+    let mut input = String::new();
+    io::stdin().read_to_string(&mut input).unwrap();
+    input
+        .lines()
+        .filter(|l| {
+            let t = l.trim();
+            !t.is_empty() && !t.starts_with('#')
+        })
+        .filter_map(|line| match parse_coeff_list_rational(line) {
+            Ok(p) => Some(p),
+            Err(e) => {
+                eprintln!("Warning: {}", e);
+                None
+            }
+        })
+        .collect()
+}
+
+fn parse_coeff_list_rational(input: &str) -> Result<Vec<RecurrenceBigRational>, String> {
+    let s = input.trim();
+    if s.is_empty() {
+        return Err("empty input".to_string());
+    }
+    if s.chars().any(|c| c.is_ascii_alphabetic()) {
+        return Err(format!(
+            "recurrence input expects coefficient lists, got expanded polynomial '{}'",
+            input
+        ));
+    }
+
+    let s = strip_coeff_list_brackets(s);
+    let parts: Vec<&str> = if s.contains(',') {
+        s.split(',').collect()
+    } else {
+        s.split_whitespace().collect()
+    };
+
+    parts
+        .iter()
+        .map(|part| parse_big_rational(part.trim()))
+        .collect()
+}
+
+fn parse_big_rational(token: &str) -> Result<RecurrenceBigRational, String> {
+    if token.is_empty() {
+        return Err("empty coefficient".to_string());
+    }
+    if let Some((num, den)) = token.split_once('/') {
+        let num = parse_bigint(num.trim())?;
+        let den = parse_bigint(den.trim())?;
+        if den == BigInt::from(0) {
+            return Err(format!("zero denominator in coefficient '{}'", token));
+        }
+        Ok(RecurrenceBigRational::new(num, den))
+    } else {
+        Ok(RecurrenceBigRational::from_integer(parse_bigint(token)?))
+    }
+}
+
+fn parse_bigint(token: &str) -> Result<BigInt, String> {
+    token
+        .parse::<BigInt>()
+        .map_err(|e| format!("invalid integer '{}': {}", token, e))
+}
+
+fn strip_coeff_list_brackets(s: &str) -> &str {
+    let s = s.trim();
+    if (s.starts_with('[') && s.ends_with(']'))
+        || (s.starts_with('{') && s.ends_with('}'))
+        || (s.starts_with('(') && s.ends_with(')'))
+    {
+        &s[1..s.len() - 1]
+    } else {
+        s
+    }
 }
 
 fn strip_trailing_zeros(coeffs: &[i64]) -> &[i64] {
@@ -158,7 +238,7 @@ fn cmd_recurrence(args: &[String]) {
                 search.try_inhomogeneous = true;
                 search.max_inhomo_idx_deg = args[i].parse().unwrap();
             }
-            "--denominator" => {
+            "--denominator" | "--try-denominator" => {
                 search.try_denominator = true;
             }
             "--alternating-sign" => {
@@ -182,7 +262,7 @@ fn cmd_recurrence(args: &[String]) {
         i += 1;
     }
 
-    let polys = read_polys();
+    let polys = read_polys_rational();
     if polys.len() < 3 {
         eprintln!("Need at least 3 polynomials for recurrence search.");
         return;
@@ -192,7 +272,7 @@ fn cmd_recurrence(args: &[String]) {
         "Searching for recurrence among {} polynomials...",
         polys.len()
     );
-    match find_recurrence_adaptive(&polys, &search) {
+    match find_recurrence_adaptive_rational(&polys, &search) {
         Some(res) => {
             println!("{}", res.recurrence);
             eprintln!(
