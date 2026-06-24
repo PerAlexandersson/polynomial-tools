@@ -1,8 +1,9 @@
 //! Simple undirected graphs on vertex set {0, 1, ..., n-1}.
 //!
 //! Provides a [`Graph`] type with adjacency-list representation, standard graph
-//! generators (complete, bipartite, path, cycle, Ferrers board, unit interval),
-//! and combinatorial algorithms (matchings, independence sets, acyclic orientations).
+//! generators (complete, bipartite, path, cycle, grid, tree families,
+//! Ferrers board, unit interval), and combinatorial algorithms (matchings,
+//! independence sets, acyclic orientations).
 //!
 //! # Examples
 //!
@@ -331,6 +332,117 @@ impl Graph {
         }
     }
 
+    /// Construct the labeled tree on `0..n` encoded by a Prüfer sequence.
+    ///
+    /// The sequence must have length `n - 2`, and every entry must be a vertex
+    /// in `0..n`. The case `n = 1` is allowed with the empty sequence.
+    pub fn tree_from_prufer_sequence(n: usize, sequence: &[usize]) -> Result<Self, String> {
+        if n == 0 {
+            return Err("a Prüfer tree must have at least one vertex".into());
+        }
+        if sequence.len() != n.saturating_sub(2) {
+            return Err(format!(
+                "Prüfer sequence for n={n} must have length {}, got {}",
+                n.saturating_sub(2),
+                sequence.len()
+            ));
+        }
+        if let Some(&v) = sequence.iter().find(|&&v| v >= n) {
+            return Err(format!("Prüfer sequence entry {v} is outside 0..{n}"));
+        }
+        if n == 1 {
+            return Ok(Graph::empty(1));
+        }
+
+        let mut degree = vec![1usize; n];
+        for &v in sequence {
+            degree[v] += 1;
+        }
+
+        let mut leaves: BTreeSet<usize> = (0..n).filter(|&v| degree[v] == 1).collect();
+        let mut edges = Vec::with_capacity(n - 1);
+
+        for &v in sequence {
+            let leaf = *leaves
+                .iter()
+                .next()
+                .expect("Prüfer decoding should always have a leaf");
+            leaves.remove(&leaf);
+            edges.push((leaf, v));
+
+            degree[leaf] -= 1;
+            degree[v] -= 1;
+            if degree[v] == 1 {
+                leaves.insert(v);
+            }
+        }
+
+        let remaining: Vec<_> = leaves.into_iter().collect();
+        debug_assert_eq!(remaining.len(), 2);
+        edges.push((remaining[0], remaining[1]));
+        Ok(Graph::new(n, &edges))
+    }
+
+    /// Construct the labeled tree encoded by a standard Prüfer sequence.
+    ///
+    /// This infers `n = sequence.len() + 2`. Use
+    /// [`Graph::tree_from_prufer_sequence`] when the one-vertex tree is needed,
+    /// since the empty standard sequence encodes the two-vertex tree.
+    pub fn from_prufer_sequence(sequence: &[usize]) -> Result<Self, String> {
+        Self::tree_from_prufer_sequence(sequence.len() + 2, sequence)
+    }
+
+    /// Call `f` on every labeled tree on `0..n`.
+    ///
+    /// This iterates over all Prüfer sequences, so it produces `n^(n-2)` trees
+    /// for `n >= 2`. It is intended for small exhaustive checks.
+    pub fn for_each_labeled_tree<F>(n: usize, mut f: F)
+    where
+        F: FnMut(Self),
+    {
+        if n == 0 {
+            return;
+        }
+        if n == 1 {
+            f(Graph::empty(1));
+            return;
+        }
+        if n == 2 {
+            f(Graph::path(2));
+            return;
+        }
+
+        let sequence_len = n - 2;
+        let mut sequence = vec![0usize; sequence_len];
+        loop {
+            f(Graph::tree_from_prufer_sequence(n, &sequence)
+                .expect("generated Prüfer sequence should be valid"));
+
+            let mut pos = sequence_len;
+            while pos > 0 {
+                pos -= 1;
+                sequence[pos] += 1;
+                if sequence[pos] < n {
+                    break;
+                }
+                sequence[pos] = 0;
+            }
+            if pos == 0 && sequence[0] == 0 {
+                break;
+            }
+        }
+    }
+
+    /// Return all labeled trees on `0..n`.
+    ///
+    /// This materializes `n^(n-2)` graphs for `n >= 2`, so prefer
+    /// [`Graph::for_each_labeled_tree`] for larger scans.
+    pub fn all_labeled_trees(n: usize) -> Vec<Self> {
+        let mut trees = Vec::new();
+        Graph::for_each_labeled_tree(n, |tree| trees.push(tree));
+        trees
+    }
+
     // -- Accessors ----------------------------------------------------------
 
     /// Number of vertices.
@@ -393,6 +505,208 @@ impl Graph {
         let mut edges: Vec<_> = (0..n - 1).map(|i| (i, i + 1)).collect();
         edges.push((0, n - 1));
         Graph::new(n, &edges)
+    }
+
+    /// Cartesian product `P_rows x P_cols`, also called the rectangular grid.
+    ///
+    /// Vertices are numbered row-major: `(r, c)` has index `r * cols + c`.
+    pub fn cartesian_product_paths(rows: usize, cols: usize) -> Self {
+        let mut edges = Vec::new();
+        for r in 0..rows {
+            for c in 0..cols {
+                let v = r * cols + c;
+                if r + 1 < rows {
+                    edges.push((v, (r + 1) * cols + c));
+                }
+                if c + 1 < cols {
+                    edges.push((v, r * cols + c + 1));
+                }
+            }
+        }
+        Graph::new(rows * cols, &edges)
+    }
+
+    /// Rectangular grid graph with `rows` rows and `cols` columns.
+    ///
+    /// This is an alias for [`Graph::cartesian_product_paths`].
+    pub fn grid(rows: usize, cols: usize) -> Self {
+        Self::cartesian_product_paths(rows, cols)
+    }
+
+    /// Ladder graph `P_rungs x P_2`.
+    pub fn ladder(rungs: usize) -> Self {
+        Self::cartesian_product_paths(rungs, 2)
+    }
+
+    /// Fan graph: a path on `path_vertices` vertices plus one universal apex.
+    ///
+    /// Vertex `0` is the apex, and vertices `1..=path_vertices` form the path.
+    pub fn fan(path_vertices: usize) -> Self {
+        let mut edges = Vec::new();
+        for i in 1..path_vertices {
+            edges.push((i, i + 1));
+        }
+        for i in 1..=path_vertices {
+            edges.push((0, i));
+        }
+        Graph::new(path_vertices + 1, &edges)
+    }
+
+    /// Wheel graph: a cycle on `rim_vertices` vertices plus one universal hub.
+    ///
+    /// For `rim_vertices < 3`, this returns the corresponding fan graph.
+    pub fn wheel(rim_vertices: usize) -> Self {
+        if rim_vertices < 3 {
+            return Self::fan(rim_vertices);
+        }
+        let mut edges = Vec::new();
+        for i in 0..rim_vertices {
+            edges.push((i + 1, ((i + 1) % rim_vertices) + 1));
+            edges.push((0, i + 1));
+        }
+        Graph::new(rim_vertices + 1, &edges)
+    }
+
+    /// Star graph with `leaves` leaves and center vertex `0`.
+    pub fn star(leaves: usize) -> Self {
+        let edges: Vec<_> = (1..=leaves).map(|leaf| (0, leaf)).collect();
+        Graph::new(leaves + 1, &edges)
+    }
+
+    /// Spider tree with arm lengths `arm_lengths`.
+    ///
+    /// Vertex `0` is the center. Each arm length is the number of edges in that
+    /// arm; zero-length arms add no vertices.
+    pub fn spider(arm_lengths: &[usize]) -> Self {
+        let n = 1 + arm_lengths.iter().sum::<usize>();
+        let mut edges = Vec::new();
+        let mut next_vertex = 1;
+        for &length in arm_lengths {
+            let mut previous = 0;
+            for _ in 0..length {
+                let current = next_vertex;
+                next_vertex += 1;
+                edges.push((previous, current));
+                previous = current;
+            }
+        }
+        Graph::new(n, &edges)
+    }
+
+    /// Spider with `arms` arms, each of length `arm_length`.
+    pub fn uniform_spider(arms: usize, arm_length: usize) -> Self {
+        Self::spider(&vec![arm_length; arms])
+    }
+
+    /// Broom tree: a path with `path_vertices` vertices and extra leaves at
+    /// path vertex `0`.
+    ///
+    /// If `path_vertices` is zero, this returns `Graph::star(leaves)`.
+    pub fn broom(path_vertices: usize, leaves: usize) -> Self {
+        if path_vertices == 0 {
+            return Self::star(leaves);
+        }
+        let mut edges: Vec<_> = (0..path_vertices.saturating_sub(1))
+            .map(|i| (i, i + 1))
+            .collect();
+        for leaf in path_vertices..path_vertices + leaves {
+            edges.push((0, leaf));
+        }
+        Graph::new(path_vertices + leaves, &edges)
+    }
+
+    /// Double-star tree with two adjacent centers `0` and `1`.
+    ///
+    /// `left_leaves` leaves are attached to vertex `0`, and `right_leaves`
+    /// leaves are attached to vertex `1`.
+    pub fn double_star(left_leaves: usize, right_leaves: usize) -> Self {
+        let mut edges = vec![(0, 1)];
+        for leaf in 0..left_leaves {
+            edges.push((0, 2 + leaf));
+        }
+        for leaf in 0..right_leaves {
+            edges.push((1, 2 + left_leaves + leaf));
+        }
+        Graph::new(left_leaves + right_leaves + 2, &edges)
+    }
+
+    /// Double-star tree with the same number of leaves on both sides.
+    pub fn balanced_double_star(leaves_per_side: usize) -> Self {
+        Self::double_star(leaves_per_side, leaves_per_side)
+    }
+
+    /// Caterpillar tree with a spine and prescribed leaves at each spine vertex.
+    ///
+    /// The spine has `leaf_counts.len()` vertices, numbered first. Then
+    /// `leaf_counts[i]` leaves are attached to spine vertex `i`.
+    pub fn caterpillar(leaf_counts: &[usize]) -> Self {
+        let spine_vertices = leaf_counts.len();
+        if spine_vertices == 0 {
+            return Graph::empty(0);
+        }
+        let n = spine_vertices + leaf_counts.iter().sum::<usize>();
+        let mut edges: Vec<_> = (0..spine_vertices - 1).map(|i| (i, i + 1)).collect();
+        let mut next_vertex = spine_vertices;
+        for (spine_vertex, &leaves) in leaf_counts.iter().enumerate() {
+            for _ in 0..leaves {
+                edges.push((spine_vertex, next_vertex));
+                next_vertex += 1;
+            }
+        }
+        Graph::new(n, &edges)
+    }
+
+    /// Caterpillar with `spine_vertices` spine vertices and the same number of
+    /// leaves attached to each spine vertex.
+    pub fn uniform_caterpillar(spine_vertices: usize, leaves_per_spine_vertex: usize) -> Self {
+        Self::caterpillar(&vec![leaves_per_spine_vertex; spine_vertices])
+    }
+
+    /// Complete rooted `branching`-ary tree of height `height`.
+    ///
+    /// Height is measured in edges from the root to a leaf. Thus height zero
+    /// gives the one-vertex tree. If `branching` is zero, this also gives the
+    /// one-vertex tree.
+    pub fn complete_kary_tree(branching: usize, height: usize) -> Self {
+        if branching == 0 || height == 0 {
+            return Graph::empty(1);
+        }
+        let mut edges = Vec::new();
+        let mut current_level = vec![0usize];
+        let mut next_vertex = 1usize;
+        for _ in 0..height {
+            let mut next_level = Vec::new();
+            for &parent in &current_level {
+                for _ in 0..branching {
+                    let child = next_vertex;
+                    next_vertex += 1;
+                    edges.push((parent, child));
+                    next_level.push(child);
+                }
+            }
+            current_level = next_level;
+        }
+        Graph::new(next_vertex, &edges)
+    }
+
+    /// Complete binary tree of height `height`.
+    pub fn complete_binary_tree(height: usize) -> Self {
+        Self::complete_kary_tree(2, height)
+    }
+
+    /// Friendship graph: `triangles` triangles sharing a common vertex.
+    ///
+    /// This is also the windmill graph `Wd(3, triangles)`.
+    pub fn friendship(triangles: usize) -> Self {
+        let mut edges = Vec::new();
+        for i in 0..triangles {
+            let a = 2 * i + 1;
+            let b = 2 * i + 2;
+            edges.push((0, a));
+            edges.push((0, b));
+            edges.push((a, b));
+        }
+        Graph::new(2 * triangles + 1, &edges)
     }
 
     /// Complete bipartite graph K_{a,b}.
@@ -1619,10 +1933,119 @@ mod tests {
     }
 
     #[test]
+    fn test_prufer_sequence_path() {
+        let tree = Graph::from_prufer_sequence(&[1, 2, 3]).unwrap();
+        assert_eq!(tree, Graph::path(5));
+    }
+
+    #[test]
+    fn test_prufer_sequence_star() {
+        let tree = Graph::from_prufer_sequence(&[0, 0]).unwrap();
+        assert_eq!(tree, Graph::new(4, &[(0, 1), (0, 2), (0, 3)]));
+    }
+
+    #[test]
+    fn test_prufer_sequence_rejects_invalid_input() {
+        assert!(Graph::tree_from_prufer_sequence(4, &[0]).is_err());
+        assert!(Graph::tree_from_prufer_sequence(4, &[0, 4]).is_err());
+        assert!(Graph::tree_from_prufer_sequence(0, &[]).is_err());
+    }
+
+    #[test]
+    fn test_all_labeled_trees_counts() {
+        let expected = [(0, 0), (1, 1), (2, 1), (3, 3), (4, 16), (5, 125)];
+        for (n, count) in expected {
+            let trees = Graph::all_labeled_trees(n);
+            assert_eq!(trees.len(), count);
+            assert!(trees.iter().all(|tree| tree.num_vertices() == n));
+            assert!(trees.iter().all(|tree| n == 0 || tree.num_edges() == n - 1));
+            assert!(trees.iter().all(|tree| n == 0 || tree.is_connected()));
+        }
+    }
+
+    #[test]
     fn test_cycle() {
         let c5 = Graph::cycle(5);
         assert_eq!(c5.num_edges(), 5);
         assert!(c5.has_edge(0, 4));
+    }
+
+    #[test]
+    fn test_grid_and_ladder() {
+        let grid = Graph::grid(3, 4);
+        assert_eq!(grid.num_vertices(), 12);
+        assert_eq!(grid.num_edges(), 17);
+        assert!(grid.has_edge(0, 1));
+        assert!(grid.has_edge(0, 4));
+        assert!(!grid.has_edge(0, 5));
+
+        let ladder = Graph::ladder(4);
+        assert_eq!(ladder.num_vertices(), 8);
+        assert_eq!(ladder.num_edges(), 10);
+        assert!(ladder.has_edge(0, 1));
+        assert!(ladder.has_edge(0, 2));
+    }
+
+    #[test]
+    fn test_fan_wheel_and_friendship() {
+        let fan = Graph::fan(4);
+        assert_eq!(fan.num_vertices(), 5);
+        assert_eq!(fan.num_edges(), 7);
+        assert!(fan.has_edge(0, 4));
+        assert!(fan.has_edge(2, 3));
+
+        let wheel = Graph::wheel(5);
+        assert_eq!(wheel.num_vertices(), 6);
+        assert_eq!(wheel.num_edges(), 10);
+        assert!(wheel.has_edge(0, 5));
+        assert!(wheel.has_edge(1, 5));
+
+        let friendship = Graph::friendship(3);
+        assert_eq!(friendship.num_vertices(), 7);
+        assert_eq!(friendship.num_edges(), 9);
+        assert!(friendship.has_edge(1, 2));
+        assert!(friendship.has_edge(5, 6));
+        assert!(!friendship.has_edge(1, 3));
+    }
+
+    #[test]
+    fn test_tree_family_generators() {
+        let star = Graph::star(4);
+        assert_eq!(star.num_vertices(), 5);
+        assert_eq!(star.num_edges(), 4);
+        assert!(star.has_edge(0, 4));
+
+        let spider = Graph::spider(&[1, 2, 3]);
+        assert_eq!(spider.num_vertices(), 7);
+        assert_eq!(spider.num_edges(), 6);
+        assert!(spider.has_edge(0, 1));
+        assert!(spider.has_edge(2, 3));
+        assert!(spider.has_edge(5, 6));
+
+        let broom = Graph::broom(4, 3);
+        assert_eq!(broom.num_vertices(), 7);
+        assert_eq!(broom.num_edges(), 6);
+        assert!(broom.has_edge(0, 1));
+        assert!(broom.has_edge(0, 6));
+
+        let double_star = Graph::double_star(2, 3);
+        assert_eq!(double_star.num_vertices(), 7);
+        assert_eq!(double_star.num_edges(), 6);
+        assert!(double_star.has_edge(0, 1));
+        assert!(double_star.has_edge(0, 3));
+        assert!(double_star.has_edge(1, 6));
+
+        let caterpillar = Graph::caterpillar(&[1, 0, 2]);
+        assert_eq!(caterpillar.num_vertices(), 6);
+        assert_eq!(caterpillar.num_edges(), 5);
+        assert!(caterpillar.has_edge(0, 1));
+        assert!(caterpillar.has_edge(2, 5));
+
+        let binary_tree = Graph::complete_binary_tree(3);
+        assert_eq!(binary_tree.num_vertices(), 15);
+        assert_eq!(binary_tree.num_edges(), 14);
+        assert!(binary_tree.has_edge(0, 1));
+        assert!(binary_tree.has_edge(2, 6));
     }
 
     #[test]
