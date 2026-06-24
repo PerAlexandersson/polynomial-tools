@@ -9,6 +9,168 @@ use polynomial_tools::recurrence::*;
 use polynomial_tools::*;
 use std::io::{self, Read};
 
+fn is_help_arg(arg: &str) -> bool {
+    matches!(arg, "-h" | "--help" | "help")
+}
+
+fn print_coefficient_input_help() {
+    println!("Input:");
+    println!("  Read dense coefficient lists from stdin, one polynomial per line.");
+    println!("  Coefficients are in ascending degree order:");
+    println!("    a_0, a_1, ..., a_d  represents  a_0 + a_1 t + ... + a_d t^d");
+    println!("  Brackets and whitespace-separated coefficients are also accepted.");
+    println!("  Blank lines and lines starting with # are ignored.");
+}
+
+fn print_rational_coefficient_input_help() {
+    println!("Input:");
+    println!("  Read dense coefficient lists from stdin, one polynomial per line.");
+    println!("  Coefficients are in ascending degree order and may be arbitrary-size");
+    println!("  integers or exact rationals such as 42, -17, or 3/7.");
+    println!("  Brackets and whitespace-separated coefficients are accepted.");
+    println!("  Expanded polynomial expressions are not accepted by recurrence.");
+    println!("  Blank lines and lines starting with # are ignored.");
+}
+
+fn print_top_level_help() {
+    println!("polytool {}", env!("CARGO_PKG_VERSION"));
+    println!("Dense univariate polynomial tools for combinatorial research.");
+    println!();
+    println!("Usage:");
+    println!("  polytool <command> [options]");
+    println!("  polytool --help");
+    println!("  polytool help <command>");
+    println!();
+    println!("Commands:");
+    println!("  real-rooted       Check real-rootedness of each polynomial");
+    println!("  interlacing       Check interlacing of consecutive polynomial pairs");
+    println!("  properties        Show real-rootedness, gamma, and related properties");
+    println!("  recurrence        Search for a polynomial recurrence");
+    println!("  bkw-scout         Scout BKW equal-modulus loci for a recurrence symbol");
+    println!("  resultant         Compute the resultant of two polynomials");
+    println!("  discriminant      Compute the discriminant of each polynomial");
+    println!("  hstar-to-ehrhart  Convert h*-vectors to Ehrhart polynomials");
+    println!("  stapledon         Compute a Stapledon decomposition");
+    println!();
+    println!("Options:");
+    println!("  -h, --help        Print help text");
+    println!();
+    println!("Run `polytool help <command>` for command-specific help.");
+}
+
+fn print_stdin_command_help(command: &str, summary: &str, extra: &[&str]) {
+    println!("Usage:");
+    println!("  polytool {command}");
+    println!("  polytool {command} --help");
+    println!();
+    println!("{summary}");
+    println!();
+    print_coefficient_input_help();
+    if !extra.is_empty() {
+        println!();
+        for line in extra {
+            println!("{line}");
+        }
+    }
+}
+
+fn print_recurrence_help() {
+    println!("Usage:");
+    println!("  polytool recurrence [options]");
+    println!("  polytool recurrence --help");
+    println!();
+    println!("Search adaptively for a linear differential-polynomial recurrence");
+    println!("among the input polynomial sequence.");
+    println!();
+    print_rational_coefficient_input_help();
+    println!();
+    println!("Search options:");
+    println!("  --skip-prefix <n>          Ignore the first n input polynomials");
+    println!("  --full-depth               Require all recurrence offsets to be used");
+    println!("  --min-rec-len <n>          Minimum number of previous rows to use");
+    println!("  --max-rec-len <n>          Maximum number of previous rows to use");
+    println!("  --min-var-deg <d>          Minimum t-degree for recurrence coefficients");
+    println!("  --max-var-deg <d>          Maximum t-degree for recurrence coefficients");
+    println!("  --min-idx-deg <d>          Minimum n-degree for recurrence coefficients");
+    println!("  --max-idx-deg <d>          Maximum n-degree for recurrence coefficients");
+    println!("  --min-diff-deg <d>         Minimum derivative order");
+    println!("  --max-diff-deg <d>         Maximum derivative order");
+    println!("  --inhomogeneous            Try inhomogeneous terms");
+    println!("  --min-inhomo-var-deg <d>   Minimum t-degree for inhomogeneous terms");
+    println!("  --max-inhomo-var-deg <d>   Maximum t-degree for inhomogeneous terms");
+    println!("  --min-inhomo-idx-deg <d>   Minimum n-degree for inhomogeneous terms");
+    println!("  --max-inhomo-idx-deg <d>   Maximum n-degree for inhomogeneous terms");
+    println!("  --denominator              Try LHS denominators");
+    println!("  --try-denominator          Alias for --denominator");
+    println!("  --max-denom-var-deg <d>    Maximum t-degree for denominators");
+    println!("  --max-denom-idx-deg <d>    Maximum n-degree for denominators");
+    println!("  --alternating-sign         Also try alternating-sign terms");
+    println!("  --verbose                  Print candidate search details");
+    println!("  -h, --help                 Print this help text");
+    println!();
+    println!("Example:");
+    println!("  printf '1\\n1\\n2\\n3\\n5\\n8\\n' | polytool recurrence");
+}
+
+fn print_stapledon_help() {
+    println!("Usage:");
+    println!("  polytool stapledon <n>");
+    println!("  polytool stapledon --help");
+    println!();
+    println!("Compute the Stapledon decomposition with respect to degree bound n.");
+    println!();
+    print_coefficient_input_help();
+}
+
+fn print_command_help(command: &str) -> bool {
+    match command {
+        "real-rooted" => print_stdin_command_help(
+            "real-rooted",
+            "Check whether each input polynomial has only real roots.",
+            &["Example:", "  echo '1, 3, 2' | polytool real-rooted"],
+        ),
+        "interlacing" => print_stdin_command_help(
+            "interlacing",
+            "Check strict and weak interlacing for consecutive input pairs.",
+            &[
+                "Example:",
+                "  printf '2,-3,1\\n-1,1\\n' | polytool interlacing",
+            ],
+        ),
+        "properties" => print_stdin_command_help(
+            "properties",
+            concat!(
+                "Report real-rootedness, palindromicity, gamma-positivity, ",
+                "log-concavity, and ultra-log-concavity."
+            ),
+            &["Example:", "  echo '1, 11, 11, 1' | polytool properties"],
+        ),
+        "recurrence" => print_recurrence_help(),
+        "bkw-scout" => bkw_scout_usage(),
+        "resultant" => print_stdin_command_help(
+            "resultant",
+            "Compute the resultant of the first two input polynomials.",
+            &[
+                "Example:",
+                "  printf '1,0,1\\n-1,1\\n' | polytool resultant",
+            ],
+        ),
+        "discriminant" => print_stdin_command_help(
+            "discriminant",
+            "Compute the discriminant of each input polynomial.",
+            &["Example:", "  echo '1, 0, 1' | polytool discriminant"],
+        ),
+        "hstar-to-ehrhart" => print_stdin_command_help(
+            "hstar-to-ehrhart",
+            "Convert each h*-vector into Ehrhart polynomial coefficients.",
+            &["Example:", "  echo '1, 2, 1' | polytool hstar-to-ehrhart"],
+        ),
+        "stapledon" => print_stapledon_help(),
+        _ => return false,
+    }
+    true
+}
+
 fn read_polys() -> Vec<Vec<i64>> {
     let mut input = String::new();
     io::stdin().read_to_string(&mut input).unwrap();
@@ -171,6 +333,11 @@ fn cmd_properties() {
 }
 
 fn cmd_recurrence(args: &[String]) {
+    if args.iter().any(|arg| is_help_arg(arg)) {
+        print_recurrence_help();
+        return;
+    }
+
     let mut search = AdaptiveSearchOptions::default();
 
     let mut i = 0;
@@ -322,8 +489,13 @@ fn cmd_hstar_to_ehrhart() {
 }
 
 fn cmd_stapledon(args: &[String]) {
+    if args.iter().any(|arg| is_help_arg(arg)) {
+        print_stapledon_help();
+        return;
+    }
+
     if args.len() != 1 {
-        eprintln!("Usage: polytool stapledon <n>");
+        print_stapledon_help();
         return;
     }
 
@@ -358,28 +530,30 @@ fn cmd_stapledon(args: &[String]) {
 }
 
 fn bkw_scout_usage() {
-    eprintln!("Usage: polytool bkw-scout [options]");
-    eprintln!();
-    eprintln!("Input symbol: z-coefficient polynomials in x, ascending z-degree.");
-    eprintln!("Example: F(x,z)=1-xz+z^2 is `1; -x; 1`.");
-    eprintln!();
-    eprintln!("Options:");
-    eprintln!("  --symbol <s>             Symbol coefficients, e.g. '1; -x; 1'");
-    eprintln!("                           If omitted, read the symbol from stdin.");
-    eprintln!("  --box <r0> <r1> <i0> <i1>");
-    eprintln!("                           Complex x rectangle (default: -3 3 -3 3)");
-    eprintln!("  --grid <n>               Use an n by n grid (default: 61)");
-    eprintln!("  --grid-re <n>            Number of real-axis grid samples");
-    eprintln!("  --grid-im <n>            Number of imaginary-axis grid samples");
-    eprintln!("  --top <n>                Number of candidates to print (default: 20)");
-    eprintln!("  --include-real-axis      Include samples with Im(x)=0");
-    eprintln!("  --min-imag <eps>         Minimum |Im(x)| unless real axis is included");
-    eprintln!("  --refine-steps <n>       Local coordinate-refinement steps (default: 8)");
-    eprintln!("  --no-refine              Disable local refinement");
-    eprintln!("  --tol <eps>              Durand--Kerner root tolerance");
-    eprintln!("  --max-iter <n>           Durand--Kerner max iterations");
-    eprintln!("  --format <text|json>     Output format (default: text)");
-    eprintln!("  --mathematica            Also print an exact Mathematica Reduce skeleton");
+    println!("Usage:");
+    println!("  polytool bkw-scout [options]");
+    println!("  polytool bkw-scout --help");
+    println!();
+    println!("Input symbol: z-coefficient polynomials in x, ascending z-degree.");
+    println!("Example: F(x,z)=1-xz+z^2 is `1; -x; 1`.");
+    println!();
+    println!("Options:");
+    println!("  --symbol <s>             Symbol coefficients, e.g. '1; -x; 1'");
+    println!("                           If omitted, read the symbol from stdin.");
+    println!("  --box <r0> <r1> <i0> <i1>");
+    println!("                           Complex x rectangle (default: -3 3 -3 3)");
+    println!("  --grid <n>               Use an n by n grid (default: 61)");
+    println!("  --grid-re <n>            Number of real-axis grid samples");
+    println!("  --grid-im <n>            Number of imaginary-axis grid samples");
+    println!("  --top <n>                Number of candidates to print (default: 20)");
+    println!("  --include-real-axis      Include samples with Im(x)=0");
+    println!("  --min-imag <eps>         Minimum |Im(x)| unless real axis is included");
+    println!("  --refine-steps <n>       Local coordinate-refinement steps (default: 8)");
+    println!("  --no-refine              Disable local refinement");
+    println!("  --tol <eps>              Durand--Kerner root tolerance");
+    println!("  --max-iter <n>           Durand--Kerner max iterations");
+    println!("  --format <text|json>     Output format (default: text)");
+    println!("  --mathematica            Also print an exact Mathematica Reduce skeleton");
 }
 
 fn cmd_bkw_scout(args: &[String]) {
@@ -618,7 +792,12 @@ fn print_bkw_text(symbol: &BkwSymbol, options: &BkwScoutOptions, candidates: &[B
     }
     println!();
     println!(
-        "Scout warning: this ranks numerical equal-modulus candidates only; it does not prove BKW dominance, amplitude nonvanishing, or eventual non-real-rootedness."
+        "{}",
+        concat!(
+            "Scout warning: this ranks numerical equal-modulus candidates only; ",
+            "it does not prove BKW dominance, amplitude nonvanishing, ",
+            "or eventual non-real-rootedness."
+        )
     );
 }
 
@@ -672,7 +851,11 @@ fn print_bkw_json(symbol: &BkwSymbol, options: &BkwScoutOptions, candidates: &[B
     }
     println!("  ],");
     println!(
-        "  \"warning\": \"numerical scout only; dominance and BKW amplitude conditions are not certified\""
+        "{}",
+        concat!(
+            "  \"warning\": \"numerical scout only; dominance and BKW ",
+            "amplitude conditions are not certified\""
+        )
     );
     println!("}}");
 }
@@ -680,30 +863,33 @@ fn print_bkw_json(symbol: &BkwSymbol, options: &BkwScoutOptions, candidates: &[B
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 2 {
-        eprintln!("Usage: polytool <command> [options]");
-        eprintln!();
-        eprintln!("Commands:");
-        eprintln!("  real-rooted     Check real-rootedness of each polynomial");
-        eprintln!("  interlacing     Check interlacing of consecutive polynomial pairs");
-        eprintln!(
-            "  properties      Show all properties (real-rooted, palindromic, gamma, log-concave)"
-        );
-        eprintln!("  recurrence      Search for a polynomial recurrence");
-        eprintln!("  bkw-scout       Scout BKW equal-modulus loci for a recurrence symbol");
-        eprintln!("  resultant       Compute resultant of two polynomials");
-        eprintln!("  discriminant    Compute discriminant of each polynomial");
-        eprintln!("  hstar-to-ehrhart  Convert h*-vector to Ehrhart polynomial");
-        eprintln!(
-            "  stapledon       Compute the Stapledon decomposition with respect to a bound n"
-        );
-        eprintln!();
-        eprintln!("Input: polynomials as comma-separated integer coefficients (ascending degree),");
-        eprintln!("       one per line on stdin. Lines starting with # are ignored.");
+        print_top_level_help();
         std::process::exit(1);
     }
 
     let cmd = &args[1];
     let rest = &args[2..];
+    if is_help_arg(cmd) {
+        if cmd == "help" && !rest.is_empty() {
+            if is_help_arg(&rest[0]) {
+                print_top_level_help();
+            } else if !print_command_help(&rest[0]) {
+                eprintln!("Unknown command: {}", rest[0]);
+                std::process::exit(1);
+            }
+        } else {
+            print_top_level_help();
+        }
+        return;
+    }
+    if rest.iter().any(|arg| is_help_arg(arg)) {
+        if !print_command_help(cmd) {
+            eprintln!("Unknown command: {}", cmd);
+            std::process::exit(1);
+        }
+        return;
+    }
+
     match cmd.as_str() {
         "real-rooted" => cmd_real_rooted(),
         "interlacing" => cmd_interlacing(),
