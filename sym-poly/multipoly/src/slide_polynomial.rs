@@ -1,8 +1,13 @@
 //! Fundamental slide polynomials.
 
+use std::collections::{BTreeMap, BTreeSet};
+
+use combinatoric_core::WeakComposition;
 use sym_poly_core::{Composition, Ring};
 
+use crate::basis::MultiPolyBasis;
 use crate::multipoly::{checked_total_degree, MultiPoly};
+use crate::multipoly_function::MultiPolyFunction;
 
 /// Compute the monomial slide polynomial M_α for a weak composition α.
 ///
@@ -65,6 +70,64 @@ pub fn fundamental_slide_polynomial<C: Ring>(alpha: &[u32]) -> MultiPoly<C> {
     result
 }
 
+/// Expand a sparse polynomial in the fundamental slide basis.
+///
+/// This uses the unitriangularity of fundamental slides: every monomial in
+/// `F_alpha` prefix-dominates `alpha`, and `x^alpha` appears with coefficient
+/// one.  Processing weak compositions by increasing prefix sums therefore
+/// gives a support-driven conversion without building a dense transition
+/// matrix.
+pub fn fundamental_slide_expansion<C: Ring>(poly: &MultiPoly<C>) -> MultiPolyFunction<C> {
+    let num_vars = poly.num_vars();
+    if poly.is_zero() {
+        return MultiPolyFunction::zero(MultiPolyBasis::FundSlide, num_vars);
+    }
+
+    let mut degrees = BTreeSet::new();
+    for exp in poly.terms().keys() {
+        degrees.insert(checked_total_degree(exp));
+    }
+
+    let mut result_terms = BTreeMap::new();
+    for degree in degrees {
+        let mut current: BTreeMap<Vec<u32>, C> = poly
+            .terms()
+            .iter()
+            .filter(|(exp, _)| checked_total_degree(exp) == degree)
+            .map(|(exp, coeff)| (exp.clone(), coeff.clone()))
+            .collect();
+
+        let mut weak_compositions = WeakComposition::all_weak_compositions(degree, num_vars);
+        weak_compositions.sort_by_key(|alpha| prefix_sums(alpha.parts()));
+
+        for alpha in weak_compositions {
+            let coeff = current.get(alpha.parts()).cloned().unwrap_or_else(C::zero);
+            if coeff.is_zero() {
+                continue;
+            }
+            result_terms.insert(alpha.clone(), coeff.clone());
+
+            let slide = fundamental_slide_polynomial::<C>(alpha.parts());
+            for (beta, beta_coeff) in slide.terms() {
+                let new_coeff = current.get(beta).cloned().unwrap_or_else(C::zero)
+                    - coeff.clone() * beta_coeff.clone();
+                if new_coeff.is_zero() {
+                    current.remove(beta);
+                } else {
+                    current.insert(beta.clone(), new_coeff);
+                }
+            }
+        }
+
+        assert!(
+            current.is_empty(),
+            "fundamental slide expansion left a nonzero remainder"
+        );
+    }
+
+    MultiPolyFunction::from_terms(MultiPolyBasis::FundSlide, num_vars, result_terms)
+}
+
 fn prefix_dominates(beta: &[u32], alpha: &[u32]) -> bool {
     let mut a_sum = 0u32;
     let mut b_sum = 0u32;
@@ -80,6 +143,19 @@ fn prefix_dominates(beta: &[u32], alpha: &[u32]) -> bool {
         }
     }
     true
+}
+
+fn prefix_sums(alpha: &[u32]) -> Vec<u32> {
+    let mut running = 0u32;
+    alpha
+        .iter()
+        .map(|&part| {
+            running = running
+                .checked_add(part)
+                .expect("composition weight overflow");
+            running
+        })
+        .collect()
 }
 
 fn is_refinement(flat_beta: &[u32], flat_alpha: &[u32]) -> bool {
@@ -162,6 +238,33 @@ mod tests {
         let f: MultiPoly<i64> = fundamental_slide_polynomial(&[1, 1]);
         assert_eq!(f.coefficient(&[1, 1]), 1);
         assert_eq!(f.terms().len(), 1);
+    }
+
+    #[test]
+    fn test_fundamental_slide_expansion_round_trip() {
+        let p = fundamental_slide_polynomial::<i64>(&[1, 0, 2])
+            + fundamental_slide_polynomial::<i64>(&[0, 3, 0]).scale(&2);
+        let expansion = fundamental_slide_expansion(&p);
+        assert_eq!(
+            expansion.coefficient(&WeakComposition::from_slice(&[1, 0, 2])),
+            1
+        );
+        assert_eq!(
+            expansion.coefficient(&WeakComposition::from_slice(&[0, 3, 0])),
+            2
+        );
+        assert_eq!(expansion.terms().len(), 2);
+        assert_eq!(expansion.to_multipoly(), p);
+    }
+
+    #[test]
+    fn test_fundamental_slide_expansion_matches_dense_transition() {
+        let p = MultiPoly::monomial(3, vec![1, 0, 2], 1)
+            + MultiPoly::monomial(3, vec![0, 3, 0], 2)
+            + MultiPoly::monomial(3, vec![2, 1, 0], 3);
+        let fast = fundamental_slide_expansion(&p);
+        let dense = MultiPolyFunction::from_multipoly(&p).to_fund_slide_basis();
+        assert_eq!(fast, dense);
     }
 
     #[test]

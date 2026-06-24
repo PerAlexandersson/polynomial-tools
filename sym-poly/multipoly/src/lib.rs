@@ -106,5 +106,7 @@ pub use schubert_polynomial::{
     schubert_polynomial, schubert_to_atom, schubert_to_fund_slide, schubert_to_key,
     schubert_to_monomial,
 };
-pub use slide_polynomial::{fundamental_slide_polynomial, monomial_slide_polynomial};
+pub use slide_polynomial::{
+    fundamental_slide_expansion, fundamental_slide_polynomial, monomial_slide_polynomial,
+};
 pub use symmetric_polynomials::{elementary_symmetric_generators, elementary_symmetric_polynomial};
