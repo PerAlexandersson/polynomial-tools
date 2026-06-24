@@ -44,7 +44,8 @@ fn print_top_level_help() {
     println!("Commands:");
     println!("  real-rooted       Check real-rootedness of each polynomial");
     println!("  interlacing       Check interlacing of consecutive polynomial pairs");
-    println!("  properties        Show real-rootedness, gamma, and related properties");
+    println!("  properties        Show real-rootedness, unimodality, and related properties");
+    println!("  gamma-expansion   Expand palindromic polynomials in the gamma basis");
     println!("  recurrence        Search for a polynomial recurrence");
     println!("  bkw-scout         Scout BKW equal-modulus loci for a recurrence symbol");
     println!("  resultant         Compute the resultant of two polynomials");
@@ -141,9 +142,23 @@ fn print_command_help(command: &str) -> bool {
             "properties",
             concat!(
                 "Report real-rootedness, palindromicity, gamma-positivity, ",
-                "log-concavity, and ultra-log-concavity."
+                "unimodality, log-concavity, and ultra-log-concavity."
             ),
             &["Example:", "  echo '1, 11, 11, 1' | polytool properties"],
+        ),
+        "gamma-expansion" | "gamma" => print_stdin_command_help(
+            "gamma-expansion",
+            concat!(
+                "Expand each palindromic input polynomial in the gamma basis ",
+                "t^i (1+t)^(d-2i)."
+            ),
+            &[
+                "Aliases:",
+                "  polytool gamma",
+                "",
+                "Example:",
+                "  echo '1, 11, 11, 1' | polytool gamma-expansion",
+            ],
         ),
         "recurrence" => print_recurrence_help(),
         "bkw-scout" => bkw_scout_usage(),
@@ -318,6 +333,9 @@ fn cmd_properties() {
                 props.push(format!("gamma-positive {:?}", gamma));
             }
         }
+        if is_unimodal(c) {
+            props.push("unimodal".to_string());
+        }
         if is_log_concave(c) {
             props.push("log-concave".to_string());
         }
@@ -329,6 +347,85 @@ fn cmd_properties() {
             props.push("(none)".to_string());
         }
         println!("{}: {}", format_poly(c), props.join(", "));
+    }
+}
+
+fn cmd_gamma_expansion() {
+    let mut had_error = false;
+    for coeffs in read_polys() {
+        let c = strip_trailing_zeros(&coeffs);
+        match gamma_coefficients(c) {
+            Some(gamma) => {
+                println!(
+                    "{}: gamma {:?}; expansion: {}",
+                    format_poly(c),
+                    gamma,
+                    format_gamma_expansion(&gamma, c.len().saturating_sub(1))
+                );
+            }
+            None => {
+                eprintln!("{}: not palindromic; no gamma expansion", format_poly(c));
+                had_error = true;
+            }
+        }
+    }
+    if had_error {
+        std::process::exit(1);
+    }
+}
+
+fn format_gamma_expansion(gamma: &[i64], degree: usize) -> String {
+    let mut out = String::new();
+    for (i, &coeff) in gamma.iter().enumerate() {
+        if coeff == 0 {
+            continue;
+        }
+        let abs_coeff = coeff.abs();
+        let factor = gamma_basis_factor(i, degree.saturating_sub(2 * i));
+        let body = if factor == "1" {
+            abs_coeff.to_string()
+        } else if abs_coeff == 1 {
+            factor
+        } else {
+            format!("{abs_coeff} {factor}")
+        };
+
+        if out.is_empty() {
+            if coeff < 0 {
+                out.push('-');
+            }
+            out.push_str(&body);
+        } else if coeff < 0 {
+            out.push_str(" - ");
+            out.push_str(&body);
+        } else {
+            out.push_str(" + ");
+            out.push_str(&body);
+        }
+    }
+    if out.is_empty() {
+        "0".to_string()
+    } else {
+        out
+    }
+}
+
+fn gamma_basis_factor(t_power: usize, one_plus_t_power: usize) -> String {
+    let mut factors = Vec::new();
+    match t_power {
+        0 => {}
+        1 => factors.push("t".to_string()),
+        n => factors.push(format!("t^{n}")),
+    }
+    match one_plus_t_power {
+        0 => {}
+        1 => factors.push("(1+t)".to_string()),
+        n => factors.push(format!("(1+t)^{n}")),
+    }
+    if factors.is_empty() {
+        "1".to_string()
+    } else {
+        factors.join(" ")
     }
 }
 
@@ -894,6 +991,7 @@ fn main() {
         "real-rooted" => cmd_real_rooted(),
         "interlacing" => cmd_interlacing(),
         "properties" => cmd_properties(),
+        "gamma-expansion" | "gamma" => cmd_gamma_expansion(),
         "recurrence" => cmd_recurrence(rest),
         "bkw-scout" => cmd_bkw_scout(rest),
         "resultant" => cmd_resultant(),
