@@ -71,6 +71,22 @@ functions accept `&[i64]`; use the `*_bigint_coeffs` variants when coefficients
 may exceed `i64`. Interlacing functions return `Option<bool>`: `None` means the
 directed degree relation is not valid for that test, not that interlacing failed.
 
+For Hermite--Biehler or Euclidean-chain experiments, the library also exposes a
+signed Sturm continued-fraction certificate checker over exact rationals:
+
+```rust
+use num_bigint::BigInt;
+use num_rational::BigRational;
+use polynomial_tools::check_sturm_continued_fraction_certificate;
+
+let q = |n: i64| BigRational::from_integer(BigInt::from(n));
+let p0 = vec![q(1), q(3), q(1)]; // x^2 + 3x + 1
+let p1 = vec![q(2), q(1)];       // x + 2
+let certificate =
+    check_sturm_continued_fraction_certificate(&p0, &p1).expect("Sturm-CF certificate");
+assert_eq!(certificate.steps, 2);
+```
+
 To build the MCP server from the workspace root:
 
 ```sh
@@ -177,6 +193,33 @@ Options:
 --max-denom-idx-deg  Max degree in n for f(n,t) (default: 2, implies --denominator)
 --verbose            Print each candidate tried
 ```
+
+### Scout BKW equal-modulus loci
+
+For a polynomial recurrence with characteristic symbol
+
+```text
+F(x,z) = a_0(x) + a_1(x) z + ... + a_r(x) z^r,
+```
+
+`bkw-scout` numerically scans a complex rectangle for points where the two
+dominant characteristic roots have nearly equal modulus.  This is a scout for
+Beraha--Kahane--Weiss accumulation obstructions; it does not certify dominance,
+amplitudes, or eventual non-real-rootedness.
+
+Give the symbol as the z-coefficient polynomials in ascending z-degree:
+
+```sh
+polytool bkw-scout \
+  --symbol '1; -x; 1' \
+  --box -3 3 -2 2 \
+  --grid 61 \
+  --top 10
+```
+
+The same symbol can be supplied on stdin, one coefficient polynomial per line.
+Use `--format json` for machine-readable output, and `--mathematica` to print a
+`Reduce` skeleton for exact equal-modulus follow-up.
 
 ### Compute resultant/discriminant
 
