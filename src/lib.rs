@@ -195,6 +195,7 @@ pub use real_rootedness::{
     is_strictly_real_rooted_hermite,
     is_strictly_real_rooted_hermite_bigint_coeffs,
     is_ultra_log_concave,
+    is_unimodal,
     real_roots,
     // Resultant and discriminant
     resultant,

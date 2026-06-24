@@ -204,6 +204,25 @@ pub fn is_log_concave(coeffs: &[i64]) -> bool {
     true
 }
 
+/// Check if a coefficient sequence is unimodal.
+///
+/// A sequence is unimodal if it is weakly increasing up to some index and
+/// weakly decreasing afterwards.  Plateaus are allowed.
+pub fn is_unimodal(coeffs: &[i64]) -> bool {
+    if coeffs.len() <= 2 {
+        return true;
+    }
+
+    let mut i = 1;
+    while i < coeffs.len() && coeffs[i - 1] <= coeffs[i] {
+        i += 1;
+    }
+    while i < coeffs.len() && coeffs[i - 1] >= coeffs[i] {
+        i += 1;
+    }
+    i == coeffs.len()
+}
+
 /// Check if a coefficient sequence is ultra-log-concave (satisfies Newton's inequalities).
 ///
 /// A polynomial a_0 + a_1 t + ... + a_d t^d of degree d is ultra-log-concave if
@@ -1686,6 +1705,16 @@ mod tests {
         assert!(is_log_concave(&[1, 2, 1]));
         assert!(is_log_concave(&[1, 3, 3, 1]));
         assert!(!is_log_concave(&[1, 1, 3]));
+    }
+
+    #[test]
+    fn test_unimodal() {
+        assert!(is_unimodal(&[]));
+        assert!(is_unimodal(&[1]));
+        assert!(is_unimodal(&[1, 2, 2, 1]));
+        assert!(is_unimodal(&[3, 2, 1]));
+        assert!(is_unimodal(&[1, 2, 3]));
+        assert!(!is_unimodal(&[1, 3, 2, 4]));
     }
 
     #[test]

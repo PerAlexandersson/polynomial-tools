@@ -146,7 +146,7 @@ Test whether consecutive polynomials interlace:
 polytool interlacing < polys.txt
 ```
 
-### Check log-concavity, palindromicity, gamma-positivity
+### Check unimodality, log-concavity, palindromicity, gamma-positivity
 
 ```sh
 polytool properties < polys.txt
@@ -155,7 +155,19 @@ polytool properties < polys.txt
 Output includes all properties for each polynomial:
 
 ```
-1 + 11t + 11t^2 + t^3: real-rooted, palindromic, gamma-positive [1, 8], log-concave
+1 + 11t + 11t^2 + t^3: real-rooted, palindromic, gamma-positive [1, 8], unimodal, log-concave
+```
+
+For a palindromic polynomial, print the full gamma expansion:
+
+```sh
+polytool gamma-expansion < polys.txt
+```
+
+Example output:
+
+```text
+1 + 11t + 11t^2 + t^3: gamma [1, 8]; expansion: (1+t)^3 + 8 t (1+t)
 ```
 
 ### Search for a recurrence
@@ -388,6 +400,7 @@ use polynomial_tools::*;
 let coeffs = [1, 11, 11, 1];
 
 assert!(is_palindromic(&coeffs));
+assert!(is_unimodal(&coeffs));
 assert!(is_log_concave(&coeffs));
 assert!(is_ultra_log_concave(&coeffs));
 assert!(is_gamma_positive(&coeffs));

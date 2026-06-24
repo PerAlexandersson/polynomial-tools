@@ -64,6 +64,7 @@ pub struct FamilyCheckOptions {
     pub require_simple_roots: Option<bool>,
     pub require_palindromic: Option<bool>,
     pub require_gamma_positive: Option<bool>,
+    pub require_unimodal: Option<bool>,
     pub require_log_concave: Option<bool>,
     pub require_ultra_log_concave: Option<bool>,
     pub check_consecutive_interlacing: Option<bool>,
@@ -278,6 +279,8 @@ pub struct PolynomialPropertiesItem {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gamma_coefficients: Option<Vec<i64>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub unimodal: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub log_concave: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ultra_log_concave: Option<bool>,
@@ -459,6 +462,7 @@ pub struct FamilyPolynomialReport {
     pub gamma_positive: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gamma_coefficients: Option<Vec<i64>>,
+    pub unimodal: bool,
     pub log_concave: bool,
     pub ultra_log_concave: bool,
 }
@@ -778,6 +782,7 @@ fn family_report(index: usize, polynomial: NormalizedPolynomial) -> FamilyPolyno
         palindromic: is_palindromic_ignoring_initial_zeros(coefficients),
         gamma_positive: is_gamma_positive_ignoring_initial_zeros(coefficients),
         gamma_coefficients: gamma_coefficients_ignoring_initial_zeros(coefficients),
+        unimodal: is_unimodal(coefficients),
         log_concave: is_log_concave(coefficients),
         ultra_log_concave: is_ultra_log_concave(coefficients),
         polynomial,
@@ -952,6 +957,7 @@ fn first_family_failure(
     let require_gamma_positive = options
         .and_then(|o| o.require_gamma_positive)
         .unwrap_or(false);
+    let require_unimodal = options.and_then(|o| o.require_unimodal).unwrap_or(false);
     let require_log_concave = options.and_then(|o| o.require_log_concave).unwrap_or(false);
     let require_ultra_log_concave = options
         .and_then(|o| o.require_ultra_log_concave)
@@ -975,6 +981,9 @@ fn first_family_failure(
         }
         if require_gamma_positive && !item.gamma_positive {
             return Some(format!("polynomial {} is not gamma-positive", item.index));
+        }
+        if require_unimodal && !item.unimodal {
+            return Some(format!("polynomial {} is not unimodal", item.index));
         }
         if require_log_concave && !item.log_concave {
             return Some(format!("polynomial {} is not log-concave", item.index));
@@ -1058,16 +1067,17 @@ fn family_markdown(
     }
 
     out.push_str("\n## Polynomial properties\n\n");
-    out.push_str("| i | polynomial | degree | RR | gamma+ | LC | ULC | pal |\n");
-    out.push_str("|---:|---|---:|:---:|:---:|:---:|:---:|:---:|\n");
+    out.push_str("| i | polynomial | degree | RR | gamma+ | unimodal | LC | ULC | pal |\n");
+    out.push_str("|---:|---|---:|:---:|:---:|:---:|:---:|:---:|:---:|\n");
     for item in items {
         out.push_str(&format!(
-            "| {} | `{}` | {} | {} | {} | {} | {} | {} |\n",
+            "| {} | `{}` | {} | {} | {} | {} | {} | {} | {} |\n",
             item.index,
             item.polynomial.polynomial,
             item.polynomial.degree,
             yes_no(item.real_rooted),
             yes_no(item.gamma_positive),
+            yes_no(item.unimodal),
             yes_no(item.log_concave),
             yes_no(item.ultra_log_concave),
             yes_no(item.palindromic)
@@ -1355,7 +1365,7 @@ impl PolynomialToolsServer {
     }
 
     #[tool(
-        description = "Check real-rootedness, gamma-positivity, log-concavity, and related polynomial properties."
+        description = "Check real-rootedness, gamma-positivity, unimodality, and concavity properties."
     )]
     pub fn polynomial_properties(
         &self,
@@ -1382,6 +1392,7 @@ impl PolynomialToolsServer {
                         gamma_coefficients: gamma_coefficients_ignoring_initial_zeros(
                             &coefficients,
                         ),
+                        unimodal: Some(is_unimodal(&coefficients)),
                         log_concave: Some(is_log_concave(&coefficients)),
                         ultra_log_concave: Some(is_ultra_log_concave(&coefficients)),
                     }
@@ -1396,6 +1407,7 @@ impl PolynomialToolsServer {
                     palindromic: None,
                     gamma_positive: None,
                     gamma_coefficients: None,
+                    unimodal: None,
                     log_concave: None,
                     ultra_log_concave: None,
                 },
@@ -1865,6 +1877,7 @@ mod tests {
         assert_eq!(item.real_rooted, Some(true));
         assert_eq!(item.gamma_positive, Some(true));
         assert_eq!(item.gamma_coefficients, Some(vec![1, 8]));
+        assert_eq!(item.unimodal, Some(true));
     }
 
     #[test]
@@ -2135,6 +2148,7 @@ mod tests {
                     require_simple_roots: None,
                     require_palindromic: None,
                     require_gamma_positive: None,
+                    require_unimodal: None,
                     require_log_concave: None,
                     require_ultra_log_concave: None,
                     check_consecutive_interlacing: Some(false),
