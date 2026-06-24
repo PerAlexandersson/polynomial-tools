@@ -4,6 +4,7 @@
 pub mod composition;
 pub mod graph;
 pub mod key_polynomial;
+pub mod meander;
 pub mod partition;
 pub mod permutation;
 pub mod poset;
@@ -13,6 +14,11 @@ pub mod set_partition;
 // Top-level re-exports for convenience
 pub use composition::{Composition, WeakComposition};
 pub use graph::Graph;
+pub use meander::{
+    is_connected_arch_pair, noncrossing_perfect_matchings, rooted_meandric_permutation_count,
+    rooted_meandric_permutation_from_arch_pair, rooted_meandric_permutations,
+    CLOSED_MEANDRIC_NUMBERS_INITIAL,
+};
 pub use partition::Partition;
 pub use permutation::{
     all_permutations_zero_indexed, compose_permutations, inverse_permutation, longest_permutation,
