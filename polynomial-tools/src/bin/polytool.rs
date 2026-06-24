@@ -13,6 +13,73 @@ fn is_help_arg(arg: &str) -> bool {
     matches!(arg, "-h" | "--help" | "help")
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum OutputFormat {
+    Text,
+    Json,
+}
+
+impl OutputFormat {
+    fn from_args(args: &[String]) -> Result<Self, String> {
+        let mut format = Self::Text;
+        for arg in args {
+            match arg.as_str() {
+                "--json" => format = Self::Json,
+                other => return Err(format!("unknown option: {other}")),
+            }
+        }
+        Ok(format)
+    }
+}
+
+fn json_escape(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    for ch in input.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if c.is_control() => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+fn json_string(input: &str) -> String {
+    format!("\"{}\"", json_escape(input))
+}
+
+fn json_i64_vec(values: &[i64]) -> String {
+    format!(
+        "[{}]",
+        values
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(",")
+    )
+}
+
+fn json_string_vec(values: &[String]) -> String {
+    format!(
+        "[{}]",
+        values
+            .iter()
+            .map(|value| json_string(value))
+            .collect::<Vec<_>>()
+            .join(",")
+    )
+}
+
+fn json_bool_option(value: Option<bool>) -> String {
+    value
+        .map(|v| if v { "true" } else { "false" }.to_string())
+        .unwrap_or_else(|| "null".to_string())
+}
+
 fn print_coefficient_input_help() {
     println!("Input:");
     println!("  Read dense coefficient lists from stdin, one polynomial per line.");
@@ -46,11 +113,14 @@ fn print_top_level_help() {
     println!("  interlacing       Check interlacing of consecutive polynomial pairs");
     println!("  properties        Show real-rootedness, unimodality, and related properties");
     println!("  gamma-expansion   Expand palindromic polynomials in the gamma basis");
+    println!("  family-check      Check properties and consecutive interlacing together");
+    println!("  sequence          Generate standard polynomial sequences");
     println!("  recurrence        Search for a polynomial recurrence");
     println!("  bkw-scout         Scout BKW equal-modulus loci for a recurrence symbol");
     println!("  resultant         Compute the resultant of two polynomials");
     println!("  discriminant      Compute the discriminant of each polynomial");
     println!("  hstar-to-ehrhart  Convert h*-vectors to Ehrhart polynomials");
+    println!("  ehrhart-to-hstar  Convert Ehrhart polynomials to h*-vectors");
     println!("  stapledon         Compute a Stapledon decomposition");
     println!();
     println!("Options:");
@@ -113,6 +183,52 @@ fn print_recurrence_help() {
     println!("  printf '1\\n1\\n2\\n3\\n5\\n8\\n' | polytool recurrence");
 }
 
+fn print_sequence_help() {
+    println!("Usage:");
+    println!("  polytool sequence <name> <max-n> [--json]");
+    println!("  polytool sequence --help");
+    println!();
+    println!("Generate standard polynomial sequences.");
+    println!();
+    println!("Names:");
+    println!("  eulerian");
+    println!("  narayana");
+    println!("  type-b-eulerian  (aliases: type-b, type_b_eulerian)");
+    println!("  chebyshev-t      (aliases: chebyshev_t, t)");
+    println!("  chebyshev-u      (aliases: chebyshev_u, u)");
+    println!("  hermite");
+    println!();
+    println!("Options:");
+    println!("  --json           Emit machine-readable JSON");
+    println!("  -h, --help       Print this help text");
+    println!();
+    println!("Example:");
+    println!("  polytool sequence eulerian 5");
+}
+
+fn print_family_check_help() {
+    println!("Usage:");
+    println!("  polytool family-check [options]");
+    println!("  polytool family-check --help");
+    println!();
+    println!("Check a polynomial family in one pass: properties, consecutive");
+    println!("interlacing, and optionally recurrence search.");
+    println!();
+    print_coefficient_input_help();
+    println!();
+    println!("Options:");
+    println!("  --recurrence                  Search for an adaptive recurrence");
+    println!("  --require-real-rooted         Fail if any row is not real-rooted");
+    println!("  --require-palindromic         Fail if any row is not palindromic");
+    println!("  --require-gamma-positive      Fail if any row is not gamma-positive");
+    println!("  --require-unimodal            Fail if any row is not unimodal");
+    println!("  --require-log-concave         Fail if any row is not log-concave");
+    println!("  --require-ultra-log-concave   Fail if any row is not ultra-log-concave");
+    println!("  --require-weak-interlacing    Fail if consecutive rows do not weakly interlace");
+    println!("  --json                        Emit machine-readable JSON");
+    println!("  -h, --help                    Print this help text");
+}
+
 fn print_stapledon_help() {
     println!("Usage:");
     println!("  polytool stapledon <n>");
@@ -144,7 +260,13 @@ fn print_command_help(command: &str) -> bool {
                 "Report real-rootedness, palindromicity, gamma-positivity, ",
                 "unimodality, log-concavity, and ultra-log-concavity."
             ),
-            &["Example:", "  echo '1, 11, 11, 1' | polytool properties"],
+            &[
+                "Options:",
+                "  --json    Emit machine-readable JSON",
+                "",
+                "Example:",
+                "  echo '1, 11, 11, 1' | polytool properties",
+            ],
         ),
         "gamma-expansion" | "gamma" => print_stdin_command_help(
             "gamma-expansion",
@@ -153,6 +275,9 @@ fn print_command_help(command: &str) -> bool {
                 "t^i (1+t)^(d-2i)."
             ),
             &[
+                "Options:",
+                "  --json    Emit machine-readable JSON",
+                "",
                 "Aliases:",
                 "  polytool gamma",
                 "",
@@ -160,6 +285,8 @@ fn print_command_help(command: &str) -> bool {
                 "  echo '1, 11, 11, 1' | polytool gamma-expansion",
             ],
         ),
+        "family-check" => print_family_check_help(),
+        "sequence" => print_sequence_help(),
         "recurrence" => print_recurrence_help(),
         "bkw-scout" => bkw_scout_usage(),
         "resultant" => print_stdin_command_help(
@@ -178,7 +305,26 @@ fn print_command_help(command: &str) -> bool {
         "hstar-to-ehrhart" => print_stdin_command_help(
             "hstar-to-ehrhart",
             "Convert each h*-vector into Ehrhart polynomial coefficients.",
-            &["Example:", "  echo '1, 2, 1' | polytool hstar-to-ehrhart"],
+            &[
+                "Options:",
+                "  --json    Emit machine-readable JSON",
+                "",
+                "Example:",
+                "  echo '1, 2, 1' | polytool hstar-to-ehrhart",
+            ],
+        ),
+        "ehrhart-to-hstar" => print_stdin_command_help(
+            "ehrhart-to-hstar",
+            "Convert each Ehrhart polynomial into an h*-vector.",
+            &[
+                "Input coefficients may be integers or exact rationals.",
+                "",
+                "Options:",
+                "  --json    Emit machine-readable JSON",
+                "",
+                "Example:",
+                "  echo '1, 2, 2' | polytool ehrhart-to-hstar",
+            ],
         ),
         "stapledon" => print_stapledon_help(),
         _ => return false,
@@ -284,6 +430,108 @@ fn strip_trailing_zeros(coeffs: &[i64]) -> &[i64] {
     &coeffs[..end]
 }
 
+fn polynomial_degree(coeffs: &[i64]) -> usize {
+    coeffs.iter().rposition(|&c| c != 0).unwrap_or(0)
+}
+
+#[derive(Clone, Debug)]
+struct PropertyReport {
+    index: usize,
+    coefficients: Vec<i64>,
+    polynomial: String,
+    degree: usize,
+    real_rooted: bool,
+    simple_roots: bool,
+    palindromic: bool,
+    gamma_positive: bool,
+    gamma_coefficients: Option<Vec<i64>>,
+    unimodal: bool,
+    log_concave: bool,
+    ultra_log_concave: bool,
+}
+
+fn property_report(index: usize, coeffs: &[i64]) -> PropertyReport {
+    PropertyReport {
+        index,
+        coefficients: coeffs.to_vec(),
+        polynomial: format_poly(coeffs),
+        degree: polynomial_degree(coeffs),
+        real_rooted: is_real_rooted(coeffs),
+        simple_roots: has_simple_roots(coeffs),
+        palindromic: is_palindromic_ignoring_initial_zeros(coeffs),
+        gamma_positive: is_gamma_positive_ignoring_initial_zeros(coeffs),
+        gamma_coefficients: gamma_coefficients_ignoring_initial_zeros(coeffs),
+        unimodal: is_unimodal(coeffs),
+        log_concave: is_log_concave(coeffs),
+        ultra_log_concave: is_ultra_log_concave(coeffs),
+    }
+}
+
+fn property_labels(report: &PropertyReport) -> Vec<String> {
+    let mut props = Vec::new();
+    if report.real_rooted {
+        props.push("real-rooted".to_string());
+    }
+    if report.palindromic {
+        props.push("palindromic".to_string());
+    }
+    if report.gamma_positive {
+        if let Some(gamma) = &report.gamma_coefficients {
+            props.push(format!("gamma-positive {:?}", gamma));
+        }
+    }
+    if report.unimodal {
+        props.push("unimodal".to_string());
+    }
+    if report.log_concave {
+        props.push("log-concave".to_string());
+    }
+    if report.ultra_log_concave {
+        props.push("ultra-log-concave".to_string());
+    }
+    if props.is_empty() {
+        props.push("(none)".to_string());
+    }
+    props
+}
+
+fn property_report_json(report: &PropertyReport) -> String {
+    let gamma = report
+        .gamma_coefficients
+        .as_ref()
+        .map(|coeffs| json_i64_vec(coeffs))
+        .unwrap_or_else(|| "null".to_string());
+    format!(
+        "{{\"index\":{},\"polynomial\":{},\"coefficients\":{},\"degree\":{},\
+         \"real_rooted\":{},\"simple_roots\":{},\"palindromic\":{},\
+         \"gamma_positive\":{},\"gamma_coefficients\":{},\"unimodal\":{},\
+         \"log_concave\":{},\"ultra_log_concave\":{}}}",
+        report.index,
+        json_string(&report.polynomial),
+        json_i64_vec(&report.coefficients),
+        report.degree,
+        report.real_rooted,
+        report.simple_roots,
+        report.palindromic,
+        report.gamma_positive,
+        gamma,
+        report.unimodal,
+        report.log_concave,
+        report.ultra_log_concave
+    )
+}
+
+fn print_property_reports_json(reports: &[PropertyReport]) {
+    println!(
+        "{{\"items\":[{}]}}",
+        reports
+            .iter()
+            .map(property_report_json)
+            .collect::<Vec<_>>()
+            .join(",")
+    );
+}
+
 fn cmd_real_rooted() {
     for coeffs in read_polys() {
         let c = strip_trailing_zeros(&coeffs);
@@ -296,78 +544,200 @@ fn cmd_real_rooted() {
     }
 }
 
-fn cmd_interlacing() {
+#[derive(Clone, Debug)]
+struct InterlacingReport {
+    pair_index: usize,
+    left_index: usize,
+    right_index: usize,
+    p: String,
+    q: String,
+    strict: Option<bool>,
+    weak: Option<bool>,
+    status: String,
+}
+
+fn interlacing_status(strict: Option<bool>, weak: Option<bool>) -> String {
+    match (strict, weak) {
+        (Some(true), _) => "strictly_interlace",
+        (_, Some(true)) => "weakly_interlace",
+        (Some(false), Some(false)) => "do_not_interlace",
+        (Some(false), None) => "not_real_rooted_or_incompatible",
+        (None, Some(false)) => "not_real_rooted_or_incompatible",
+        (None, None) => "not_real_rooted_or_incompatible",
+    }
+    .to_string()
+}
+
+fn interlacing_report(
+    pair_index: usize,
+    left_index: usize,
+    right_index: usize,
+    p: &[i64],
+    q: &[i64],
+) -> InterlacingReport {
+    let strict = check_interlacing(p, q);
+    let weak = check_weak_interlacing(p, q);
+    InterlacingReport {
+        pair_index,
+        left_index,
+        right_index,
+        p: format_poly(p),
+        q: format_poly(q),
+        strict,
+        weak,
+        status: interlacing_status(strict, weak),
+    }
+}
+
+fn interlacing_report_json(report: &InterlacingReport) -> String {
+    format!(
+        "{{\"pair_index\":{},\"left_index\":{},\"right_index\":{},\
+         \"p\":{},\"q\":{},\"strict\":{},\"weak\":{},\"status\":{}}}",
+        report.pair_index,
+        report.left_index,
+        report.right_index,
+        json_string(&report.p),
+        json_string(&report.q),
+        json_bool_option(report.strict),
+        json_bool_option(report.weak),
+        json_string(&report.status)
+    )
+}
+
+fn print_interlacing_reports_json(reports: &[InterlacingReport]) {
+    println!(
+        "{{\"pairs\":[{}]}}",
+        reports
+            .iter()
+            .map(interlacing_report_json)
+            .collect::<Vec<_>>()
+            .join(",")
+    );
+}
+
+fn cmd_interlacing(args: &[String]) {
+    let format = match OutputFormat::from_args(args) {
+        Ok(format) => format,
+        Err(error) => {
+            eprintln!("{error}");
+            return;
+        }
+    };
     let polys = read_polys();
     if polys.len() < 2 {
         eprintln!("Need at least two polynomials for interlacing check.");
         return;
     }
-    for pair in polys.windows(2) {
-        let p = strip_trailing_zeros(&pair[0]);
-        let q = strip_trailing_zeros(&pair[1]);
-        let result = check_interlacing(p, q);
-        let weak = check_weak_interlacing(p, q);
-        let status = match (result, weak) {
-            (Some(true), _) => "strictly interlace",
-            (_, Some(true)) => "weakly interlace (shared roots)",
-            (Some(false), _) => "do NOT interlace",
+    let reports = polys
+        .windows(2)
+        .enumerate()
+        .map(|(i, pair)| {
+            let p = strip_trailing_zeros(&pair[0]);
+            let q = strip_trailing_zeros(&pair[1]);
+            interlacing_report(i, i, i + 1, p, q)
+        })
+        .collect::<Vec<_>>();
+    if format == OutputFormat::Json {
+        print_interlacing_reports_json(&reports);
+        return;
+    }
+    for report in reports {
+        let status = match report.status.as_str() {
+            "strictly_interlace" => "strictly interlace",
+            "weakly_interlace" => "weakly interlace (shared roots)",
+            "do_not_interlace" => "do NOT interlace",
             _ => "incompatible degrees",
         };
-        println!("{} & {}: {}", format_poly(p), format_poly(q), status);
+        println!("{} & {}: {}", report.p, report.q, status);
     }
 }
 
-fn cmd_properties() {
-    for coeffs in read_polys() {
-        let c = strip_trailing_zeros(&coeffs);
-        let mut props = Vec::new();
-
-        if is_real_rooted(c) {
-            props.push("real-rooted".to_string());
+fn cmd_properties(args: &[String]) {
+    let format = match OutputFormat::from_args(args) {
+        Ok(format) => format,
+        Err(error) => {
+            eprintln!("{error}");
+            return;
         }
-        if is_palindromic_ignoring_initial_zeros(c) {
-            props.push("palindromic".to_string());
-        }
-        if is_gamma_positive_ignoring_initial_zeros(c) {
-            if let Some(gamma) = gamma_coefficients_ignoring_initial_zeros(c) {
-                props.push(format!("gamma-positive {:?}", gamma));
-            }
-        }
-        if is_unimodal(c) {
-            props.push("unimodal".to_string());
-        }
-        if is_log_concave(c) {
-            props.push("log-concave".to_string());
-        }
-        if is_ultra_log_concave(c) {
-            props.push("ultra-log-concave".to_string());
-        }
-
-        if props.is_empty() {
-            props.push("(none)".to_string());
-        }
-        println!("{}: {}", format_poly(c), props.join(", "));
+    };
+    let reports = read_polys()
+        .into_iter()
+        .enumerate()
+        .map(|(index, coeffs)| {
+            let c = strip_trailing_zeros(&coeffs);
+            property_report(index, c)
+        })
+        .collect::<Vec<_>>();
+    if format == OutputFormat::Json {
+        print_property_reports_json(&reports);
+        return;
+    }
+    for report in reports {
+        println!(
+            "{}: {}",
+            report.polynomial,
+            property_labels(&report).join(", ")
+        );
     }
 }
 
-fn cmd_gamma_expansion() {
+fn cmd_gamma_expansion(args: &[String]) {
+    let format = match OutputFormat::from_args(args) {
+        Ok(format) => format,
+        Err(error) => {
+            eprintln!("{error}");
+            return;
+        }
+    };
     let mut had_error = false;
-    for coeffs in read_polys() {
+    let mut json_items = Vec::new();
+    for (index, coeffs) in read_polys().into_iter().enumerate() {
         let c = strip_trailing_zeros(&coeffs);
         match gamma_coefficients(c) {
             Some(gamma) => {
-                println!(
-                    "{}: gamma {:?}; expansion: {}",
-                    format_poly(c),
-                    gamma,
-                    format_gamma_expansion(&gamma, c.len().saturating_sub(1))
-                );
+                let polynomial = format_poly(c);
+                let expansion = format_gamma_expansion(&gamma, c.len().saturating_sub(1));
+                if format == OutputFormat::Json {
+                    json_items.push(format!(
+                        "{{\"index\":{},\"ok\":true,\"polynomial\":{},\"coefficients\":{},\
+                         \"degree\":{},\"gamma\":{},\"expansion\":{}}}",
+                        index,
+                        json_string(&polynomial),
+                        json_i64_vec(c),
+                        polynomial_degree(c),
+                        json_i64_vec(&gamma),
+                        json_string(&expansion)
+                    ));
+                } else {
+                    println!("{polynomial}: gamma {:?}; expansion: {expansion}", gamma);
+                }
             }
             None => {
-                eprintln!("{}: not palindromic; no gamma expansion", format_poly(c));
+                let polynomial = format_poly(c);
+                let error = "not palindromic; no gamma expansion";
+                if format == OutputFormat::Json {
+                    json_items.push(format!(
+                        "{{\"index\":{},\"ok\":false,\"polynomial\":{},\"coefficients\":{},\
+                         \"degree\":{},\"error\":{}}}",
+                        index,
+                        json_string(&polynomial),
+                        json_i64_vec(c),
+                        polynomial_degree(c),
+                        json_string(error)
+                    ));
+                } else {
+                    eprintln!("{polynomial}: {error}");
+                }
                 had_error = true;
             }
         }
+    }
+    if format == OutputFormat::Json {
+        println!(
+            "{{\"ok\":{},\"items\":[{}]}}",
+            !had_error,
+            json_items.join(",")
+        );
     }
     if had_error {
         std::process::exit(1);
@@ -426,6 +796,123 @@ fn gamma_basis_factor(t_power: usize, one_plus_t_power: usize) -> String {
         "1".to_string()
     } else {
         factors.join(" ")
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SequenceKind {
+    Eulerian,
+    Narayana,
+    TypeBEulerian,
+    ChebyshevT,
+    ChebyshevU,
+    Hermite,
+}
+
+impl SequenceKind {
+    fn parse(input: &str) -> Option<Self> {
+        match input {
+            "eulerian" => Some(Self::Eulerian),
+            "narayana" => Some(Self::Narayana),
+            "type-b-eulerian" | "type-b" | "type_b_eulerian" | "type_b" => {
+                Some(Self::TypeBEulerian)
+            }
+            "chebyshev-t" | "chebyshev_t" | "t" => Some(Self::ChebyshevT),
+            "chebyshev-u" | "chebyshev_u" | "u" => Some(Self::ChebyshevU),
+            "hermite" => Some(Self::Hermite),
+            _ => None,
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Eulerian => "eulerian",
+            Self::Narayana => "narayana",
+            Self::TypeBEulerian => "type_b_eulerian",
+            Self::ChebyshevT => "chebyshev_t",
+            Self::ChebyshevU => "chebyshev_u",
+            Self::Hermite => "hermite",
+        }
+    }
+
+    fn polynomials(self, max_n: usize) -> Vec<Vec<i64>> {
+        match self {
+            Self::Eulerian => polynomial_tools::sequences::eulerian_polynomials(max_n),
+            Self::Narayana => polynomial_tools::sequences::narayana_polynomials(max_n),
+            Self::TypeBEulerian => polynomial_tools::sequences::type_b_eulerian_polynomials(max_n),
+            Self::ChebyshevT => polynomial_tools::sequences::chebyshev_polynomials_t(max_n),
+            Self::ChebyshevU => polynomial_tools::sequences::chebyshev_polynomials_u(max_n),
+            Self::Hermite => polynomial_tools::sequences::hermite_polynomials(max_n),
+        }
+    }
+
+    fn label(self, index: usize) -> String {
+        match self {
+            Self::Eulerian => format!("A_{}(t)", index + 1),
+            Self::Narayana => format!("N_{}(t)", index + 1),
+            Self::TypeBEulerian => format!("B_{index}(t)"),
+            Self::ChebyshevT => format!("T_{index}(t)"),
+            Self::ChebyshevU => format!("U_{index}(t)"),
+            Self::Hermite => format!("He_{index}(t)"),
+        }
+    }
+}
+
+fn cmd_sequence(args: &[String]) {
+    let mut positional = Vec::new();
+    let mut format = OutputFormat::Text;
+    for arg in args {
+        match arg.as_str() {
+            "--json" => format = OutputFormat::Json,
+            other => positional.push(other),
+        }
+    }
+    if positional.len() != 2 {
+        print_sequence_help();
+        std::process::exit(1);
+    }
+    let Some(kind) = SequenceKind::parse(positional[0]) else {
+        eprintln!("unknown sequence: {}", positional[0]);
+        print_sequence_help();
+        std::process::exit(1);
+    };
+    let max_n = positional[1].parse::<usize>().unwrap_or_else(|_| {
+        eprintln!(
+            "expected a nonnegative integer max-n, got '{}'",
+            positional[1]
+        );
+        std::process::exit(1);
+    });
+    let polynomials = kind.polynomials(max_n);
+    if format == OutputFormat::Json {
+        let items = polynomials
+            .iter()
+            .enumerate()
+            .map(|(index, coeffs)| {
+                let c = strip_trailing_zeros(coeffs);
+                format!(
+                    "{{\"index\":{},\"label\":{},\"polynomial\":{},\"coefficients\":{},\
+                     \"degree\":{}}}",
+                    index,
+                    json_string(&kind.label(index)),
+                    json_string(&format_poly(c)),
+                    json_i64_vec(c),
+                    polynomial_degree(c)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        println!(
+            "{{\"sequence\":{},\"max_n\":{},\"polynomials\":[{}]}}",
+            json_string(kind.name()),
+            max_n,
+            items
+        );
+        return;
+    }
+    for (index, coeffs) in polynomials.iter().enumerate() {
+        let c = strip_trailing_zeros(coeffs);
+        println!("{} = {}", kind.label(index), format_poly(c));
     }
 }
 
@@ -573,15 +1060,347 @@ fn cmd_discriminant() {
     }
 }
 
-fn cmd_hstar_to_ehrhart() {
-    for coeffs in read_polys() {
+fn cmd_hstar_to_ehrhart(args: &[String]) {
+    let format = match OutputFormat::from_args(args) {
+        Ok(format) => format,
+        Err(error) => {
+            eprintln!("{error}");
+            return;
+        }
+    };
+    let mut json_items = Vec::new();
+    for (index, coeffs) in read_polys().into_iter().enumerate() {
         let ehrhart = hstar_to_ehrhart(&coeffs);
         let display: Vec<String> = ehrhart.iter().map(|r| format!("{}", r)).collect();
+        if format == OutputFormat::Json {
+            json_items.push(format!(
+                "{{\"index\":{},\"hstar\":{},\"ehrhart_coefficients\":{}}}",
+                index,
+                json_i64_vec(&coeffs),
+                json_string_vec(&display)
+            ));
+        } else {
+            println!(
+                "h*={} => L(n) coeffs: [{}]",
+                format_poly(&coeffs),
+                display.join(", ")
+            );
+        }
+    }
+    if format == OutputFormat::Json {
+        println!("{{\"items\":[{}]}}", json_items.join(","));
+    }
+}
+
+fn cmd_ehrhart_to_hstar(args: &[String]) {
+    let format = match OutputFormat::from_args(args) {
+        Ok(format) => format,
+        Err(error) => {
+            eprintln!("{error}");
+            return;
+        }
+    };
+    let mut json_items = Vec::new();
+    for (index, coeffs) in read_polys_rational().into_iter().enumerate() {
+        let hstar = ehrhart_to_hstar(&coeffs);
+        let display: Vec<String> = coeffs.iter().map(ToString::to_string).collect();
+        if format == OutputFormat::Json {
+            json_items.push(format!(
+                "{{\"index\":{},\"ehrhart_coefficients\":{},\"hstar\":{}}}",
+                index,
+                json_string_vec(&display),
+                json_i64_vec(&hstar)
+            ));
+        } else {
+            println!(
+                "L(n) coeffs: [{}] => h*={}",
+                display.join(", "),
+                format_poly(&hstar)
+            );
+        }
+    }
+    if format == OutputFormat::Json {
+        println!("{{\"items\":[{}]}}", json_items.join(","));
+    }
+}
+
+#[derive(Clone, Debug)]
+struct FamilyCheckOptions {
+    format: OutputFormat,
+    recurrence: bool,
+    require_real_rooted: bool,
+    require_palindromic: bool,
+    require_gamma_positive: bool,
+    require_unimodal: bool,
+    require_log_concave: bool,
+    require_ultra_log_concave: bool,
+    require_weak_interlacing: bool,
+}
+
+impl Default for FamilyCheckOptions {
+    fn default() -> Self {
+        Self {
+            format: OutputFormat::Text,
+            recurrence: false,
+            require_real_rooted: false,
+            require_palindromic: false,
+            require_gamma_positive: false,
+            require_unimodal: false,
+            require_log_concave: false,
+            require_ultra_log_concave: false,
+            require_weak_interlacing: false,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct RecurrenceSummary {
+    found: bool,
+    recurrence: Option<String>,
+    unknowns: Option<usize>,
+    equations: Option<usize>,
+    candidates_tried: Option<usize>,
+    error: Option<String>,
+}
+
+fn parse_family_check_args(args: &[String]) -> Result<FamilyCheckOptions, String> {
+    let mut options = FamilyCheckOptions::default();
+    for arg in args {
+        match arg.as_str() {
+            "--json" => options.format = OutputFormat::Json,
+            "--recurrence" => options.recurrence = true,
+            "--require-real-rooted" => options.require_real_rooted = true,
+            "--require-palindromic" => options.require_palindromic = true,
+            "--require-gamma-positive" => options.require_gamma_positive = true,
+            "--require-unimodal" => options.require_unimodal = true,
+            "--require-log-concave" => options.require_log_concave = true,
+            "--require-ultra-log-concave" => options.require_ultra_log_concave = true,
+            "--require-weak-interlacing" => options.require_weak_interlacing = true,
+            other => return Err(format!("unknown family-check option: {other}")),
+        }
+    }
+    Ok(options)
+}
+
+fn first_family_failure(
+    reports: &[PropertyReport],
+    pairs: &[InterlacingReport],
+    recurrence: Option<&RecurrenceSummary>,
+    options: &FamilyCheckOptions,
+) -> Option<String> {
+    for report in reports {
+        if options.require_real_rooted && !report.real_rooted {
+            return Some(format!("polynomial {} is not real-rooted", report.index));
+        }
+        if options.require_palindromic && !report.palindromic {
+            return Some(format!("polynomial {} is not palindromic", report.index));
+        }
+        if options.require_gamma_positive && !report.gamma_positive {
+            return Some(format!("polynomial {} is not gamma-positive", report.index));
+        }
+        if options.require_unimodal && !report.unimodal {
+            return Some(format!("polynomial {} is not unimodal", report.index));
+        }
+        if options.require_log_concave && !report.log_concave {
+            return Some(format!("polynomial {} is not log-concave", report.index));
+        }
+        if options.require_ultra_log_concave && !report.ultra_log_concave {
+            return Some(format!(
+                "polynomial {} is not ultra-log-concave",
+                report.index
+            ));
+        }
+    }
+    if options.require_weak_interlacing {
+        for pair in pairs {
+            if pair.weak != Some(true) {
+                return Some(format!(
+                    "polynomials {} and {} do not weakly interlace",
+                    pair.left_index, pair.right_index
+                ));
+            }
+        }
+    }
+    if options.recurrence {
+        if let Some(summary) = recurrence {
+            if !summary.found {
+                return Some(
+                    summary
+                        .error
+                        .clone()
+                        .unwrap_or_else(|| "no recurrence found".to_string()),
+                );
+            }
+        }
+    }
+    None
+}
+
+fn find_family_recurrence(polys: &[Vec<i64>]) -> RecurrenceSummary {
+    if polys.len() < 3 {
+        return RecurrenceSummary {
+            found: false,
+            recurrence: None,
+            unknowns: None,
+            equations: None,
+            candidates_tried: None,
+            error: Some("need at least 3 polynomials".to_string()),
+        };
+    }
+    let search = AdaptiveSearchOptions::default();
+    match find_recurrence_adaptive(polys, &search) {
+        Some(result) => RecurrenceSummary {
+            found: true,
+            recurrence: Some(result.recurrence.to_string()),
+            unknowns: Some(result.num_unknowns),
+            equations: Some(result.num_equations),
+            candidates_tried: Some(result.candidates_tried),
+            error: None,
+        },
+        None => RecurrenceSummary {
+            found: false,
+            recurrence: None,
+            unknowns: None,
+            equations: None,
+            candidates_tried: None,
+            error: Some("no recurrence found within the search bounds".to_string()),
+        },
+    }
+}
+
+fn recurrence_summary_json(summary: &RecurrenceSummary) -> String {
+    format!(
+        "{{\"found\":{},\"recurrence\":{},\"unknowns\":{},\"equations\":{},\
+         \"candidates_tried\":{},\"error\":{}}}",
+        summary.found,
+        summary
+            .recurrence
+            .as_ref()
+            .map(|r| json_string(r))
+            .unwrap_or_else(|| "null".to_string()),
+        summary
+            .unknowns
+            .map(|n| n.to_string())
+            .unwrap_or_else(|| "null".to_string()),
+        summary
+            .equations
+            .map(|n| n.to_string())
+            .unwrap_or_else(|| "null".to_string()),
+        summary
+            .candidates_tried
+            .map(|n| n.to_string())
+            .unwrap_or_else(|| "null".to_string()),
+        summary
+            .error
+            .as_ref()
+            .map(|e| json_string(e))
+            .unwrap_or_else(|| "null".to_string())
+    )
+}
+
+fn cmd_family_check(args: &[String]) {
+    let options = match parse_family_check_args(args) {
+        Ok(options) => options,
+        Err(error) => {
+            eprintln!("{error}");
+            return;
+        }
+    };
+    let polys = read_polys()
+        .into_iter()
+        .map(|coeffs| strip_trailing_zeros(&coeffs).to_vec())
+        .collect::<Vec<_>>();
+    let reports = polys
+        .iter()
+        .enumerate()
+        .map(|(index, coeffs)| property_report(index, coeffs))
+        .collect::<Vec<_>>();
+    let pairs = polys
+        .windows(2)
+        .enumerate()
+        .map(|(index, pair)| interlacing_report(index, index, index + 1, &pair[0], &pair[1]))
+        .collect::<Vec<_>>();
+    let recurrence = options.recurrence.then(|| find_family_recurrence(&polys));
+    let first_failure = first_family_failure(&reports, &pairs, recurrence.as_ref(), &options);
+    let passed = first_failure.is_none();
+
+    if options.format == OutputFormat::Json {
+        let items = reports
+            .iter()
+            .map(property_report_json)
+            .collect::<Vec<_>>()
+            .join(",");
+        let pair_items = pairs
+            .iter()
+            .map(interlacing_report_json)
+            .collect::<Vec<_>>()
+            .join(",");
+        let recurrence_json = recurrence
+            .as_ref()
+            .map(recurrence_summary_json)
+            .unwrap_or_else(|| "null".to_string());
+        let failure_json = first_failure
+            .as_ref()
+            .map(|failure| json_string(failure))
+            .unwrap_or_else(|| "null".to_string());
         println!(
-            "h*={} => L(n) coeffs: [{}]",
-            format_poly(&coeffs),
-            display.join(", ")
+            "{{\"item_count\":{},\"all_required_checks_passed\":{},\
+             \"first_failure\":{},\"items\":[{}],\"consecutive_pairs\":[{}],\
+             \"recurrence\":{}}}",
+            reports.len(),
+            passed,
+            failure_json,
+            items,
+            pair_items,
+            recurrence_json
         );
+        if !passed {
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    println!("Polynomial family check");
+    println!("- Polynomials: {}", reports.len());
+    println!(
+        "- Required checks: {}",
+        if passed { "passed" } else { "failed" }
+    );
+    if let Some(failure) = &first_failure {
+        println!("- First failure: {failure}");
+    }
+    println!();
+    println!("Properties:");
+    for report in &reports {
+        println!("{}: {}", report.index, property_labels(report).join(", "));
+    }
+    if !pairs.is_empty() {
+        println!();
+        println!("Consecutive interlacing:");
+        for pair in &pairs {
+            println!(
+                "{}-{}: weak={}, strict={}, status={}",
+                pair.left_index,
+                pair.right_index,
+                json_bool_option(pair.weak),
+                json_bool_option(pair.strict),
+                pair.status
+            );
+        }
+    }
+    if let Some(summary) = &recurrence {
+        println!();
+        println!("Recurrence:");
+        if let Some(rec) = &summary.recurrence {
+            println!("- Found: {rec}");
+        } else if let Some(error) = &summary.error {
+            println!("- Not found: {error}");
+        } else {
+            println!("- Not found");
+        }
+    }
+    if !passed {
+        std::process::exit(1);
     }
 }
 
@@ -989,14 +1808,17 @@ fn main() {
 
     match cmd.as_str() {
         "real-rooted" => cmd_real_rooted(),
-        "interlacing" => cmd_interlacing(),
-        "properties" => cmd_properties(),
-        "gamma-expansion" | "gamma" => cmd_gamma_expansion(),
+        "interlacing" => cmd_interlacing(rest),
+        "properties" => cmd_properties(rest),
+        "gamma-expansion" | "gamma" => cmd_gamma_expansion(rest),
+        "family-check" => cmd_family_check(rest),
+        "sequence" => cmd_sequence(rest),
         "recurrence" => cmd_recurrence(rest),
         "bkw-scout" => cmd_bkw_scout(rest),
         "resultant" => cmd_resultant(),
         "discriminant" => cmd_discriminant(),
-        "hstar-to-ehrhart" => cmd_hstar_to_ehrhart(),
+        "hstar-to-ehrhart" => cmd_hstar_to_ehrhart(rest),
+        "ehrhart-to-hstar" => cmd_ehrhart_to_hstar(rest),
         "stapledon" => cmd_stapledon(rest),
         _ => {
             eprintln!("Unknown command: {}", cmd);
