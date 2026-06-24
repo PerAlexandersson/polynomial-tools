@@ -70,15 +70,20 @@ fn lists_tools_and_calls_properties() {
         }),
     );
     let tools = read_response(&mut stdout, 2);
-    let tool_names: Vec<&str> = tools["result"]["tools"]
-        .as_array()
-        .expect("tool list")
+    let tools_array = tools["result"]["tools"].as_array().expect("tool list");
+    let tool_names: Vec<&str> = tools_array
         .iter()
         .filter_map(|tool| tool["name"].as_str())
         .collect();
     assert!(tool_names.contains(&"polynomial_properties"));
     assert!(tool_names.contains(&"check_polynomial_family"));
     assert!(tool_names.contains(&"find_recurrence"));
+    let recurrence_schema = &tools_array
+        .iter()
+        .find(|tool| tool["name"] == "find_recurrence")
+        .expect("find_recurrence tool")["inputSchema"];
+    assert!(recurrence_schema["oneOf"].is_array());
+    assert!(recurrence_schema["properties"]["coefficients"].is_object());
 
     send(
         &mut stdin,
@@ -125,6 +130,25 @@ fn lists_tools_and_calls_properties() {
         .as_str()
         .expect("markdown")
         .contains("Polynomial family check"));
+
+    send(
+        &mut stdin,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 5,
+            "method": "tools/call",
+            "params": {
+                "name": "find_recurrence",
+                "arguments": {
+                    "coefficients": [[1], [1], [2], [3], [5], [8]]
+                }
+            }
+        }),
+    );
+    let recurrence = read_response(&mut stdout, 5);
+    let structured = &recurrence["result"]["structuredContent"];
+    assert_eq!(structured["found"], true);
+    assert_eq!(structured["recurrence"], "P(n) = P(n-1) + P(n-2)");
 
     drop(stdin);
     let _ = child.kill();
