@@ -76,6 +76,7 @@
 //! - [`root_count`] — primitive integer PRS root counting and the default exact
 //!   real-rootedness backend
 //! - [`sturm`] — Sturm chains for exact root isolation (used internally)
+//! - [`sturm_cf`] — signed Euclidean/Sturm continued-fraction certificates
 //! - [`recurrence`] — Adaptive recurrence search for polynomial sequences
 //! - [`sequences`] — Standard sequences: Eulerian, Narayana, type B Eulerian,
 //!   Chebyshev T/U, Hermite
@@ -83,6 +84,8 @@
 //!   expanded polynomial notation)
 //! - [`basis`] — Exact expansion of polynomials in prescribed bases, including
 //!   the magic basis `{t^i (1+t)^{d-i}}`
+//! - [`bkw`] — Beraha--Kahane--Weiss scout tools for characteristic symbols of
+//!   polynomial recurrences
 //! - [`decomposition`] — `I_d` / `R_d` symmetric decompositions, `f`-polynomials,
 //!   alternatingly increasing checks, and Brandén--Solus-style magic-basis analysis
 //! - [`brenti_sequence`] — Brenti-style planar strip digraph certificates for
@@ -93,12 +96,14 @@
 //!   lower-unitriangular totally nonnegative matrices and monic polynomial sequences
 
 pub mod basis;
+pub mod bkw;
 pub mod brenti_sequence;
 pub mod decomposition;
 pub mod interlacing_matrix;
 pub mod linalg;
 pub mod polynomial;
 pub mod sturm;
+pub mod sturm_cf;
 pub mod tnn_network;
 pub mod vec_poly;
 
@@ -122,6 +127,10 @@ pub use basis::{
     coordinates_in_basis_bigint, coordinates_in_basis_i64, is_magic_positive_bigint,
     is_magic_positive_i64, magic_basis, magic_basis_coordinates_bigint,
     magic_basis_coordinates_i64, BasisError, MagicBasisAnalysis,
+};
+pub use bkw::{
+    BkwError, BkwRootComputation, BkwRootInfo, BkwRootOptions, BkwScoutCandidate, BkwScoutOptions,
+    BkwSymbol, Complex64,
 };
 pub use brenti_sequence::{
     build_brenti_sequence_certificate, BrentiEdge, BrentiError, BrentiSequenceCertificate,
@@ -205,6 +214,11 @@ pub use root_count::{
     primitive_sturm_max_coefficient_bits, satisfies_kurtz_condition_bigint,
     satisfies_newton_inequalities_bigint, squarefree_degree_bigint_coeffs,
     tarski_query_prs_bigint_coeffs, RootSignCounts,
+};
+pub use sturm_cf::{
+    check_sturm_continued_fraction_certificate,
+    check_sturm_continued_fraction_certificate_with_options, SturmContinuedFractionError,
+    SturmContinuedFractionOptions, SturmContinuedFractionSummary,
 };
 pub use tnn_network::{
     build_tnn_certificate_from_monic_polynomials, coefficient_matrix_from_monic_polynomials,
