@@ -320,7 +320,22 @@ Example arguments:
 
 Search adaptively for a recurrence in a polynomial sequence.
 
-Example arguments:
+Provide exactly one input source:
+
+- `coefficients`: dense coefficient vectors, one polynomial per row;
+- `expressions`: polynomial expressions such as `"1 + 4*x + x^2"`;
+- `polynomials`: explicit `PolynomialInput` objects;
+- `text`: newline-separated polynomial data.
+
+Compact coefficient example:
+
+```json
+{
+  "coefficients": [[1], [1], [2], [3], [5], [8]]
+}
+```
+
+Explicit polynomial example:
 
 ```json
 {
