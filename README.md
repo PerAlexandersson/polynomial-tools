@@ -124,6 +124,10 @@ A text file `polys.txt` might look like:
 1, 57, 302, 302, 57, 1
 ```
 
+The commands `interlacing`, `properties`, `gamma-expansion`,
+`family-check`, `sequence`, `hstar-to-ehrhart`, and `ehrhart-to-hstar`
+also accept `--json` for machine-readable output.
+
 ### Check real-rootedness
 
 ```sh
@@ -144,30 +148,57 @@ Test whether consecutive polynomials interlace:
 
 ```sh
 polytool interlacing < polys.txt
+polytool interlacing --json < polys.txt
 ```
 
 ### Check unimodality, log-concavity, palindromicity, gamma-positivity
 
 ```sh
 polytool properties < polys.txt
+polytool properties --json < polys.txt
 ```
 
 Output includes all properties for each polynomial:
 
 ```
-1 + 11t + 11t^2 + t^3: real-rooted, palindromic, gamma-positive [1, 8], unimodal, log-concave
+1 + 11t + 11t^2 + t^3: real-rooted, palindromic, gamma-positive [1, 8], unimodal, log-concave, ultra-log-concave
 ```
 
 For a palindromic polynomial, print the full gamma expansion:
 
 ```sh
 polytool gamma-expansion < polys.txt
+polytool gamma-expansion --json < polys.txt
 ```
 
 Example output:
 
 ```text
 1 + 11t + 11t^2 + t^3: gamma [1, 8]; expansion: (1+t)^3 + 8 t (1+t)
+```
+
+### Generate standard sequences
+
+```sh
+polytool sequence eulerian 5
+polytool sequence narayana 5 --json
+```
+
+Supported sequence names are `eulerian`, `narayana`, `type-b-eulerian`,
+`chebyshev-t`, `chebyshev-u`, and `hermite`.
+
+### Check a family in one pass
+
+`family-check` reports properties, consecutive weak/strict interlacing, and
+optionally an adaptive recurrence search.  Requirement flags make the command
+exit nonzero at the first failed requested condition.
+
+```sh
+polytool family-check \
+  --require-real-rooted \
+  --require-weak-interlacing \
+  --recurrence \
+  --json < polys.txt
 ```
 
 ### Search for a recurrence
@@ -251,7 +282,7 @@ echo "1, 0, -3, 1" | polytool discriminant
 echo "1, 8, 35, 32, 9" | polytool hstar-to-ehrhart
 
 # Ehrhart polynomial → h*-vector (coefficients as rationals: num/den)
-echo "1/1, 2/1, 1/1" | polytool ehrhart-to-hstar
+echo "1, 2, 2" | polytool ehrhart-to-hstar
 ```
 
 ## Library usage
