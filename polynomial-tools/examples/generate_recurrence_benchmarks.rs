@@ -71,6 +71,14 @@ fn add3(a: &[Rat], b: &[Rat], c: &[Rat]) -> Poly {
     add(&add(a, b), c)
 }
 
+fn sum_polys(polys: &[Poly]) -> Poly {
+    let mut out = vec![Rat::zero()];
+    for p in polys {
+        out = add(&out, p);
+    }
+    out
+}
+
 fn scale(a: &[Rat], c: Rat) -> Poly {
     if c.is_zero() {
         return vec![Rat::zero()];
@@ -98,6 +106,25 @@ fn mul_linear(constant: Rat, t_coeff: Rat, p: &[Rat]) -> Poly {
     add(&scale(p, constant), &scale(&shift_t(p, 1), t_coeff))
 }
 
+fn mul_t_poly(coeffs: &[Rat], p: &[Rat]) -> Poly {
+    if coeffs.iter().all(|c| c.is_zero()) || p.iter().all(|c| c.is_zero()) {
+        return vec![Rat::zero()];
+    }
+    let mut out = vec![Rat::zero(); coeffs.len() + p.len() - 1];
+    for (i, coeff) in coeffs.iter().enumerate() {
+        if coeff.is_zero() {
+            continue;
+        }
+        for (j, value) in p.iter().enumerate() {
+            if value.is_zero() {
+                continue;
+            }
+            out[i + j] += coeff.clone() * value.clone();
+        }
+    }
+    trim(out)
+}
+
 fn derivative(p: &[Rat]) -> Poly {
     if p.len() <= 1 {
         return vec![Rat::zero()];
@@ -112,7 +139,15 @@ fn derivative(p: &[Rat]) -> Poly {
 }
 
 fn second_derivative(p: &[Rat]) -> Poly {
-    derivative(&derivative(p))
+    nth_derivative(p, 2)
+}
+
+fn nth_derivative(p: &[Rat], order: usize) -> Poly {
+    let mut out = p.to_vec();
+    for _ in 0..order {
+        out = derivative(&out);
+    }
+    out
 }
 
 fn alternating_sign(n: usize) -> Rat {
@@ -380,6 +415,88 @@ fn fixtures() -> Vec<Fixture> {
                     &add(&derivative(prev(rows, 1)), &scale_i(&shift_t(&derivative(prev(rows, 1)), 1), -1)),
                     &scale(&shift_t(prev(rows, 2), 1), alternating_sign(n)),
                 )
+            }),
+        },
+        Fixture {
+            slug: "21_fifth_order_mixed_coefficients",
+            title: "Fifth-order mixed coefficients",
+            features: "fifth-order recurrence, n^2- and t^5-dependent coefficients",
+            suggested_args: "--full-depth --min-rec-len 5 --max-rec-len 5 --min-var-deg 5 --max-var-deg 5 --min-idx-deg 2 --max-idx-deg 2 --max-diff-deg 0",
+            recurrence: "P_n = tP_{n-1} + (t^2-t-n)P_{n-2} + (t^2+tn+1)P_{n-3} + (t^4+t^3n^2+1)P_{n-4} - t^5P_{n-5}",
+            initial: vec![
+                poly(&[1]),
+                poly(&[1, 1]),
+                poly(&[2, -1, 1]),
+                poly(&[1, 0, 2, 1]),
+                poly(&[3, 1, -1, 2, 1]),
+            ],
+            next: Box::new(|n, rows| {
+                let n_rat = rat_usize(n);
+                let n_sq = n_rat.clone() * n_rat.clone();
+                let term1 = shift_t(prev(rows, 1), 1);
+                let term2 = mul_t_poly(&[-n_rat.clone(), rat(-1), Rat::one()], prev(rows, 2));
+                let term3 = mul_t_poly(&[Rat::one(), n_rat.clone(), Rat::one()], prev(rows, 3));
+                let term4 = mul_t_poly(
+                    &[Rat::one(), Rat::zero(), Rat::zero(), n_sq, Rat::one()],
+                    prev(rows, 4),
+                );
+                let term5 = scale_i(&shift_t(prev(rows, 5), 5), -1);
+                sum_polys(&[term1, term2, term3, term4, term5])
+            }),
+        },
+        Fixture {
+            slug: "22_fifth_derivative_generic",
+            title: "Fifth-derivative generic",
+            features: "second-order recurrence, derivatives through order five, n- and t-dependent coefficients",
+            suggested_args: "--full-depth --min-rec-len 2 --max-rec-len 2 --min-var-deg 2 --max-var-deg 2 --min-idx-deg 1 --max-idx-deg 1 --min-diff-deg 5 --max-diff-deg 5",
+            recurrence: "P_n = (2+t-nt^2)P_{n-1} + (-1+3t)P'_{n-1} + (1+t^2)P''_{n-2} + (4-2n+t)P'''_{n-2} + (-3+t+nt^2)P^{(4)}_{n-2} + (5+t-2nt)P^{(5)}_{n-2}",
+            initial: vec![
+                poly(&[1, 1, 2, -1, 0, 1]),
+                poly(&[2, -1, 3, 0, 1, 2]),
+            ],
+            next: Box::new(|n, rows| {
+                let n_rat = rat_usize(n);
+                let term1 = mul_t_poly(&[rat(2), Rat::one(), -n_rat.clone()], prev(rows, 1));
+                let term2 = mul_t_poly(&[rat(-1), rat(3)], &derivative(prev(rows, 1)));
+                let term3 = mul_t_poly(
+                    &[Rat::one(), Rat::zero(), Rat::one()],
+                    &nth_derivative(prev(rows, 2), 2),
+                );
+                let term4 = mul_t_poly(
+                    &[rat(4) - rat_usize(2 * n), Rat::one()],
+                    &nth_derivative(prev(rows, 2), 3),
+                );
+                let term5 = mul_t_poly(
+                    &[rat(-3), Rat::one(), n_rat],
+                    &nth_derivative(prev(rows, 2), 4),
+                );
+                let term6 = mul_t_poly(
+                    &[rat(5), rat(1) - rat_usize(2 * n)],
+                    &nth_derivative(prev(rows, 2), 5),
+                );
+                sum_polys(&[term1, term2, term3, term4, term5, term6])
+            }),
+        },
+        Fixture {
+            slug: "23_sparse_second_derivative_lag",
+            title: "Sparse second-derivative lag",
+            features: "second derivative, third-order recurrence, sparse t^2 coefficients",
+            suggested_args: "--min-rec-len 3 --max-rec-len 3 --min-var-deg 2 --max-var-deg 2 --min-idx-deg 1 --max-idx-deg 1 --min-diff-deg 2 --max-diff-deg 2 --fit-extra-rows 2",
+            recurrence: "P_n = tP_{n-1} + t^2P''_{n-1} - t^2P_{n-3} + nt^2P''_{n-3}",
+            initial: vec![
+                poly(&[1, 2, 3, 1]),
+                poly(&[2, -1, 1, 4, 1]),
+                poly(&[1, 0, 3, -2, 2]),
+            ],
+            next: Box::new(|n, rows| {
+                let term1 = shift_t(prev(rows, 1), 1);
+                let term2 = shift_t(&second_derivative(prev(rows, 1)), 2);
+                let term3 = scale_i(&shift_t(prev(rows, 3), 2), -1);
+                let term4 = scale(
+                    &shift_t(&second_derivative(prev(rows, 3)), 2),
+                    rat_usize(n),
+                );
+                sum_polys(&[term1, term2, term3, term4])
             }),
         },
     ]

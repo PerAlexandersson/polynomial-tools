@@ -1,0 +1,223 @@
+{
+  "schema": "polynomial-tools.recurrence.v1",
+  "first_index": 1,
+  "initial_polynomials": [
+    [
+      "1"
+    ],
+    [
+      "1",
+      "1"
+    ],
+    [
+      "2",
+      "-1",
+      "1"
+    ],
+    [
+      "1",
+      "0",
+      "2",
+      "1"
+    ],
+    [
+      "3",
+      "1",
+      "-1",
+      "2",
+      "1"
+    ]
+  ],
+  "recurrence": {
+    "terms": [
+      {
+        "offset": 1,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "1",
+              "0",
+              "0",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 2,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "-1",
+              "1",
+              "0",
+              "0",
+              "0"
+            ],
+            [
+              "-1",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 3,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "1",
+              "0",
+              "1",
+              "0",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "1",
+              "0",
+              "0",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 4,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "1",
+              "0",
+              "0",
+              "0",
+              "1",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "1",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 5,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "-1"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  "search": {
+    "recurrence_text": "P(n) = t P(n-1) + (-n - t + t^2) P(n-2) + (1 + nt + t^2) P(n-3) + (1 + n^2t^3 + t^4) P(n-4) - t^5 P(n-5)",
+    "source_rows": 50,
+    "skip_prefix": 0,
+    "unknowns": 90,
+    "weighted_unknowns": 90,
+    "equations": 119,
+    "fit_polynomials": 12,
+    "verification_polynomials": 38,
+    "candidates_tried": 1,
+    "options": {
+      "var_deg": 5,
+      "idx_deg": 2,
+      "diff_deg": 0,
+      "rec_len": 5,
+      "homogeneous": true,
+      "inhomo_var_deg": 0,
+      "inhomo_idx_deg": 0,
+      "denom_var_deg": 0,
+      "denom_idx_deg": 0,
+      "alternating_sign": false
+    }
+  }
+}
