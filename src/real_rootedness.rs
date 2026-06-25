@@ -2154,7 +2154,8 @@ mod tests {
 
     #[test]
     fn test_strip_initial_zero_wrappers() {
-        assert_eq!(strip_initial_zeros(&[]), &[]);
+        let empty: &[i64] = &[];
+        assert_eq!(strip_initial_zeros(empty), empty);
         assert_eq!(strip_initial_zeros(&[0, 0, 1, 2, 1]), &[1, 2, 1]);
         assert!(is_palindromic_ignoring_initial_zeros(&[0, 1, 1]));
         assert!(is_palindromic_ignoring_initial_zeros(&[0, 0, 1, 2, 1]));

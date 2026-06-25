@@ -7,6 +7,7 @@ use num_bigint::BigInt;
 use polynomial_tools::recurrence::BigRational as RecurrenceBigRational;
 use polynomial_tools::recurrence::*;
 use polynomial_tools::*;
+use std::fs;
 use std::io::{self, Read};
 
 fn is_help_arg(arg: &str) -> bool {
@@ -116,6 +117,8 @@ fn print_top_level_help() {
     println!("  family-check      Check properties and consecutive interlacing together");
     println!("  sequence          Generate standard polynomial sequences");
     println!("  recurrence        Search for a polynomial recurrence");
+    println!("  recurrence-generate");
+    println!("                    Generate coefficient rows from recurrence JSON");
     println!("  bkw-scout         Scout BKW equal-modulus loci for a recurrence symbol");
     println!("  resultant         Compute the resultant of two polynomials");
     println!("  discriminant      Compute the discriminant of each polynomial");
@@ -179,11 +182,34 @@ fn print_recurrence_help() {
     println!("  --min-margin <n>           Require equations >= unknowns + n");
     println!("  --fit-extra-rows <n>       Extra rows beyond the first solvable prefix");
     println!("  --no-verify                Use all input rows for fitting");
+    println!("  --json                     Emit recurrence JSON with initial conditions");
+    println!("  --format json              Alias for --json");
     println!("  --verbose                  Print candidate search details");
     println!("  -h, --help                 Print this help text");
     println!();
     println!("Example:");
     println!("  printf '1\\n1\\n2\\n3\\n5\\n8\\n' | polytool recurrence");
+    println!("  polytool recurrence --json < rows.txt > recurrence.json");
+}
+
+fn print_recurrence_generate_help() {
+    println!("Usage:");
+    println!("  polytool recurrence-generate --recurrence <file|-> --rows <n>");
+    println!("  polytool recurrence-generate --recurrence <file|-> --additional <n>");
+    println!("  polytool recurrence-generate --help");
+    println!();
+    println!("Generate coefficient rows from recurrence JSON emitted by");
+    println!("`polytool recurrence --json`.");
+    println!();
+    println!("Options:");
+    println!("  --recurrence <file|->      Read recurrence JSON from file, or stdin with -");
+    println!("  --rows <n>                 Output n total rows, including initial rows");
+    println!("  --additional <n>           Output initial rows plus n generated rows");
+    println!("  --json                     Emit generated rows as JSON");
+    println!("  -h, --help                 Print this help text");
+    println!();
+    println!("Example:");
+    println!("  polytool recurrence-generate --recurrence recurrence.json --rows 50");
 }
 
 fn print_sequence_help() {
@@ -291,6 +317,7 @@ fn print_command_help(command: &str) -> bool {
         "family-check" => print_family_check_help(),
         "sequence" => print_sequence_help(),
         "recurrence" => print_recurrence_help(),
+        "recurrence-generate" => print_recurrence_generate_help(),
         "bkw-scout" => bkw_scout_usage(),
         "resultant" => print_stdin_command_help(
             "resultant",
@@ -926,10 +953,25 @@ fn cmd_recurrence(args: &[String]) {
     }
 
     let mut search = AdaptiveSearchOptions::default();
+    let mut format = OutputFormat::Text;
 
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
+            "--json" => {
+                format = OutputFormat::Json;
+            }
+            "--format" => {
+                i += 1;
+                format = match args[i].as_str() {
+                    "text" => OutputFormat::Text,
+                    "json" => OutputFormat::Json,
+                    other => {
+                        eprintln!("unknown recurrence output format: {other}");
+                        return;
+                    }
+                };
+            }
             "--skip-prefix" => {
                 i += 1;
                 search.skip_prefix = args[i].parse().unwrap();
@@ -1039,7 +1081,34 @@ fn cmd_recurrence(args: &[String]) {
     );
     match find_recurrence_adaptive_rational(&polys, &search) {
         Some(res) => {
-            println!("{}", res.recurrence);
+            if format == OutputFormat::Json {
+                let searched_polys = polys.get(search.skip_prefix..).unwrap_or(&[]);
+                let initial_count = res.recurrence.max_offset().min(searched_polys.len());
+                let initial_polys = &searched_polys[..initial_count];
+                let recurrence_json = RecurrenceJson::from_recurrence_rational(
+                    &res.recurrence,
+                    1,
+                    initial_polys,
+                    Some(RecurrenceJsonSearch {
+                        recurrence_text: res.recurrence.to_string(),
+                        source_rows: polys.len(),
+                        skip_prefix: search.skip_prefix,
+                        unknowns: res.num_unknowns,
+                        weighted_unknowns: res.weighted_unknowns,
+                        equations: res.num_equations,
+                        fit_polynomials: res.fit_polynomials,
+                        verification_polynomials: res.verification_polynomials,
+                        candidates_tried: res.candidates_tried,
+                        options: RecurrenceOptionsJson::from(&res.opts),
+                    }),
+                );
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&recurrence_json).unwrap()
+                );
+            } else {
+                println!("{}", res.recurrence);
+            }
             eprintln!(
                 "Found with {} unknowns, weighted score {}, {} equations, {} fit rows, \
                  {} verification rows ({} candidates tried)",
@@ -1053,6 +1122,126 @@ fn cmd_recurrence(args: &[String]) {
         }
         None => {
             eprintln!("No recurrence found within the search bounds.");
+        }
+    }
+}
+
+fn format_rational_row(coeffs: &[RecurrenceBigRational]) -> String {
+    coeffs
+        .iter()
+        .map(format_rational_coeff)
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn read_recurrence_json(path: &str) -> Result<RecurrenceJson, String> {
+    let mut input = String::new();
+    if path == "-" {
+        io::stdin()
+            .read_to_string(&mut input)
+            .map_err(|e| format!("failed to read recurrence JSON from stdin: {e}"))?;
+    } else {
+        input = fs::read_to_string(path)
+            .map_err(|e| format!("failed to read recurrence JSON `{path}`: {e}"))?;
+    }
+    serde_json::from_str(&input).map_err(|e| format!("failed to parse recurrence JSON: {e}"))
+}
+
+fn cmd_recurrence_generate(args: &[String]) {
+    if args.iter().any(|arg| is_help_arg(arg)) {
+        print_recurrence_generate_help();
+        return;
+    }
+
+    let mut recurrence_path: Option<String> = None;
+    let mut rows: Option<usize> = None;
+    let mut additional: Option<usize> = None;
+    let mut format = OutputFormat::Text;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--recurrence" => {
+                i += 1;
+                recurrence_path = args.get(i).cloned();
+            }
+            "--rows" => {
+                i += 1;
+                rows = args.get(i).and_then(|s| s.parse().ok());
+            }
+            "--additional" => {
+                i += 1;
+                additional = args.get(i).and_then(|s| s.parse().ok());
+            }
+            "--json" => {
+                format = OutputFormat::Json;
+            }
+            other => {
+                eprintln!("unknown recurrence-generate option: {other}");
+                return;
+            }
+        }
+        i += 1;
+    }
+
+    let Some(path) = recurrence_path else {
+        eprintln!("recurrence-generate needs --recurrence <file|->");
+        return;
+    };
+    if rows.is_some() && additional.is_some() {
+        eprintln!("use only one of --rows or --additional");
+        return;
+    }
+
+    let recurrence_json = match read_recurrence_json(&path) {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("{error}");
+            return;
+        }
+    };
+    let (recurrence, first_index, initial_polys) = match recurrence_json.to_recurrence_parts() {
+        Ok(parts) => parts,
+        Err(error) => {
+            eprintln!("{error}");
+            return;
+        }
+    };
+
+    let total_rows = if let Some(rows) = rows {
+        rows
+    } else if let Some(additional) = additional {
+        initial_polys.len() + additional
+    } else {
+        eprintln!("recurrence-generate needs --rows <n> or --additional <n>");
+        return;
+    };
+
+    let generated = match recurrence.generate_rows_rational(&initial_polys, first_index, total_rows)
+    {
+        Ok(rows) => rows,
+        Err(error) => {
+            eprintln!("{error}");
+            return;
+        }
+    };
+
+    if format == OutputFormat::Json {
+        let rows_json: Vec<Vec<String>> = generated
+            .iter()
+            .map(|row| row.iter().map(format_rational_coeff).collect())
+            .collect();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "first_index": first_index,
+                "polynomials": rows_json,
+            }))
+            .unwrap()
+        );
+    } else {
+        for row in &generated {
+            println!("{}", format_rational_row(row));
         }
     }
 }
@@ -1859,6 +2048,7 @@ fn main() {
         "family-check" => cmd_family_check(rest),
         "sequence" => cmd_sequence(rest),
         "recurrence" => cmd_recurrence(rest),
+        "recurrence-generate" => cmd_recurrence_generate(rest),
         "bkw-scout" => cmd_bkw_scout(rest),
         "resultant" => cmd_resultant(),
         "discriminant" => cmd_discriminant(),
