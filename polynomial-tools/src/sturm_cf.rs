@@ -67,8 +67,8 @@ pub enum SturmContinuedFractionError {
     },
     QuotientRootsNotIncreasing {
         step: usize,
-        previous: BigRational,
-        current: BigRational,
+        previous: Box<BigRational>,
+        current: Box<BigRational>,
     },
     SignedRemainderHasNonpositiveCoefficient {
         step: usize,
@@ -196,8 +196,8 @@ pub fn check_sturm_continued_fraction_certificate_with_options(
                 if previous_root >= &root {
                     return Err(SturmContinuedFractionError::QuotientRootsNotIncreasing {
                         step: steps,
-                        previous: previous_root.clone(),
-                        current: root,
+                        previous: Box::new(previous_root.clone()),
+                        current: Box::new(root),
                     });
                 }
             }
