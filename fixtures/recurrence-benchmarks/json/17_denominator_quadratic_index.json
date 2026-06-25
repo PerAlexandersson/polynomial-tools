@@ -1,0 +1,61 @@
+{
+  "schema": "polynomial-tools.recurrence.v1",
+  "first_index": 1,
+  "initial_polynomials": [
+    [
+      "1"
+    ]
+  ],
+  "recurrence": {
+    "terms": [
+      {
+        "offset": 1,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "1"
+            ]
+          ]
+        }
+      }
+    ],
+    "denominator": {
+      "coeffs": [
+        [
+          "1"
+        ],
+        [
+          "1"
+        ],
+        [
+          "1"
+        ]
+      ]
+    }
+  },
+  "search": {
+    "recurrence_text": "(1 + n + n^2) P(n) = P(n-1)",
+    "source_rows": 50,
+    "skip_prefix": 0,
+    "unknowns": 3,
+    "weighted_unknowns": 5,
+    "equations": 5,
+    "fit_polynomials": 6,
+    "verification_polynomials": 44,
+    "candidates_tried": 4,
+    "options": {
+      "var_deg": 0,
+      "idx_deg": 0,
+      "diff_deg": 0,
+      "rec_len": 1,
+      "homogeneous": true,
+      "inhomo_var_deg": 0,
+      "inhomo_idx_deg": 0,
+      "denom_var_deg": 0,
+      "denom_idx_deg": 2,
+      "alternating_sign": false
+    }
+  }
+}

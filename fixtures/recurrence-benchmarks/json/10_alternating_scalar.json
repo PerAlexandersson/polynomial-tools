@@ -1,0 +1,48 @@
+{
+  "schema": "polynomial-tools.recurrence.v1",
+  "first_index": 1,
+  "initial_polynomials": [
+    [
+      "1"
+    ]
+  ],
+  "recurrence": {
+    "terms": [
+      {
+        "offset": 1,
+        "deriv_order": 0,
+        "sign": "alternating_n",
+        "coeff": {
+          "coeffs": [
+            [
+              "1"
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  "search": {
+    "recurrence_text": "P(n) = (-1)^n P(n-1)",
+    "source_rows": 50,
+    "skip_prefix": 0,
+    "unknowns": 2,
+    "weighted_unknowns": 4,
+    "equations": 4,
+    "fit_polynomials": 5,
+    "verification_polynomials": 45,
+    "candidates_tried": 2,
+    "options": {
+      "var_deg": 0,
+      "idx_deg": 0,
+      "diff_deg": 0,
+      "rec_len": 1,
+      "homogeneous": true,
+      "inhomo_var_deg": 0,
+      "inhomo_idx_deg": 0,
+      "denom_var_deg": 0,
+      "denom_idx_deg": 0,
+      "alternating_sign": true
+    }
+  }
+}

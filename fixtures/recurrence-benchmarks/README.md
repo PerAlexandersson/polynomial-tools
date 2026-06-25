@@ -5,11 +5,15 @@ Each `rows/*.txt` file contains 50 polynomials, one dense coefficient list per l
 with coefficients in ascending powers of `t`. These files contain no headers,
 so they can be piped directly into `polytool recurrence`.
 Metadata lives separately in `manifest.tsv` and in the table below.
+The matching `json/*.json` files are recurrence JSON records emitted by
+`polytool recurrence --json`; they include minimal initial conditions and
+can regenerate or extend the raw row files with `recurrence-generate`.
 
 Regenerate from the Rust workspace root with:
 
 ```sh
 cargo run -p polynomial-tools --example generate_recurrence_benchmarks
+bash polynomial-tools/fixtures/recurrence-benchmarks/regenerate-json.sh
 ```
 
 Example timing command:
@@ -18,6 +22,14 @@ Example timing command:
 time cargo run -q -p polynomial-tools --bin polytool -- recurrence \
   --max-rec-len 1 --max-var-deg 1 --max-idx-deg 0 --max-diff-deg 0 \
   < polynomial-tools/fixtures/recurrence-benchmarks/rows/03_binomial_powers.txt
+```
+
+Example regeneration command:
+
+```sh
+polytool recurrence-generate \
+  --recurrence polynomial-tools/fixtures/recurrence-benchmarks/json/03_binomial_powers.json \
+  --rows 50
 ```
 
 | slug | features | suggested args | recurrence |

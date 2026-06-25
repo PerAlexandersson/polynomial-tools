@@ -398,15 +398,16 @@ fn write_fixture(base: &Path, fixture: &Fixture, rows: &[Poly]) -> std::io::Resu
 
 fn write_manifest(base: &Path, fixtures: &[Fixture]) -> std::io::Result<()> {
     let mut tsv = String::new();
-    tsv.push_str("slug\ttitle\tfeatures\tsuggested_args\trecurrence\trows_file\n");
+    tsv.push_str("slug\ttitle\tfeatures\tsuggested_args\trecurrence\trows_file\tjson_file\n");
     for fixture in fixtures {
         tsv.push_str(&format!(
-            "{}\t{}\t{}\t{}\t{}\trows/{}.txt\n",
+            "{}\t{}\t{}\t{}\t{}\trows/{}.txt\tjson/{}.json\n",
             fixture.slug,
             fixture.title,
             fixture.features,
             fixture.suggested_args,
             fixture.recurrence,
+            fixture.slug,
             fixture.slug
         ));
     }
@@ -422,10 +423,14 @@ fn write_readme(base: &Path, fixtures: &[Fixture], row_count: usize) -> std::io:
     ));
     md.push_str("with coefficients in ascending powers of `t`. These files contain no headers,\n");
     md.push_str("so they can be piped directly into `polytool recurrence`.\n");
-    md.push_str("Metadata lives separately in `manifest.tsv` and in the table below.\n\n");
+    md.push_str("Metadata lives separately in `manifest.tsv` and in the table below.\n");
+    md.push_str("The matching `json/*.json` files are recurrence JSON records emitted by\n");
+    md.push_str("`polytool recurrence --json`; they include minimal initial conditions and\n");
+    md.push_str("can regenerate or extend the raw row files with `recurrence-generate`.\n\n");
     md.push_str("Regenerate from the Rust workspace root with:\n\n");
     md.push_str("```sh\n");
     md.push_str("cargo run -p polynomial-tools --example generate_recurrence_benchmarks\n");
+    md.push_str("bash polynomial-tools/fixtures/recurrence-benchmarks/regenerate-json.sh\n");
     md.push_str("```\n\n");
     md.push_str("Example timing command:\n\n");
     md.push_str("```sh\n");
@@ -434,6 +439,12 @@ fn write_readme(base: &Path, fixtures: &[Fixture], row_count: usize) -> std::io:
     md.push_str(
         "  < polynomial-tools/fixtures/recurrence-benchmarks/rows/03_binomial_powers.txt\n",
     );
+    md.push_str("```\n\n");
+    md.push_str("Example regeneration command:\n\n");
+    md.push_str("```sh\n");
+    md.push_str("polytool recurrence-generate \\\n");
+    md.push_str("  --recurrence polynomial-tools/fixtures/recurrence-benchmarks/json/03_binomial_powers.json \\\n");
+    md.push_str("  --rows 50\n");
     md.push_str("```\n\n");
     md.push_str("| slug | features | suggested args | recurrence |\n");
     md.push_str("|---|---|---|---|\n");
