@@ -1121,6 +1121,8 @@ dependencies = [
  "num-integer",
  "num-rational",
  "num-traits",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

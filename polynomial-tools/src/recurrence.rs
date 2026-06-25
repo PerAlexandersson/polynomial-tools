@@ -14,6 +14,7 @@
 use num_bigint::BigInt;
 use num_rational::Ratio;
 use num_traits::{One, Zero};
+use serde::{Deserialize, Serialize};
 use std::fmt;
 
 pub type BigRational = Ratio<BigInt>;
@@ -264,6 +265,44 @@ fn poly_mul_rational(lhs: &[BigRational], rhs: &[BigRational]) -> Vec<BigRationa
         }
     }
     trim_poly_rational(result)
+}
+
+fn poly_div_exact_rational(
+    numerator: &[BigRational],
+    denominator: &[BigRational],
+) -> Result<Vec<BigRational>, RecurrenceEvaluationError> {
+    let denominator = trim_poly_rational(denominator.to_vec());
+    if poly_is_zero_rational(&denominator) {
+        return Err(RecurrenceEvaluationError::ZeroDenominator);
+    }
+
+    let mut remainder = trim_poly_rational(numerator.to_vec());
+    if poly_is_zero_rational(&remainder) {
+        return Ok(rational_zero_poly());
+    }
+
+    let denom_deg = poly_degree_rational(&denominator);
+    let denom_lc = denominator[denom_deg].clone();
+    let mut quotient =
+        vec![BigRational::zero(); poly_degree_rational(&remainder).saturating_sub(denom_deg) + 1];
+
+    while !poly_is_zero_rational(&remainder) && poly_degree_rational(&remainder) >= denom_deg {
+        let rem_deg = poly_degree_rational(&remainder);
+        let shift = rem_deg - denom_deg;
+        let factor = remainder[rem_deg].clone() / denom_lc.clone();
+        quotient[shift] += factor.clone();
+        for (idx, denom_coeff) in denominator.iter().enumerate().take(denom_deg + 1) {
+            let target = idx + shift;
+            remainder[target] -= factor.clone() * denom_coeff.clone();
+        }
+        remainder = trim_poly_rational(remainder);
+    }
+
+    if poly_is_zero_rational(&remainder) {
+        Ok(trim_poly_rational(quotient))
+    } else {
+        Err(RecurrenceEvaluationError::NonPolynomialQuotient)
+    }
 }
 
 fn bivar_eval_n(poly: &BivarPoly, n: usize) -> Vec<BigRational> {
@@ -633,6 +672,38 @@ fn fmt_rational(r: &BigRational) -> String {
     }
 }
 
+/// Format an exact rational coefficient as an integer or `num/den` string.
+pub fn format_rational_coeff(r: &BigRational) -> String {
+    fmt_rational(r)
+}
+
+/// Parse an exact rational coefficient from an integer or `num/den` string.
+pub fn parse_rational_coeff(input: &str) -> Result<BigRational, String> {
+    let token = input.trim();
+    if token.is_empty() {
+        return Err("empty rational coefficient".to_string());
+    }
+    if let Some((num, den)) = token.split_once('/') {
+        let numerator = num
+            .trim()
+            .parse::<BigInt>()
+            .map_err(|e| format!("invalid numerator `{}`: {e}", num.trim()))?;
+        let denominator = den
+            .trim()
+            .parse::<BigInt>()
+            .map_err(|e| format!("invalid denominator `{}`: {e}", den.trim()))?;
+        if denominator.is_zero() {
+            return Err(format!("zero denominator in coefficient `{token}`"));
+        }
+        Ok(BigRational::new(numerator, denominator))
+    } else {
+        let integer = token
+            .parse::<BigInt>()
+            .map_err(|e| format!("invalid integer `{token}`: {e}"))?;
+        Ok(BigRational::from_integer(integer))
+    }
+}
+
 fn fmt_monomial(c: &BigRational, n_pow: usize, t_pow: usize) -> String {
     let var = match (n_pow, t_pow) {
         (0, 0) => return fmt_rational(c),
@@ -901,7 +972,8 @@ fn fmt_univariate_poly_rational_code(style: CodeStyle, coeffs: &[BigRational]) -
 }
 
 impl Recurrence {
-    fn max_offset(&self) -> usize {
+    /// Largest recurrence offset used by any term.
+    pub fn max_offset(&self) -> usize {
         self.terms.iter().map(|term| term.offset).max().unwrap_or(0)
     }
 
@@ -1234,6 +1306,402 @@ impl fmt::Display for Recurrence {
         }
 
         Ok(())
+    }
+}
+
+/// Errors that can occur while replaying a recurrence to generate rows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RecurrenceEvaluationError {
+    /// More initial rows are needed before the recurrence can be evaluated.
+    InsufficientInitialRows { required: usize, provided: usize },
+    /// An offset points before the first available initial/generated row.
+    OffsetBeforeInitialRow {
+        n: usize,
+        offset: usize,
+        first_index: usize,
+    },
+    /// The evaluated LHS factor is the zero polynomial.
+    ZeroDenominator,
+    /// A denominator recurrence produced a rational function rather than a polynomial.
+    NonPolynomialQuotient,
+}
+
+impl fmt::Display for RecurrenceEvaluationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InsufficientInitialRows { required, provided } => write!(
+                f,
+                "insufficient initial rows: need at least {required}, got {provided}"
+            ),
+            Self::OffsetBeforeInitialRow {
+                n,
+                offset,
+                first_index,
+            } => write!(
+                f,
+                "cannot evaluate P({n}): offset {offset} refers before first index {first_index}"
+            ),
+            Self::ZeroDenominator => write!(f, "evaluated denominator is the zero polynomial"),
+            Self::NonPolynomialQuotient => write!(
+                f,
+                "recurrence evaluation did not divide exactly to a polynomial"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for RecurrenceEvaluationError {}
+
+impl Recurrence {
+    /// Evaluate the next row after `rows`, where `rows[0]` is `P(first_index)`.
+    pub fn evaluate_next_rational(
+        &self,
+        rows: &[Vec<BigRational>],
+        first_index: usize,
+    ) -> Result<Vec<BigRational>, RecurrenceEvaluationError> {
+        let required = self.max_offset();
+        if rows.len() < required {
+            return Err(RecurrenceEvaluationError::InsufficientInitialRows {
+                required,
+                provided: rows.len(),
+            });
+        }
+
+        let n = first_index + rows.len();
+        let mut rhs = rational_zero_poly();
+
+        for term in &self.terms {
+            let Some(reference_index) = n.checked_sub(term.offset) else {
+                return Err(RecurrenceEvaluationError::OffsetBeforeInitialRow {
+                    n,
+                    offset: term.offset,
+                    first_index,
+                });
+            };
+            if reference_index < first_index {
+                return Err(RecurrenceEvaluationError::OffsetBeforeInitialRow {
+                    n,
+                    offset: term.offset,
+                    first_index,
+                });
+            }
+            let row_index = reference_index - first_index;
+            let Some(ref_poly) = rows.get(row_index) else {
+                return Err(RecurrenceEvaluationError::OffsetBeforeInitialRow {
+                    n,
+                    offset: term.offset,
+                    first_index,
+                });
+            };
+
+            let deriv = poly_nth_derivative_rational(ref_poly, term.deriv_order);
+            let coeff = bivar_eval_n(&term.coeff, n);
+            let product = poly_mul_rational(&coeff, &deriv);
+            let sign = match term.sign {
+                RecurrenceSign::None => BigRational::one(),
+                RecurrenceSign::AlternatingN if n % 2 == 1 => {
+                    BigRational::from_integer(BigInt::from(-1))
+                }
+                RecurrenceSign::AlternatingN => BigRational::one(),
+            };
+            poly_add_scaled_assign(&mut rhs, &product, &sign);
+        }
+
+        if let Some(inhomogeneous) = &self.inhomogeneous {
+            let inh = bivar_eval_n(inhomogeneous, n);
+            poly_add_scaled_assign(&mut rhs, &inh, &BigRational::one());
+        }
+
+        if let Some(denominator) = &self.denominator {
+            poly_div_exact_rational(&rhs, &bivar_eval_n(denominator, n))
+        } else {
+            Ok(trim_poly_rational(rhs))
+        }
+    }
+
+    /// Generate `total_rows` rows, including the supplied initial rows.
+    pub fn generate_rows_rational(
+        &self,
+        initial_rows: &[Vec<BigRational>],
+        first_index: usize,
+        total_rows: usize,
+    ) -> Result<Vec<Vec<BigRational>>, RecurrenceEvaluationError> {
+        if total_rows <= initial_rows.len() {
+            return Ok(initial_rows[..total_rows].to_vec());
+        }
+        let required = self.max_offset();
+        if initial_rows.len() < required {
+            return Err(RecurrenceEvaluationError::InsufficientInitialRows {
+                required,
+                provided: initial_rows.len(),
+            });
+        }
+
+        let mut rows = initial_rows.to_vec();
+        while rows.len() < total_rows {
+            let next = self.evaluate_next_rational(&rows, first_index)?;
+            rows.push(next);
+        }
+        Ok(rows)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// JSON schema
+// ---------------------------------------------------------------------------
+
+/// Current JSON schema tag for serialized recurrences.
+pub const RECURRENCE_JSON_SCHEMA: &str = "polynomial-tools.recurrence.v1";
+
+/// Stable JSON representation of a recurrence together with initial rows.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RecurrenceJson {
+    /// Schema identifier. Currently `polynomial-tools.recurrence.v1`.
+    pub schema: String,
+    /// Index of the first polynomial in `initial_polynomials`.
+    pub first_index: usize,
+    /// Initial coefficient rows, in ascending powers of `t`.
+    pub initial_polynomials: Vec<Vec<String>>,
+    /// The recurrence data.
+    pub recurrence: RecurrenceJsonData,
+    /// Optional metadata from an adaptive search.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub search: Option<RecurrenceJsonSearch>,
+}
+
+/// Stable JSON representation of a recurrence without initial rows.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RecurrenceJsonData {
+    pub terms: Vec<RecurrenceTermJson>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denominator: Option<BivarPolyJson>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inhomogeneous: Option<BivarPolyJson>,
+}
+
+/// Stable JSON representation of one recurrence term.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RecurrenceTermJson {
+    pub offset: usize,
+    pub deriv_order: usize,
+    pub sign: String,
+    pub coeff: BivarPolyJson,
+}
+
+/// Stable JSON representation of a bivariate polynomial in `(n,t)`.
+///
+/// `coeffs[i][j]` is the coefficient of `n^i t^j`, stored as an exact rational
+/// string.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct BivarPolyJson {
+    pub coeffs: Vec<Vec<String>>,
+}
+
+/// Optional metadata describing how an adaptive recurrence was found.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RecurrenceJsonSearch {
+    pub recurrence_text: String,
+    pub source_rows: usize,
+    pub skip_prefix: usize,
+    pub unknowns: usize,
+    pub weighted_unknowns: usize,
+    pub equations: usize,
+    pub fit_polynomials: usize,
+    pub verification_polynomials: usize,
+    pub candidates_tried: usize,
+    pub options: RecurrenceOptionsJson,
+}
+
+/// Search-space options for the recurrence that was found.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RecurrenceOptionsJson {
+    pub var_deg: usize,
+    pub idx_deg: usize,
+    pub diff_deg: usize,
+    pub rec_len: usize,
+    pub homogeneous: bool,
+    pub inhomo_var_deg: usize,
+    pub inhomo_idx_deg: usize,
+    pub denom_var_deg: usize,
+    pub denom_idx_deg: usize,
+    pub alternating_sign: bool,
+}
+
+impl From<&RecurrenceOptions> for RecurrenceOptionsJson {
+    fn from(opts: &RecurrenceOptions) -> Self {
+        Self {
+            var_deg: opts.var_deg,
+            idx_deg: opts.idx_deg,
+            diff_deg: opts.diff_deg,
+            rec_len: opts.rec_len,
+            homogeneous: opts.homogeneous,
+            inhomo_var_deg: opts.inhomo_var_deg,
+            inhomo_idx_deg: opts.inhomo_idx_deg,
+            denom_var_deg: opts.denom_var_deg,
+            denom_idx_deg: opts.denom_idx_deg,
+            alternating_sign: opts.alternating_sign,
+        }
+    }
+}
+
+impl RecurrenceJson {
+    /// Create a JSON record from a recurrence and initial rows.
+    pub fn from_recurrence_rational(
+        recurrence: &Recurrence,
+        first_index: usize,
+        initial_polynomials: &[Vec<BigRational>],
+        search: Option<RecurrenceJsonSearch>,
+    ) -> Self {
+        Self {
+            schema: RECURRENCE_JSON_SCHEMA.to_string(),
+            first_index,
+            initial_polynomials: initial_polynomials
+                .iter()
+                .map(|row| row.iter().map(format_rational_coeff).collect())
+                .collect(),
+            recurrence: RecurrenceJsonData::from_recurrence(recurrence),
+            search,
+        }
+    }
+
+    /// Convert this JSON record back to a recurrence and initial rows.
+    pub fn to_recurrence_parts(
+        &self,
+    ) -> Result<(Recurrence, usize, Vec<Vec<BigRational>>), String> {
+        if self.schema != RECURRENCE_JSON_SCHEMA {
+            return Err(format!(
+                "unsupported recurrence JSON schema `{}`",
+                self.schema
+            ));
+        }
+        let recurrence = self.recurrence.to_recurrence()?;
+        let initial_polynomials = self
+            .initial_polynomials
+            .iter()
+            .enumerate()
+            .map(|(row_idx, row)| {
+                row.iter()
+                    .enumerate()
+                    .map(|(coeff_idx, coeff)| {
+                        parse_rational_coeff(coeff).map_err(|e| {
+                            format!(
+                                "invalid initial coefficient at row {}, coefficient {}: {e}",
+                                row_idx + 1,
+                                coeff_idx
+                            )
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(trim_poly_rational)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok((recurrence, self.first_index, initial_polynomials))
+    }
+}
+
+impl RecurrenceJsonData {
+    fn from_recurrence(recurrence: &Recurrence) -> Self {
+        Self {
+            terms: recurrence
+                .terms
+                .iter()
+                .map(RecurrenceTermJson::from_term)
+                .collect(),
+            denominator: recurrence
+                .denominator
+                .as_ref()
+                .map(BivarPolyJson::from_bivar),
+            inhomogeneous: recurrence
+                .inhomogeneous
+                .as_ref()
+                .map(BivarPolyJson::from_bivar),
+        }
+    }
+
+    fn to_recurrence(&self) -> Result<Recurrence, String> {
+        Ok(Recurrence {
+            terms: self
+                .terms
+                .iter()
+                .map(RecurrenceTermJson::to_term)
+                .collect::<Result<Vec<_>, _>>()?,
+            denominator: self
+                .denominator
+                .as_ref()
+                .map(BivarPolyJson::to_bivar)
+                .transpose()?,
+            inhomogeneous: self
+                .inhomogeneous
+                .as_ref()
+                .map(BivarPolyJson::to_bivar)
+                .transpose()?,
+        })
+    }
+}
+
+impl RecurrenceTermJson {
+    fn from_term(term: &RecurrenceTerm) -> Self {
+        Self {
+            offset: term.offset,
+            deriv_order: term.deriv_order,
+            sign: match term.sign {
+                RecurrenceSign::None => "none",
+                RecurrenceSign::AlternatingN => "alternating_n",
+            }
+            .to_string(),
+            coeff: BivarPolyJson::from_bivar(&term.coeff),
+        }
+    }
+
+    fn to_term(&self) -> Result<RecurrenceTerm, String> {
+        let sign = match self.sign.as_str() {
+            "none" => RecurrenceSign::None,
+            "alternating_n" => RecurrenceSign::AlternatingN,
+            other => return Err(format!("unsupported recurrence sign `{other}`")),
+        };
+        Ok(RecurrenceTerm {
+            offset: self.offset,
+            deriv_order: self.deriv_order,
+            sign,
+            coeff: self.coeff.to_bivar()?,
+        })
+    }
+}
+
+impl BivarPolyJson {
+    fn from_bivar(poly: &BivarPoly) -> Self {
+        Self {
+            coeffs: poly
+                .coeffs
+                .iter()
+                .map(|row| row.iter().map(format_rational_coeff).collect())
+                .collect(),
+        }
+    }
+
+    fn to_bivar(&self) -> Result<BivarPoly, String> {
+        let coeffs = self
+            .coeffs
+            .iter()
+            .enumerate()
+            .map(|(i, row)| {
+                row.iter()
+                    .enumerate()
+                    .map(|(j, coeff)| {
+                        parse_rational_coeff(coeff).map_err(|e| {
+                            format!("invalid bivariate coefficient ({i},{j}) `{coeff}`: {e}")
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(BivarPoly { coeffs })
     }
 }
 
@@ -2462,6 +2930,77 @@ mod tests {
         let polys: Vec<Vec<i64>> = vec![vec![1], vec![1], vec![2]];
         let result = find_recurrence_adaptive(&polys, &AdaptiveSearchOptions::default());
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn recurrence_json_roundtrip_generates_rows() {
+        let polys: Vec<Vec<i64>> = vec![
+            vec![1],
+            vec![1],
+            vec![2],
+            vec![3],
+            vec![5],
+            vec![8],
+            vec![13],
+            vec![21],
+        ];
+        let result = find_recurrence_adaptive(&polys, &AdaptiveSearchOptions::default()).unwrap();
+        let rational_polys = i64_polys_to_rational(&polys);
+        let initial_count = result.recurrence.max_offset();
+        let recurrence_json = RecurrenceJson::from_recurrence_rational(
+            &result.recurrence,
+            1,
+            &rational_polys[..initial_count],
+            Some(RecurrenceJsonSearch {
+                recurrence_text: result.recurrence.to_string(),
+                source_rows: polys.len(),
+                skip_prefix: 0,
+                unknowns: result.num_unknowns,
+                weighted_unknowns: result.weighted_unknowns,
+                equations: result.num_equations,
+                fit_polynomials: result.fit_polynomials,
+                verification_polynomials: result.verification_polynomials,
+                candidates_tried: result.candidates_tried,
+                options: RecurrenceOptionsJson::from(&result.opts),
+            }),
+        );
+
+        let encoded = serde_json::to_string(&recurrence_json).unwrap();
+        let decoded: RecurrenceJson = serde_json::from_str(&encoded).unwrap();
+        let (recurrence, first_index, initial_polys) = decoded.to_recurrence_parts().unwrap();
+        let generated = recurrence
+            .generate_rows_rational(&initial_polys, first_index, polys.len())
+            .unwrap();
+        assert_eq!(generated, rational_polys);
+    }
+
+    #[test]
+    fn recurrence_json_generates_denominator_rows() {
+        let mut polys: Vec<Vec<BigRational>> = vec![vec![BigRational::one()]];
+        for n in 2..=8 {
+            let prev = polys.last().unwrap()[0].clone();
+            polys.push(vec![prev / BigRational::from_integer(BigInt::from(n + 1))]);
+        }
+        let opts = RecurrenceOptions {
+            var_deg: 0,
+            idx_deg: 0,
+            diff_deg: 0,
+            rec_len: 1,
+            homogeneous: true,
+            denom_var_deg: 0,
+            denom_idx_deg: 1,
+            ..Default::default()
+        };
+        let recurrence =
+            find_polynomial_recurrence_rational(&polys, &opts).expect("should find denominator");
+        let recurrence_json =
+            RecurrenceJson::from_recurrence_rational(&recurrence, 1, &polys[..1], None);
+        let (recurrence, first_index, initial_polys) =
+            recurrence_json.to_recurrence_parts().unwrap();
+        let generated = recurrence
+            .generate_rows_rational(&initial_polys, first_index, polys.len())
+            .unwrap();
+        assert_eq!(generated, polys);
     }
 
     #[test]

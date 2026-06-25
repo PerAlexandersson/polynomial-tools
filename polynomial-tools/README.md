@@ -248,6 +248,24 @@ Options:
 --verbose            Print each candidate tried
 ```
 
+To save a recurrence with enough initial conditions to regenerate the sequence,
+use JSON output:
+
+```sh
+polytool recurrence --json < polys.txt > recurrence.json
+```
+
+The JSON schema stores exact rational coefficients as strings, the recurrence
+terms, the LHS denominator if present, and the minimal initial polynomial rows.
+Generate more rows from the saved recurrence with:
+
+```sh
+polytool recurrence-generate --recurrence recurrence.json --rows 100 > rows-100.txt
+```
+
+Use `--additional n` instead of `--rows n` to keep all initial rows and append
+`n` newly generated rows.
+
 ### Scout BKW equal-modulus loci
 
 For a polynomial recurrence with characteristic symbol
