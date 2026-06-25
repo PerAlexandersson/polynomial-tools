@@ -212,6 +212,14 @@ recurrence `f(n,t) P_n(t) = Σ c_{r,d}(n,t) D^d P_{n-r}(t)`. With
 polytool recurrence < polys.txt
 ```
 
+The adaptive search orders candidates by a weighted parameter count. Ordinary
+coefficient unknowns are cheapest; derivative, denominator, alternating-sign,
+and inhomogeneous unknowns are delayed. A candidate is only solved when the
+available fitting prefix has at least `unknowns + min_margin` scalar equations.
+By default the last input row is reserved for exact verification, and the fit
+uses the first solvable prefix plus one extra row. Use `--no-verify` to fit
+against all input rows.
+
 Options:
 
 ```
@@ -234,6 +242,9 @@ Options:
 --alternating-sign   Also allow right-hand-side terms multiplied by (-1)^n
 --max-denom-var-deg  Max degree in t for f(n,t) (default: 2, implies --denominator)
 --max-denom-idx-deg  Max degree in n for f(n,t) (default: 2, implies --denominator)
+--min-margin <k>     Require equations >= unknowns + k (default: 1)
+--fit-extra-rows <k> Extra rows after the first solvable prefix (default: 1)
+--no-verify          Fit all rows instead of reserving held-out verification rows
 --verbose            Print each candidate tried
 ```
 
