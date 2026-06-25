@@ -210,6 +210,79 @@ fn poly_degree_rational(coeffs: &[BigRational]) -> usize {
     coeffs.iter().rposition(|c| !c.is_zero()).unwrap_or(0)
 }
 
+fn trim_poly_rational(mut coeffs: Vec<BigRational>) -> Vec<BigRational> {
+    while coeffs.len() > 1 && coeffs.last().is_some_and(|c| c.is_zero()) {
+        coeffs.pop();
+    }
+    if coeffs.is_empty() {
+        rational_zero_poly()
+    } else {
+        coeffs
+    }
+}
+
+fn poly_is_zero_rational(coeffs: &[BigRational]) -> bool {
+    coeffs.iter().all(|c| c.is_zero())
+}
+
+fn poly_equal_rational(lhs: &[BigRational], rhs: &[BigRational]) -> bool {
+    let max_len = lhs.len().max(rhs.len());
+    (0..max_len).all(|idx| poly_coeff_rational(lhs, idx) == poly_coeff_rational(rhs, idx))
+}
+
+fn poly_add_scaled_assign(
+    target: &mut Vec<BigRational>,
+    source: &[BigRational],
+    scale: &BigRational,
+) {
+    if scale.is_zero() || poly_is_zero_rational(source) {
+        return;
+    }
+    if target.len() < source.len() {
+        target.resize(source.len(), BigRational::zero());
+    }
+    for (idx, coeff) in source.iter().enumerate() {
+        if !coeff.is_zero() {
+            target[idx] += coeff.clone() * scale.clone();
+        }
+    }
+}
+
+fn poly_mul_rational(lhs: &[BigRational], rhs: &[BigRational]) -> Vec<BigRational> {
+    if poly_is_zero_rational(lhs) || poly_is_zero_rational(rhs) {
+        return rational_zero_poly();
+    }
+    let mut result = vec![BigRational::zero(); lhs.len() + rhs.len() - 1];
+    for (i, a) in lhs.iter().enumerate() {
+        if a.is_zero() {
+            continue;
+        }
+        for (j, b) in rhs.iter().enumerate() {
+            if !b.is_zero() {
+                result[i + j] += a.clone() * b.clone();
+            }
+        }
+    }
+    trim_poly_rational(result)
+}
+
+fn bivar_eval_n(poly: &BivarPoly, n: usize) -> Vec<BigRational> {
+    let width = poly.coeffs.iter().map(Vec::len).max().unwrap_or(0);
+    if width == 0 {
+        return rational_zero_poly();
+    }
+    let mut result = vec![BigRational::zero(); width];
+    for (i, row) in poly.coeffs.iter().enumerate() {
+        let n_power = BigRational::from_integer(num_traits::pow::pow(BigInt::from(n), i));
+        for (j, coeff) in row.iter().enumerate() {
+            if !coeff.is_zero() {
+                result[j] += coeff.clone() * n_power.clone();
+            }
+        }
+    }
+    trim_poly_rational(result)
+}
+
 use crate::linalg;
 
 // ---------------------------------------------------------------------------
@@ -1165,21 +1238,163 @@ impl fmt::Display for Recurrence {
 }
 
 // ---------------------------------------------------------------------------
+// Recurrence verification
+// ---------------------------------------------------------------------------
+
+/// Check whether a recurrence holds at the 1-based row index `nn`.
+///
+/// This tests the exact polynomial identity
+/// `f(n,t) P_n(t) = RHS(n,t)` without using the linear system that produced
+/// the recurrence.
+pub fn recurrence_holds_at_rational(
+    polys: &[Vec<BigRational>],
+    rec: &Recurrence,
+    nn: usize,
+) -> bool {
+    if nn == 0 || nn > polys.len() {
+        return false;
+    }
+
+    let current = &polys[nn - 1];
+    let lhs = if let Some(denom) = &rec.denominator {
+        poly_mul_rational(&bivar_eval_n(denom, nn), current)
+    } else {
+        trim_poly_rational(current.clone())
+    };
+
+    let mut rhs = rational_zero_poly();
+    for term in &rec.terms {
+        if term.offset == 0 || term.offset >= nn {
+            return false;
+        }
+        let ref_poly = &polys[nn - 1 - term.offset];
+        let deriv = poly_nth_derivative_rational(ref_poly, term.deriv_order);
+        let coeff = bivar_eval_n(&term.coeff, nn);
+        let product = poly_mul_rational(&coeff, &deriv);
+        let sign = match term.sign {
+            RecurrenceSign::None => BigRational::one(),
+            RecurrenceSign::AlternatingN if nn % 2 == 1 => {
+                BigRational::from_integer(BigInt::from(-1))
+            }
+            RecurrenceSign::AlternatingN => BigRational::one(),
+        };
+        poly_add_scaled_assign(&mut rhs, &product, &sign);
+    }
+
+    if let Some(inhomogeneous) = &rec.inhomogeneous {
+        let inh = bivar_eval_n(inhomogeneous, nn);
+        poly_add_scaled_assign(&mut rhs, &inh, &BigRational::one());
+    }
+
+    poly_equal_rational(&lhs, &rhs)
+}
+
+/// Check whether a recurrence holds for all admissible rows from `start_nn`.
+///
+/// The row index is 1-based. Rows before `rec_len + 1` are skipped because
+/// there are not enough previous polynomials for the recurrence.
+pub fn recurrence_holds_from_rational(
+    polys: &[Vec<BigRational>],
+    rec: &Recurrence,
+    rec_len: usize,
+    start_nn: usize,
+) -> bool {
+    let first = start_nn.max(rec_len + 1);
+    (first..=polys.len()).all(|nn| recurrence_holds_at_rational(polys, rec, nn))
+}
+
+/// Check whether a recurrence holds on every admissible row.
+pub fn recurrence_holds_rational(
+    polys: &[Vec<BigRational>],
+    rec: &Recurrence,
+    rec_len: usize,
+) -> bool {
+    recurrence_holds_from_rational(polys, rec, rec_len, rec_len + 1)
+}
+
+// ---------------------------------------------------------------------------
 // Parameter counting
 // ---------------------------------------------------------------------------
 
-/// Count the total number of unknowns for a given set of recurrence options.
-pub fn count_unknowns(opts: &RecurrenceOptions) -> usize {
-    let num_denom_vars = (opts.denom_idx_deg + 1) * (opts.denom_var_deg + 1) - 1;
+/// Parameter counts for one candidate recurrence search space.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CandidateComplexity {
+    /// Actual number of linear unknowns in the system.
+    pub raw_unknowns: usize,
+    /// Weighted complexity used only for ordering adaptive candidates.
+    pub weighted_unknowns: usize,
+    /// Non-alternating, non-derivative recurrence coefficient unknowns.
+    pub ordinary_unknowns: usize,
+    /// Non-alternating derivative recurrence coefficient unknowns.
+    pub derivative_unknowns: usize,
+    /// Alternating, non-derivative recurrence coefficient unknowns.
+    pub alternating_unknowns: usize,
+    /// Alternating derivative recurrence coefficient unknowns.
+    pub alternating_derivative_unknowns: usize,
+    /// LHS denominator unknowns.
+    pub denominator_unknowns: usize,
+    /// Inhomogeneous-term unknowns.
+    pub inhomogeneous_unknowns: usize,
+}
+
+/// Count and weight the parameter slots for a candidate recurrence space.
+///
+/// The raw count is used for the linear-algebra dimension check. The weighted
+/// count is only a heuristic search score: derivative parameters count double,
+/// denominator parameters count double, alternating parameters are delayed, and
+/// inhomogeneous parameters are delayed further.
+pub fn candidate_complexity(opts: &RecurrenceOptions) -> CandidateComplexity {
+    let denominator_unknowns = (opts.denom_idx_deg + 1) * (opts.denom_var_deg + 1) - 1;
     let vars_per_coeff = (opts.idx_deg + 1) * (opts.var_deg + 1);
-    let sign_family_count = if opts.alternating_sign { 2 } else { 1 };
-    let num_coeff_vars = opts.rec_len * (opts.diff_deg + 1) * sign_family_count * vars_per_coeff;
-    let num_inhomo_vars = if opts.homogeneous {
+    let ordinary_unknowns = opts.rec_len * vars_per_coeff;
+    let derivative_unknowns = opts.rec_len * opts.diff_deg * vars_per_coeff;
+    let alternating_unknowns = if opts.alternating_sign {
+        opts.rec_len * vars_per_coeff
+    } else {
+        0
+    };
+    let alternating_derivative_unknowns = if opts.alternating_sign {
+        opts.rec_len * opts.diff_deg * vars_per_coeff
+    } else {
+        0
+    };
+    let inhomogeneous_unknowns = if opts.homogeneous {
         0
     } else {
         (opts.inhomo_idx_deg + 1) * (opts.inhomo_var_deg + 1)
     };
-    num_denom_vars + num_coeff_vars + num_inhomo_vars
+    let raw_unknowns = ordinary_unknowns
+        + derivative_unknowns
+        + alternating_unknowns
+        + alternating_derivative_unknowns
+        + denominator_unknowns
+        + inhomogeneous_unknowns;
+    let weighted_unknowns = ordinary_unknowns
+        + 2 * derivative_unknowns
+        + 3 * alternating_unknowns
+        + 4 * alternating_derivative_unknowns
+        + 2 * denominator_unknowns
+        + 4 * inhomogeneous_unknowns;
+    CandidateComplexity {
+        raw_unknowns,
+        weighted_unknowns,
+        ordinary_unknowns,
+        derivative_unknowns,
+        alternating_unknowns,
+        alternating_derivative_unknowns,
+        denominator_unknowns,
+        inhomogeneous_unknowns,
+    }
+}
+
+/// Count the total number of unknowns for a given set of recurrence options.
+pub fn count_unknowns(opts: &RecurrenceOptions) -> usize {
+    candidate_complexity(opts).raw_unknowns
+}
+
+/// Weighted unknown count used for adaptive candidate ordering.
+pub fn count_weighted_unknowns(opts: &RecurrenceOptions) -> usize {
+    candidate_complexity(opts).weighted_unknowns
 }
 
 /// Count the total number of equations for a given set of recurrence options
@@ -1259,6 +1474,10 @@ pub struct AdaptiveSearchOptions {
     pub max_denom_idx_deg: usize,
     /// Minimum surplus: equations - unknowns must be >= this.
     pub min_margin: usize,
+    /// Use all input rows for fitting and skip held-out verification.
+    pub no_verify: bool,
+    /// Extra rows to add after the first prefix that clears `min_margin`.
+    pub fit_extra_rows: usize,
     /// Print each candidate tried to stderr.
     pub verbose: bool,
 }
@@ -1286,6 +1505,8 @@ impl Default for AdaptiveSearchOptions {
             max_denom_var_deg: 2,
             max_denom_idx_deg: 2,
             min_margin: 1,
+            no_verify: false,
+            fit_extra_rows: 1,
             verbose: false,
         }
     }
@@ -1313,18 +1534,24 @@ pub struct AdaptiveSearchResult {
     pub opts: RecurrenceOptions,
     /// Number of unknowns in the winning system.
     pub num_unknowns: usize,
+    /// Weighted unknown count used for adaptive ordering.
+    pub weighted_unknowns: usize,
     /// Number of equations in the winning system.
     pub num_equations: usize,
+    /// Number of polynomials used to fit the winning system after skip_prefix.
+    pub fit_polynomials: usize,
+    /// Number of held-out polynomials verified after fitting.
+    pub verification_polynomials: usize,
     /// Number of candidates actually solved (not just counted).
     pub candidates_tried: usize,
 }
 
 /// Generate candidate parameter sets.
 ///
-/// Candidates are sorted by total unknowns, derivative order, and recurrence
-/// length. Thus a shorter alternating recurrence may be reported before a
-/// longer ordinary recurrence with the same number of unknowns. For the same
-/// shape, ordinary candidates are tried before alternating candidates.
+/// Candidates are sorted by weighted parameter count. The raw parameter count
+/// is still used later for the linear-algebra solvability check; this ordering
+/// only delays more complicated explanations such as derivatives,
+/// alternating-sign terms, denominators, and inhomogeneous terms.
 fn generate_candidates(m: usize, search: &AdaptiveSearchOptions) -> Vec<RecurrenceOptions> {
     let min_rl = search.min_rec_len.max(1).min(m.saturating_sub(1));
     let max_rl = search.max_rec_len.min(m.saturating_sub(1));
@@ -1408,16 +1635,63 @@ fn generate_candidates(m: usize, search: &AdaptiveSearchOptions) -> Vec<Recurren
     }
 
     candidates.sort_by_key(|opts| {
+        let complexity = candidate_complexity(opts);
+        let has_denominator = opts.denom_var_deg > 0 || opts.denom_idx_deg > 0;
         (
-            count_unknowns(opts),
+            complexity.weighted_unknowns,
+            complexity.raw_unknowns,
+            opts.alternating_sign,
+            has_denominator,
+            !opts.homogeneous,
             opts.diff_deg,
             opts.rec_len,
-            opts.alternating_sign,
             opts.idx_deg,
             opts.var_deg,
+            opts.denom_idx_deg + opts.denom_var_deg,
+            opts.inhomo_idx_deg + opts.inhomo_var_deg,
         )
     });
     candidates
+}
+
+fn fitting_polynomial_count(
+    polys: &[Vec<BigRational>],
+    opts: &RecurrenceOptions,
+    search: &AdaptiveSearchOptions,
+) -> Option<usize> {
+    let m = polys.len();
+    if m <= opts.rec_len {
+        return None;
+    }
+
+    if search.no_verify {
+        return Some(m);
+    }
+
+    let max_fit = m.checked_sub(1)?;
+    if max_fit <= opts.rec_len {
+        return None;
+    }
+
+    let unknowns = count_unknowns(opts);
+    for fit_len in opts.rec_len + 1..=max_fit {
+        let equations = count_equations_rational(&polys[..fit_len], opts);
+        if equations >= unknowns + search.min_margin {
+            return Some((fit_len + search.fit_extra_rows).min(max_fit));
+        }
+    }
+
+    None
+}
+
+fn verify_heldout_tail(
+    polys: &[Vec<BigRational>],
+    rec: &Recurrence,
+    opts: &RecurrenceOptions,
+    fit_len: usize,
+    search: &AdaptiveSearchOptions,
+) -> bool {
+    search.no_verify || recurrence_holds_from_rational(polys, rec, opts.rec_len, fit_len + 1)
 }
 
 /// Search for the simplest polynomial recurrence by trying parameter
@@ -1437,8 +1711,14 @@ pub fn find_recurrence_adaptive_rational(
     let mut tried = 0;
 
     for opts in &candidates {
-        let unknowns = count_unknowns(opts);
-        let equations = count_equations_rational(polys, opts);
+        let complexity = candidate_complexity(opts);
+        let unknowns = complexity.raw_unknowns;
+        let weighted_unknowns = complexity.weighted_unknowns;
+        let Some(fit_len) = fitting_polynomial_count(polys, opts, search) else {
+            continue;
+        };
+        let fit_polys = &polys[..fit_len];
+        let equations = count_equations_rational(fit_polys, opts);
 
         if equations < unknowns + search.min_margin {
             continue;
@@ -1450,8 +1730,9 @@ pub fn find_recurrence_adaptive_rational(
             eprintln!(
                 "  try #{tried}: rec_len={} var_deg={} idx_deg={} diff_deg={} \
                  alternating={} denom=({},{}) homog={} \
-                 inhomo=({},{}) \
-                 (unknowns={unknowns}, equations={equations}, margin={})",
+                 inhomo=({},{}) fit_rows={} verify_rows={} \
+                 (unknowns={unknowns}, weighted={weighted_unknowns}, \
+                 equations={equations}, margin={})",
                 opts.rec_len,
                 opts.var_deg,
                 opts.idx_deg,
@@ -1462,12 +1743,20 @@ pub fn find_recurrence_adaptive_rational(
                 opts.homogeneous,
                 opts.inhomo_var_deg,
                 opts.inhomo_idx_deg,
+                fit_len,
+                m - fit_len,
                 equations - unknowns,
             );
         }
 
-        if let Some(rec) = find_polynomial_recurrence_rational(polys, opts) {
+        if let Some(rec) = find_polynomial_recurrence_rational(fit_polys, opts) {
             if search.require_all_offsets && !recurrence_uses_all_offsets(&rec, opts.rec_len) {
+                continue;
+            }
+            if !verify_heldout_tail(polys, &rec, opts, fit_len, search) {
+                if search.verbose {
+                    eprintln!("  -> fitted prefix but failed held-out verification");
+                }
                 continue;
             }
             if search.verbose {
@@ -1477,7 +1766,10 @@ pub fn find_recurrence_adaptive_rational(
                 recurrence: rec,
                 opts: opts.clone(),
                 num_unknowns: unknowns,
+                weighted_unknowns,
                 num_equations: equations,
+                fit_polynomials: fit_len,
+                verification_polynomials: m - fit_len,
                 candidates_tried: tried,
             });
         }
@@ -1501,8 +1793,14 @@ pub fn find_recurrence_adaptive_rational(
                 continue;
             }
 
-            let unknowns = count_unknowns(opts);
-            let equations = count_equations_rational(polys, opts);
+            let complexity = candidate_complexity(opts);
+            let unknowns = complexity.raw_unknowns;
+            let weighted_unknowns = complexity.weighted_unknowns;
+            let Some(fit_len) = fitting_polynomial_count(polys, opts, search) else {
+                continue;
+            };
+            let fit_polys = &polys[..fit_len];
+            let equations = count_equations_rational(fit_polys, opts);
 
             if equations < unknowns + search.min_margin {
                 continue;
@@ -1514,7 +1812,9 @@ pub fn find_recurrence_adaptive_rational(
                 eprintln!(
                     "  try #{tried} (rational): rec_len={} var_deg={} idx_deg={} diff_deg={} \
                      alternating={} denom=({},{}) \
-                     (unknowns={unknowns}, equations={equations}, margin={})",
+                     fit_rows={} verify_rows={} \
+                     (unknowns={unknowns}, weighted={weighted_unknowns}, \
+                     equations={equations}, margin={})",
                     opts.rec_len,
                     opts.var_deg,
                     opts.idx_deg,
@@ -1522,12 +1822,20 @@ pub fn find_recurrence_adaptive_rational(
                     opts.alternating_sign,
                     opts.denom_var_deg,
                     opts.denom_idx_deg,
+                    fit_len,
+                    m - fit_len,
                     equations - unknowns,
                 );
             }
 
-            if let Some(rec) = find_polynomial_recurrence_rational(polys, opts) {
+            if let Some(rec) = find_polynomial_recurrence_rational(fit_polys, opts) {
                 if search.require_all_offsets && !recurrence_uses_all_offsets(&rec, opts.rec_len) {
+                    continue;
+                }
+                if !verify_heldout_tail(polys, &rec, opts, fit_len, search) {
+                    if search.verbose {
+                        eprintln!("  -> fitted prefix but failed held-out verification");
+                    }
                     continue;
                 }
                 if search.verbose {
@@ -1537,7 +1845,10 @@ pub fn find_recurrence_adaptive_rational(
                     recurrence: rec,
                     opts: opts.clone(),
                     num_unknowns: unknowns,
+                    weighted_unknowns,
                     num_equations: equations,
+                    fit_polynomials: fit_len,
+                    verification_polynomials: m - fit_len,
                     candidates_tried: tried,
                 });
             }
@@ -1880,6 +2191,57 @@ mod tests {
         let polys: Vec<Vec<i64>> = vec![vec![1], vec![2], vec![4], vec![8], vec![16], vec![32]];
         let result = find_recurrence_adaptive(&polys, &AdaptiveSearchOptions::default()).unwrap();
         assert_eq!(format!("{}", result.recurrence), "P(n) = 2 P(n-1)");
+        assert!(result.verification_polynomials >= 1);
+        assert!(result.fit_polynomials < polys.len());
+    }
+
+    #[test]
+    fn adaptive_no_verify_uses_all_rows() {
+        let polys: Vec<Vec<i64>> = vec![vec![1], vec![2], vec![4], vec![8], vec![16], vec![32]];
+        let search = AdaptiveSearchOptions {
+            no_verify: true,
+            ..Default::default()
+        };
+        let result = find_recurrence_adaptive(&polys, &search).unwrap();
+        assert_eq!(format!("{}", result.recurrence), "P(n) = 2 P(n-1)");
+        assert_eq!(result.fit_polynomials, polys.len());
+        assert_eq!(result.verification_polynomials, 0);
+    }
+
+    #[test]
+    fn adaptive_rejects_false_prefix_fit_on_heldout_row() {
+        let polys: Vec<Vec<i64>> = vec![vec![1], vec![2], vec![4], vec![8], vec![17]];
+        let search = AdaptiveSearchOptions {
+            max_rec_len: 1,
+            max_var_deg: 0,
+            max_idx_deg: 0,
+            max_diff_deg: 0,
+            ..Default::default()
+        };
+        assert!(find_recurrence_adaptive(&polys, &search).is_none());
+    }
+
+    #[test]
+    fn weighted_complexity_delays_alternating_terms() {
+        let ordinary = RecurrenceOptions {
+            rec_len: 2,
+            var_deg: 0,
+            idx_deg: 0,
+            diff_deg: 0,
+            homogeneous: true,
+            ..Default::default()
+        };
+        let alternating = RecurrenceOptions {
+            rec_len: 1,
+            var_deg: 0,
+            idx_deg: 0,
+            diff_deg: 0,
+            homogeneous: true,
+            alternating_sign: true,
+            ..Default::default()
+        };
+        assert_eq!(count_unknowns(&ordinary), count_unknowns(&alternating));
+        assert!(count_weighted_unknowns(&ordinary) < count_weighted_unknowns(&alternating));
     }
 
     #[test]
@@ -2037,9 +2399,8 @@ mod tests {
 
     #[test]
     fn adaptive_eulerian() {
-        // With 6 polys, the adaptive search finds a 3-term non-derivative recurrence
-        // (6 unknowns) before the 1-term derivative recurrence (12 unknowns).
-        // Both are valid; the search correctly picks the simpler one.
+        // With held-out verification, prefix-only non-derivative fits are
+        // rejected, and the standard derivative recurrence is found.
         let polys: Vec<Vec<i64>> = vec![
             vec![1],
             vec![1],
@@ -2049,10 +2410,14 @@ mod tests {
             vec![1, 26, 66, 26, 1],
         ];
         let result = find_recurrence_adaptive(&polys, &AdaptiveSearchOptions::default()).unwrap();
-        assert_eq!(result.opts.diff_deg, 0);
-        assert_eq!(result.opts.rec_len, 3);
+        assert_eq!(
+            format!("{}", result.recurrence),
+            "P(n) = (1 - 2t + nt) P(n-1) + (t - t^2) P'(n-1)"
+        );
+        assert_eq!(result.opts.diff_deg, 1);
+        assert_eq!(result.opts.rec_len, 1);
 
-        // With max_diff_deg=0 disabled, force derivative search only:
+        // With max_rec_len=1, the same derivative recurrence is still found.
         let search = AdaptiveSearchOptions {
             max_rec_len: 1,
             max_diff_deg: 2,

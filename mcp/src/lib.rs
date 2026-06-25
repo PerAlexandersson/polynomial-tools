@@ -123,6 +123,8 @@ pub struct RecurrenceSearchOptionsInput {
     pub max_denom_var_deg: Option<usize>,
     pub max_denom_idx_deg: Option<usize>,
     pub min_margin: Option<usize>,
+    pub no_verify: Option<bool>,
+    pub fit_extra_rows: Option<usize>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -351,7 +353,13 @@ pub struct FindRecurrenceResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub unknowns: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub weighted_unknowns: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub equations: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fit_polynomials: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verification_polynomials: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub candidates_tried: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -906,7 +914,10 @@ fn family_recurrence_response(
             mathematica: None,
             sage: None,
             unknowns: None,
+            weighted_unknowns: None,
             equations: None,
+            fit_polynomials: None,
+            verification_polynomials: None,
             candidates_tried: None,
             error: Some("need at least 3 polynomials".to_string()),
             parse_errors: Vec::new(),
@@ -922,7 +933,10 @@ fn family_recurrence_response(
             mathematica: Some(result.recurrence.to_mathematica_definition(coefficients)),
             sage: Some(result.recurrence.to_sage_definition(coefficients)),
             unknowns: Some(result.num_unknowns),
+            weighted_unknowns: Some(result.weighted_unknowns),
             equations: Some(result.num_equations),
+            fit_polynomials: Some(result.fit_polynomials),
+            verification_polynomials: Some(result.verification_polynomials),
             candidates_tried: Some(result.candidates_tried),
             error: None,
             parse_errors: Vec::new(),
@@ -934,7 +948,10 @@ fn family_recurrence_response(
             mathematica: None,
             sage: None,
             unknowns: None,
+            weighted_unknowns: None,
             equations: None,
+            fit_polynomials: None,
+            verification_polynomials: None,
             candidates_tried: None,
             error: Some("no recurrence found within the search bounds".to_string()),
             parse_errors: Vec::new(),
@@ -1228,6 +1245,12 @@ fn apply_recurrence_options(input: Option<RecurrenceSearchOptionsInput>) -> Adap
     }
     if let Some(value) = input.min_margin {
         options.min_margin = value;
+    }
+    if let Some(value) = input.no_verify {
+        options.no_verify = value;
+    }
+    if let Some(value) = input.fit_extra_rows {
+        options.fit_extra_rows = value;
     }
     options.verbose = false;
     options
@@ -1532,7 +1555,10 @@ impl PolynomialToolsServer {
                     mathematica: None,
                     sage: None,
                     unknowns: None,
+                    weighted_unknowns: None,
                     equations: None,
+                    fit_polynomials: None,
+                    verification_polynomials: None,
                     candidates_tried: None,
                     error: Some("one or more polynomials failed to parse".to_string()),
                     parse_errors,
@@ -1547,7 +1573,10 @@ impl PolynomialToolsServer {
                 mathematica: None,
                 sage: None,
                 unknowns: None,
+                weighted_unknowns: None,
                 equations: None,
+                fit_polynomials: None,
+                verification_polynomials: None,
                 candidates_tried: None,
                 error: Some("need at least 3 polynomials".to_string()),
                 parse_errors: Vec::new(),
@@ -1566,7 +1595,10 @@ impl PolynomialToolsServer {
                 ),
                 sage: Some(result.recurrence.to_sage_definition_rational(&polynomials)),
                 unknowns: Some(result.num_unknowns),
+                weighted_unknowns: Some(result.weighted_unknowns),
                 equations: Some(result.num_equations),
+                fit_polynomials: Some(result.fit_polynomials),
+                verification_polynomials: Some(result.verification_polynomials),
                 candidates_tried: Some(result.candidates_tried),
                 error: None,
                 parse_errors: Vec::new(),
@@ -1578,7 +1610,10 @@ impl PolynomialToolsServer {
                 mathematica: None,
                 sage: None,
                 unknowns: None,
+                weighted_unknowns: None,
                 equations: None,
+                fit_polynomials: None,
+                verification_polynomials: None,
                 candidates_tried: None,
                 error: Some("no recurrence found within the search bounds".to_string()),
                 parse_errors: Vec::new(),

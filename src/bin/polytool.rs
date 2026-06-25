@@ -176,6 +176,9 @@ fn print_recurrence_help() {
     println!("  --max-denom-var-deg <d>    Maximum t-degree for denominators");
     println!("  --max-denom-idx-deg <d>    Maximum n-degree for denominators");
     println!("  --alternating-sign         Also try alternating-sign terms");
+    println!("  --min-margin <n>           Require equations >= unknowns + n");
+    println!("  --fit-extra-rows <n>       Extra rows beyond the first solvable prefix");
+    println!("  --no-verify                Use all input rows for fitting");
     println!("  --verbose                  Print candidate search details");
     println!("  -h, --help                 Print this help text");
     println!();
@@ -1005,6 +1008,17 @@ fn cmd_recurrence(args: &[String]) {
                 search.try_denominator = true;
                 search.max_denom_idx_deg = args[i].parse().unwrap();
             }
+            "--min-margin" => {
+                i += 1;
+                search.min_margin = args[i].parse().unwrap();
+            }
+            "--fit-extra-rows" => {
+                i += 1;
+                search.fit_extra_rows = args[i].parse().unwrap();
+            }
+            "--no-verify" => {
+                search.no_verify = true;
+            }
             "--verbose" => {
                 search.verbose = true;
             }
@@ -1027,8 +1041,14 @@ fn cmd_recurrence(args: &[String]) {
         Some(res) => {
             println!("{}", res.recurrence);
             eprintln!(
-                "Found with {} unknowns, {} equations ({} candidates tried)",
-                res.num_unknowns, res.num_equations, res.candidates_tried
+                "Found with {} unknowns, weighted score {}, {} equations, {} fit rows, \
+                 {} verification rows ({} candidates tried)",
+                res.num_unknowns,
+                res.weighted_unknowns,
+                res.num_equations,
+                res.fit_polynomials,
+                res.verification_polynomials,
+                res.candidates_tried
             );
         }
         None => {
@@ -1158,7 +1178,10 @@ struct RecurrenceSummary {
     found: bool,
     recurrence: Option<String>,
     unknowns: Option<usize>,
+    weighted_unknowns: Option<usize>,
     equations: Option<usize>,
+    fit_polynomials: Option<usize>,
+    verification_polynomials: Option<usize>,
     candidates_tried: Option<usize>,
     error: Option<String>,
 }
@@ -1242,7 +1265,10 @@ fn find_family_recurrence(polys: &[Vec<i64>]) -> RecurrenceSummary {
             found: false,
             recurrence: None,
             unknowns: None,
+            weighted_unknowns: None,
             equations: None,
+            fit_polynomials: None,
+            verification_polynomials: None,
             candidates_tried: None,
             error: Some("need at least 3 polynomials".to_string()),
         };
@@ -1253,7 +1279,10 @@ fn find_family_recurrence(polys: &[Vec<i64>]) -> RecurrenceSummary {
             found: true,
             recurrence: Some(result.recurrence.to_string()),
             unknowns: Some(result.num_unknowns),
+            weighted_unknowns: Some(result.weighted_unknowns),
             equations: Some(result.num_equations),
+            fit_polynomials: Some(result.fit_polynomials),
+            verification_polynomials: Some(result.verification_polynomials),
             candidates_tried: Some(result.candidates_tried),
             error: None,
         },
@@ -1261,7 +1290,10 @@ fn find_family_recurrence(polys: &[Vec<i64>]) -> RecurrenceSummary {
             found: false,
             recurrence: None,
             unknowns: None,
+            weighted_unknowns: None,
             equations: None,
+            fit_polynomials: None,
+            verification_polynomials: None,
             candidates_tried: None,
             error: Some("no recurrence found within the search bounds".to_string()),
         },
@@ -1270,7 +1302,8 @@ fn find_family_recurrence(polys: &[Vec<i64>]) -> RecurrenceSummary {
 
 fn recurrence_summary_json(summary: &RecurrenceSummary) -> String {
     format!(
-        "{{\"found\":{},\"recurrence\":{},\"unknowns\":{},\"equations\":{},\
+        "{{\"found\":{},\"recurrence\":{},\"unknowns\":{},\"weighted_unknowns\":{},\
+         \"equations\":{},\"fit_polynomials\":{},\"verification_polynomials\":{},\
          \"candidates_tried\":{},\"error\":{}}}",
         summary.found,
         summary
@@ -1283,7 +1316,19 @@ fn recurrence_summary_json(summary: &RecurrenceSummary) -> String {
             .map(|n| n.to_string())
             .unwrap_or_else(|| "null".to_string()),
         summary
+            .weighted_unknowns
+            .map(|n| n.to_string())
+            .unwrap_or_else(|| "null".to_string()),
+        summary
             .equations
+            .map(|n| n.to_string())
+            .unwrap_or_else(|| "null".to_string()),
+        summary
+            .fit_polynomials
+            .map(|n| n.to_string())
+            .unwrap_or_else(|| "null".to_string()),
+        summary
+            .verification_polynomials
             .map(|n| n.to_string())
             .unwrap_or_else(|| "null".to_string()),
         summary

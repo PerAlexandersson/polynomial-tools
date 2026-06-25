@@ -44,7 +44,13 @@ struct RecurrenceResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     unknowns: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    weighted_unknowns: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     equations: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fit_polynomials: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    verification_polynomials: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     candidates_tried: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -240,6 +246,7 @@ pub fn compute_discriminant(input: &str) -> String {
 }
 
 #[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
 pub fn find_recurrence(
     input: &str,
     max_rec_len: u32,
@@ -259,7 +266,10 @@ pub fn find_recurrence(
             mathematica: None,
             sage: None,
             unknowns: None,
+            weighted_unknowns: None,
             equations: None,
+            fit_polynomials: None,
+            verification_polynomials: None,
             candidates_tried: None,
             error: Some("need at least 3 polynomials".to_string()),
         })
@@ -285,7 +295,10 @@ pub fn find_recurrence(
             mathematica: Some(res.recurrence.to_mathematica_definition(&polys)),
             sage: Some(res.recurrence.to_sage_definition(&polys)),
             unknowns: Some(res.num_unknowns),
+            weighted_unknowns: Some(res.weighted_unknowns),
             equations: Some(res.num_equations),
+            fit_polynomials: Some(res.fit_polynomials),
+            verification_polynomials: Some(res.verification_polynomials),
             candidates_tried: Some(res.candidates_tried),
             error: None,
         })
@@ -297,7 +310,10 @@ pub fn find_recurrence(
             mathematica: None,
             sage: None,
             unknowns: None,
+            weighted_unknowns: None,
             equations: None,
+            fit_polynomials: None,
+            verification_polynomials: None,
             candidates_tried: None,
             error: Some("no recurrence found within search bounds".to_string()),
         })
