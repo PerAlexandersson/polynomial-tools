@@ -90,18 +90,13 @@ pub struct BivarPoly {
 }
 
 /// Extra sign factor attached to one recurrence term.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum RecurrenceSign {
     /// No extra sign factor.
+    #[default]
     None,
     /// Multiply the term by (-1)^n.
     AlternatingN,
-}
-
-impl Default for RecurrenceSign {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 impl RecurrenceSign {
