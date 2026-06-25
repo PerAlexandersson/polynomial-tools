@@ -63,7 +63,7 @@ fn format_rows(rows: &[Vec<BigRational>]) -> Vec<String> {
 #[test]
 fn recurrence_json_fixtures_regenerate_raw_rows() {
     let fixtures = parse_manifest();
-    assert_eq!(fixtures.len(), 20, "expected the benchmark fixture suite");
+    assert_eq!(fixtures.len(), 23, "expected the benchmark fixture suite");
 
     for fixture in fixtures {
         let expected = read_rows(Path::new(BASE).join(&fixture.rows_file));
