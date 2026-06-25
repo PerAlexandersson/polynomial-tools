@@ -1,0 +1,60 @@
+{
+  "schema": "polynomial-tools.recurrence.v1",
+  "first_index": 1,
+  "initial_polynomials": [
+    [
+      "1"
+    ]
+  ],
+  "recurrence": {
+    "terms": [
+      {
+        "offset": 1,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "1"
+            ]
+          ]
+        }
+      }
+    ],
+    "inhomogeneous": {
+      "coeffs": [
+        [
+          "0",
+          "1"
+        ],
+        [
+          "1",
+          "0"
+        ]
+      ]
+    }
+  },
+  "search": {
+    "recurrence_text": "P(n) = P(n-1) + n + t",
+    "source_rows": 50,
+    "skip_prefix": 0,
+    "unknowns": 5,
+    "weighted_unknowns": 17,
+    "equations": 9,
+    "fit_polynomials": 4,
+    "verification_polynomials": 46,
+    "candidates_tried": 5,
+    "options": {
+      "var_deg": 0,
+      "idx_deg": 0,
+      "diff_deg": 0,
+      "rec_len": 1,
+      "homogeneous": false,
+      "inhomo_var_deg": 1,
+      "inhomo_idx_deg": 1,
+      "denom_var_deg": 0,
+      "denom_idx_deg": 0,
+      "alternating_sign": false
+    }
+  }
+}
