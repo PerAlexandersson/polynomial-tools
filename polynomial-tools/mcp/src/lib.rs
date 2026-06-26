@@ -104,7 +104,6 @@ pub struct InterlacingPairRequest {
 #[serde(deny_unknown_fields)]
 pub struct RecurrenceSearchOptionsInput {
     pub skip_prefix: Option<usize>,
-    pub require_all_offsets: Option<bool>,
     pub min_rec_len: Option<usize>,
     pub max_rec_len: Option<usize>,
     pub min_var_deg: Option<usize>,
@@ -1182,9 +1181,6 @@ fn apply_recurrence_options(input: Option<RecurrenceSearchOptionsInput>) -> Adap
 
     if let Some(value) = input.skip_prefix {
         options.skip_prefix = value;
-    }
-    if let Some(value) = input.require_all_offsets {
-        options.require_all_offsets = value;
     }
     if let Some(value) = input.min_rec_len {
         options.min_rec_len = value;

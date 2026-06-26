@@ -160,7 +160,6 @@ fn print_recurrence_help() {
     println!();
     println!("Search options:");
     println!("  --skip-prefix <n>          Ignore the first n input polynomials");
-    println!("  --full-depth               Require all recurrence offsets to be used");
     println!("  --min-rec-len <n>          Minimum number of previous rows to use");
     println!("  --max-rec-len <n>          Maximum number of previous rows to use");
     println!("  --min-var-deg <d>          Minimum t-degree for recurrence coefficients");
@@ -976,9 +975,6 @@ fn cmd_recurrence(args: &[String]) {
                 i += 1;
                 search.skip_prefix = args[i].parse().unwrap();
             }
-            "--full-depth" => {
-                search.require_all_offsets = true;
-            }
             "--min-rec-len" => {
                 i += 1;
                 search.min_rec_len = args[i].parse().unwrap();
@@ -1064,7 +1060,10 @@ fn cmd_recurrence(args: &[String]) {
             "--verbose" => {
                 search.verbose = true;
             }
-            _ => {}
+            other => {
+                eprintln!("unknown recurrence option: {other}");
+                return;
+            }
         }
         i += 1;
     }
