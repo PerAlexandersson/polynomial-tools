@@ -194,6 +194,7 @@ fn print_recurrence_help() {
     println!("  --min-margin <n>           Require equations >= unknowns + n");
     println!("  --fit-extra-rows <n>       Extra rows beyond the first solvable prefix");
     println!("  --no-verify                Use all input rows for fitting");
+    println!("  --modular-prefilter        Probabilistically reject candidates modulo primes");
     println!("  --json                     Emit recurrence JSON with initial conditions");
     println!("  --format json              Alias for --json");
     println!("  --python                   Emit exact Python code for the recurrence");
@@ -1238,6 +1239,9 @@ fn cmd_recurrence(args: &[String]) {
             }
             "--no-verify" => {
                 search.no_verify = true;
+            }
+            "--modular-prefilter" => {
+                search.modular_prefilter = true;
             }
             "--verbose" => {
                 search.verbose = true;

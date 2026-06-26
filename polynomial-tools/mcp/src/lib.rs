@@ -126,6 +126,7 @@ pub struct RecurrenceSearchOptionsInput {
     pub min_margin: Option<usize>,
     pub no_verify: Option<bool>,
     pub fit_extra_rows: Option<usize>,
+    pub modular_prefilter: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -1393,6 +1394,9 @@ fn apply_recurrence_options(input: Option<RecurrenceSearchOptionsInput>) -> Adap
     }
     if let Some(value) = input.fit_extra_rows {
         options.fit_extra_rows = value;
+    }
+    if let Some(value) = input.modular_prefilter {
+        options.modular_prefilter = value;
     }
     options.verbose = false;
     options
