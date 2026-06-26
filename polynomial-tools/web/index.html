@@ -1099,6 +1099,8 @@ function copyRec(btn, kind) {
     latex: '_lastRecLatex',
     mathematica: '_lastRecMathematica',
     sage: '_lastRecSage',
+    python: '_lastRecPython',
+    json: '_lastRecJson',
   })[kind] || '_lastRecPlain';
   const text = window[key] || '';
   navigator.clipboard.writeText(text).then(() => {
@@ -1131,6 +1133,20 @@ function renderRecurrenceCodeStack(data) {
       'Sage',
       'Defines P(n) in a polynomial ring over QQ, memoized from the discovered recurrence and initial values.',
       data.sage
+    ));
+  }
+  if (data.python) {
+    cards.push(renderRecurrenceCodeCard(
+      'Python',
+      'Defines P(n) using exact Fraction arithmetic and coefficient lists in ascending powers of t.',
+      data.python
+    ));
+  }
+  if (data.recurrence_json) {
+    cards.push(renderRecurrenceCodeCard(
+      'Recurrence JSON',
+      'Machine-readable recurrence with initial values; usable by polytool recurrence-generate.',
+      data.recurrence_json
     ));
   }
   return cards.length ? ('<div class="recurrence-code-stack">' + cards.join('') + '</div>') : '';
@@ -1225,7 +1241,7 @@ function renderProperties(text) {
   const counts = computeInterlacingCounts(data);
   const ms = (performance.now() - t0).toFixed(1);
   renderPropsTable(data, counts);
-  setStatus(data.length + ' polynomial(s) checked in ' + ms + ' ms, including interlacing.');
+  setStatus(data.length + ' polynomial(s) checked in ' + ms + ' ms, including consecutive interlacing profile.');
 }
 
 function computeInterlacingCounts(data) {
@@ -1238,17 +1254,18 @@ function computeInterlacingCounts(data) {
     const itemI = data[i];
     if (itemI.error || !itemI.coefficients) { counts[i] = null; continue; }
     let count = 0;
-    const degI = itemI.degree;
     const ci = JSON.stringify(itemI.coefficients);
 
     for (let j = i - 1; j >= 0; j--) {
       const itemJ = data[j];
-      if (itemJ.error || !itemJ.coefficients) continue;
-      const degJ = itemJ.degree;
-      if (Math.abs(degI - degJ) > 1) continue;
+      if (itemJ.error || !itemJ.coefficients) break;
       const cj = JSON.stringify(itemJ.coefficients);
       const result = JSON.parse(check_interlacing_pair(cj, ci));
-      if (result.strict || result.weak) count++;
+      if (result.strict || result.weak) {
+        count++;
+      } else {
+        break;
+      }
     }
     counts[i] = count;
   }
@@ -1276,9 +1293,9 @@ function renderPropsTable(data, interlacingCounts) {
       if (count === undefined || count === null) {
         intCell = '<td class="icons">' + mini('—', null, '', '', 'Interlacing data unavailable') + '</td>';
       } else if (count > 0) {
-        intCell = '<td class="icons">' + mini(String(count), true, 'Interlaces ' + count + ' earlier polynomial(s)') + '</td>';
+        intCell = '<td class="icons">' + mini(String(count), true, 'Interlaces ' + count + ' consecutive previous polynomial(s) before first failure') + '</td>';
       } else {
-        intCell = '<td class="icons">' + mini('0', null, '', '', 'Interlaces no earlier polynomials') + '</td>';
+        intCell = '<td class="icons">' + mini('0', null, '', '', 'No previous consecutive interlacing before first failure') + '</td>';
       }
     }
     rows.push(
@@ -1762,6 +1779,8 @@ function startRecurrence(text) {
           '<button class="copy-btn" onclick="copyRec(this,\'latex\')">Copy LaTeX</button>' +
           (data.mathematica ? '<button class="copy-btn" onclick="copyRec(this,\'mathematica\')">Copy Mathematica</button>' : '') +
           (data.sage ? '<button class="copy-btn" onclick="copyRec(this,\'sage\')">Copy Sage</button>' : '') +
+          (data.python ? '<button class="copy-btn" onclick="copyRec(this,\'python\')">Copy Python</button>' : '') +
+          (data.recurrence_json ? '<button class="copy-btn" onclick="copyRec(this,\'json\')">Copy JSON</button>' : '') +
           '</div>';
         const statsEl = '<div class="recurrence-stats">' +
                         esc(data.unknowns + ' unknowns, ' +
@@ -1774,6 +1793,8 @@ function startRecurrence(text) {
         window._lastRecLatex = data.latex;
         window._lastRecMathematica = data.mathematica || '';
         window._lastRecSage = data.sage || '';
+        window._lastRecPython = data.python || '';
+        window._lastRecJson = data.recurrence_json || '';
         // Render KaTeX (may load async)
         try {
           katex.render(data.latex, document.getElementById('recurrence-katex'), {displayMode: true, throwOnError: false});

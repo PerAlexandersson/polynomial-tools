@@ -1,3 +1,4 @@
+use polynomial_tools::recurrence::BigRational as RecurrenceBigRational;
 use polynomial_tools::recurrence::*;
 use polynomial_tools::*;
 use serde::Serialize;
@@ -41,6 +42,10 @@ struct RecurrenceResult {
     mathematica: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     sage: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    python: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    recurrence_json: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     unknowns: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -120,6 +125,48 @@ fn strip_trailing_zeros(coeffs: &[i64]) -> &[i64] {
     } else {
         &coeffs[..end]
     }
+}
+
+fn integer_polys_to_rational(polys: &[Vec<i64>]) -> Vec<Vec<RecurrenceBigRational>> {
+    polys
+        .iter()
+        .map(|row| {
+            row.iter()
+                .map(|coeff| {
+                    parse_rational_coeff(&coeff.to_string())
+                        .expect("integer coefficients parse as rationals")
+                })
+                .collect()
+        })
+        .collect()
+}
+
+fn recurrence_json_output(
+    result: &AdaptiveSearchResult,
+    polys: &[Vec<i64>],
+    search: &AdaptiveSearchOptions,
+) -> String {
+    let rational_polys = integer_polys_to_rational(polys);
+    let searched_polys = rational_polys.get(search.skip_prefix..).unwrap_or(&[]);
+    let initial_count = result.recurrence.max_offset().min(searched_polys.len());
+    let recurrence_json = RecurrenceJson::from_recurrence_rational(
+        &result.recurrence,
+        1,
+        &searched_polys[..initial_count],
+        Some(RecurrenceJsonSearch {
+            recurrence_text: result.recurrence.to_string(),
+            source_rows: polys.len(),
+            skip_prefix: search.skip_prefix,
+            unknowns: result.num_unknowns,
+            weighted_unknowns: result.weighted_unknowns,
+            equations: result.num_equations,
+            fit_polynomials: result.fit_polynomials,
+            verification_polynomials: result.verification_polynomials,
+            candidates_tried: result.candidates_tried,
+            options: RecurrenceOptionsJson::from(&result.opts),
+        }),
+    );
+    serde_json::to_string_pretty(&recurrence_json).expect("serialize recurrence JSON")
 }
 
 fn parse_input(input: &str) -> Vec<Result<Vec<i64>, String>> {
@@ -265,6 +312,8 @@ pub fn find_recurrence(
             latex: None,
             mathematica: None,
             sage: None,
+            python: None,
+            recurrence_json: None,
             unknowns: None,
             weighted_unknowns: None,
             equations: None,
@@ -294,6 +343,8 @@ pub fn find_recurrence(
             latex: Some(res.recurrence.to_latex()),
             mathematica: Some(res.recurrence.to_mathematica_definition(&polys)),
             sage: Some(res.recurrence.to_sage_definition(&polys)),
+            python: Some(res.recurrence.to_python_definition(&polys)),
+            recurrence_json: Some(recurrence_json_output(&res, &polys, &search)),
             unknowns: Some(res.num_unknowns),
             weighted_unknowns: Some(res.weighted_unknowns),
             equations: Some(res.num_equations),
@@ -309,6 +360,8 @@ pub fn find_recurrence(
             latex: None,
             mathematica: None,
             sage: None,
+            python: None,
+            recurrence_json: None,
             unknowns: None,
             weighted_unknowns: None,
             equations: None,

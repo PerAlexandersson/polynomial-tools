@@ -300,6 +300,25 @@ Example arguments:
 
 Returns parsed `items` and pairwise `pairs`.
 
+### `check_interlacing_profile`
+
+For each row, check previous rows backward and stop at the first failure.  This
+is useful for quickly profiling how long the local interlacing chain persists.
+
+Example arguments:
+
+```json
+{
+  "text": "1\n1, 1\n1, 2, 1\n1, 0, 1"
+}
+```
+
+Returns parsed `items` and a `profile` array.  Each profile row includes
+`previous_count`, `checked_previous_count`, `interlacing_previous_count`,
+strict/weak counts, the successful previous indices, and the checked pair
+reports.  The checked pair reports are ordered backward from the immediately
+previous row and include the first failure when there is one.
+
 ### `real_roots`
 
 Return rational midpoint representatives from the existing Sturm isolation
@@ -364,9 +383,45 @@ Important option fields:
 - `try_alternating_sign`
 - `max_denom_var_deg`, `max_denom_idx_deg`
 - `min_margin`
+- `fit_extra_rows`
+- `no_verify`
 
 `verbose` is intentionally not exposed through MCP, so the server never writes
 search traces into the stdio protocol stream.
+
+When a recurrence is found, the response includes:
+
+- `recurrence`: compact plaintext recurrence
+- `latex`
+- `mathematica`
+- `sage`
+- `python`: exact standalone Python code using `fractions.Fraction`
+- `recurrence_json`: a saved recurrence record with initial values, suitable
+  for `generate_recurrence_rows` or `polytool recurrence-generate`
+- search metadata such as `unknowns`, `equations`, `fit_polynomials`,
+  `verification_polynomials`, and `candidates_tried`
+
+### `generate_recurrence_rows`
+
+Generate or extend coefficient rows from `recurrence_json` returned by
+`find_recurrence`.
+
+Example arguments:
+
+```json
+{
+  "recurrence_json": "{ ... JSON string returned by find_recurrence ... }",
+  "rows": 20
+}
+```
+
+Use exactly one of:
+
+- `rows`: total number of rows to return, including initial rows;
+- `additional`: append this many rows after the initial rows.
+
+The response contains `first_index`, `row_count`, and `polynomials`, where
+coefficients are exact rational strings in ascending powers of `t`.
 
 ### `resultant`
 
