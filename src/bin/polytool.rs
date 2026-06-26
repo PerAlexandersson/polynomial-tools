@@ -64,6 +64,17 @@ fn json_i64_vec(values: &[i64]) -> String {
     )
 }
 
+fn json_usize_vec(values: &[usize]) -> String {
+    format!(
+        "[{}]",
+        values
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(",")
+    )
+}
+
 fn json_string_vec(values: &[String]) -> String {
     format!(
         "[{}]",
@@ -112,6 +123,8 @@ fn print_top_level_help() {
     println!("Commands:");
     println!("  real-rooted       Check real-rootedness of each polynomial");
     println!("  interlacing       Check interlacing of consecutive polynomial pairs");
+    println!("  interlacing-profile");
+    println!("                    Count previous polynomials interlaced by each row");
     println!("  properties        Show real-rootedness, unimodality, and related properties");
     println!("  gamma-expansion   Expand palindromic polynomials in the gamma basis");
     println!("  family-check      Check properties and consecutive interlacing together");
@@ -183,6 +196,8 @@ fn print_recurrence_help() {
     println!("  --no-verify                Use all input rows for fitting");
     println!("  --json                     Emit recurrence JSON with initial conditions");
     println!("  --format json              Alias for --json");
+    println!("  --python                   Emit exact Python code for the recurrence");
+    println!("  --format python            Alias for --python");
     println!("  --verbose                  Print candidate search details");
     println!("  -h, --help                 Print this help text");
     println!();
@@ -278,8 +293,22 @@ fn print_command_help(command: &str) -> bool {
             "interlacing",
             "Check strict and weak interlacing for consecutive input pairs.",
             &[
+                "Options:",
+                "  --json    Emit machine-readable JSON",
+                "",
                 "Example:",
                 "  printf '2,-3,1\\n-1,1\\n' | polytool interlacing",
+            ],
+        ),
+        "interlacing-profile" => print_stdin_command_help(
+            "interlacing-profile",
+            "For each row, count how many previous rows it weakly or strictly interlaces.",
+            &[
+                "Options:",
+                "  --json    Emit machine-readable JSON, including all previous-pair reports",
+                "",
+                "Example:",
+                "  printf '1\\n1,1\\n1,2,1\\n' | polytool interlacing-profile",
             ],
         ),
         "properties" => print_stdin_command_help(
@@ -644,6 +673,85 @@ fn print_interlacing_reports_json(reports: &[InterlacingReport]) {
     );
 }
 
+#[derive(Clone, Debug)]
+struct InterlacingProfileReport {
+    index: usize,
+    polynomial: String,
+    previous_count: usize,
+    interlacing_previous_count: usize,
+    strict_previous_count: usize,
+    weak_previous_count: usize,
+    previous_interlacing_indices: Vec<usize>,
+    previous: Vec<InterlacingReport>,
+}
+
+fn interlacing_report_has_interlacing(report: &InterlacingReport) -> bool {
+    matches!(
+        report.status.as_str(),
+        "strictly_interlace" | "weakly_interlace"
+    )
+}
+
+fn interlacing_profile_report(
+    index: usize,
+    polynomial: &[i64],
+    previous: Vec<InterlacingReport>,
+) -> InterlacingProfileReport {
+    let previous_interlacing_indices = previous
+        .iter()
+        .filter(|report| interlacing_report_has_interlacing(report))
+        .map(|report| report.left_index)
+        .collect::<Vec<_>>();
+    InterlacingProfileReport {
+        index,
+        polynomial: format_poly(polynomial),
+        previous_count: previous.len(),
+        interlacing_previous_count: previous_interlacing_indices.len(),
+        strict_previous_count: previous
+            .iter()
+            .filter(|report| report.strict == Some(true))
+            .count(),
+        weak_previous_count: previous
+            .iter()
+            .filter(|report| report.weak == Some(true))
+            .count(),
+        previous_interlacing_indices,
+        previous,
+    }
+}
+
+fn interlacing_profile_report_json(report: &InterlacingProfileReport) -> String {
+    format!(
+        "{{\"index\":{},\"polynomial\":{},\"previous_count\":{},\
+         \"interlacing_previous_count\":{},\"strict_previous_count\":{},\
+         \"weak_previous_count\":{},\"previous_interlacing_indices\":{},\"previous\":[{}]}}",
+        report.index,
+        json_string(&report.polynomial),
+        report.previous_count,
+        report.interlacing_previous_count,
+        report.strict_previous_count,
+        report.weak_previous_count,
+        json_usize_vec(&report.previous_interlacing_indices),
+        report
+            .previous
+            .iter()
+            .map(interlacing_report_json)
+            .collect::<Vec<_>>()
+            .join(",")
+    )
+}
+
+fn print_interlacing_profile_reports_json(reports: &[InterlacingProfileReport]) {
+    println!(
+        "{{\"items\":[{}]}}",
+        reports
+            .iter()
+            .map(interlacing_profile_report_json)
+            .collect::<Vec<_>>()
+            .join(",")
+    );
+}
+
 fn cmd_interlacing(args: &[String]) {
     let format = match OutputFormat::from_args(args) {
         Ok(format) => format,
@@ -678,6 +786,63 @@ fn cmd_interlacing(args: &[String]) {
             _ => "incompatible degrees",
         };
         println!("{} & {}: {}", report.p, report.q, status);
+    }
+}
+
+fn cmd_interlacing_profile(args: &[String]) {
+    let format = match OutputFormat::from_args(args) {
+        Ok(format) => format,
+        Err(error) => {
+            eprintln!("{error}");
+            return;
+        }
+    };
+    let polys = read_polys()
+        .into_iter()
+        .map(|coeffs| strip_trailing_zeros(&coeffs).to_vec())
+        .collect::<Vec<_>>();
+    if polys.is_empty() {
+        eprintln!("Need at least one polynomial for interlacing profile.");
+        return;
+    }
+
+    let mut pair_index = 0;
+    let mut reports = Vec::with_capacity(polys.len());
+    for current in 0..polys.len() {
+        let mut previous = Vec::with_capacity(current);
+        for left in 0..current {
+            previous.push(interlacing_report(
+                pair_index,
+                left,
+                current,
+                &polys[left],
+                &polys[current],
+            ));
+            pair_index += 1;
+        }
+        reports.push(interlacing_profile_report(
+            current,
+            &polys[current],
+            previous,
+        ));
+    }
+
+    if format == OutputFormat::Json {
+        print_interlacing_profile_reports_json(&reports);
+        return;
+    }
+
+    for report in reports {
+        println!(
+            "row {}: {}/{} previous rows interlace; strict={}, weak={}; indices={:?}; {}",
+            report.index,
+            report.interlacing_previous_count,
+            report.previous_count,
+            report.strict_previous_count,
+            report.weak_previous_count,
+            report.previous_interlacing_indices,
+            report.polynomial
+        );
     }
 }
 
@@ -945,6 +1110,13 @@ fn cmd_sequence(args: &[String]) {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RecurrenceOutputFormat {
+    Text,
+    Json,
+    Python,
+}
+
 fn cmd_recurrence(args: &[String]) {
     if args.iter().any(|arg| is_help_arg(arg)) {
         print_recurrence_help();
@@ -952,19 +1124,23 @@ fn cmd_recurrence(args: &[String]) {
     }
 
     let mut search = AdaptiveSearchOptions::default();
-    let mut format = OutputFormat::Text;
+    let mut format = RecurrenceOutputFormat::Text;
 
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
             "--json" => {
-                format = OutputFormat::Json;
+                format = RecurrenceOutputFormat::Json;
+            }
+            "--python" => {
+                format = RecurrenceOutputFormat::Python;
             }
             "--format" => {
                 i += 1;
                 format = match args[i].as_str() {
-                    "text" => OutputFormat::Text,
-                    "json" => OutputFormat::Json,
+                    "text" => RecurrenceOutputFormat::Text,
+                    "json" => RecurrenceOutputFormat::Json,
+                    "python" => RecurrenceOutputFormat::Python,
                     other => {
                         eprintln!("unknown recurrence output format: {other}");
                         return;
@@ -1080,33 +1256,42 @@ fn cmd_recurrence(args: &[String]) {
     );
     match find_recurrence_adaptive_rational(&polys, &search) {
         Some(res) => {
-            if format == OutputFormat::Json {
-                let searched_polys = polys.get(search.skip_prefix..).unwrap_or(&[]);
-                let initial_count = res.recurrence.max_offset().min(searched_polys.len());
-                let initial_polys = &searched_polys[..initial_count];
-                let recurrence_json = RecurrenceJson::from_recurrence_rational(
-                    &res.recurrence,
-                    1,
-                    initial_polys,
-                    Some(RecurrenceJsonSearch {
-                        recurrence_text: res.recurrence.to_string(),
-                        source_rows: polys.len(),
-                        skip_prefix: search.skip_prefix,
-                        unknowns: res.num_unknowns,
-                        weighted_unknowns: res.weighted_unknowns,
-                        equations: res.num_equations,
-                        fit_polynomials: res.fit_polynomials,
-                        verification_polynomials: res.verification_polynomials,
-                        candidates_tried: res.candidates_tried,
-                        options: RecurrenceOptionsJson::from(&res.opts),
-                    }),
-                );
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&recurrence_json).unwrap()
-                );
-            } else {
-                println!("{}", res.recurrence);
+            let searched_polys = polys.get(search.skip_prefix..).unwrap_or(&[]);
+            let initial_count = res.recurrence.max_offset().min(searched_polys.len());
+            let initial_polys = &searched_polys[..initial_count];
+            match format {
+                RecurrenceOutputFormat::Json => {
+                    let recurrence_json = RecurrenceJson::from_recurrence_rational(
+                        &res.recurrence,
+                        1,
+                        initial_polys,
+                        Some(RecurrenceJsonSearch {
+                            recurrence_text: res.recurrence.to_string(),
+                            source_rows: polys.len(),
+                            skip_prefix: search.skip_prefix,
+                            unknowns: res.num_unknowns,
+                            weighted_unknowns: res.weighted_unknowns,
+                            equations: res.num_equations,
+                            fit_polynomials: res.fit_polynomials,
+                            verification_polynomials: res.verification_polynomials,
+                            candidates_tried: res.candidates_tried,
+                            options: RecurrenceOptionsJson::from(&res.opts),
+                        }),
+                    );
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&recurrence_json).unwrap()
+                    );
+                }
+                RecurrenceOutputFormat::Python => {
+                    println!(
+                        "{}",
+                        res.recurrence.to_python_definition_rational(initial_polys)
+                    );
+                }
+                RecurrenceOutputFormat::Text => {
+                    println!("{}", res.recurrence);
+                }
             }
             eprintln!(
                 "Found with {} unknowns, weighted score {}, {} equations, {} fit rows, \
@@ -2042,6 +2227,7 @@ fn main() {
     match cmd.as_str() {
         "real-rooted" => cmd_real_rooted(),
         "interlacing" => cmd_interlacing(rest),
+        "interlacing-profile" => cmd_interlacing_profile(rest),
         "properties" => cmd_properties(rest),
         "gamma-expansion" | "gamma" => cmd_gamma_expansion(rest),
         "family-check" => cmd_family_check(rest),

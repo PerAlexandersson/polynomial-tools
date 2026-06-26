@@ -971,6 +971,53 @@ fn fmt_univariate_poly_rational_code(style: CodeStyle, coeffs: &[BigRational]) -
     join_signed_terms(&terms)
 }
 
+fn fmt_python_rational(r: &BigRational) -> String {
+    if r.denom() == &BigInt::one() {
+        format!("{}", r.numer())
+    } else {
+        format!("Fraction({}, {})", r.numer(), r.denom())
+    }
+}
+
+fn fmt_python_poly_literal(coeffs: &[BigRational]) -> String {
+    format!(
+        "[{}]",
+        coeffs
+            .iter()
+            .map(fmt_python_rational)
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
+}
+
+fn fmt_python_bivar_literal(poly: &BivarPoly) -> String {
+    format!(
+        "[{}]",
+        poly.coeffs
+            .iter()
+            .map(|row| fmt_python_poly_literal(row))
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
+}
+
+fn python_sign_name(sign: RecurrenceSign) -> &'static str {
+    match sign {
+        RecurrenceSign::None => "none",
+        RecurrenceSign::AlternatingN => "alternating_n",
+    }
+}
+
+fn python_term_literal(term: &RecurrenceTerm) -> String {
+    format!(
+        "{{\"offset\": {}, \"deriv_order\": {}, \"sign\": \"{}\", \"coeff\": {}}}",
+        term.offset,
+        term.deriv_order,
+        python_sign_name(term.sign),
+        fmt_python_bivar_literal(&term.coeff)
+    )
+}
+
 impl Recurrence {
     /// Largest recurrence offset used by any term.
     pub fn max_offset(&self) -> usize {
@@ -1147,6 +1194,150 @@ impl Recurrence {
     pub fn to_sage_definition(&self, initial_polys: &[Vec<i64>]) -> String {
         let rational_polys = i64_polys_to_rational(initial_polys);
         self.to_sage_definition_rational(&rational_polys)
+    }
+
+    pub fn to_python_definition_rational(&self, initial_polys: &[Vec<BigRational>]) -> String {
+        let base_count = self.max_offset().min(initial_polys.len());
+        let mut lines = vec![
+            "from fractions import Fraction".to_string(),
+            String::new(),
+            "def _trim(p):".to_string(),
+            "    p = list(p)".to_string(),
+            "    while len(p) > 1 and p[-1] == 0:".to_string(),
+            "        p.pop()".to_string(),
+            "    return p or [0]".to_string(),
+            String::new(),
+            "def _is_zero(p):".to_string(),
+            "    return all(coeff == 0 for coeff in p)".to_string(),
+            String::new(),
+            "def _add(a, b):".to_string(),
+            "    length = max(len(a), len(b))".to_string(),
+            "    out = [0] * length".to_string(),
+            "    for i in range(length):".to_string(),
+            "        out[i] = (a[i] if i < len(a) else 0) + (b[i] if i < len(b) else 0)"
+                .to_string(),
+            "    return _trim(out)".to_string(),
+            String::new(),
+            "def _scale(p, c):".to_string(),
+            "    return _trim([c * coeff for coeff in p])".to_string(),
+            String::new(),
+            "def _mul(a, b):".to_string(),
+            "    if _is_zero(a) or _is_zero(b):".to_string(),
+            "        return [0]".to_string(),
+            "    out = [0] * (len(a) + len(b) - 1)".to_string(),
+            "    for i, ai in enumerate(a):".to_string(),
+            "        for j, bj in enumerate(b):".to_string(),
+            "            out[i + j] += ai * bj".to_string(),
+            "    return _trim(out)".to_string(),
+            String::new(),
+            "def _derivative(p, order):".to_string(),
+            "    out = list(p)".to_string(),
+            "    for _ in range(order):".to_string(),
+            "        if len(out) <= 1:".to_string(),
+            "            return [0]".to_string(),
+            "        out = [(i + 1) * out[i + 1] for i in range(len(out) - 1)]".to_string(),
+            "    return _trim(out)".to_string(),
+            String::new(),
+            "def _div_exact(numerator, denominator):".to_string(),
+            "    denominator = _trim(denominator)".to_string(),
+            "    if _is_zero(denominator):".to_string(),
+            "        raise ZeroDivisionError(\"zero recurrence denominator\")".to_string(),
+            "    remainder = _trim(numerator)".to_string(),
+            "    if _is_zero(remainder):".to_string(),
+            "        return [0]".to_string(),
+            "    if len(remainder) < len(denominator):".to_string(),
+            "        raise ValueError(\"non-exact polynomial quotient\")".to_string(),
+            "    quotient = [0] * (len(remainder) - len(denominator) + 1)".to_string(),
+            "    denominator_degree = len(denominator) - 1".to_string(),
+            "    denominator_lc = denominator[-1]".to_string(),
+            "    while not _is_zero(remainder) and len(remainder) - 1 >= denominator_degree:"
+                .to_string(),
+            "        shift = len(remainder) - 1 - denominator_degree".to_string(),
+            "        factor = remainder[-1] / denominator_lc".to_string(),
+            "        quotient[shift] += factor".to_string(),
+            "        for i, coeff in enumerate(denominator):".to_string(),
+            "            remainder[i + shift] -= factor * coeff".to_string(),
+            "        remainder = _trim(remainder)".to_string(),
+            "    if not _is_zero(remainder):".to_string(),
+            "        raise ValueError(\"non-exact polynomial quotient\")".to_string(),
+            "    return _trim(quotient)".to_string(),
+            String::new(),
+            "def _bivar(coeffs, n):".to_string(),
+            "    width = max((len(row) for row in coeffs), default=0)".to_string(),
+            "    out = [0] * width".to_string(),
+            "    n_power = 1".to_string(),
+            "    for row in coeffs:".to_string(),
+            "        for t_power, coeff in enumerate(row):".to_string(),
+            "            out[t_power] += coeff * n_power".to_string(),
+            "        n_power *= n".to_string(),
+            "    return _trim(out)".to_string(),
+            String::new(),
+            "_P_cache = {".to_string(),
+        ];
+        for (idx, coeffs) in initial_polys.iter().take(base_count).enumerate() {
+            lines.push(format!(
+                "    {}: {},",
+                idx + 1,
+                fmt_python_poly_literal(coeffs)
+            ));
+        }
+        lines.push("}".to_string());
+        lines.push(format!(
+            "_terms = [{}]",
+            self.terms
+                .iter()
+                .map(python_term_literal)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+        lines.push(format!(
+            "_denominator = {}",
+            self.denominator
+                .as_ref()
+                .map(fmt_python_bivar_literal)
+                .unwrap_or_else(|| "None".to_string())
+        ));
+        lines.push(format!(
+            "_inhomogeneous = {}",
+            self.inhomogeneous
+                .as_ref()
+                .map(fmt_python_bivar_literal)
+                .unwrap_or_else(|| "None".to_string())
+        ));
+        lines.push(String::new());
+        lines.push("def P(n):".to_string());
+        lines.push("    if n < 1:".to_string());
+        lines.push("        raise ValueError(\"n must be a positive integer\")".to_string());
+        lines.push("    if n in _P_cache:".to_string());
+        lines.push("        return _P_cache[n]".to_string());
+        lines.push("    start = max(_P_cache) + 1 if _P_cache else 1".to_string());
+        lines.push("    for k in range(start, n + 1):".to_string());
+        lines.push("        rhs = [0]".to_string());
+        lines.push("        for term in _terms:".to_string());
+        lines.push(
+            "            ref = _derivative(P(k - term[\"offset\"]), term[\"deriv_order\"])"
+                .to_string(),
+        );
+        lines.push("            coeff = _bivar(term[\"coeff\"], k)".to_string());
+        lines.push("            product = _mul(coeff, ref)".to_string());
+        lines
+            .push("            if term[\"sign\"] == \"alternating_n\" and k % 2 == 1:".to_string());
+        lines.push("                product = _scale(product, -1)".to_string());
+        lines.push("            rhs = _add(rhs, product)".to_string());
+        lines.push("        if _inhomogeneous is not None:".to_string());
+        lines.push("            rhs = _add(rhs, _bivar(_inhomogeneous, k))".to_string());
+        lines.push("        if _denominator is not None:".to_string());
+        lines.push("            rhs = _div_exact(rhs, _bivar(_denominator, k))".to_string());
+        lines.push("        _P_cache[k] = rhs".to_string());
+        lines.push("    return _P_cache[n]".to_string());
+        lines.push(String::new());
+        lines.push("# Example: [P(n) for n in range(1, 11)]".to_string());
+        lines.join("\n")
+    }
+
+    pub fn to_python_definition(&self, initial_polys: &[Vec<i64>]) -> String {
+        let rational_polys = i64_polys_to_rational(initial_polys);
+        self.to_python_definition_rational(&rational_polys)
     }
 
     /// Format the recurrence as a LaTeX expression.
@@ -2550,6 +2741,52 @@ mod tests {
         assert!(code.contains("1: R([1]),"));
         assert!(code.contains("value = R("));
         assert!(code.contains("P(n - 1).derivative(t)"));
+    }
+
+    #[test]
+    fn python_definition_contains_exact_fraction_rule() {
+        let polys: Vec<Vec<i64>> = vec![vec![1], vec![1], vec![2], vec![3], vec![5], vec![8]];
+        let opts = RecurrenceOptions {
+            var_deg: 0,
+            idx_deg: 0,
+            diff_deg: 0,
+            rec_len: 2,
+            homogeneous: true,
+            ..Default::default()
+        };
+        let rec = find_polynomial_recurrence(&polys, &opts).expect("should find recurrence");
+        let code = rec.to_python_definition(&polys);
+        assert!(code.contains("from fractions import Fraction"));
+        assert!(code.contains("def P(n):"));
+        assert!(code.contains("_P_cache = {"));
+        assert!(code.contains("1: [1],"));
+        assert!(code.contains("\"offset\": 1"));
+        assert!(code.contains("_div_exact"));
+    }
+
+    #[test]
+    fn python_definition_contains_derivative_metadata() {
+        let polys: Vec<Vec<i64>> = vec![
+            vec![1],
+            vec![1],
+            vec![1, 1],
+            vec![1, 4, 1],
+            vec![1, 11, 11, 1],
+            vec![1, 26, 66, 26, 1],
+        ];
+        let opts = RecurrenceOptions {
+            var_deg: 2,
+            idx_deg: 1,
+            diff_deg: 1,
+            rec_len: 1,
+            homogeneous: true,
+            ..Default::default()
+        };
+        let rec = find_polynomial_recurrence(&polys, &opts).expect("should find recurrence");
+        let code = rec.to_python_definition(&polys);
+        assert!(code.contains("\"deriv_order\": 1"));
+        assert!(code.contains("ref = _derivative(P(k - term[\"offset\"]),"));
+        assert!(code.contains("coeff = _bivar(term[\"coeff\"], k)"));
     }
 
     #[test]
