@@ -481,7 +481,7 @@ fn fixtures() -> Vec<Fixture> {
             slug: "23_sparse_second_derivative_lag",
             title: "Sparse second-derivative lag",
             features: "second derivative, third-order recurrence, sparse t^2 coefficients",
-            suggested_args: "--min-rec-len 3 --max-rec-len 3 --min-var-deg 2 --max-var-deg 2 --min-idx-deg 1 --max-idx-deg 1 --min-diff-deg 2 --max-diff-deg 2 --fit-extra-rows 2",
+            suggested_args: "--max-rec-len 3 --max-var-deg 2 --max-idx-deg 1 --max-diff-deg 2 --fit-extra-rows 2",
             recurrence: "P_n = tP_{n-1} + t^2P''_{n-1} - t^2P_{n-3} + nt^2P''_{n-3}",
             initial: vec![
                 poly(&[1, 2, 3, 1]),
