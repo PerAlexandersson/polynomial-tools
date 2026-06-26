@@ -112,7 +112,7 @@
     "equations": 91,
     "fit_polynomials": 10,
     "verification_polynomials": 40,
-    "candidates_tried": 1,
+    "candidates_tried": 54,
     "options": {
       "var_deg": 2,
       "idx_deg": 1,
