@@ -1,5 +1,7 @@
 use polynomial_tools::recurrence::{
-    find_recurrence_adaptive, find_recurrence_adaptive_rational, AdaptiveSearchOptions,
+    find_recurrence_adaptive, find_recurrence_adaptive_rational, format_rational_coeff,
+    parse_rational_coeff, AdaptiveSearchOptions, AdaptiveSearchResult, BigRational, RecurrenceJson,
+    RecurrenceJsonSearch, RecurrenceOptionsJson,
 };
 use polynomial_tools::sequences::{
     chebyshev_polynomials_t, chebyshev_polynomials_u, eulerian_polynomials, hermite_polynomials,
@@ -320,6 +322,29 @@ pub struct InterlacingSequenceResponse {
 }
 
 #[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
+pub struct InterlacingProfileItem {
+    pub index: usize,
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub polynomial: Option<NormalizedPolynomial>,
+    pub previous_count: usize,
+    pub checked_previous_count: usize,
+    pub interlacing_previous_count: usize,
+    pub strict_previous_count: usize,
+    pub weak_previous_count: usize,
+    pub previous_interlacing_indices: Vec<usize>,
+    pub previous: Vec<InterlacingPairItem>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
+pub struct InterlacingProfileResponse {
+    pub items: Vec<ParsePolynomialItem>,
+    pub profile: Vec<InterlacingProfileItem>,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
 pub struct RealRootsItem {
     pub index: usize,
     pub ok: bool,
@@ -350,6 +375,10 @@ pub struct FindRecurrenceResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sage: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub python: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recurrence_json: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub unknowns: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub weighted_unknowns: Option<usize>,
@@ -365,6 +394,21 @@ pub struct FindRecurrenceResponse {
     pub error: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub parse_errors: Vec<ParsePolynomialItem>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GenerateRecurrenceRowsRequest {
+    pub recurrence_json: String,
+    pub rows: Option<usize>,
+    pub additional: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
+pub struct GenerateRecurrenceRowsResponse {
+    pub first_index: usize,
+    pub row_count: usize,
+    pub polynomials: Vec<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
@@ -780,6 +824,94 @@ fn interlacing_result(p: NormalizedPolynomial, q: NormalizedPolynomial) -> Inter
     }
 }
 
+fn interlacing_pair_has_interlacing(item: &InterlacingPairItem) -> bool {
+    item.result.as_ref().is_some_and(|result| {
+        matches!(
+            result.status.as_str(),
+            "strictly_interlace" | "weakly_interlace"
+        )
+    })
+}
+
+fn interlacing_pair_item(
+    pair_index: usize,
+    left_index: usize,
+    right_index: usize,
+    left: &Result<NormalizedPolynomial, String>,
+    right: &Result<NormalizedPolynomial, String>,
+) -> InterlacingPairItem {
+    match (left, right) {
+        (Ok(p), Ok(q)) => InterlacingPairItem {
+            pair_index,
+            left_index,
+            right_index,
+            ok: true,
+            result: Some(interlacing_result(p.clone(), q.clone())),
+            error: None,
+        },
+        _ => {
+            let mut messages = Vec::new();
+            if let Err(error) = left {
+                messages.push(format!("polynomial {left_index}: {error}"));
+            }
+            if let Err(error) = right {
+                messages.push(format!("polynomial {right_index}: {error}"));
+            }
+            InterlacingPairItem {
+                pair_index,
+                left_index,
+                right_index,
+                ok: false,
+                result: None,
+                error: Some(messages.join("; ")),
+            }
+        }
+    }
+}
+
+fn integer_polys_to_rational(coefficients: &[Vec<i64>]) -> Vec<Vec<BigRational>> {
+    coefficients
+        .iter()
+        .map(|row| {
+            row.iter()
+                .map(|coeff| {
+                    parse_rational_coeff(&coeff.to_string())
+                        .expect("integer coefficients parse as rationals")
+                })
+                .collect()
+        })
+        .collect()
+}
+
+fn recurrence_json_string(
+    result: &AdaptiveSearchResult,
+    polynomials: &[Vec<BigRational>],
+    search: &AdaptiveSearchOptions,
+    source_rows: usize,
+) -> String {
+    let searched_polys = polynomials.get(search.skip_prefix..).unwrap_or(&[]);
+    let initial_count = result.recurrence.max_offset().min(searched_polys.len());
+    let initial_polys = &searched_polys[..initial_count];
+    let recurrence_json = RecurrenceJson::from_recurrence_rational(
+        &result.recurrence,
+        1,
+        initial_polys,
+        Some(RecurrenceJsonSearch {
+            recurrence_text: result.recurrence.to_string(),
+            source_rows,
+            skip_prefix: search.skip_prefix,
+            unknowns: result.num_unknowns,
+            weighted_unknowns: result.weighted_unknowns,
+            equations: result.num_equations,
+            fit_polynomials: result.fit_polynomials,
+            verification_polynomials: result.verification_polynomials,
+            candidates_tried: result.candidates_tried,
+            options: RecurrenceOptionsJson::from(&result.opts),
+        }),
+    );
+    serde_json::to_string_pretty(&recurrence_json).expect("serialize recurrence JSON")
+}
+
 fn family_report(index: usize, polynomial: NormalizedPolynomial) -> FamilyPolynomialReport {
     let coefficients = &polynomial.coefficients;
     FamilyPolynomialReport {
@@ -912,6 +1044,8 @@ fn family_recurrence_response(
             latex: None,
             mathematica: None,
             sage: None,
+            python: None,
+            recurrence_json: None,
             unknowns: None,
             weighted_unknowns: None,
             equations: None,
@@ -925,27 +1059,39 @@ fn family_recurrence_response(
 
     let search = apply_recurrence_options(options);
     match find_recurrence_adaptive(coefficients, &search) {
-        Some(result) => FindRecurrenceResponse {
-            found: true,
-            recurrence: Some(format!("{}", result.recurrence)),
-            latex: Some(result.recurrence.to_latex()),
-            mathematica: Some(result.recurrence.to_mathematica_definition(coefficients)),
-            sage: Some(result.recurrence.to_sage_definition(coefficients)),
-            unknowns: Some(result.num_unknowns),
-            weighted_unknowns: Some(result.weighted_unknowns),
-            equations: Some(result.num_equations),
-            fit_polynomials: Some(result.fit_polynomials),
-            verification_polynomials: Some(result.verification_polynomials),
-            candidates_tried: Some(result.candidates_tried),
-            error: None,
-            parse_errors: Vec::new(),
-        },
+        Some(result) => {
+            let rational_polys = integer_polys_to_rational(coefficients);
+            FindRecurrenceResponse {
+                found: true,
+                recurrence: Some(format!("{}", result.recurrence)),
+                latex: Some(result.recurrence.to_latex()),
+                mathematica: Some(result.recurrence.to_mathematica_definition(coefficients)),
+                sage: Some(result.recurrence.to_sage_definition(coefficients)),
+                python: Some(result.recurrence.to_python_definition(coefficients)),
+                recurrence_json: Some(recurrence_json_string(
+                    &result,
+                    &rational_polys,
+                    &search,
+                    coefficients.len(),
+                )),
+                unknowns: Some(result.num_unknowns),
+                weighted_unknowns: Some(result.weighted_unknowns),
+                equations: Some(result.num_equations),
+                fit_polynomials: Some(result.fit_polynomials),
+                verification_polynomials: Some(result.verification_polynomials),
+                candidates_tried: Some(result.candidates_tried),
+                error: None,
+                parse_errors: Vec::new(),
+            }
+        }
         None => FindRecurrenceResponse {
             found: false,
             recurrence: None,
             latex: None,
             mathematica: None,
             sage: None,
+            python: None,
+            recurrence_json: None,
             unknowns: None,
             weighted_unknowns: None,
             equations: None,
@@ -1456,38 +1602,88 @@ impl PolynomialToolsServer {
             .windows(2)
             .enumerate()
             .map(|(pair_index, pair)| {
-                let left_index = pair_index;
-                let right_index = pair_index + 1;
-                match (&pair[0], &pair[1]) {
-                    (Ok(p), Ok(q)) => InterlacingPairItem {
-                        pair_index,
-                        left_index,
-                        right_index,
-                        ok: true,
-                        result: Some(interlacing_result(p.clone(), q.clone())),
-                        error: None,
-                    },
-                    (left, right) => {
-                        let mut messages = Vec::new();
-                        if let Err(error) = left {
-                            messages.push(format!("polynomial {left_index}: {error}"));
-                        }
-                        if let Err(error) = right {
-                            messages.push(format!("polynomial {right_index}: {error}"));
-                        }
-                        InterlacingPairItem {
+                interlacing_pair_item(pair_index, pair_index, pair_index + 1, &pair[0], &pair[1])
+            })
+            .collect();
+        Ok(Json(InterlacingSequenceResponse { items, pairs }))
+    }
+
+    #[tool(
+        description = "For each polynomial, count backward consecutive previous interlacings until the first failure."
+    )]
+    pub fn check_interlacing_profile(
+        &self,
+        Parameters(input): Parameters<PolynomialBatchInput>,
+    ) -> Result<Json<InterlacingProfileResponse>, McpError> {
+        let batch = parse_batch(&input)?;
+        let items = parse_items(&batch);
+        let mut pair_index = 0;
+        let profile = batch
+            .iter()
+            .enumerate()
+            .map(|(index, item)| match item {
+                Err(error) => InterlacingProfileItem {
+                    index,
+                    ok: false,
+                    polynomial: None,
+                    previous_count: index,
+                    checked_previous_count: 0,
+                    interlacing_previous_count: 0,
+                    strict_previous_count: 0,
+                    weak_previous_count: 0,
+                    previous_interlacing_indices: Vec::new(),
+                    previous: Vec::new(),
+                    error: Some(error.clone()),
+                },
+                Ok(polynomial) => {
+                    let mut previous = Vec::new();
+                    for left_index in (0..index).rev() {
+                        let pair = interlacing_pair_item(
                             pair_index,
                             left_index,
-                            right_index,
-                            ok: false,
-                            result: None,
-                            error: Some(messages.join("; ")),
+                            index,
+                            &batch[left_index],
+                            item,
+                        );
+                        pair_index += 1;
+                        let interlaces = interlacing_pair_has_interlacing(&pair);
+                        previous.push(pair);
+                        if !interlaces {
+                            break;
                         }
+                    }
+                    let previous_interlacing_indices = previous
+                        .iter()
+                        .filter(|pair| interlacing_pair_has_interlacing(pair))
+                        .map(|pair| pair.left_index)
+                        .collect::<Vec<_>>();
+                    InterlacingProfileItem {
+                        index,
+                        ok: true,
+                        polynomial: Some(polynomial.clone()),
+                        previous_count: index,
+                        checked_previous_count: previous.len(),
+                        interlacing_previous_count: previous_interlacing_indices.len(),
+                        strict_previous_count: previous
+                            .iter()
+                            .filter(|pair| {
+                                pair.result.as_ref().and_then(|result| result.strict) == Some(true)
+                            })
+                            .count(),
+                        weak_previous_count: previous
+                            .iter()
+                            .filter(|pair| {
+                                pair.result.as_ref().and_then(|result| result.weak) == Some(true)
+                            })
+                            .count(),
+                        previous_interlacing_indices,
+                        previous,
+                        error: None,
                     }
                 }
             })
             .collect();
-        Ok(Json(InterlacingSequenceResponse { items, pairs }))
+        Ok(Json(InterlacingProfileResponse { items, profile }))
     }
 
     #[tool(
@@ -1550,6 +1746,8 @@ impl PolynomialToolsServer {
                     latex: None,
                     mathematica: None,
                     sage: None,
+                    python: None,
+                    recurrence_json: None,
                     unknowns: None,
                     weighted_unknowns: None,
                     equations: None,
@@ -1568,6 +1766,8 @@ impl PolynomialToolsServer {
                 latex: None,
                 mathematica: None,
                 sage: None,
+                python: None,
+                recurrence_json: None,
                 unknowns: None,
                 weighted_unknowns: None,
                 equations: None,
@@ -1590,6 +1790,17 @@ impl PolynomialToolsServer {
                         .to_mathematica_definition_rational(&polynomials),
                 ),
                 sage: Some(result.recurrence.to_sage_definition_rational(&polynomials)),
+                python: Some(
+                    result
+                        .recurrence
+                        .to_python_definition_rational(&polynomials),
+                ),
+                recurrence_json: Some(recurrence_json_string(
+                    &result,
+                    &polynomials,
+                    &search,
+                    polynomials.len(),
+                )),
                 unknowns: Some(result.num_unknowns),
                 weighted_unknowns: Some(result.weighted_unknowns),
                 equations: Some(result.num_equations),
@@ -1605,6 +1816,8 @@ impl PolynomialToolsServer {
                 latex: None,
                 mathematica: None,
                 sage: None,
+                python: None,
+                recurrence_json: None,
                 unknowns: None,
                 weighted_unknowns: None,
                 equations: None,
@@ -1615,6 +1828,40 @@ impl PolynomialToolsServer {
                 parse_errors: Vec::new(),
             })),
         }
+    }
+
+    #[tool(
+        description = "Generate or extend coefficient rows from recurrence JSON returned by find_recurrence."
+    )]
+    pub fn generate_recurrence_rows(
+        &self,
+        Parameters(input): Parameters<GenerateRecurrenceRowsRequest>,
+    ) -> Result<Json<GenerateRecurrenceRowsResponse>, McpError> {
+        if input.rows.is_some() == input.additional.is_some() {
+            return Err(invalid_params("provide exactly one of rows or additional"));
+        }
+        let recurrence_json: RecurrenceJson = serde_json::from_str(&input.recurrence_json)
+            .map_err(|error| invalid_params(format!("failed to parse recurrence JSON: {error}")))?;
+        let (recurrence, first_index, initial_polys) = recurrence_json
+            .to_recurrence_parts()
+            .map_err(|error| invalid_params(format!("invalid recurrence JSON: {error}")))?;
+        let row_count = match (input.rows, input.additional) {
+            (Some(rows), None) => rows,
+            (None, Some(additional)) => initial_polys.len() + additional,
+            _ => unreachable!("validated exactly one row-count option"),
+        };
+        let generated = recurrence
+            .generate_rows_rational(&initial_polys, first_index, row_count)
+            .map_err(|error| invalid_params(format!("failed to generate rows: {error}")))?;
+        let polynomials = generated
+            .iter()
+            .map(|row| row.iter().map(format_rational_coeff).collect())
+            .collect::<Vec<Vec<_>>>();
+        Ok(Json(GenerateRecurrenceRowsResponse {
+            first_index,
+            row_count: generated.len(),
+            polynomials,
+        }))
     }
 
     #[tool(description = "Compute the exact resultant of two polynomials.")]
@@ -1932,6 +2179,32 @@ mod tests {
     }
 
     #[test]
+    fn interlacing_profile_stops_at_first_failure() {
+        let server = PolynomialToolsServer::new();
+        let Json(response) = server
+            .check_interlacing_profile(Parameters(PolynomialBatchInput {
+                polynomials: Some(vec![
+                    coeffs(&[1]),
+                    coeffs(&[1, 1]),
+                    coeffs(&[1, 2, 1]),
+                    coeffs(&[1, 0, 1]),
+                    coeffs(&[1, 3, 3, 1]),
+                ]),
+                text: None,
+            }))
+            .unwrap();
+
+        assert_eq!(response.profile[2].previous_count, 2);
+        assert_eq!(response.profile[2].checked_previous_count, 2);
+        assert_eq!(response.profile[2].interlacing_previous_count, 1);
+        assert_eq!(response.profile[2].previous_interlacing_indices, vec![1]);
+
+        assert_eq!(response.profile[3].previous_count, 3);
+        assert_eq!(response.profile[3].checked_previous_count, 1);
+        assert_eq!(response.profile[3].interlacing_previous_count, 0);
+    }
+
+    #[test]
     fn computes_resultant_and_discriminant() {
         let server = PolynomialToolsServer::new();
         let Json(resultant) = server
@@ -1999,6 +2272,32 @@ mod tests {
             }))
             .unwrap();
         assert_eq!(geometric.recurrence.as_deref(), Some("P(n) = 2 P(n-1)"));
+        assert!(geometric
+            .python
+            .as_deref()
+            .is_some_and(|python| python.contains("def P(n):")));
+        let recurrence_json = geometric
+            .recurrence_json
+            .clone()
+            .expect("recurrence JSON output");
+        let Json(generated) = server
+            .generate_recurrence_rows(Parameters(GenerateRecurrenceRowsRequest {
+                recurrence_json,
+                rows: Some(6),
+                additional: None,
+            }))
+            .unwrap();
+        assert_eq!(
+            generated.polynomials,
+            vec![
+                vec!["1".to_string()],
+                vec!["2".to_string()],
+                vec!["4".to_string()],
+                vec!["8".to_string()],
+                vec!["16".to_string()],
+                vec!["32".to_string()],
+            ]
+        );
 
         let Json(fibonacci) = server
             .find_recurrence(Parameters(FindRecurrenceRequest {

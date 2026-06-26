@@ -124,9 +124,9 @@ A text file `polys.txt` might look like:
 1, 57, 302, 302, 57, 1
 ```
 
-The commands `interlacing`, `properties`, `gamma-expansion`,
-`family-check`, `sequence`, `hstar-to-ehrhart`, and `ehrhart-to-hstar`
-also accept `--json` for machine-readable output.
+The commands `interlacing`, `interlacing-profile`, `properties`,
+`gamma-expansion`, `family-check`, `sequence`, `hstar-to-ehrhart`, and
+`ehrhart-to-hstar` also accept `--json` for machine-readable output.
 
 ### Check real-rootedness
 
@@ -150,6 +150,17 @@ Test whether consecutive polynomials interlace:
 polytool interlacing < polys.txt
 polytool interlacing --json < polys.txt
 ```
+
+Count how many consecutive previous rows each polynomial interlaces, stopping
+the backward scan at the first failure:
+
+```sh
+polytool interlacing-profile < polys.txt
+polytool interlacing-profile --json < polys.txt
+```
+
+The JSON output includes `previous_count`, `checked_previous_count`, and
+`interlacing_previous_count`, plus the checked pair reports.
 
 ### Check unimodality, log-concavity, palindromicity, gamma-positivity
 
@@ -244,6 +255,10 @@ Options:
 --min-margin <k>     Require equations >= unknowns + k (default: 1)
 --fit-extra-rows <k> Extra rows after the first solvable prefix (default: 1)
 --no-verify          Fit all rows instead of reserving held-out verification rows
+--json               Emit recurrence JSON with initial conditions
+--python             Emit exact standalone Python code using Fraction arithmetic
+--format json        Alias for --json
+--format python      Alias for --python
 --verbose            Print each candidate tried
 ```
 
@@ -264,6 +279,15 @@ polytool recurrence-generate --recurrence recurrence.json --rows 100 > rows-100.
 
 Use `--additional n` instead of `--rows n` to keep all initial rows and append
 `n` newly generated rows.
+
+Use Python output when a sequence extension script is more convenient than JSON:
+
+```sh
+polytool recurrence --python < polys.txt > recurrence.py
+```
+
+The generated Python uses exact `fractions.Fraction` arithmetic and dense
+coefficient lists in ascending powers of `t`.
 
 ### Scout BKW equal-modulus loci
 
@@ -519,8 +543,10 @@ Available MCP tools:
 - `polynomial_properties`
 - `check_interlacing_pair`
 - `check_interlacing_sequence`
+- `check_interlacing_profile`
 - `real_roots`
 - `find_recurrence`
+- `generate_recurrence_rows`
 - `resultant`
 - `discriminant`
 - `ehrhart_hstar`
