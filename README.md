@@ -224,7 +224,6 @@ Options:
 
 ```
 --skip-prefix <k>    Ignore the first k input polynomials before searching
---full-depth         Require all offsets 1..depth to appear in the recurrence
 --min-rec-len <k>    Minimum recurrence depth to try (default: 1)
 --max-rec-len <k>    Maximum recurrence depth (default: 5)
 --min-var-deg <d>    Minimum degree in t for coefficients (default: 0)

@@ -1904,8 +1904,6 @@ pub fn count_equations(polys: &[Vec<i64>], opts: &RecurrenceOptions) -> usize {
 pub struct AdaptiveSearchOptions {
     /// Number of initial polynomials to ignore before searching.
     pub skip_prefix: usize,
-    /// Require every offset 1..=rec_len to appear with a non-zero coefficient.
-    pub require_all_offsets: bool,
     /// Minimum recurrence length to try.
     pub min_rec_len: usize,
     /// Maximum recurrence length to try.
@@ -1954,7 +1952,6 @@ impl Default for AdaptiveSearchOptions {
     fn default() -> Self {
         Self {
             skip_prefix: 0,
-            require_all_offsets: false,
             min_rec_len: 1,
             max_rec_len: 5,
             min_var_deg: 0,
@@ -1987,10 +1984,6 @@ impl AdaptiveSearchOptions {
         self.try_alternating_sign = try_alternating_sign;
         self
     }
-}
-
-fn recurrence_uses_all_offsets(rec: &Recurrence, rec_len: usize) -> bool {
-    (1..=rec_len).all(|offset| rec.terms.iter().any(|term| term.offset == offset))
 }
 
 /// Result of an adaptive recurrence search, including metadata.
@@ -2218,9 +2211,6 @@ pub fn find_recurrence_adaptive_rational(
         }
 
         if let Some(rec) = find_polynomial_recurrence_rational(fit_polys, opts) {
-            if search.require_all_offsets && !recurrence_uses_all_offsets(&rec, opts.rec_len) {
-                continue;
-            }
             if !verify_heldout_tail(polys, &rec, opts, fit_len, search) {
                 if search.verbose {
                     eprintln!("  -> fitted prefix but failed held-out verification");
@@ -2297,9 +2287,6 @@ pub fn find_recurrence_adaptive_rational(
             }
 
             if let Some(rec) = find_polynomial_recurrence_rational(fit_polys, opts) {
-                if search.require_all_offsets && !recurrence_uses_all_offsets(&rec, opts.rec_len) {
-                    continue;
-                }
                 if !verify_heldout_tail(polys, &rec, opts, fit_len, search) {
                     if search.verbose {
                         eprintln!("  -> fitted prefix but failed held-out verification");
@@ -2724,7 +2711,6 @@ mod tests {
             vec![13],
         ];
         let search = AdaptiveSearchOptions {
-            require_all_offsets: true,
             min_rec_len: 2,
             max_rec_len: 2,
             min_var_deg: 0,

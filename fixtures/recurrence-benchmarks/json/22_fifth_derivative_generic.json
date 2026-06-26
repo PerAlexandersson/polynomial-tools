@@ -146,7 +146,7 @@
     "equations": 120,
     "fit_polynomials": 8,
     "verification_polynomials": 42,
-    "candidates_tried": 1,
+    "candidates_tried": 72,
     "options": {
       "var_deg": 2,
       "idx_deg": 1,

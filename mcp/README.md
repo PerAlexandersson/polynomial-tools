@@ -353,7 +353,6 @@ Explicit polynomial example:
 Important option fields:
 
 - `skip_prefix`
-- `require_all_offsets`
 - `min_rec_len`, `max_rec_len`
 - `min_var_deg`, `max_var_deg`
 - `min_idx_deg`, `max_idx_deg`
