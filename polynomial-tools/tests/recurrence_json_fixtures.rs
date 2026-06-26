@@ -1,6 +1,7 @@
 use polynomial_tools::recurrence::{
     format_rational_coeff, parse_rational_coeff, BigRational, RecurrenceJson,
 };
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -58,6 +59,47 @@ fn format_rows(rows: &[Vec<BigRational>]) -> Vec<String> {
                 .join(", ")
         })
         .collect()
+}
+
+fn fixture_files(dir: &str, extension: &str) -> BTreeSet<String> {
+    fs::read_dir(Path::new(BASE).join(dir))
+        .unwrap_or_else(|err| panic!("read fixture directory {dir}: {err}"))
+        .map(|entry| entry.expect("read fixture directory entry").path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == extension))
+        .map(|path| {
+            format!(
+                "{}/{}",
+                dir,
+                path.file_name()
+                    .expect("fixture path has file name")
+                    .to_string_lossy()
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn recurrence_benchmark_manifest_matches_generated_files() {
+    let fixtures = parse_manifest();
+    let expected_rows = fixtures
+        .iter()
+        .map(|fixture| fixture.rows_file.clone())
+        .collect::<BTreeSet<_>>();
+    let expected_json = fixtures
+        .iter()
+        .map(|fixture| fixture.json_file.clone())
+        .collect::<BTreeSet<_>>();
+
+    assert_eq!(
+        expected_rows,
+        fixture_files("rows", "txt"),
+        "manifest rows_file entries should match generated row files exactly"
+    );
+    assert_eq!(
+        expected_json,
+        fixture_files("json", "json"),
+        "manifest json_file entries should match generated JSON files exactly"
+    );
 }
 
 #[test]
