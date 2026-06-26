@@ -124,7 +124,7 @@ fn print_top_level_help() {
     println!("  real-rooted       Check real-rootedness of each polynomial");
     println!("  interlacing       Check interlacing of consecutive polynomial pairs");
     println!("  interlacing-profile");
-    println!("                    Count previous polynomials interlaced by each row");
+    println!("                    Count consecutive previous interlacings until first fail");
     println!("  properties        Show real-rootedness, unimodality, and related properties");
     println!("  gamma-expansion   Expand palindromic polynomials in the gamma basis");
     println!("  family-check      Check properties and consecutive interlacing together");
@@ -302,10 +302,10 @@ fn print_command_help(command: &str) -> bool {
         ),
         "interlacing-profile" => print_stdin_command_help(
             "interlacing-profile",
-            "For each row, count how many previous rows it weakly or strictly interlaces.",
+            "For each row, count backward consecutive previous interlacings until first failure.",
             &[
                 "Options:",
-                "  --json    Emit machine-readable JSON, including all previous-pair reports",
+                "  --json    Emit machine-readable JSON, including checked previous-pair reports",
                 "",
                 "Example:",
                 "  printf '1\\n1,1\\n1,2,1\\n' | polytool interlacing-profile",
@@ -678,6 +678,7 @@ struct InterlacingProfileReport {
     index: usize,
     polynomial: String,
     previous_count: usize,
+    checked_previous_count: usize,
     interlacing_previous_count: usize,
     strict_previous_count: usize,
     weak_previous_count: usize,
@@ -705,7 +706,8 @@ fn interlacing_profile_report(
     InterlacingProfileReport {
         index,
         polynomial: format_poly(polynomial),
-        previous_count: previous.len(),
+        previous_count: index,
+        checked_previous_count: previous.len(),
         interlacing_previous_count: previous_interlacing_indices.len(),
         strict_previous_count: previous
             .iter()
@@ -723,11 +725,13 @@ fn interlacing_profile_report(
 fn interlacing_profile_report_json(report: &InterlacingProfileReport) -> String {
     format!(
         "{{\"index\":{},\"polynomial\":{},\"previous_count\":{},\
-         \"interlacing_previous_count\":{},\"strict_previous_count\":{},\
-         \"weak_previous_count\":{},\"previous_interlacing_indices\":{},\"previous\":[{}]}}",
+         \"checked_previous_count\":{},\"interlacing_previous_count\":{},\
+         \"strict_previous_count\":{},\"weak_previous_count\":{},\
+         \"previous_interlacing_indices\":{},\"previous\":[{}]}}",
         report.index,
         json_string(&report.polynomial),
         report.previous_count,
+        report.checked_previous_count,
         report.interlacing_previous_count,
         report.strict_previous_count,
         report.weak_previous_count,
@@ -809,16 +813,16 @@ fn cmd_interlacing_profile(args: &[String]) {
     let mut pair_index = 0;
     let mut reports = Vec::with_capacity(polys.len());
     for current in 0..polys.len() {
-        let mut previous = Vec::with_capacity(current);
-        for left in 0..current {
-            previous.push(interlacing_report(
-                pair_index,
-                left,
-                current,
-                &polys[left],
-                &polys[current],
-            ));
+        let mut previous = Vec::new();
+        for left in (0..current).rev() {
+            let report =
+                interlacing_report(pair_index, left, current, &polys[left], &polys[current]);
             pair_index += 1;
+            let interlaces = interlacing_report_has_interlacing(&report);
+            previous.push(report);
+            if !interlaces {
+                break;
+            }
         }
         reports.push(interlacing_profile_report(
             current,
@@ -834,9 +838,11 @@ fn cmd_interlacing_profile(args: &[String]) {
 
     for report in reports {
         println!(
-            "row {}: {}/{} previous rows interlace; strict={}, weak={}; indices={:?}; {}",
+            "row {}: {} previous rows interlace before first failure (checked {}/{}); \
+             strict={}, weak={}; indices={:?}; {}",
             report.index,
             report.interlacing_previous_count,
+            report.checked_previous_count,
             report.previous_count,
             report.strict_previous_count,
             report.weak_previous_count,
