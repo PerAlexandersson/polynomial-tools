@@ -264,8 +264,9 @@ Options:
 ```
 
 The modular prefilter is disabled by default. It can be much faster on false
-candidates, but it is probabilistic because an unlucky prime can make a
-rationally solvable system look inconsistent modulo that prime.
+candidates, but it is probabilistic: it rejects only when every usable fixed
+large-prime reduction is inconsistent, so a false rejection would require all
+tested primes to be bad for a rational solution.
 
 To save a recurrence with enough initial conditions to regenerate the sequence,
 use JSON output:

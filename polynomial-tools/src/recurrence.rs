@@ -52,9 +52,9 @@ pub struct RecurrenceOptions {
     pub alternating_sign: bool,
     /// Use modular consistency checks to reject candidates before exact solving.
     ///
-    /// This is a probabilistic prefilter: a bad prime can make a rationally
-    /// solvable system look inconsistent modulo that prime. Keep it disabled
-    /// for fully exact exhaustive searches.
+    /// This is a probabilistic prefilter: bad primes can make a rationally
+    /// solvable system look inconsistent modulo every tested prime. Keep it
+    /// disabled for fully exact exhaustive searches.
     pub modular_prefilter: bool,
 }
 
@@ -623,11 +623,23 @@ fn modular_prefilter_rejects(
     derivs: &[Vec<Vec<BigRational>>],
     opts: &RecurrenceOptions,
 ) -> bool {
-    opts.modular_prefilter
-        && MODULAR_PREFILTER_PRIMES
-            .iter()
-            .filter_map(|&prime| recurrence_system_consistent_mod_prime(polys, derivs, opts, prime))
-            .any(|consistent| !consistent)
+    if !opts.modular_prefilter {
+        return false;
+    }
+
+    let mut usable_primes = 0;
+    let mut inconsistent_primes = 0;
+    for &prime in &MODULAR_PREFILTER_PRIMES {
+        if let Some(consistent) = recurrence_system_consistent_mod_prime(polys, derivs, opts, prime)
+        {
+            usable_primes += 1;
+            if !consistent {
+                inconsistent_primes += 1;
+            }
+        }
+    }
+
+    usable_primes > 0 && usable_primes == inconsistent_primes
 }
 
 // ---------------------------------------------------------------------------
@@ -2935,6 +2947,27 @@ mod tests {
             ..Default::default()
         };
         assert_recurrence(&polys, &opts, "P(n) = P(n-1) + P(n-2)");
+    }
+
+    #[test]
+    fn modular_prefilter_tolerates_single_bad_prime() {
+        let bad_prime = MODULAR_PREFILTER_PRIMES[0];
+        let polys = i64_polys_to_rational(&[vec![bad_prime * bad_prime], vec![bad_prime], vec![1]]);
+        let derivs = polys
+            .iter()
+            .map(|p| vec![poly_nth_derivative_rational(p, 0)])
+            .collect::<Vec<_>>();
+        let opts = RecurrenceOptions {
+            var_deg: 0,
+            idx_deg: 0,
+            diff_deg: 0,
+            rec_len: 1,
+            homogeneous: true,
+            modular_prefilter: true,
+            ..Default::default()
+        };
+        assert!(!modular_prefilter_rejects(&polys, &derivs, &opts));
+        assert!(find_polynomial_recurrence_rational(&polys, &opts).is_some());
     }
 
     #[test]
