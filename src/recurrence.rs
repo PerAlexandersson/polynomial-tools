@@ -13,7 +13,7 @@
 
 use num_bigint::BigInt;
 use num_rational::Ratio;
-use num_traits::{One, Zero};
+use num_traits::{One, ToPrimitive, Zero};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -50,6 +50,12 @@ pub struct RecurrenceOptions {
     pub denom_idx_deg: usize,
     /// Also allow recurrence coefficient terms multiplied by (-1)^n.
     pub alternating_sign: bool,
+    /// Use modular consistency checks to reject candidates before exact solving.
+    ///
+    /// This is a probabilistic prefilter: a bad prime can make a rationally
+    /// solvable system look inconsistent modulo that prime. Keep it disabled
+    /// for fully exact exhaustive searches.
+    pub modular_prefilter: bool,
 }
 
 impl Default for RecurrenceOptions {
@@ -65,6 +71,7 @@ impl Default for RecurrenceOptions {
             denom_var_deg: 0,
             denom_idx_deg: 0,
             alternating_sign: false,
+            modular_prefilter: false,
         }
     }
 }
@@ -324,6 +331,305 @@ fn bivar_eval_n(poly: &BivarPoly, n: usize) -> Vec<BigRational> {
 
 use crate::linalg;
 
+const MODULAR_PREFILTER_PRIMES: [i64; 3] = [1_000_000_007, 1_000_000_009, 998_244_353];
+
+fn mod_norm(value: i64, modulus: i64) -> i64 {
+    value.rem_euclid(modulus)
+}
+
+fn mod_neg(value: i64, modulus: i64) -> i64 {
+    if value == 0 {
+        0
+    } else {
+        modulus - value
+    }
+}
+
+fn mod_add(lhs: i64, rhs: i64, modulus: i64) -> i64 {
+    ((lhs as i128 + rhs as i128).rem_euclid(modulus as i128)) as i64
+}
+
+fn mod_sub(lhs: i64, rhs: i64, modulus: i64) -> i64 {
+    ((lhs as i128 - rhs as i128).rem_euclid(modulus as i128)) as i64
+}
+
+fn mod_mul(lhs: i64, rhs: i64, modulus: i64) -> i64 {
+    ((lhs as i128 * rhs as i128).rem_euclid(modulus as i128)) as i64
+}
+
+fn mod_pow(mut base: i64, mut exp: i64, modulus: i64) -> i64 {
+    let mut acc = 1;
+    base = mod_norm(base, modulus);
+    while exp > 0 {
+        if exp & 1 == 1 {
+            acc = mod_mul(acc, base, modulus);
+        }
+        base = mod_mul(base, base, modulus);
+        exp >>= 1;
+    }
+    acc
+}
+
+fn mod_inv(value: i64, modulus: i64) -> Option<i64> {
+    let value = mod_norm(value, modulus);
+    (value != 0).then(|| mod_pow(value, modulus - 2, modulus))
+}
+
+fn bigint_mod_i64(value: &BigInt, modulus: i64) -> i64 {
+    let modulus_big = BigInt::from(modulus);
+    let residue = ((value % &modulus_big) + &modulus_big) % &modulus_big;
+    residue
+        .to_i64()
+        .expect("residue modulo i64 prime fits in i64")
+}
+
+fn rational_mod_prime(value: &BigRational, modulus: i64) -> Option<i64> {
+    let numerator = bigint_mod_i64(value.numer(), modulus);
+    let denominator = bigint_mod_i64(value.denom(), modulus);
+    let denominator_inv = mod_inv(denominator, modulus)?;
+    Some(mod_mul(numerator, denominator_inv, modulus))
+}
+
+fn poly_coeff_mod(coeffs: &[Vec<i64>], poly_idx: usize, coeff_idx: usize) -> i64 {
+    coeffs
+        .get(poly_idx)
+        .and_then(|coeffs| coeffs.get(coeff_idx))
+        .copied()
+        .unwrap_or(0)
+}
+
+fn poly_coeff_mod_slice(coeffs: &[i64], coeff_idx: usize) -> i64 {
+    coeffs.get(coeff_idx).copied().unwrap_or(0)
+}
+
+fn rational_polys_mod_prime(polys: &[Vec<BigRational>], modulus: i64) -> Option<Vec<Vec<i64>>> {
+    polys
+        .iter()
+        .map(|poly| {
+            poly.iter()
+                .map(|coeff| rational_mod_prime(coeff, modulus))
+                .collect()
+        })
+        .collect()
+}
+
+fn rational_derivs_mod_prime(
+    derivs: &[Vec<Vec<BigRational>>],
+    modulus: i64,
+) -> Option<Vec<Vec<Vec<i64>>>> {
+    derivs
+        .iter()
+        .map(|poly_derivs| {
+            poly_derivs
+                .iter()
+                .map(|poly| {
+                    poly.iter()
+                        .map(|coeff| rational_mod_prime(coeff, modulus))
+                        .collect()
+                })
+                .collect()
+        })
+        .collect()
+}
+
+fn modular_linear_system_consistent(mut aug: Vec<Vec<i64>>, num_vars: usize, modulus: i64) -> bool {
+    let num_rows = aug.len();
+    let mut pivot_row = 0;
+
+    for col in 0..num_vars {
+        let Some(pr) = (pivot_row..num_rows).find(|&row| aug[row][col] != 0) else {
+            continue;
+        };
+        aug.swap(pivot_row, pr);
+        let pivot_inv = mod_inv(aug[pivot_row][col], modulus)
+            .expect("nonzero element modulo prime is invertible");
+        let pivot_snapshot = aug[pivot_row][col..=num_vars].to_vec();
+
+        for aug_row in aug.iter_mut().take(num_rows).skip(pivot_row + 1) {
+            if aug_row[col] == 0 {
+                continue;
+            }
+            let factor = mod_mul(aug_row[col], pivot_inv, modulus);
+            for (entry, pivot_entry) in aug_row[col..=num_vars]
+                .iter_mut()
+                .zip(pivot_snapshot.iter())
+            {
+                *entry = mod_sub(*entry, mod_mul(factor, *pivot_entry, modulus), modulus);
+            }
+        }
+
+        pivot_row += 1;
+        if pivot_row == num_rows {
+            return true;
+        }
+    }
+
+    aug[pivot_row..]
+        .iter()
+        .all(|row| row[..num_vars].iter().any(|&entry| entry != 0) || row[num_vars] == 0)
+}
+
+fn recurrence_system_consistent_mod_prime(
+    polys: &[Vec<BigRational>],
+    derivs: &[Vec<Vec<BigRational>>],
+    opts: &RecurrenceOptions,
+    modulus: i64,
+) -> Option<bool> {
+    let m = polys.len();
+    if m <= opts.rec_len {
+        return Some(true);
+    }
+
+    let polys_mod = rational_polys_mod_prime(polys, modulus)?;
+    let derivs_mod = rational_derivs_mod_prime(derivs, modulus)?;
+
+    let denom_start: usize = 0;
+    let denom_w = opts.denom_var_deg + 1;
+    let num_denom_vars = (opts.denom_idx_deg + 1) * denom_w - 1;
+    let denom_col = |i: usize, j: usize| -> usize {
+        let flat = i * denom_w + j;
+        denom_start + flat - 1
+    };
+
+    let coeff_start = denom_start + num_denom_vars;
+    let vars_per_coeff = (opts.idx_deg + 1) * (opts.var_deg + 1);
+    let sign_family_count = if opts.alternating_sign { 2 } else { 1 };
+    let num_coeff_vars = opts.rec_len * (opts.diff_deg + 1) * sign_family_count * vars_per_coeff;
+    let coeff_col = |r: usize, d: usize, sign_idx: usize, i: usize, j: usize| -> usize {
+        coeff_start
+            + (((r - 1) * (opts.diff_deg + 1) + d) * sign_family_count + sign_idx) * vars_per_coeff
+            + i * (opts.var_deg + 1)
+            + j
+    };
+
+    let inhomo_start = coeff_start + num_coeff_vars;
+    let inhomo_w = opts.inhomo_var_deg + 1;
+    let num_inhomo_vars = if opts.homogeneous {
+        0
+    } else {
+        (opts.inhomo_idx_deg + 1) * inhomo_w
+    };
+    let inhomo_col = |i: usize, j: usize| -> usize { inhomo_start + i * inhomo_w + j };
+
+    let num_vars = inhomo_start + num_inhomo_vars;
+    if num_vars == 0 {
+        return Some(true);
+    }
+
+    let max_poly_deg = polys
+        .iter()
+        .map(|p| poly_degree_rational(p))
+        .max()
+        .unwrap_or(0);
+    let max_j = opts
+        .var_deg
+        .max(opts.denom_var_deg)
+        .max(if opts.homogeneous {
+            0
+        } else {
+            opts.inhomo_var_deg
+        });
+    let max_t_deg = max_j + max_poly_deg;
+    let eqs_per_nn = max_t_deg + 1;
+    let num_rows = (m - opts.rec_len) * eqs_per_nn;
+    let mut aug = vec![vec![0; num_vars + 1]; num_rows];
+
+    for (eq_idx, nn) in (opts.rec_len + 1..=m).enumerate() {
+        let current_idx = nn - 1;
+        let max_n_pow = opts
+            .idx_deg
+            .max(opts.denom_idx_deg)
+            .max(if opts.homogeneous {
+                0
+            } else {
+                opts.inhomo_idx_deg
+            });
+        let n_powers = (0..=max_n_pow)
+            .map(|i| mod_pow(nn as i64, i as i64, modulus))
+            .collect::<Vec<_>>();
+
+        for l in 0..=max_t_deg {
+            let row = eq_idx * eqs_per_nn + l;
+            let cur_l = poly_coeff_mod(&polys_mod, current_idx, l);
+            aug[row][num_vars] = mod_neg(cur_l, modulus);
+
+            if num_denom_vars > 0 {
+                for (i, &n_power) in n_powers.iter().enumerate().take(opts.denom_idx_deg + 1) {
+                    for j in 0..=opts.denom_var_deg {
+                        if i == 0 && j == 0 {
+                            continue;
+                        }
+                        if l < j {
+                            continue;
+                        }
+                        let pc = poly_coeff_mod(&polys_mod, current_idx, l - j);
+                        if pc == 0 {
+                            continue;
+                        }
+                        let col = denom_col(i, j);
+                        aug[row][col] =
+                            mod_add(aug[row][col], mod_mul(pc, n_power, modulus), modulus);
+                    }
+                }
+            }
+
+            for r in 1..=opts.rec_len {
+                for (d, ref_poly) in derivs_mod[nn - 1 - r]
+                    .iter()
+                    .enumerate()
+                    .take(opts.diff_deg + 1)
+                {
+                    for sign_idx in 0..sign_family_count {
+                        for (i, &n_power) in n_powers.iter().enumerate().take(opts.idx_deg + 1) {
+                            let n_factor = if sign_idx == 1 && nn % 2 == 1 {
+                                mod_neg(n_power, modulus)
+                            } else {
+                                n_power
+                            };
+                            for j in 0..=opts.var_deg {
+                                if l < j {
+                                    continue;
+                                }
+                                let rc = poly_coeff_mod_slice(ref_poly, l - j);
+                                if rc == 0 {
+                                    continue;
+                                }
+                                let col = coeff_col(r, d, sign_idx, i, j);
+                                aug[row][col] = mod_add(
+                                    aug[row][col],
+                                    mod_neg(mod_mul(rc, n_factor, modulus), modulus),
+                                    modulus,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+
+            if !opts.homogeneous && l <= opts.inhomo_var_deg {
+                for (i, &n_power) in n_powers.iter().enumerate().take(opts.inhomo_idx_deg + 1) {
+                    let col = inhomo_col(i, l);
+                    aug[row][col] = mod_add(aug[row][col], mod_neg(n_power, modulus), modulus);
+                }
+            }
+        }
+    }
+
+    Some(modular_linear_system_consistent(aug, num_vars, modulus))
+}
+
+fn modular_prefilter_rejects(
+    polys: &[Vec<BigRational>],
+    derivs: &[Vec<Vec<BigRational>>],
+    opts: &RecurrenceOptions,
+) -> bool {
+    opts.modular_prefilter
+        && MODULAR_PREFILTER_PRIMES
+            .iter()
+            .filter_map(|&prime| recurrence_system_consistent_mod_prime(polys, derivs, opts, prime))
+            .any(|consistent| !consistent)
+}
+
 // ---------------------------------------------------------------------------
 // Main algorithm
 // ---------------------------------------------------------------------------
@@ -350,6 +656,10 @@ pub fn find_polynomial_recurrence_rational(
                 .collect()
         })
         .collect();
+
+    if modular_prefilter_rejects(polys, &derivs, opts) {
+        return None;
+    }
 
     // --- Assign column indices to unknowns ---
 
@@ -2135,6 +2445,9 @@ pub struct AdaptiveSearchOptions {
     pub no_verify: bool,
     /// Extra rows to add after the first prefix that clears `min_margin`.
     pub fit_extra_rows: usize,
+    /// Probabilistically reject inconsistent candidates modulo large primes
+    /// before exact rational solving.
+    pub modular_prefilter: bool,
     /// Print each candidate tried to stderr.
     pub verbose: bool,
 }
@@ -2163,6 +2476,7 @@ impl Default for AdaptiveSearchOptions {
             min_margin: 1,
             no_verify: false,
             fit_extra_rows: 1,
+            modular_prefilter: false,
             verbose: false,
         }
     }
@@ -2234,6 +2548,7 @@ fn generate_candidates(m: usize, search: &AdaptiveSearchOptions) -> Vec<Recurren
                             denom_var_deg: 0,
                             denom_idx_deg: 0,
                             alternating_sign,
+                            modular_prefilter: search.modular_prefilter,
                         });
 
                         if search.try_inhomogeneous {
@@ -2254,6 +2569,7 @@ fn generate_candidates(m: usize, search: &AdaptiveSearchOptions) -> Vec<Recurren
                                         denom_var_deg: 0,
                                         denom_idx_deg: 0,
                                         alternating_sign,
+                                        modular_prefilter: search.modular_prefilter,
                                     });
                                 }
                             }
@@ -2276,6 +2592,7 @@ fn generate_candidates(m: usize, search: &AdaptiveSearchOptions) -> Vec<Recurren
                                         denom_var_deg: dvd,
                                         denom_idx_deg: did,
                                         alternating_sign,
+                                        modular_prefilter: search.modular_prefilter,
                                     });
                                 }
                             }
@@ -2575,6 +2892,49 @@ mod tests {
         let rec = find_polynomial_recurrence_rational(&polys, &opts)
             .expect("should find recurrence with large coefficients");
         assert_eq!(format!("{rec}"), "P(n) = 2 P(n-1)");
+    }
+
+    #[test]
+    fn modular_prefilter_rejects_inconsistent_scalar_candidate() {
+        let polys = i64_polys_to_rational(&[vec![1], vec![2], vec![5]]);
+        let derivs = polys
+            .iter()
+            .map(|p| vec![poly_nth_derivative_rational(p, 0)])
+            .collect::<Vec<_>>();
+        let opts = RecurrenceOptions {
+            var_deg: 0,
+            idx_deg: 0,
+            diff_deg: 0,
+            rec_len: 1,
+            homogeneous: true,
+            modular_prefilter: true,
+            ..Default::default()
+        };
+        assert!(modular_prefilter_rejects(&polys, &derivs, &opts));
+        assert!(find_polynomial_recurrence_rational(&polys, &opts).is_none());
+    }
+
+    #[test]
+    fn modular_prefilter_preserves_true_recurrence() {
+        let polys: Vec<Vec<i64>> = vec![
+            vec![1],
+            vec![1],
+            vec![2],
+            vec![3],
+            vec![5],
+            vec![8],
+            vec![13],
+        ];
+        let opts = RecurrenceOptions {
+            var_deg: 0,
+            idx_deg: 0,
+            diff_deg: 0,
+            rec_len: 2,
+            homogeneous: true,
+            modular_prefilter: true,
+            ..Default::default()
+        };
+        assert_recurrence(&polys, &opts, "P(n) = P(n-1) + P(n-2)");
     }
 
     #[test]
@@ -3050,6 +3410,26 @@ mod tests {
     }
 
     #[test]
+    fn adaptive_modular_prefilter_finds_fibonacci() {
+        let polys: Vec<Vec<i64>> = vec![
+            vec![1],
+            vec![1],
+            vec![2],
+            vec![3],
+            vec![5],
+            vec![8],
+            vec![13],
+        ];
+        let search = AdaptiveSearchOptions {
+            modular_prefilter: true,
+            ..Default::default()
+        };
+        let result = find_recurrence_adaptive(&polys, &search).unwrap();
+        assert_eq!(format!("{}", result.recurrence), "P(n) = P(n-1) + P(n-2)");
+        assert!(result.opts.modular_prefilter);
+    }
+
+    #[test]
     fn adaptive_factorial() {
         let polys: Vec<Vec<i64>> = vec![vec![1], vec![2], vec![6], vec![24], vec![120]];
         let result = find_recurrence_adaptive(&polys, &AdaptiveSearchOptions::default()).unwrap();
@@ -3239,6 +3619,7 @@ mod tests {
             denom_var_deg: 0,
             denom_idx_deg: 0,
             alternating_sign: false,
+            modular_prefilter: false,
         };
         // vars_per_coeff = 2*2 = 4, num_coeff_vars = 2*1*4 = 8, denom = 0
         assert_eq!(count_unknowns(&opts), 8);
@@ -3266,6 +3647,7 @@ mod tests {
             denom_var_deg: 0,
             denom_idx_deg: 0,
             alternating_sign: false,
+            modular_prefilter: false,
         };
         // m=7, rec_len=2, num_nn=5, max_poly_deg=0, max_j=0, eqs_per_nn=1
         assert_eq!(count_equations(&polys, &opts), 5);

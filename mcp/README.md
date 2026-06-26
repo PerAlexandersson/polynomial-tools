@@ -385,9 +385,12 @@ Important option fields:
 - `min_margin`
 - `fit_extra_rows`
 - `no_verify`
+- `modular_prefilter`
 
 `verbose` is intentionally not exposed through MCP, so the server never writes
 search traces into the stdio protocol stream.
+`modular_prefilter` is opt-in because it rejects candidates modulo fixed large
+primes before exact rational solving; this is fast but probabilistic.
 
 When a recurrence is found, the response includes:
 

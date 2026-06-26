@@ -255,12 +255,17 @@ Options:
 --min-margin <k>     Require equations >= unknowns + k (default: 1)
 --fit-extra-rows <k> Extra rows after the first solvable prefix (default: 1)
 --no-verify          Fit all rows instead of reserving held-out verification rows
+--modular-prefilter  Probabilistically reject candidates modulo large primes
 --json               Emit recurrence JSON with initial conditions
 --python             Emit exact standalone Python code using Fraction arithmetic
 --format json        Alias for --json
 --format python      Alias for --python
 --verbose            Print each candidate tried
 ```
+
+The modular prefilter is disabled by default. It can be much faster on false
+candidates, but it is probabilistic because an unlucky prime can make a
+rationally solvable system look inconsistent modulo that prime.
 
 To save a recurrence with enough initial conditions to regenerate the sequence,
 use JSON output:
