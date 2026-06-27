@@ -10,11 +10,30 @@
 //!
 //! All formats produce coefficients in ascending degree order.
 
+use num_bigint::BigInt;
+use num_traits::ToPrimitive;
+
 /// Parse a single line into polynomial coefficients (ascending degree).
 ///
 /// Tries expanded polynomial format first (if a letter is found),
 /// then falls back to coefficient list parsing.
 pub fn parse_polynomial(input: &str) -> Result<Vec<i64>, String> {
+    parse_polynomial_bigint(input)?
+        .into_iter()
+        .map(|coeff| {
+            coeff
+                .to_i64()
+                .ok_or_else(|| format!("integer '{}' does not fit in i64", coeff))
+        })
+        .collect()
+}
+
+/// Parse a single line into arbitrary-size integer polynomial coefficients
+/// (ascending degree).
+///
+/// Tries expanded polynomial format first (if a letter is found),
+/// then falls back to coefficient list parsing.
+pub fn parse_polynomial_bigint(input: &str) -> Result<Vec<BigInt>, String> {
     let s = input.trim();
     if s.is_empty() {
         return Err("empty input".to_string());
@@ -25,21 +44,41 @@ pub fn parse_polynomial(input: &str) -> Result<Vec<i64>, String> {
 
     // Detect if this looks like an expanded polynomial (contains a letter)
     if has_variable(s) {
-        parse_expanded(s)
+        parse_expanded_bigint(s)
     } else {
-        parse_coeff_list(s)
+        parse_coeff_list_bigint(s)
     }
 }
 
 /// Parse multiple lines, skipping blanks and comments.
 pub fn parse_polynomials(input: &str) -> Vec<Result<Vec<i64>, String>> {
+    parse_polynomials_bigint(input)
+        .into_iter()
+        .map(|result| {
+            result.and_then(|coeffs| {
+                coeffs
+                    .into_iter()
+                    .map(|coeff| {
+                        coeff
+                            .to_i64()
+                            .ok_or_else(|| format!("integer '{}' does not fit in i64", coeff))
+                    })
+                    .collect()
+            })
+        })
+        .collect()
+}
+
+/// Parse multiple lines into arbitrary-size integer coefficient vectors,
+/// skipping blanks and comments.
+pub fn parse_polynomials_bigint(input: &str) -> Vec<Result<Vec<BigInt>, String>> {
     input
         .lines()
         .filter(|l| {
             let t = l.trim();
             !t.is_empty() && !t.starts_with('#')
         })
-        .map(parse_polynomial)
+        .map(parse_polynomial_bigint)
         .collect()
 }
 
@@ -47,7 +86,7 @@ pub fn parse_polynomials(input: &str) -> Vec<Result<Vec<i64>, String>> {
 // Coefficient list: "1, 2, 3" or "1 2 3"
 // ---------------------------------------------------------------------------
 
-fn parse_coeff_list(s: &str) -> Result<Vec<i64>, String> {
+fn parse_coeff_list_bigint(s: &str) -> Result<Vec<BigInt>, String> {
     // Determine separator: comma if present, else whitespace
     let parts: Vec<&str> = if s.contains(',') {
         s.split(',').collect()
@@ -55,11 +94,11 @@ fn parse_coeff_list(s: &str) -> Result<Vec<i64>, String> {
         s.split_whitespace().collect()
     };
 
-    let coeffs: Result<Vec<i64>, _> = parts
+    let coeffs: Result<Vec<BigInt>, _> = parts
         .iter()
         .map(|p| {
             p.trim()
-                .parse::<i64>()
+                .parse::<BigInt>()
                 .map_err(|e| format!("invalid integer '{}': {}", p.trim(), e))
         })
         .collect();
@@ -91,31 +130,31 @@ fn detect_variable(s: &str) -> Result<char, String> {
 }
 
 /// Parse an expanded polynomial string like "3t^2 - 5t + 1" or "x**3 + 2*x - 7".
-fn parse_expanded(s: &str) -> Result<Vec<i64>, String> {
+fn parse_expanded_bigint(s: &str) -> Result<Vec<BigInt>, String> {
     let var = detect_variable(s)?;
 
     // Normalize: remove spaces around operators, but keep spacing for tokenizing
     // Strategy: split into terms by + and - (keeping the sign)
     let terms = split_into_terms(s);
 
-    let mut coeffs: Vec<i64> = Vec::new();
+    let mut coeffs: Vec<BigInt> = Vec::new();
 
     for term in &terms {
         let term = term.trim();
         if term.is_empty() {
             continue;
         }
-        let (coeff, deg) = parse_term(term, var)?;
+        let (coeff, deg) = parse_term_bigint(term, var)?;
 
         // Extend coefficient vector if needed
         if deg >= coeffs.len() {
-            coeffs.resize(deg + 1, 0);
+            coeffs.resize(deg + 1, BigInt::from(0));
         }
         coeffs[deg] += coeff;
     }
 
     if coeffs.is_empty() {
-        coeffs.push(0);
+        coeffs.push(BigInt::from(0));
     }
 
     Ok(coeffs)
@@ -149,11 +188,11 @@ fn split_into_terms(s: &str) -> Vec<String> {
 
 /// Parse a single term like "3t^2", "-t", "5", "t", "-3*t**2".
 /// Returns (coefficient, degree).
-fn parse_term(term: &str, var: char) -> Result<(i64, usize), String> {
+fn parse_term_bigint(term: &str, var: char) -> Result<(BigInt, usize), String> {
     let s: String = term.chars().filter(|c| !c.is_whitespace()).collect();
 
     if s.is_empty() {
-        return Ok((0, 0));
+        return Ok((BigInt::from(0), 0));
     }
 
     // Find the variable position
@@ -163,7 +202,7 @@ fn parse_term(term: &str, var: char) -> Result<(i64, usize), String> {
         None => {
             // Pure constant: no variable
             let val = s
-                .parse::<i64>()
+                .parse::<BigInt>()
                 .map_err(|e| format!("cannot parse '{}' as integer: {}", s, e))?;
             Ok((val, 0))
         }
@@ -174,12 +213,12 @@ fn parse_term(term: &str, var: char) -> Result<(i64, usize), String> {
             let coeff_str = coeff_str.trim_end_matches('*');
 
             let coeff = if coeff_str.is_empty() || coeff_str == "+" {
-                1
+                BigInt::from(1)
             } else if coeff_str == "-" {
-                -1
+                BigInt::from(-1)
             } else {
                 coeff_str
-                    .parse::<i64>()
+                    .parse::<BigInt>()
                     .map_err(|e| format!("cannot parse coefficient '{}': {}", coeff_str, e))?
             };
 
@@ -286,6 +325,19 @@ mod tests {
     #[test]
     fn test_constant() {
         assert_eq!(parse_polynomial("42").unwrap(), vec![42]);
+    }
+
+    #[test]
+    fn test_bigint_coefficients() {
+        let big = BigInt::from(10u64).pow(40);
+        assert_eq!(
+            parse_polynomial_bigint(&format!("{big}, 2, 1")).unwrap(),
+            vec![big.clone(), BigInt::from(2), BigInt::from(1)]
+        );
+        assert_eq!(
+            parse_polynomial_bigint(&format!("{big}t^2 + 2t + 1")).unwrap(),
+            vec![BigInt::from(1), BigInt::from(2), big]
+        );
     }
 
     #[test]

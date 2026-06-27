@@ -138,6 +138,47 @@ pub fn format_poly_var(coeffs: &[i64], var: &str) -> String {
     result
 }
 
+/// Format a `BigInt` coefficient vector as a human-readable polynomial string.
+pub fn format_poly_bigint_coeffs(coeffs: &[BigInt]) -> String {
+    format_poly_bigint_var(coeffs, "t")
+}
+
+/// Format a `BigInt` coefficient vector with a custom variable name.
+pub fn format_poly_bigint_var(coeffs: &[BigInt], var: &str) -> String {
+    let one = BigInt::from(1);
+    let minus_one = BigInt::from(-1);
+    let mut terms = Vec::new();
+    for (i, c) in coeffs.iter().enumerate() {
+        if c.is_zero() {
+            continue;
+        }
+        let term = match i {
+            0 => c.to_string(),
+            1 if c == &one => var.to_string(),
+            1 if c == &minus_one => format!("-{}", var),
+            1 => format!("{}{}", c, var),
+            e if c == &one => format!("{}^{}", var, e),
+            e if c == &minus_one => format!("-{}^{}", var, e),
+            e => format!("{}{}^{}", c, var, e),
+        };
+        terms.push(term);
+    }
+    if terms.is_empty() {
+        return "0".to_string();
+    }
+    let mut result = terms[0].clone();
+    for term in &terms[1..] {
+        if let Some(rest) = term.strip_prefix('-') {
+            result.push_str(" - ");
+            result.push_str(rest);
+        } else {
+            result.push_str(" + ");
+            result.push_str(term);
+        }
+    }
+    result
+}
+
 // ---------------------------------------------------------------------------
 // Real-rootedness and interlacing
 // ---------------------------------------------------------------------------
@@ -204,11 +245,42 @@ pub fn is_log_concave(coeffs: &[i64]) -> bool {
     true
 }
 
+/// Check if a `BigInt` coefficient sequence is log-concave.
+pub fn is_log_concave_bigint_coeffs(coeffs: &[BigInt]) -> bool {
+    if coeffs.len() <= 2 {
+        return true;
+    }
+    for i in 1..coeffs.len() - 1 {
+        let lhs = &coeffs[i] * &coeffs[i];
+        let rhs = &coeffs[i - 1] * &coeffs[i + 1];
+        if lhs < rhs {
+            return false;
+        }
+    }
+    true
+}
+
 /// Check if a coefficient sequence is unimodal.
 ///
 /// A sequence is unimodal if it is weakly increasing up to some index and
 /// weakly decreasing afterwards.  Plateaus are allowed.
 pub fn is_unimodal(coeffs: &[i64]) -> bool {
+    if coeffs.len() <= 2 {
+        return true;
+    }
+
+    let mut i = 1;
+    while i < coeffs.len() && coeffs[i - 1] <= coeffs[i] {
+        i += 1;
+    }
+    while i < coeffs.len() && coeffs[i - 1] >= coeffs[i] {
+        i += 1;
+    }
+    i == coeffs.len()
+}
+
+/// Check if a `BigInt` coefficient sequence is unimodal.
+pub fn is_unimodal_bigint_coeffs(coeffs: &[BigInt]) -> bool {
     if coeffs.len() <= 2 {
         return true;
     }
@@ -251,6 +323,29 @@ pub fn is_ultra_log_concave(coeffs: &[i64]) -> bool {
     true
 }
 
+/// Check if a `BigInt` coefficient sequence is ultra-log-concave.
+pub fn is_ultra_log_concave_bigint_coeffs(coeffs: &[BigInt]) -> bool {
+    let d = match coeffs.iter().rposition(|c| !c.is_zero()) {
+        Some(d) => d,
+        None => return true,
+    };
+    if d <= 1 {
+        return true;
+    }
+    let mut binom = vec![BigInt::from(1); d + 1];
+    for k in 1..=d {
+        binom[k] = &binom[k - 1] * BigInt::from(d - k + 1) / BigInt::from(k);
+    }
+    for k in 1..d {
+        let lhs = coeffs[k].pow(2) * &binom[k - 1] * &binom[k + 1];
+        let rhs = &coeffs[k - 1] * &coeffs[k + 1] * &binom[k] * &binom[k];
+        if lhs < rhs {
+            return false;
+        }
+    }
+    true
+}
+
 /// Check if a polynomial has palindromic (symmetric) coefficients.
 ///
 /// A polynomial a_0 + a_1 t + ... + a_d t^d is palindromic if a_i = a_{d-i}
@@ -260,6 +355,20 @@ pub fn is_ultra_log_concave(coeffs: &[i64]) -> bool {
 /// Trailing zeros are trimmed before checking.
 pub fn is_palindromic(coeffs: &[i64]) -> bool {
     let d = match coeffs.iter().rposition(|&c| c != 0) {
+        Some(d) => d,
+        None => return true,
+    };
+    for i in 0..=d / 2 {
+        if coeffs[i] != coeffs[d - i] {
+            return false;
+        }
+    }
+    true
+}
+
+/// Check if a `BigInt` coefficient polynomial is palindromic.
+pub fn is_palindromic_bigint_coeffs(coeffs: &[BigInt]) -> bool {
+    let d = match coeffs.iter().rposition(|c| !c.is_zero()) {
         Some(d) => d,
         None => return true,
     };
@@ -323,6 +432,37 @@ pub fn gamma_coefficients(coeffs: &[i64]) -> Option<Vec<i64>> {
     )
 }
 
+/// Compute gamma coefficients for a palindromic `BigInt` coefficient polynomial.
+pub fn gamma_coefficients_bigint_coeffs(coeffs: &[BigInt]) -> Option<Vec<BigInt>> {
+    let d = match coeffs.iter().rposition(|c| !c.is_zero()) {
+        Some(d) => d,
+        None => return Some(vec![]),
+    };
+    if !is_palindromic_bigint_coeffs(coeffs) {
+        return None;
+    }
+    let half = d / 2;
+
+    let mut binomials = vec![vec![BigInt::from(0); d + 1]; d + 1];
+    for n in 0..=d {
+        binomials[n][0] = BigInt::from(1);
+        for k in 1..=n {
+            binomials[n][k] = &binomials[n - 1][k - 1] + &binomials[n - 1][k];
+        }
+    }
+
+    let mut gamma = vec![BigInt::from(0); half + 1];
+    for i in 0..=half {
+        let mut val = coeffs[i].clone();
+        for j in 0..i {
+            val -= &gamma[j] * &binomials[d - 2 * j][i - j];
+        }
+        gamma[i] = val;
+    }
+
+    Some(gamma)
+}
+
 /// Check if a polynomial is gamma-positive.
 ///
 /// A palindromic polynomial is gamma-positive if all its gamma coefficients
@@ -336,9 +476,26 @@ pub fn is_gamma_positive(coeffs: &[i64]) -> bool {
     }
 }
 
+/// Check if a `BigInt` coefficient polynomial is gamma-positive.
+pub fn is_gamma_positive_bigint_coeffs(coeffs: &[BigInt]) -> bool {
+    match gamma_coefficients_bigint_coeffs(coeffs) {
+        None => false,
+        Some(gammas) => gammas.iter().all(|g| g >= &BigInt::zero()),
+    }
+}
+
 /// Remove all initial zeros, i.e. divide out the largest power of `t`.
 pub fn strip_initial_zeros(coeffs: &[i64]) -> &[i64] {
     let start = match coeffs.iter().position(|&c| c != 0) {
+        Some(start) => start,
+        None => return &[],
+    };
+    &coeffs[start..]
+}
+
+/// Remove all initial zeros from a `BigInt` coefficient vector.
+pub fn strip_initial_zeros_bigint_coeffs(coeffs: &[BigInt]) -> &[BigInt] {
+    let start = match coeffs.iter().position(|c| !c.is_zero()) {
         Some(start) => start,
         None => return &[],
     };
@@ -350,14 +507,31 @@ pub fn is_palindromic_ignoring_initial_zeros(coeffs: &[i64]) -> bool {
     is_palindromic(strip_initial_zeros(coeffs))
 }
 
+/// Check palindromicity after dividing out all factors of `t`.
+pub fn is_palindromic_ignoring_initial_zeros_bigint_coeffs(coeffs: &[BigInt]) -> bool {
+    is_palindromic_bigint_coeffs(strip_initial_zeros_bigint_coeffs(coeffs))
+}
+
 /// Compute gamma-coefficients after dividing out all factors of `t`.
 pub fn gamma_coefficients_ignoring_initial_zeros(coeffs: &[i64]) -> Option<Vec<i64>> {
     gamma_coefficients(strip_initial_zeros(coeffs))
 }
 
+/// Compute gamma coefficients after dividing out all factors of `t`.
+pub fn gamma_coefficients_ignoring_initial_zeros_bigint_coeffs(
+    coeffs: &[BigInt],
+) -> Option<Vec<BigInt>> {
+    gamma_coefficients_bigint_coeffs(strip_initial_zeros_bigint_coeffs(coeffs))
+}
+
 /// Check gamma-positivity after dividing out all factors of `t`.
 pub fn is_gamma_positive_ignoring_initial_zeros(coeffs: &[i64]) -> bool {
     is_gamma_positive(strip_initial_zeros(coeffs))
+}
+
+/// Check gamma-positivity after dividing out all factors of `t`.
+pub fn is_gamma_positive_ignoring_initial_zeros_bigint_coeffs(coeffs: &[BigInt]) -> bool {
+    is_gamma_positive_bigint_coeffs(strip_initial_zeros_bigint_coeffs(coeffs))
 }
 
 /// Compute the Stapledon decomposition with respect to a degree bound `n`.
@@ -1730,6 +1904,19 @@ mod tests {
     }
 
     #[test]
+    fn test_bigint_shape_properties() {
+        let scale = BigInt::from(10u64).pow(40);
+        let coeffs = [1_i64, 3, 3, 1]
+            .into_iter()
+            .map(|c| BigInt::from(c) * &scale)
+            .collect::<Vec<_>>();
+        assert!(is_palindromic_bigint_coeffs(&coeffs));
+        assert!(is_unimodal_bigint_coeffs(&coeffs));
+        assert!(is_log_concave_bigint_coeffs(&coeffs));
+        assert!(is_ultra_log_concave_bigint_coeffs(&coeffs));
+    }
+
+    #[test]
     fn test_hermite_biehler_parts() {
         let (even, odd) = hermite_biehler_parts(&[1, 2, 3, 4, 5]);
         assert_eq!(even, vec![1, 3, 5]);
@@ -2138,6 +2325,19 @@ mod tests {
 
         // [1,2,2,1] degree 3: gamma_0=1, gamma_1=2-3=-1
         assert_eq!(gamma_coefficients(&[1, 2, 2, 1]), Some(vec![1, -1]));
+    }
+
+    #[test]
+    fn test_bigint_gamma_coefficients() {
+        let scale = BigInt::from(10u64).pow(40);
+        let coeffs = [1_i64, 11, 11, 1]
+            .into_iter()
+            .map(|c| BigInt::from(c) * &scale)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            gamma_coefficients_bigint_coeffs(&coeffs),
+            Some(vec![scale.clone(), BigInt::from(8) * scale])
+        );
     }
 
     #[test]
