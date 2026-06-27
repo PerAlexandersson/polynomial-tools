@@ -148,7 +148,9 @@ pub use interlacing_matrix::{
     lace_matrix_bigint, lace_matrix_i64, lace_matrix_sequence, lace_matrix_sequence_bigint,
     lace_matrix_sequence_i64, InterlacingMatrixError,
 };
-pub use parse::{parse_polynomial, parse_polynomials};
+pub use parse::{
+    parse_polynomial, parse_polynomial_bigint, parse_polynomials, parse_polynomials_bigint,
+};
 pub use polynomial::{CoeffRing, FieldRing, Polynomial};
 pub use real_rootedness::{
     // Bézout matrix directly
@@ -164,9 +166,13 @@ pub use real_rootedness::{
     ehrhart_to_hstar_with_denom,
     // Display
     format_poly,
+    format_poly_bigint_coeffs,
+    format_poly_bigint_var,
     format_poly_var,
     gamma_coefficients,
+    gamma_coefficients_bigint_coeffs,
     gamma_coefficients_ignoring_initial_zeros,
+    gamma_coefficients_ignoring_initial_zeros_bigint_coeffs,
     // Concavity and symmetry
     has_simple_roots,
     has_simple_roots_bigint_coeffs,
@@ -175,10 +181,15 @@ pub use real_rootedness::{
     // Ehrhart polynomial <-> h*-vector
     hstar_to_ehrhart,
     is_gamma_positive,
+    is_gamma_positive_bigint_coeffs,
     is_gamma_positive_ignoring_initial_zeros,
+    is_gamma_positive_ignoring_initial_zeros_bigint_coeffs,
     is_log_concave,
+    is_log_concave_bigint_coeffs,
     is_palindromic,
+    is_palindromic_bigint_coeffs,
     is_palindromic_ignoring_initial_zeros,
+    is_palindromic_ignoring_initial_zeros_bigint_coeffs,
     // Default methods and explicit Bézout path
     is_real_rooted,
     is_real_rooted_bezout_bigint_coeffs,
@@ -195,13 +206,16 @@ pub use real_rootedness::{
     is_strictly_real_rooted_hermite,
     is_strictly_real_rooted_hermite_bigint_coeffs,
     is_ultra_log_concave,
+    is_ultra_log_concave_bigint_coeffs,
     is_unimodal,
+    is_unimodal_bigint_coeffs,
     real_roots,
     // Resultant and discriminant
     resultant,
     squarefree_part_bigint_coeffs,
     stapledon_decomposition,
     strip_initial_zeros,
+    strip_initial_zeros_bigint_coeffs,
     sylvester_matrix,
 };
 pub use real_rootedness::{

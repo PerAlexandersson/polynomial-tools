@@ -64,6 +64,17 @@ fn json_i64_vec(values: &[i64]) -> String {
     )
 }
 
+fn json_bigint_vec(values: &[BigInt]) -> String {
+    format!(
+        "[{}]",
+        values
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(",")
+    )
+}
+
 fn json_usize_vec(values: &[usize]) -> String {
     format!(
         "[{}]",
@@ -322,6 +333,9 @@ fn print_command_help(command: &str) -> bool {
                 "Options:",
                 "  --json    Emit machine-readable JSON",
                 "",
+                "Note:",
+                "  Accepts arbitrary-size integer coefficients; small rows use the i64 fast path.",
+                "",
                 "Example:",
                 "  echo '1, 11, 11, 1' | polytool properties",
             ],
@@ -395,6 +409,21 @@ fn read_polys() -> Vec<Vec<i64>> {
     let mut input = String::new();
     io::stdin().read_to_string(&mut input).unwrap();
     parse_polynomials(&input)
+        .into_iter()
+        .filter_map(|r| match r {
+            Ok(p) => Some(p),
+            Err(e) => {
+                eprintln!("Warning: {}", e);
+                None
+            }
+        })
+        .collect()
+}
+
+fn read_polys_bigint() -> Vec<Vec<BigInt>> {
+    let mut input = String::new();
+    io::stdin().read_to_string(&mut input).unwrap();
+    parse_polynomials_bigint(&input)
         .into_iter()
         .filter_map(|r| match r {
             Ok(p) => Some(p),
@@ -489,40 +518,77 @@ fn strip_trailing_zeros(coeffs: &[i64]) -> &[i64] {
     &coeffs[..end]
 }
 
+fn strip_trailing_zeros_bigint(coeffs: &[BigInt]) -> &[BigInt] {
+    let end = coeffs
+        .iter()
+        .rposition(|c| c != &BigInt::from(0))
+        .map_or(0, |i| i + 1);
+    &coeffs[..end]
+}
+
 fn polynomial_degree(coeffs: &[i64]) -> usize {
     coeffs.iter().rposition(|&c| c != 0).unwrap_or(0)
+}
+
+fn polynomial_degree_bigint(coeffs: &[BigInt]) -> usize {
+    coeffs
+        .iter()
+        .rposition(|c| c != &BigInt::from(0))
+        .unwrap_or(0)
 }
 
 #[derive(Clone, Debug)]
 struct PropertyReport {
     index: usize,
-    coefficients: Vec<i64>,
+    coefficients: Vec<BigInt>,
     polynomial: String,
     degree: usize,
     real_rooted: bool,
     simple_roots: bool,
     palindromic: bool,
     gamma_positive: bool,
-    gamma_coefficients: Option<Vec<i64>>,
+    gamma_coefficients: Option<Vec<BigInt>>,
     unimodal: bool,
     log_concave: bool,
     ultra_log_concave: bool,
 }
 
-fn property_report(index: usize, coeffs: &[i64]) -> PropertyReport {
+fn property_report_i64(index: usize, coeffs: &[i64]) -> PropertyReport {
     PropertyReport {
         index,
-        coefficients: coeffs.to_vec(),
+        coefficients: coeffs.iter().map(|&c| BigInt::from(c)).collect(),
         polynomial: format_poly(coeffs),
         degree: polynomial_degree(coeffs),
         real_rooted: is_real_rooted(coeffs),
         simple_roots: has_simple_roots(coeffs),
         palindromic: is_palindromic_ignoring_initial_zeros(coeffs),
         gamma_positive: is_gamma_positive_ignoring_initial_zeros(coeffs),
-        gamma_coefficients: gamma_coefficients_ignoring_initial_zeros(coeffs),
+        gamma_coefficients: gamma_coefficients_ignoring_initial_zeros(coeffs)
+            .map(|gamma| gamma.into_iter().map(BigInt::from).collect()),
         unimodal: is_unimodal(coeffs),
         log_concave: is_log_concave(coeffs),
         ultra_log_concave: is_ultra_log_concave(coeffs),
+    }
+}
+
+fn property_report(index: usize, coeffs: &[BigInt]) -> PropertyReport {
+    if let Some(coeffs_i64) = bigint_coeffs_to_i64(coeffs) {
+        return property_report_i64(index, &coeffs_i64);
+    }
+
+    PropertyReport {
+        index,
+        coefficients: coeffs.to_vec(),
+        polynomial: format_poly_bigint_coeffs(coeffs),
+        degree: polynomial_degree_bigint(coeffs),
+        real_rooted: is_real_rooted_bigint_coeffs(coeffs),
+        simple_roots: has_simple_roots_bigint_coeffs(coeffs),
+        palindromic: is_palindromic_ignoring_initial_zeros_bigint_coeffs(coeffs),
+        gamma_positive: is_gamma_positive_ignoring_initial_zeros_bigint_coeffs(coeffs),
+        gamma_coefficients: gamma_coefficients_ignoring_initial_zeros_bigint_coeffs(coeffs),
+        unimodal: is_unimodal_bigint_coeffs(coeffs),
+        log_concave: is_log_concave_bigint_coeffs(coeffs),
+        ultra_log_concave: is_ultra_log_concave_bigint_coeffs(coeffs),
     }
 }
 
@@ -558,7 +624,7 @@ fn property_report_json(report: &PropertyReport) -> String {
     let gamma = report
         .gamma_coefficients
         .as_ref()
-        .map(|coeffs| json_i64_vec(coeffs))
+        .map(|coeffs| json_bigint_vec(coeffs))
         .unwrap_or_else(|| "null".to_string());
     format!(
         "{{\"index\":{},\"polynomial\":{},\"coefficients\":{},\"degree\":{},\
@@ -567,7 +633,7 @@ fn property_report_json(report: &PropertyReport) -> String {
          \"log_concave\":{},\"ultra_log_concave\":{}}}",
         report.index,
         json_string(&report.polynomial),
-        json_i64_vec(&report.coefficients),
+        json_bigint_vec(&report.coefficients),
         report.degree,
         report.real_rooted,
         report.simple_roots,
@@ -861,11 +927,11 @@ fn cmd_properties(args: &[String]) {
             return;
         }
     };
-    let reports = read_polys()
+    let reports = read_polys_bigint()
         .into_iter()
         .enumerate()
         .map(|(index, coeffs)| {
-            let c = strip_trailing_zeros(&coeffs);
+            let c = strip_trailing_zeros_bigint(&coeffs);
             property_report(index, c)
         })
         .collect::<Vec<_>>();
@@ -1741,7 +1807,7 @@ fn cmd_family_check(args: &[String]) {
     let reports = polys
         .iter()
         .enumerate()
-        .map(|(index, coeffs)| property_report(index, coeffs))
+        .map(|(index, coeffs)| property_report_i64(index, coeffs))
         .collect::<Vec<_>>();
     let pairs = polys
         .windows(2)

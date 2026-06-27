@@ -169,6 +169,11 @@ polytool properties < polys.txt
 polytool properties --json < polys.txt
 ```
 
+`properties` accepts arbitrary-size integer coefficients in both dense-list
+and expanded-polynomial input.  When all coefficients fit in `i64`, it uses the
+same fast exact path as the rest of the CLI; otherwise it falls back to exact
+BigInt property checks.
+
 Output includes all properties for each polynomial:
 
 ```
