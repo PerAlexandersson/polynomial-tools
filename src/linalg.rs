@@ -735,6 +735,13 @@ pub enum SparseModRowOrder {
     /// This is a cheap fill-in heuristic.  The result still reports original
     /// zero-based input row indices in `pivot_rows` and `inconsistent_row`.
     IncreasingNonzeros,
+    /// Process rows by an initial Markowitz-style fill-in score.
+    ///
+    /// The score is `(row_nnz - 1) * (leading_column_nnz - 1)`, where
+    /// `leading_column_nnz` is computed from the unreduced input system.  This
+    /// is cheaper than dynamic Markowitz pivoting but tends to prefer sparse
+    /// rows whose leading pivot column is also sparse.
+    IncreasingMarkowitzCost,
 }
 
 /// Options for sparse modular elimination.
@@ -845,6 +852,41 @@ fn sparse_modular_solution_from_pivots(
         solution[pivot_col] = value;
     }
     solution
+}
+
+fn sparse_modular_column_counts(
+    indexed_rows: &[(usize, SparseModRow)],
+    num_vars: usize,
+) -> Vec<usize> {
+    let mut column_counts = vec![0; num_vars];
+    for (_, row) in indexed_rows {
+        for &(col, _) in &row.entries {
+            if col < num_vars {
+                column_counts[col] += 1;
+            }
+        }
+    }
+    column_counts
+}
+
+fn sparse_modular_initial_markowitz_cost(
+    row: &SparseModRow,
+    column_counts: &[usize],
+) -> (usize, usize, usize) {
+    let Some(&(col, _)) = row.entries.first() else {
+        return (0, 0, 0);
+    };
+    let row_fill = row.entries.len().saturating_sub(1);
+    let column_fill = column_counts
+        .get(col)
+        .copied()
+        .unwrap_or(usize::MAX)
+        .saturating_sub(1);
+    (
+        row_fill.saturating_mul(column_fill),
+        row.entries.len(),
+        column_fill,
+    )
 }
 
 fn sparse_modular_linear_system_consistency_indexed<I>(
@@ -968,6 +1010,23 @@ where
             let mut indexed_rows = rows.into_iter().enumerate().collect::<Vec<_>>();
             indexed_rows
                 .sort_unstable_by_key(|(index, row)| (row.entries.len(), row.rhs == 0, *index));
+            sparse_modular_linear_system_consistency_indexed(
+                indexed_rows,
+                num_vars,
+                prime,
+                options.compute_solution,
+            )
+        }
+        SparseModRowOrder::IncreasingMarkowitzCost => {
+            let mut indexed_rows = rows.into_iter().enumerate().collect::<Vec<_>>();
+            let column_counts = sparse_modular_column_counts(&indexed_rows, num_vars);
+            indexed_rows.sort_unstable_by_key(|(index, row)| {
+                (
+                    sparse_modular_initial_markowitz_cost(row, &column_counts),
+                    row.rhs == 0,
+                    *index,
+                )
+            });
             sparse_modular_linear_system_consistency_indexed(
                 indexed_rows,
                 num_vars,
@@ -2099,6 +2158,34 @@ mod tests {
         )
         .unwrap();
         assert!(result.consistent);
+        assert_eq!(result.solution, None);
+    }
+
+    #[test]
+    fn test_sparse_modular_solver_can_use_initial_markowitz_cost() {
+        let prime = 101;
+        let num_vars = 5;
+        let rows = vec![
+            SparseModRow::from_entries([(0, 1), (3, 1)], 1, prime),
+            SparseModRow::from_entries([(0, 1), (4, 1)], 2, prime),
+            SparseModRow::from_entries([(1, 1), (3, 1)], 3, prime),
+            SparseModRow::from_entries([(1, 1), (4, 1)], 4, prime),
+            SparseModRow::from_entries([(2, 1), (3, 1)], 5, prime),
+        ];
+        let result = sparse_modular_linear_system_consistency_with_options(
+            rows,
+            num_vars,
+            prime,
+            SparseModEliminationOptions {
+                row_order: SparseModRowOrder::IncreasingMarkowitzCost,
+                compute_solution: false,
+            },
+        )
+        .unwrap();
+
+        assert!(result.consistent);
+        assert_eq!(result.pivot_rows[0], 4);
+        assert_eq!(result.pivot_columns[0], 2);
         assert_eq!(result.solution, None);
     }
 
