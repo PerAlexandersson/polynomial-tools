@@ -162,6 +162,10 @@ polytool interlacing-profile --json < polys.txt
 
 The JSON output includes `previous_count`, `checked_previous_count`, and
 `interlacing_previous_count`, plus the checked pair reports.
+Both commands accept arbitrary-size integer coefficients in dense-list and
+expanded-polynomial input.  Rows whose coefficients fit in `i64` use the
+small-coefficient fast path; larger rows use the exact BigInt interlacing
+backend.
 
 ### Check unimodality, log-concavity, palindromicity, gamma-positivity
 
@@ -209,9 +213,9 @@ Supported sequence names are `eulerian`, `narayana`, `type-b-eulerian`,
 `family-check` reports properties, consecutive weak/strict interlacing, and
 optionally an adaptive recurrence search.  Requirement flags make the command
 exit nonzero at the first failed requested condition.
-Property checks accept arbitrary-size integer coefficients.  Consecutive
-interlacing and recurrence search currently require coefficients that fit in
-`i64`; oversized rows are preserved in the report and those checks are marked
+Property checks and consecutive interlacing accept arbitrary-size integer
+coefficients.  Recurrence search currently requires coefficients that fit in
+`i64`; oversized rows are preserved in the report and recurrence is marked
 unavailable rather than silently dropped.
 
 ```sh
@@ -568,6 +572,10 @@ Available MCP tools:
 - `ehrhart_hstar`
 - `analyze_decomposition`
 - `generate_sequence`
+
+The MCP interlacing and property tools accept arbitrary-size integer
+coefficients.  JSON integers may be provided directly when they fit the client
+stack, and larger exact integers should be sent as strings.
 
 See [`mcp/README.md`](mcp/README.md) for request schemas, examples, and
 development notes.

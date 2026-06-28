@@ -301,6 +301,9 @@ fn print_family_check_help() {
     println!("  --require-weak-interlacing    Fail if consecutive rows do not weakly interlace");
     println!("  --json                        Emit machine-readable JSON");
     println!("  -h, --help                    Print this help text");
+    println!();
+    println!("Note: properties and interlacing accept arbitrary-size integer coefficients;");
+    println!("      recurrence search currently requires coefficients that fit in i64.");
 }
 
 fn print_stapledon_help() {
@@ -327,6 +330,9 @@ fn print_command_help(command: &str) -> bool {
                 "Options:",
                 "  --json    Emit machine-readable JSON",
                 "",
+                "Note:",
+                "  Accepts arbitrary-size integer coefficients; small rows use the i64 fast path.",
+                "",
                 "Example:",
                 "  printf '2,-3,1\\n-1,1\\n' | polytool interlacing",
             ],
@@ -337,6 +343,9 @@ fn print_command_help(command: &str) -> bool {
             &[
                 "Options:",
                 "  --json    Emit machine-readable JSON, including checked previous-pair reports",
+                "",
+                "Note:",
+                "  Accepts arbitrary-size integer coefficients; small rows use the i64 fast path.",
                 "",
                 "Example:",
                 "  printf '1\\n1,1\\n1,2,1\\n' | polytool interlacing-profile",
@@ -730,40 +739,20 @@ fn interlacing_report(
     pair_index: usize,
     left_index: usize,
     right_index: usize,
-    p: &[i64],
-    q: &[i64],
+    p: &[BigInt],
+    q: &[BigInt],
 ) -> InterlacingReport {
-    let strict = check_interlacing(p, q);
-    let weak = check_weak_interlacing(p, q);
+    let strict = check_interlacing_bigint_coeffs(p, q);
+    let weak = check_weak_interlacing_bigint_coeffs(p, q);
     InterlacingReport {
         pair_index,
         left_index,
         right_index,
-        p: format_poly(p),
-        q: format_poly(q),
+        p: format_poly_bigint_coeffs(p),
+        q: format_poly_bigint_coeffs(q),
         strict,
         weak,
         status: interlacing_status(strict, weak),
-    }
-}
-
-fn interlacing_unavailable_report(
-    pair_index: usize,
-    left_index: usize,
-    right_index: usize,
-    p: &str,
-    q: &str,
-    reason: &str,
-) -> InterlacingReport {
-    InterlacingReport {
-        pair_index,
-        left_index,
-        right_index,
-        p: p.to_string(),
-        q: q.to_string(),
-        strict: None,
-        weak: None,
-        status: reason.to_string(),
     }
 }
 
@@ -815,7 +804,7 @@ fn interlacing_report_has_interlacing(report: &InterlacingReport) -> bool {
 
 fn interlacing_profile_report(
     index: usize,
-    polynomial: &[i64],
+    polynomial: &[BigInt],
     previous: Vec<InterlacingReport>,
 ) -> InterlacingProfileReport {
     let previous_interlacing_indices = previous
@@ -825,7 +814,7 @@ fn interlacing_profile_report(
         .collect::<Vec<_>>();
     InterlacingProfileReport {
         index,
-        polynomial: format_poly(polynomial),
+        polynomial: format_poly_bigint_coeffs(polynomial),
         previous_count: index,
         checked_previous_count: previous.len(),
         interlacing_previous_count: previous_interlacing_indices.len(),
@@ -884,7 +873,7 @@ fn cmd_interlacing(args: &[String]) {
             return;
         }
     };
-    let polys = read_polys();
+    let polys = read_polys_bigint();
     if polys.len() < 2 {
         eprintln!("Need at least two polynomials for interlacing check.");
         return;
@@ -893,8 +882,8 @@ fn cmd_interlacing(args: &[String]) {
         .windows(2)
         .enumerate()
         .map(|(i, pair)| {
-            let p = strip_trailing_zeros(&pair[0]);
-            let q = strip_trailing_zeros(&pair[1]);
+            let p = strip_trailing_zeros_bigint(&pair[0]);
+            let q = strip_trailing_zeros_bigint(&pair[1]);
             interlacing_report(i, i, i + 1, p, q)
         })
         .collect::<Vec<_>>();
@@ -921,9 +910,9 @@ fn cmd_interlacing_profile(args: &[String]) {
             return;
         }
     };
-    let polys = read_polys()
+    let polys = read_polys_bigint()
         .into_iter()
-        .map(|coeffs| strip_trailing_zeros(&coeffs).to_vec())
+        .map(|coeffs| strip_trailing_zeros_bigint(&coeffs).to_vec())
         .collect::<Vec<_>>();
     if polys.is_empty() {
         eprintln!("Need at least one polynomial for interlacing profile.");
@@ -1842,12 +1831,6 @@ fn first_family_failure(
     if options.require_weak_interlacing {
         for pair in pairs {
             if pair.weak != Some(true) {
-                if pair.status == "integer_coefficients_out_of_i64_range" {
-                    return Some(format!(
-                        "interlacing check for polynomials {} and {} requires coefficients that fit in i64",
-                        pair.left_index, pair.right_index
-                    ));
-                }
                 return Some(format!(
                     "polynomials {} and {} do not weakly interlace",
                     pair.left_index, pair.right_index
@@ -2007,19 +1990,13 @@ fn cmd_family_check(args: &[String]) {
             .map(|pair_index| {
                 let left_index = polys[pair_index].0;
                 let right_index = polys[pair_index + 1].0;
-                match (&i64_polys[pair_index], &i64_polys[pair_index + 1]) {
-                    (Some(p), Some(q)) => {
-                        interlacing_report(pair_index, left_index, right_index, p, q)
-                    }
-                    _ => interlacing_unavailable_report(
-                        pair_index,
-                        left_index,
-                        right_index,
-                        &reports[pair_index].polynomial,
-                        &reports[pair_index + 1].polynomial,
-                        "integer_coefficients_out_of_i64_range",
-                    ),
-                }
+                interlacing_report(
+                    pair_index,
+                    left_index,
+                    right_index,
+                    &polys[pair_index].1,
+                    &polys[pair_index + 1].1,
+                )
             })
             .collect::<Vec<_>>()
     } else {

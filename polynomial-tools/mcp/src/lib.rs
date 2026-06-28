@@ -173,6 +173,13 @@ pub struct InterlacingPairRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub struct BigIntInterlacingPairRequest {
+    pub p: BigIntPolynomialInput,
+    pub q: BigIntPolynomialInput,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct RecurrenceSearchOptionsInput {
     pub skip_prefix: Option<usize>,
     pub min_rec_len: Option<usize>,
@@ -342,6 +349,16 @@ pub struct ParsePolynomialItem {
 }
 
 #[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
+pub struct BigIntParsePolynomialItem {
+    pub index: usize,
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub polynomial: Option<BigIntNormalizedPolynomial>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
 pub struct ParsePolynomialsResponse {
     pub items: Vec<ParsePolynomialItem>,
 }
@@ -379,8 +396,8 @@ pub struct PolynomialPropertiesResponse {
 
 #[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
 pub struct InterlacingPairResult {
-    pub p: NormalizedPolynomial,
-    pub q: NormalizedPolynomial,
+    pub p: BigIntNormalizedPolynomial,
+    pub q: BigIntNormalizedPolynomial,
     pub strict: Option<bool>,
     pub weak: Option<bool>,
     pub status: String,
@@ -400,7 +417,7 @@ pub struct InterlacingPairItem {
 
 #[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
 pub struct InterlacingSequenceResponse {
-    pub items: Vec<ParsePolynomialItem>,
+    pub items: Vec<BigIntParsePolynomialItem>,
     pub pairs: Vec<InterlacingPairItem>,
 }
 
@@ -409,7 +426,7 @@ pub struct InterlacingProfileItem {
     pub index: usize,
     pub ok: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub polynomial: Option<NormalizedPolynomial>,
+    pub polynomial: Option<BigIntNormalizedPolynomial>,
     pub previous_count: usize,
     pub checked_previous_count: usize,
     pub interlacing_previous_count: usize,
@@ -423,7 +440,7 @@ pub struct InterlacingProfileItem {
 
 #[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
 pub struct InterlacingProfileResponse {
-    pub items: Vec<ParsePolynomialItem>,
+    pub items: Vec<BigIntParsePolynomialItem>,
     pub profile: Vec<InterlacingProfileItem>,
 }
 
@@ -688,6 +705,13 @@ fn parse_bigint_polynomial_input(input: &BigIntPolynomialInput) -> Result<Vec<Bi
     }
 }
 
+fn parse_required_bigint_polynomial(
+    input: &BigIntPolynomialInput,
+    name: &str,
+) -> Result<Vec<BigInt>, McpError> {
+    parse_bigint_polynomial_input(input).map_err(|e| invalid_params(format!("{name}: {e}")))
+}
+
 fn normalize_coefficients(mut coefficients: Vec<i64>) -> Vec<i64> {
     while coefficients.len() > 1 && coefficients.last() == Some(&0) {
         coefficients.pop();
@@ -916,6 +940,27 @@ fn parse_items(batch: &ParsedBatch) -> Vec<ParsePolynomialItem> {
         .collect()
 }
 
+fn parse_bigint_items(batch: &BigIntParsedBatch) -> Vec<BigIntParsePolynomialItem> {
+    batch
+        .iter()
+        .enumerate()
+        .map(|(index, item)| match item {
+            Ok(polynomial) => BigIntParsePolynomialItem {
+                index,
+                ok: true,
+                polynomial: Some(polynomial.display.clone()),
+                error: None,
+            },
+            Err(error) => BigIntParsePolynomialItem {
+                index,
+                ok: false,
+                polynomial: None,
+                error: Some(error.clone()),
+            },
+        })
+        .collect()
+}
+
 fn collect_polynomials_or_errors(
     batch: ParsedBatch,
 ) -> Result<Vec<NormalizedPolynomial>, Vec<ParsePolynomialItem>> {
@@ -966,9 +1011,12 @@ fn collect_rational_polynomials_or_errors(
     }
 }
 
-fn interlacing_result(p: NormalizedPolynomial, q: NormalizedPolynomial) -> InterlacingPairResult {
-    let strict = check_interlacing(&p.coefficients, &q.coefficients);
-    let weak = check_weak_interlacing(&p.coefficients, &q.coefficients);
+fn interlacing_result(
+    p: NormalizedBigIntPolynomial,
+    q: NormalizedBigIntPolynomial,
+) -> InterlacingPairResult {
+    let strict = check_interlacing_bigint_coeffs(&p.coefficients, &q.coefficients);
+    let weak = check_weak_interlacing_bigint_coeffs(&p.coefficients, &q.coefficients);
     let status = match (strict, weak) {
         (Some(true), _) => "strictly_interlace",
         (_, Some(true)) => "weakly_interlace",
@@ -979,12 +1027,21 @@ fn interlacing_result(p: NormalizedPolynomial, q: NormalizedPolynomial) -> Inter
     }
     .to_string();
     InterlacingPairResult {
-        p,
-        q,
+        p: p.display,
+        q: q.display,
         strict,
         weak,
         status,
     }
+}
+
+fn interlacing_result_i64(
+    p: NormalizedPolynomial,
+    q: NormalizedPolynomial,
+) -> InterlacingPairResult {
+    let p = normalize_bigint_polynomial(p.coefficients.into_iter().map(BigInt::from).collect());
+    let q = normalize_bigint_polynomial(q.coefficients.into_iter().map(BigInt::from).collect());
+    interlacing_result(p, q)
 }
 
 fn interlacing_pair_has_interlacing(item: &InterlacingPairItem) -> bool {
@@ -1000,8 +1057,8 @@ fn interlacing_pair_item(
     pair_index: usize,
     left_index: usize,
     right_index: usize,
-    left: &Result<NormalizedPolynomial, String>,
-    right: &Result<NormalizedPolynomial, String>,
+    left: &Result<NormalizedBigIntPolynomial, String>,
+    right: &Result<NormalizedBigIntPolynomial, String>,
 ) -> InterlacingPairItem {
     match (left, right) {
         (Ok(p), Ok(q)) => InterlacingPairItem {
@@ -1704,7 +1761,7 @@ impl PolynomialToolsServer {
                     left_index: pair_index,
                     right_index: pair_index + 1,
                     ok: true,
-                    result: Some(interlacing_result(pair[0].clone(), pair[1].clone())),
+                    result: Some(interlacing_result_i64(pair[0].clone(), pair[1].clone())),
                     error: None,
                 })
                 .collect()
@@ -1786,23 +1843,27 @@ impl PolynomialToolsServer {
         Ok(Json(PolynomialPropertiesResponse { items }))
     }
 
-    #[tool(description = "Check strict and weak interlacing for a pair of polynomials.")]
+    #[tool(
+        description = "Check strict and weak interlacing for a pair of polynomials with arbitrary-size integer coefficients."
+    )]
     pub fn check_interlacing_pair(
         &self,
-        Parameters(input): Parameters<InterlacingPairRequest>,
+        Parameters(input): Parameters<BigIntInterlacingPairRequest>,
     ) -> Result<Json<InterlacingPairResult>, McpError> {
-        let p = normalize_polynomial(parse_required_polynomial(&input.p, "p")?);
-        let q = normalize_polynomial(parse_required_polynomial(&input.q, "q")?);
+        let p = normalize_bigint_polynomial(parse_required_bigint_polynomial(&input.p, "p")?);
+        let q = normalize_bigint_polynomial(parse_required_bigint_polynomial(&input.q, "q")?);
         Ok(Json(interlacing_result(p, q)))
     }
 
-    #[tool(description = "Check strict and weak interlacing for consecutive polynomial pairs.")]
+    #[tool(
+        description = "Check strict and weak interlacing for consecutive polynomial pairs with arbitrary-size integer coefficients."
+    )]
     pub fn check_interlacing_sequence(
         &self,
-        Parameters(input): Parameters<PolynomialBatchInput>,
+        Parameters(input): Parameters<BigIntPolynomialBatchInput>,
     ) -> Result<Json<InterlacingSequenceResponse>, McpError> {
-        let batch = parse_batch(&input)?;
-        let items = parse_items(&batch);
+        let batch = parse_bigint_batch(&input)?;
+        let items = parse_bigint_items(&batch);
         let pairs = batch
             .windows(2)
             .enumerate()
@@ -1814,14 +1875,14 @@ impl PolynomialToolsServer {
     }
 
     #[tool(
-        description = "For each polynomial, count backward consecutive previous interlacings until the first failure."
+        description = "For each polynomial, count backward consecutive previous interlacings until the first failure. Accepts arbitrary-size integer coefficients."
     )]
     pub fn check_interlacing_profile(
         &self,
-        Parameters(input): Parameters<PolynomialBatchInput>,
+        Parameters(input): Parameters<BigIntPolynomialBatchInput>,
     ) -> Result<Json<InterlacingProfileResponse>, McpError> {
-        let batch = parse_batch(&input)?;
-        let items = parse_items(&batch);
+        let batch = parse_bigint_batch(&input)?;
+        let items = parse_bigint_items(&batch);
         let mut pair_index = 0;
         let profile = batch
             .iter()
@@ -1865,7 +1926,7 @@ impl PolynomialToolsServer {
                     InterlacingProfileItem {
                         index,
                         ok: true,
-                        polynomial: Some(polynomial.clone()),
+                        polynomial: Some(polynomial.display.clone()),
                         previous_count: index,
                         checked_previous_count: previous.len(),
                         interlacing_previous_count: previous_interlacing_indices.len(),
@@ -2404,33 +2465,53 @@ mod tests {
     fn checks_strict_and_weak_interlacing() {
         let server = PolynomialToolsServer::new();
         let Json(strict) = server
-            .check_interlacing_pair(Parameters(InterlacingPairRequest {
-                p: coeffs(&[-2, 1]),
-                q: coeffs(&[3, -4, 1]),
+            .check_interlacing_pair(Parameters(BigIntInterlacingPairRequest {
+                p: bigint_coeffs(&["-2", "1"]),
+                q: bigint_coeffs(&["3", "-4", "1"]),
             }))
             .unwrap();
         assert_eq!(strict.strict, Some(true));
 
         let Json(weak) = server
-            .check_interlacing_pair(Parameters(InterlacingPairRequest {
-                p: coeffs(&[-1, 1]),
-                q: coeffs(&[2, -3, 1]),
+            .check_interlacing_pair(Parameters(BigIntInterlacingPairRequest {
+                p: bigint_coeffs(&["-1", "1"]),
+                q: bigint_coeffs(&["2", "-3", "1"]),
             }))
             .unwrap();
         assert_eq!(weak.weak, Some(true));
     }
 
     #[test]
+    fn interlacing_accepts_bigint_coefficients() {
+        let server = PolynomialToolsServer::new();
+        let center = "100000000000000000000";
+        let Json(result) = server
+            .check_interlacing_pair(Parameters(BigIntInterlacingPairRequest {
+                p: bigint_coeffs(&["-100000000000000000000", "1"]),
+                q: bigint_coeffs(&[
+                    "9999999999999999999999999999999999999999",
+                    "-200000000000000000000",
+                    "1",
+                ]),
+            }))
+            .unwrap();
+
+        assert_eq!(result.strict, Some(true));
+        assert_eq!(result.p.coefficients[0], format!("-{center}"));
+        assert_eq!(result.q.degree, 2);
+    }
+
+    #[test]
     fn interlacing_profile_stops_at_first_failure() {
         let server = PolynomialToolsServer::new();
         let Json(response) = server
-            .check_interlacing_profile(Parameters(PolynomialBatchInput {
+            .check_interlacing_profile(Parameters(BigIntPolynomialBatchInput {
                 polynomials: Some(vec![
-                    coeffs(&[1]),
-                    coeffs(&[1, 1]),
-                    coeffs(&[1, 2, 1]),
-                    coeffs(&[1, 0, 1]),
-                    coeffs(&[1, 3, 3, 1]),
+                    bigint_coeffs(&["1"]),
+                    bigint_coeffs(&["1", "1"]),
+                    bigint_coeffs(&["1", "2", "1"]),
+                    bigint_coeffs(&["1", "0", "1"]),
+                    bigint_coeffs(&["1", "3", "3", "1"]),
                 ]),
                 text: None,
             }))
