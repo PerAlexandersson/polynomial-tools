@@ -997,6 +997,32 @@ fn modular_prefilter_with_cache(
                     full_rank_pivot_rows: None,
                 };
             }
+        } else if result.full_rank_pivot_rows.is_none() {
+            if let Some(verify_len) = tail_verify_end {
+                if verify_len > fit_len {
+                    // Rank-deficient prefix fits are the expensive false
+                    // positives: they have many modular solutions, so no
+                    // unique held-out solution can be checked.  Add the
+                    // held-out rows modulo the same prime before paying for an
+                    // exact rational solve.
+                    let extended = recurrence_system_consistent_mod_images(
+                        &polys[..verify_len],
+                        &prime_images.polys[..verify_len],
+                        &prime_images.derivs[..verify_len],
+                        opts,
+                        prime_images.modulus,
+                    );
+                    if !extended.consistent {
+                        inconsistent_primes += 1;
+                        if inconsistent_primes >= MODULAR_PREFILTER_INCONSISTENT_PRIMES_TO_REJECT {
+                            return ModularPrefilterResult {
+                                rejected: true,
+                                full_rank_pivot_rows: None,
+                            };
+                        }
+                    }
+                }
+            }
         } else if let Some(pivot_rows) = result.full_rank_pivot_rows {
             return ModularPrefilterResult {
                 rejected: false,
@@ -3549,6 +3575,26 @@ mod tests {
             &[1, 2],
             4,
         ));
+    }
+
+    #[test]
+    fn modular_prefilter_rejects_rank_deficient_prefix_with_bad_heldout_row() {
+        let polys = i64_polys_to_rational(&[vec![0], vec![0], vec![0], vec![1]]);
+        let derivs = rational_derivatives_up_to(&polys, 0);
+        let cache = ModularPrefilterCache::new(&polys, &derivs, 0);
+        let opts = RecurrenceOptions {
+            var_deg: 0,
+            idx_deg: 0,
+            diff_deg: 0,
+            rec_len: 1,
+            homogeneous: true,
+            modular_prefilter: true,
+            ..Default::default()
+        };
+
+        let prefilter = modular_prefilter_with_cache(&polys, 3, &opts, &cache);
+        assert!(prefilter.rejected);
+        assert!(prefilter.full_rank_pivot_rows.is_none());
     }
 
     #[test]
