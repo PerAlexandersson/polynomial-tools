@@ -968,19 +968,18 @@ fn modular_prefilter_with_cache(
             opts,
             prime_images.modulus,
         );
-        let tail_consistent = tail_verify_end.is_none()
-            || result.full_rank_solution.as_ref().is_none_or(|solution| {
-                let verify_len = tail_verify_end.expect("tail verification length was checked");
-                recurrence_solution_holds_from_mod_images(
-                    &polys[..verify_len],
-                    &prime_images.polys[..verify_len],
-                    &prime_images.derivs[..verify_len],
-                    opts,
-                    prime_images.modulus,
-                    solution,
-                    fit_len + 1,
-                )
-            });
+        let tail_consistent = match (tail_verify_end, result.full_rank_solution.as_ref()) {
+            (Some(verify_len), Some(solution)) => recurrence_solution_holds_from_mod_images(
+                &polys[..verify_len],
+                &prime_images.polys[..verify_len],
+                &prime_images.derivs[..verify_len],
+                opts,
+                prime_images.modulus,
+                solution,
+                fit_len + 1,
+            ),
+            _ => true,
+        };
         if result.consistent && !tail_consistent {
             // A full-rank modular fit has a unique solution with a nonzero
             // pivot determinant modulo this prime. If a held-out row fails,
