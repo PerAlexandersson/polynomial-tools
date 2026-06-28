@@ -279,6 +279,9 @@ Example arguments:
 
 Check strict and weak interlacing for two polynomials.
 
+This tool accepts arbitrary-size integer coefficients.  In explicit coefficient
+input, write coefficients that may exceed `i64` as strings.
+
 Example arguments:
 
 ```json
@@ -289,12 +292,31 @@ Example arguments:
 ```
 
 Returns normalized `p` and `q`, plus `strict`, `weak`, and a status string.
+Returned coefficients are strings so JSON clients do not lose precision.
 `strict` and `weak` can be `null` when degrees are incompatible or a required
 real-rootedness condition fails.
+
+Example with coefficients beyond `i64`:
+
+```json
+{
+  "p": { "coefficients": ["-100000000000000000000", "1"] },
+  "q": {
+    "coefficients": [
+      "9999999999999999999999999999999999999999",
+      "-200000000000000000000",
+      "1"
+    ]
+  }
+}
+```
 
 ### `check_interlacing_sequence`
 
 Apply `check_interlacing_pair` to consecutive pairs in a batch.
+
+This tool accepts arbitrary-size integer coefficients and returns normalized
+polynomials with string coefficients.
 
 Example arguments:
 
@@ -310,6 +332,9 @@ Returns parsed `items` and pairwise `pairs`.
 
 For each row, check previous rows backward and stop at the first failure.  This
 is useful for quickly profiling how long the local interlacing chain persists.
+
+This tool accepts arbitrary-size integer coefficients and returns normalized
+polynomials with string coefficients.
 
 Example arguments:
 
