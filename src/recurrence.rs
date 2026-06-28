@@ -1207,7 +1207,11 @@ fn find_polynomial_recurrence_rational_with_derivs_and_rows(
     }
 
     // --- Solve ---
-    let solution = linalg::solve_linear_system(&matrix, &rhs)?;
+    let solution = if exact_row_indices.is_some() && matrix.len() == num_vars {
+        linalg::solve_full_rank_square_linear_system(&matrix, &rhs)?
+    } else {
+        linalg::solve_linear_system(&matrix, &rhs)?
+    };
 
     // Check: are all recurrence coefficients zero?  (Trivial / degenerate.)
     let all_zero = (coeff_start..coeff_start + num_coeff_vars).all(|c| solution[c].is_zero());

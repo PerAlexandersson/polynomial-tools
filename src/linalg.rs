@@ -1691,6 +1691,65 @@ pub fn solve_linear_system(a: &[Vec<Q>], b: &[Q]) -> Option<Vec<Q>> {
     Some(x)
 }
 
+/// Solve a nonsingular square system `Ax = b` over `Q`.
+///
+/// This uses ordinary forward elimination followed by back-substitution.  It is
+/// faster than [`solve_linear_system`] when the caller already knows that the
+/// chosen rows form a full-rank square subsystem, because it does not compute a
+/// full reduced row-echelon form.  Returns `None` if the input is not square or
+/// if a zero pivot proves that the matrix is singular.
+pub fn solve_full_rank_square_linear_system(a: &[Vec<Q>], b: &[Q]) -> Option<Vec<Q>> {
+    let n = a.len();
+    if b.len() != n || a.iter().any(|row| row.len() != n) {
+        return None;
+    }
+    if n == 0 {
+        return Some(vec![]);
+    }
+
+    let mut aug: Vec<Vec<Q>> = a
+        .iter()
+        .zip(b.iter())
+        .map(|(row, bi)| {
+            let mut r = row.clone();
+            r.push(bi.clone());
+            r
+        })
+        .collect();
+
+    for col in 0..n {
+        let pivot_row = (col..n).find(|&row| !aug[row][col].is_zero())?;
+        aug.swap(col, pivot_row);
+
+        let pivot_val = aug[col][col].clone();
+        let pivot_snapshot: Vec<_> = aug[col][col + 1..=n].to_vec();
+        for row in col + 1..n {
+            if aug[row][col].is_zero() {
+                continue;
+            }
+            let factor = aug[row][col].clone() / pivot_val.clone();
+            aug[row][col] = Q::zero();
+            for (aug_j, pivot_j) in aug[row][col + 1..=n].iter_mut().zip(pivot_snapshot.iter()) {
+                let sub = pivot_j.clone() * &factor;
+                *aug_j -= sub;
+            }
+        }
+    }
+
+    let mut x = vec![Q::zero(); n];
+    for row in (0..n).rev() {
+        let mut value = aug[row][n].clone();
+        for (col, coeff) in aug[row].iter().enumerate().take(n).skip(row + 1) {
+            if !coeff.is_zero() {
+                value -= coeff.clone() * &x[col];
+            }
+        }
+        x[row] = value / aug[row][row].clone();
+    }
+
+    Some(x)
+}
+
 // ---------------------------------------------------------------------------
 // Total positivity
 // ---------------------------------------------------------------------------
@@ -2302,6 +2361,26 @@ mod tests {
         let x = solve_linear_system(&a, &b).unwrap();
         assert_eq!(x[0], Q::from_integer(bi(1)));
         assert_eq!(x[1], Q::from_integer(bi(2)));
+    }
+
+    #[test]
+    fn test_solve_full_rank_square_2x2() {
+        // x + 2y = 5, 3x + 4y = 11 -> x = 1, y = 2
+        let a = vec![
+            vec![Q::from_integer(bi(1)), Q::from_integer(bi(2))],
+            vec![Q::from_integer(bi(3)), Q::from_integer(bi(4))],
+        ];
+        let b = vec![Q::from_integer(bi(5)), Q::from_integer(bi(11))];
+        let x = solve_full_rank_square_linear_system(&a, &b).unwrap();
+        assert_eq!(x[0], Q::from_integer(bi(1)));
+        assert_eq!(x[1], Q::from_integer(bi(2)));
+    }
+
+    #[test]
+    fn test_solve_full_rank_square_rejects_singular() {
+        let a = vec![vec![Q::one(), Q::one()], vec![Q::one(), Q::one()]];
+        let b = vec![Q::one(), Q::one()];
+        assert!(solve_full_rank_square_linear_system(&a, &b).is_none());
     }
 
     #[test]
