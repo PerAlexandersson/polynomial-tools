@@ -372,6 +372,9 @@ fn mod_neg(value: i64, modulus: i64) -> i64 {
 }
 
 fn mod_mul(lhs: i64, rhs: i64, modulus: i64) -> i64 {
+    if (0..modulus).contains(&lhs) && (0..modulus).contains(&rhs) && modulus <= 3_000_000_000 {
+        return (lhs * rhs) % modulus;
+    }
     ((lhs as i128 * rhs as i128).rem_euclid(modulus as i128)) as i64
 }
 
@@ -3213,6 +3216,40 @@ fn verify_heldout_tail(
         || recurrence_holds_from_rational_with_derivs(polys, derivs, rec, opts.rec_len, fit_len + 1)
 }
 
+fn homogeneous_degree_bound_rejects(
+    polys: &[Vec<BigRational>],
+    derivs: &[Vec<Vec<BigRational>>],
+    opts: &RecurrenceOptions,
+    fit_len: usize,
+) -> bool {
+    if !opts.homogeneous || opts.denom_var_deg > 0 || opts.denom_idx_deg > 0 {
+        return false;
+    }
+
+    for nn in opts.rec_len + 1..=fit_len {
+        let current = &polys[nn - 1];
+        if poly_is_zero_rational(current) {
+            continue;
+        }
+        let lhs_degree = poly_degree_rational(current);
+        let mut rhs_degree_bound: Option<usize> = None;
+        for r in 1..=opts.rec_len {
+            for ref_poly in derivs[nn - 1 - r].iter().take(opts.diff_deg + 1) {
+                if !poly_is_zero_rational(ref_poly) {
+                    let degree = poly_degree_rational(ref_poly) + opts.var_deg;
+                    rhs_degree_bound =
+                        Some(rhs_degree_bound.map_or(degree, |bound| bound.max(degree)));
+                }
+            }
+        }
+        if rhs_degree_bound.is_none_or(|degree| degree < lhs_degree) {
+            return true;
+        }
+    }
+
+    false
+}
+
 /// Search for the simplest polynomial recurrence by trying parameter
 /// combinations in order of ascending complexity.
 pub fn find_recurrence_adaptive_rational(
@@ -3244,6 +3281,10 @@ pub fn find_recurrence_adaptive_rational(
         let equations = count_equations_rational(fit_polys, opts);
 
         if equations < unknowns + search.min_margin {
+            continue;
+        }
+
+        if homogeneous_degree_bound_rejects(polys, &derivs, opts, fit_len) {
             continue;
         }
 
@@ -3343,6 +3384,10 @@ pub fn find_recurrence_adaptive_rational(
             let equations = count_equations_rational(fit_polys, opts);
 
             if equations < unknowns + search.min_margin {
+                continue;
+            }
+
+            if homogeneous_degree_bound_rejects(polys, &derivs, opts, fit_len) {
                 continue;
             }
 
@@ -3926,6 +3971,34 @@ mod tests {
         assert_eq!(format!("{}", result.recurrence), "P(n) = 2 P(n-1)");
         assert!(result.verification_polynomials >= 1);
         assert!(result.fit_polynomials < polys.len());
+    }
+
+    #[test]
+    fn homogeneous_degree_bound_rejects_impossible_rhs_degree() {
+        let polys = i64_polys_to_rational(&[vec![1], vec![1, 1], vec![1, 2, 1]]);
+        let derivs = rational_derivatives_up_to(&polys, 0);
+        let too_low = RecurrenceOptions {
+            rec_len: 1,
+            var_deg: 0,
+            idx_deg: 0,
+            diff_deg: 0,
+            homogeneous: true,
+            ..Default::default()
+        };
+        let enough_t_degree = RecurrenceOptions {
+            var_deg: 1,
+            ..too_low.clone()
+        };
+
+        assert!(homogeneous_degree_bound_rejects(
+            &polys, &derivs, &too_low, 3
+        ));
+        assert!(!homogeneous_degree_bound_rejects(
+            &polys,
+            &derivs,
+            &enough_t_degree,
+            3
+        ));
     }
 
     #[test]
