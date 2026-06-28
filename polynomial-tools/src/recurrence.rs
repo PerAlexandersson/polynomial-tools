@@ -313,13 +313,19 @@ fn poly_div_exact_rational(
 }
 
 fn bivar_eval_n(poly: &BivarPoly, n: usize) -> Vec<BigRational> {
+    bivar_eval_n_with_powers(poly, &rational_index_powers(n, bivar_n_degree(poly)))
+}
+
+fn bivar_eval_n_with_powers(poly: &BivarPoly, n_powers: &[BigRational]) -> Vec<BigRational> {
     let width = poly.coeffs.iter().map(Vec::len).max().unwrap_or(0);
     if width == 0 {
         return rational_zero_poly();
     }
     let mut result = vec![BigRational::zero(); width];
     for (i, row) in poly.coeffs.iter().enumerate() {
-        let n_power = BigRational::from_integer(num_traits::pow::pow(BigInt::from(n), i));
+        let n_power = n_powers
+            .get(i)
+            .expect("bivariate evaluation requires enough powers of n");
         for (j, coeff) in row.iter().enumerate() {
             if !coeff.is_zero() {
                 result[j] += coeff.clone() * n_power.clone();
@@ -327,6 +333,21 @@ fn bivar_eval_n(poly: &BivarPoly, n: usize) -> Vec<BigRational> {
         }
     }
     trim_poly_rational(result)
+}
+
+fn bivar_n_degree(poly: &BivarPoly) -> usize {
+    poly.coeffs.len().saturating_sub(1)
+}
+
+fn recurrence_n_degree(rec: &Recurrence) -> usize {
+    let mut degree = rec.denominator.as_ref().map_or(0, bivar_n_degree);
+    for term in &rec.terms {
+        degree = degree.max(bivar_n_degree(&term.coeff));
+    }
+    if let Some(inhomogeneous) = &rec.inhomogeneous {
+        degree = degree.max(bivar_n_degree(inhomogeneous));
+    }
+    degree
 }
 
 use crate::linalg;
@@ -523,23 +544,23 @@ fn recurrence_system_consistent_mod_images(
     let eqs_per_nn = max_t_deg + 1;
     let mut rows = Vec::with_capacity((m - opts.rec_len) * eqs_per_nn);
     let mut row_indices = Vec::with_capacity((m - opts.rec_len) * eqs_per_nn);
+    let max_n_pow = opts
+        .idx_deg
+        .max(opts.denom_idx_deg)
+        .max(if opts.homogeneous {
+            0
+        } else {
+            opts.inhomo_idx_deg
+        });
 
     for (eq_idx, nn) in (opts.rec_len + 1..=m).enumerate() {
         let current_idx = nn - 1;
-        let max_n_pow = opts
-            .idx_deg
-            .max(opts.denom_idx_deg)
-            .max(if opts.homogeneous {
-                0
-            } else {
-                opts.inhomo_idx_deg
-            });
         let n_powers = mod_index_powers(nn, max_n_pow, modulus);
 
         for l in 0..=max_t_deg {
             let equation_row = eq_idx * eqs_per_nn + l;
             let cur_l = poly_coeff_mod(polys_mod, current_idx, l);
-            let mut row = linalg::SparseModRow::from_signed_rhs(mod_neg(cur_l, modulus), prime);
+            let mut row = linalg::SparseModRow::new(mod_neg(cur_l, modulus) as u64, prime);
 
             if num_denom_vars > 0 {
                 for (i, &n_power) in n_powers.iter().enumerate().take(opts.denom_idx_deg + 1) {
@@ -555,7 +576,11 @@ fn recurrence_system_consistent_mod_images(
                             continue;
                         }
                         let col = denom_col(i, j);
-                        row.add_signed_entry_sorted(col, mod_mul(pc, n_power, modulus), prime);
+                        row.add_reduced_entry_sorted(
+                            col,
+                            mod_mul(pc, n_power, modulus) as u64,
+                            prime,
+                        );
                     }
                 }
             }
@@ -582,9 +607,9 @@ fn recurrence_system_consistent_mod_images(
                                     continue;
                                 }
                                 let col = coeff_col(r, d, sign_idx, i, j);
-                                row.add_signed_entry_sorted(
+                                row.add_reduced_entry_sorted(
                                     col,
-                                    mod_neg(mod_mul(rc, n_factor, modulus), modulus),
+                                    mod_neg(mod_mul(rc, n_factor, modulus), modulus) as u64,
                                     prime,
                                 );
                             }
@@ -596,7 +621,7 @@ fn recurrence_system_consistent_mod_images(
             if !opts.homogeneous && l <= opts.inhomo_var_deg {
                 for (i, &n_power) in n_powers.iter().enumerate().take(opts.inhomo_idx_deg + 1) {
                     let col = inhomo_col(i, l);
-                    row.add_signed_entry_sorted(col, mod_neg(n_power, modulus), prime);
+                    row.add_reduced_entry_sorted(col, mod_neg(n_power, modulus) as u64, prime);
                 }
             }
 
@@ -897,6 +922,9 @@ fn find_polynomial_recurrence_rational_with_derivs_and_rows(
         } else {
             opts.inhomo_idx_deg
         });
+    let n_power_table = (opts.rec_len + 1..=m)
+        .map(|nn| rational_index_powers(nn, max_n_pow))
+        .collect::<Vec<_>>();
 
     for (row, &equation_row) in row_indices.iter().enumerate() {
         if equation_row >= num_rows {
@@ -907,7 +935,7 @@ fn find_polynomial_recurrence_rational_with_derivs_and_rows(
         let nn = opts.rec_len + 1 + eq_idx;
         // nn is 1-based; polys[nn-1] is P_nn(t).
         let current = &polys[nn - 1];
-        let n_powers = rational_index_powers(nn, max_n_pow);
+        let n_powers = &n_power_table[eq_idx];
 
         // RHS = coefficient of t^l in P_nn(t)  (moved to RHS with negation).
         let cur_l = poly_coeff_rational(current, l);
@@ -1057,7 +1085,9 @@ fn find_polynomial_recurrence_rational_with_derivs_and_rows(
         inhomogeneous,
     };
 
-    if exact_row_indices.is_some() && !recurrence_holds_rational(polys, &recurrence, opts.rec_len) {
+    if exact_row_indices.is_some()
+        && !recurrence_holds_rational_with_derivs(polys, derivs, &recurrence, opts.rec_len)
+    {
         return None;
     }
 
@@ -2401,9 +2431,10 @@ pub fn recurrence_holds_at_rational(
         return false;
     }
 
+    let n_powers = rational_index_powers(nn, recurrence_n_degree(rec));
     let current = &polys[nn - 1];
     let lhs = if let Some(denom) = &rec.denominator {
-        poly_mul_rational(&bivar_eval_n(denom, nn), current)
+        poly_mul_rational(&bivar_eval_n_with_powers(denom, &n_powers), current)
     } else {
         trim_poly_rational(current.clone())
     };
@@ -2415,7 +2446,7 @@ pub fn recurrence_holds_at_rational(
         }
         let ref_poly = &polys[nn - 1 - term.offset];
         let deriv = poly_nth_derivative_rational(ref_poly, term.deriv_order);
-        let coeff = bivar_eval_n(&term.coeff, nn);
+        let coeff = bivar_eval_n_with_powers(&term.coeff, &n_powers);
         let product = poly_mul_rational(&coeff, &deriv);
         let sign = match term.sign {
             RecurrenceSign::None => BigRational::one(),
@@ -2428,7 +2459,56 @@ pub fn recurrence_holds_at_rational(
     }
 
     if let Some(inhomogeneous) = &rec.inhomogeneous {
-        let inh = bivar_eval_n(inhomogeneous, nn);
+        let inh = bivar_eval_n_with_powers(inhomogeneous, &n_powers);
+        poly_add_scaled_assign(&mut rhs, &inh, &BigRational::one());
+    }
+
+    poly_equal_rational(&lhs, &rhs)
+}
+
+fn recurrence_holds_at_rational_with_derivs(
+    polys: &[Vec<BigRational>],
+    derivs: &[Vec<Vec<BigRational>>],
+    rec: &Recurrence,
+    nn: usize,
+) -> bool {
+    if nn == 0 || nn > polys.len() || nn > derivs.len() {
+        return false;
+    }
+
+    let n_powers = rational_index_powers(nn, recurrence_n_degree(rec));
+    let current = &polys[nn - 1];
+    let lhs = if let Some(denom) = &rec.denominator {
+        poly_mul_rational(&bivar_eval_n_with_powers(denom, &n_powers), current)
+    } else {
+        trim_poly_rational(current.clone())
+    };
+
+    let mut rhs = rational_zero_poly();
+    for term in &rec.terms {
+        if term.offset == 0 || term.offset >= nn {
+            return false;
+        }
+        let Some(poly_derivs) = derivs.get(nn - 1 - term.offset) else {
+            return false;
+        };
+        let Some(deriv) = poly_derivs.get(term.deriv_order) else {
+            return false;
+        };
+        let coeff = bivar_eval_n_with_powers(&term.coeff, &n_powers);
+        let product = poly_mul_rational(&coeff, deriv);
+        let sign = match term.sign {
+            RecurrenceSign::None => BigRational::one(),
+            RecurrenceSign::AlternatingN if nn % 2 == 1 => {
+                BigRational::from_integer(BigInt::from(-1))
+            }
+            RecurrenceSign::AlternatingN => BigRational::one(),
+        };
+        poly_add_scaled_assign(&mut rhs, &product, &sign);
+    }
+
+    if let Some(inhomogeneous) = &rec.inhomogeneous {
+        let inh = bivar_eval_n_with_powers(inhomogeneous, &n_powers);
         poly_add_scaled_assign(&mut rhs, &inh, &BigRational::one());
     }
 
@@ -2449,6 +2529,17 @@ pub fn recurrence_holds_from_rational(
     (first..=polys.len()).all(|nn| recurrence_holds_at_rational(polys, rec, nn))
 }
 
+fn recurrence_holds_from_rational_with_derivs(
+    polys: &[Vec<BigRational>],
+    derivs: &[Vec<Vec<BigRational>>],
+    rec: &Recurrence,
+    rec_len: usize,
+    start_nn: usize,
+) -> bool {
+    let first = start_nn.max(rec_len + 1);
+    (first..=polys.len()).all(|nn| recurrence_holds_at_rational_with_derivs(polys, derivs, rec, nn))
+}
+
 /// Check whether a recurrence holds on every admissible row.
 pub fn recurrence_holds_rational(
     polys: &[Vec<BigRational>],
@@ -2456,6 +2547,15 @@ pub fn recurrence_holds_rational(
     rec_len: usize,
 ) -> bool {
     recurrence_holds_from_rational(polys, rec, rec_len, rec_len + 1)
+}
+
+fn recurrence_holds_rational_with_derivs(
+    polys: &[Vec<BigRational>],
+    derivs: &[Vec<Vec<BigRational>>],
+    rec: &Recurrence,
+    rec_len: usize,
+) -> bool {
+    recurrence_holds_from_rational_with_derivs(polys, derivs, rec, rec_len, rec_len + 1)
 }
 
 // ---------------------------------------------------------------------------
@@ -2832,12 +2932,14 @@ fn fitting_polynomial_count(
 
 fn verify_heldout_tail(
     polys: &[Vec<BigRational>],
+    derivs: &[Vec<Vec<BigRational>>],
     rec: &Recurrence,
     opts: &RecurrenceOptions,
     fit_len: usize,
     search: &AdaptiveSearchOptions,
 ) -> bool {
-    search.no_verify || recurrence_holds_from_rational(polys, rec, opts.rec_len, fit_len + 1)
+    search.no_verify
+        || recurrence_holds_from_rational_with_derivs(polys, derivs, rec, opts.rec_len, fit_len + 1)
 }
 
 /// Search for the simplest polynomial recurrence by trying parameter
@@ -2920,7 +3022,7 @@ pub fn find_recurrence_adaptive_rational(
             solve_opts,
             exact_row_indices.as_deref(),
         ) {
-            if !verify_heldout_tail(polys, &rec, opts, fit_len, search) {
+            if !verify_heldout_tail(polys, &derivs, &rec, opts, fit_len, search) {
                 if search.verbose {
                     eprintln!("  -> fitted prefix but failed held-out verification");
                 }
@@ -3016,7 +3118,7 @@ pub fn find_recurrence_adaptive_rational(
                 solve_opts,
                 exact_row_indices.as_deref(),
             ) {
-                if !verify_heldout_tail(polys, &rec, opts, fit_len, search) {
+                if !verify_heldout_tail(polys, &derivs, &rec, opts, fit_len, search) {
                     if search.verbose {
                         eprintln!("  -> fitted prefix but failed held-out verification");
                     }

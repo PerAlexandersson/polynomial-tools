@@ -595,8 +595,8 @@ impl SparseModRow {
         self.add_entry(col, signed_mod_u64(value, prime), prime);
     }
 
-    pub(crate) fn add_entry_sorted(&mut self, col: usize, value: u64, prime: u64) {
-        let value = value % prime;
+    pub(crate) fn add_reduced_entry_sorted(&mut self, col: usize, value: u64, prime: u64) {
+        debug_assert!(value < prime);
         if value == 0 {
             return;
         }
@@ -609,10 +609,6 @@ impl SparseModRow {
         } else {
             self.add_entry(col, value, prime);
         }
-    }
-
-    pub(crate) fn add_signed_entry_sorted(&mut self, col: usize, value: i64, prime: u64) {
-        self.add_entry_sorted(col, signed_mod_u64(value, prime), prime);
     }
 
     /// Return true if the row is the tautology `0 = 0`.
@@ -2054,10 +2050,10 @@ mod tests {
         let prime = 101;
         let mut row = SparseModRow::new(0, prime);
 
-        row.add_entry_sorted(1, 4, prime);
-        row.add_entry_sorted(3, 8, prime);
-        row.add_entry_sorted(2, 5, prime);
-        row.add_entry_sorted(3, 93, prime);
+        row.add_reduced_entry_sorted(1, 4, prime);
+        row.add_reduced_entry_sorted(3, 8, prime);
+        row.add_reduced_entry_sorted(2, 5, prime);
+        row.add_reduced_entry_sorted(3, 93, prime);
 
         assert_eq!(row.entries(), &[(1, 4), (2, 5)]);
     }
