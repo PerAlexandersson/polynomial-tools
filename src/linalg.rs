@@ -571,6 +571,18 @@ impl SparseModRow {
         self.rhs
     }
 
+    /// Return true if `solution` satisfies this augmented row over `F_p`.
+    pub fn is_satisfied_by(&self, solution: &[u64], prime: u64) -> bool {
+        let mut lhs = 0;
+        for &(col, coeff) in &self.entries {
+            let Some(&value) = solution.get(col) else {
+                return false;
+            };
+            lhs = add_mod_u64(lhs, mul_mod_u64(coeff, value, prime), prime);
+        }
+        lhs == self.rhs
+    }
+
     /// Add `value` to the coefficient of `col`, reducing modulo `prime`.
     pub fn add_entry(&mut self, col: usize, value: u64, prime: u64) {
         let value = value % prime;
@@ -625,8 +637,27 @@ impl SparseModRow {
         self.entries.first().copied()
     }
 
+    fn coefficient_at(&self, col: usize) -> Option<u64> {
+        self.entries
+            .binary_search_by_key(&col, |&(entry_col, _)| entry_col)
+            .ok()
+            .map(|index| self.entries[index].1)
+    }
+
     fn normalize_pivot(&mut self, prime: u64) {
         let Some((_, pivot)) = self.leading_entry() else {
+            return;
+        };
+        let pivot_inv = mod_inverse_prime(pivot, prime)
+            .expect("nonzero element modulo prime should be invertible");
+        for (_, value) in &mut self.entries {
+            *value = mul_mod_u64(*value, pivot_inv, prime);
+        }
+        self.rhs = mul_mod_u64(self.rhs, pivot_inv, prime);
+    }
+
+    fn normalize_pivot_at(&mut self, pivot_col: usize, prime: u64) {
+        let Some(pivot) = self.coefficient_at(pivot_col) else {
             return;
         };
         let pivot_inv = mod_inverse_prime(pivot, prime)
@@ -718,6 +749,45 @@ impl SparseModRow {
         self.entries = merged;
         self.rhs = sub_mod_u64(self.rhs, mul_mod_u64(factor, pivot.rhs, prime), prime);
     }
+
+    fn subtract_scaled_general(&mut self, pivot: &SparseModRow, factor: u64, prime: u64) {
+        let factor = factor % prime;
+        if factor == 0 {
+            return;
+        }
+
+        let mut merged = Vec::with_capacity(self.entries.len() + pivot.entries.len());
+        let mut lhs = 0;
+        let mut rhs = 0;
+        while lhs < self.entries.len() || rhs < pivot.entries.len() {
+            let next_col = match (self.entries.get(lhs), pivot.entries.get(rhs)) {
+                (Some(&(lhs_col, _)), Some(&(rhs_col, _))) => lhs_col.min(rhs_col),
+                (Some(&(lhs_col, _)), None) => lhs_col,
+                (None, Some(&(rhs_col, _))) => rhs_col,
+                (None, None) => break,
+            };
+
+            let mut value = 0;
+            if lhs < self.entries.len() && self.entries[lhs].0 == next_col {
+                value = self.entries[lhs].1;
+                lhs += 1;
+            }
+            if rhs < pivot.entries.len() && pivot.entries[rhs].0 == next_col {
+                value = sub_mod_u64(
+                    value,
+                    mul_mod_u64(factor, pivot.entries[rhs].1, prime),
+                    prime,
+                );
+                rhs += 1;
+            }
+            if value != 0 {
+                merged.push((next_col, value));
+            }
+        }
+
+        self.entries = merged;
+        self.rhs = sub_mod_u64(self.rhs, mul_mod_u64(factor, pivot.rhs, prime), prime);
+    }
 }
 
 /// Row ordering strategy for sparse modular elimination.
@@ -738,6 +808,13 @@ pub enum SparseModRowOrder {
     /// is cheaper than dynamic Markowitz pivoting but tends to prefer sparse
     /// rows whose leading pivot column is also sparse.
     IncreasingMarkowitzCost,
+    /// Repeatedly choose a pivot entry with low current Markowitz fill score.
+    ///
+    /// This collects the matrix and updates all active rows after each pivot,
+    /// so it has higher overhead than the streaming backends. It can preserve
+    /// sparsity much better on systems where the leading-column order produces
+    /// unnecessary fill-in.
+    DynamicMarkowitz,
 }
 
 /// Options for sparse modular elimination.
@@ -853,12 +930,27 @@ fn sparse_modular_solution_from_pivots(
     solution
 }
 
-fn sparse_modular_row_matches_solution(row: &SparseModRow, solution: &[u64], prime: u64) -> bool {
-    let mut lhs = 0;
-    for &(col, coeff) in &row.entries {
-        lhs = add_mod_u64(lhs, mul_mod_u64(coeff, solution[col], prime), prime);
+fn sparse_modular_solution_from_ordered_pivots(
+    pivot_rows: &[SparseModRow],
+    pivot_columns: &[usize],
+    num_vars: usize,
+    prime: u64,
+) -> Vec<u64> {
+    let mut solution = vec![0; num_vars];
+    for (row, &pivot_col) in pivot_rows.iter().zip(pivot_columns.iter()).rev() {
+        let mut value = row.rhs;
+        for &(col, coeff) in &row.entries {
+            if col != pivot_col {
+                value = sub_mod_u64(value, mul_mod_u64(coeff, solution[col], prime), prime);
+            }
+        }
+        solution[pivot_col] = value;
     }
-    lhs == row.rhs
+    solution
+}
+
+fn sparse_modular_row_matches_solution(row: &SparseModRow, solution: &[u64], prime: u64) -> bool {
+    row.is_satisfied_by(solution, prime)
 }
 
 fn sparse_modular_column_counts(
@@ -894,6 +986,35 @@ fn sparse_modular_initial_markowitz_cost(
         row.entries.len(),
         column_fill,
     )
+}
+
+fn sparse_modular_dynamic_markowitz_pivot(
+    active_rows: &[(usize, SparseModRow)],
+    num_vars: usize,
+) -> Option<(usize, usize)> {
+    let column_counts = sparse_modular_column_counts(active_rows, num_vars);
+    let mut best: Option<(usize, usize, usize, usize, usize, usize)> = None;
+
+    for (row_pos, (row_index, row)) in active_rows.iter().enumerate() {
+        let row_fill = row.entries.len().saturating_sub(1);
+        for &(col, _) in &row.entries {
+            let column_fill = column_counts[col].saturating_sub(1);
+            let score = row_fill.saturating_mul(column_fill);
+            let candidate = (
+                score,
+                row.entries.len(),
+                column_counts[col],
+                *row_index,
+                col,
+                row_pos,
+            );
+            if best.is_none_or(|best| candidate < best) {
+                best = Some(candidate);
+            }
+        }
+    }
+
+    best.map(|(_, _, _, _, col, row_pos)| (row_pos, col))
 }
 
 fn sparse_modular_linear_system_consistency_indexed<I>(
@@ -997,6 +1118,148 @@ where
     })
 }
 
+fn sparse_modular_linear_system_consistency_dynamic_markowitz(
+    rows: Vec<(usize, SparseModRow)>,
+    num_vars: usize,
+    prime: u64,
+    compute_solution: bool,
+) -> Result<SparseModEliminationResult, SparseModEliminationError> {
+    let mut active_rows = Vec::with_capacity(rows.len());
+    let mut pivot_rows = Vec::new();
+    let mut pivot_columns = Vec::new();
+    let mut ordered_pivots = Vec::new();
+    let mut stats = SparseModEliminationStats::default();
+
+    for (row_index, row) in rows {
+        stats.input_rows += 1;
+        stats.input_nonzeros += row.entries.len();
+        stats.max_active_nonzeros = stats.max_active_nonzeros.max(row.entries.len());
+        for &(column, _) in &row.entries {
+            if column >= num_vars {
+                return Err(SparseModEliminationError::ColumnOutOfRange {
+                    row: row_index,
+                    column,
+                    num_vars,
+                });
+            }
+        }
+        if row.is_contradiction() {
+            return Ok(SparseModEliminationResult {
+                consistent: false,
+                rank: 0,
+                pivot_rows,
+                pivot_columns,
+                inconsistent_row: Some(row_index),
+                solution: None,
+                stats,
+            });
+        }
+        if row.is_tautology() {
+            stats.zero_rows += 1;
+        } else {
+            active_rows.push((row_index, row));
+        }
+    }
+
+    loop {
+        let mut row_pos = 0;
+        while row_pos < active_rows.len() {
+            if active_rows[row_pos].1.is_contradiction() {
+                return Ok(SparseModEliminationResult {
+                    consistent: false,
+                    rank: pivot_columns.len(),
+                    pivot_rows,
+                    pivot_columns,
+                    inconsistent_row: Some(active_rows[row_pos].0),
+                    solution: None,
+                    stats,
+                });
+            }
+            if active_rows[row_pos].1.is_tautology() {
+                stats.zero_rows += 1;
+                active_rows.swap_remove(row_pos);
+            } else {
+                row_pos += 1;
+            }
+        }
+
+        let Some((pivot_pos, pivot_col)) =
+            sparse_modular_dynamic_markowitz_pivot(&active_rows, num_vars)
+        else {
+            break;
+        };
+        let (pivot_row_index, mut pivot) = active_rows.swap_remove(pivot_pos);
+        pivot.normalize_pivot_at(pivot_col, prime);
+        stats.pivot_nonzeros += pivot.entries.len();
+        pivot_rows.push(pivot_row_index);
+        pivot_columns.push(pivot_col);
+        ordered_pivots.push(pivot);
+
+        if pivot_columns.len() == num_vars {
+            let solution = sparse_modular_solution_from_ordered_pivots(
+                &ordered_pivots,
+                &pivot_columns,
+                num_vars,
+                prime,
+            );
+            stats.full_rank_checks += active_rows.len();
+            for (row_index, row) in &active_rows {
+                if !sparse_modular_row_matches_solution(row, &solution, prime) {
+                    return Ok(SparseModEliminationResult {
+                        consistent: false,
+                        rank: pivot_columns.len(),
+                        pivot_rows,
+                        pivot_columns,
+                        inconsistent_row: Some(*row_index),
+                        solution: None,
+                        stats,
+                    });
+                }
+            }
+            return Ok(SparseModEliminationResult {
+                consistent: true,
+                rank: pivot_columns.len(),
+                pivot_rows,
+                pivot_columns,
+                inconsistent_row: None,
+                solution: compute_solution.then_some(solution),
+                stats,
+            });
+        }
+
+        let pivot = ordered_pivots
+            .last()
+            .expect("pivot was just pushed before active-row reduction");
+        for (_, row) in &mut active_rows {
+            let Some(factor) = row.coefficient_at(pivot_col) else {
+                continue;
+            };
+            row.subtract_scaled_general(pivot, factor, prime);
+            stats.row_reductions += 1;
+            stats.max_active_nonzeros = stats.max_active_nonzeros.max(row.entries.len());
+        }
+    }
+
+    let solution = compute_solution.then(|| {
+        sparse_modular_solution_from_ordered_pivots(
+            &ordered_pivots,
+            &pivot_columns,
+            num_vars,
+            prime,
+        )
+    });
+
+    Ok(SparseModEliminationResult {
+        consistent: true,
+        rank: pivot_columns.len(),
+        pivot_rows,
+        pivot_columns,
+        inconsistent_row: None,
+        solution,
+        stats,
+    })
+}
+
 /// Check consistency of a sparse linear system over the prime field `F_p`.
 ///
 /// The rows are augmented rows `A_i x = b_i`.  The implementation performs
@@ -1078,6 +1341,15 @@ where
                 )
             });
             sparse_modular_linear_system_consistency_indexed(
+                indexed_rows,
+                num_vars,
+                prime,
+                options.compute_solution,
+            )
+        }
+        SparseModRowOrder::DynamicMarkowitz => {
+            let indexed_rows = rows.into_iter().enumerate().collect::<Vec<_>>();
+            sparse_modular_linear_system_consistency_dynamic_markowitz(
                 indexed_rows,
                 num_vars,
                 prime,
@@ -2277,6 +2549,67 @@ mod tests {
         assert!(result.consistent);
         assert_eq!(result.pivot_rows[0], 4);
         assert_eq!(result.pivot_columns[0], 2);
+        assert_eq!(result.solution, None);
+    }
+
+    #[test]
+    fn test_sparse_modular_solver_dynamic_markowitz_matches_dense() {
+        let prime = 101;
+        let num_vars = 4;
+        let aug = vec![
+            vec![1, 1, 1, 1, 10],
+            vec![0, 0, 1, 1, 7],
+            vec![0, 1, 0, 1, 8],
+            vec![1, 0, 0, 0, 2],
+            vec![2, 1, 1, 2, 19],
+            vec![0, 0, 0, 0, 0],
+        ];
+        let result = sparse_modular_linear_system_consistency_with_options(
+            sparse_rows_from_dense_aug(&aug, num_vars, prime),
+            num_vars,
+            prime,
+            SparseModEliminationOptions {
+                row_order: SparseModRowOrder::DynamicMarkowitz,
+                compute_solution: true,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            result.consistent,
+            dense_modular_linear_system_consistent(aug.clone(), num_vars, prime)
+        );
+        assert_eq!(result.rank, 4);
+        assert_eq!(result.solution.as_ref().map(Vec::len), Some(num_vars));
+        assert!(solution_satisfies_dense_aug(
+            &aug,
+            num_vars,
+            prime,
+            result.solution.as_ref().expect("consistent system")
+        ));
+        assert_eq!(result.stats.zero_rows, 0);
+        assert!(result.stats.row_reductions > 0);
+    }
+
+    #[test]
+    fn test_sparse_modular_solver_dynamic_markowitz_detects_inconsistency() {
+        let prime = 101;
+        let num_vars = 3;
+        let aug = vec![vec![1, 0, 0, 2], vec![0, 1, 0, 3], vec![1, 1, 0, 6]];
+        let result = sparse_modular_linear_system_consistency_with_options(
+            sparse_rows_from_dense_aug(&aug, num_vars, prime),
+            num_vars,
+            prime,
+            SparseModEliminationOptions {
+                row_order: SparseModRowOrder::DynamicMarkowitz,
+                compute_solution: true,
+            },
+        )
+        .unwrap();
+
+        assert!(!result.consistent);
+        assert_eq!(result.rank, 2);
+        assert_eq!(result.inconsistent_row, Some(2));
         assert_eq!(result.solution, None);
     }
 
