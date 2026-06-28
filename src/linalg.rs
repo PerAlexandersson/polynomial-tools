@@ -595,9 +595,34 @@ impl SparseModRow {
         self.add_entry(col, signed_mod_u64(value, prime), prime);
     }
 
+    pub(crate) fn add_entry_sorted(&mut self, col: usize, value: u64, prime: u64) {
+        let value = value % prime;
+        if value == 0 {
+            return;
+        }
+        let Some(&(last_col, _)) = self.entries.last() else {
+            self.entries.push((col, value));
+            return;
+        };
+        if col > last_col {
+            self.entries.push((col, value));
+        } else {
+            self.add_entry(col, value, prime);
+        }
+    }
+
+    pub(crate) fn add_signed_entry_sorted(&mut self, col: usize, value: i64, prime: u64) {
+        self.add_entry_sorted(col, signed_mod_u64(value, prime), prime);
+    }
+
     /// Return true if the row is the tautology `0 = 0`.
     pub fn is_tautology(&self) -> bool {
         self.entries.is_empty() && self.rhs == 0
+    }
+
+    /// Return true if the row is the contradiction `0 = c` with `c != 0`.
+    pub fn is_contradiction(&self) -> bool {
+        self.entries.is_empty() && self.rhs != 0
     }
 
     fn leading_entry(&self) -> Option<(usize, u64)> {
@@ -616,9 +641,52 @@ impl SparseModRow {
         self.rhs = mul_mod_u64(self.rhs, pivot_inv, prime);
     }
 
+    fn subtract_entry(&mut self, col: usize, value: u64, prime: u64) {
+        let value = value % prime;
+        if value == 0 {
+            return;
+        }
+        match self.entries.binary_search_by_key(&col, |&(col, _)| col) {
+            Ok(index) => {
+                let new_value = sub_mod_u64(self.entries[index].1, value, prime);
+                if new_value == 0 {
+                    self.entries.remove(index);
+                } else {
+                    self.entries[index].1 = new_value;
+                }
+            }
+            Err(index) => {
+                let value = sub_mod_u64(0, value, prime);
+                self.entries.insert(index, (col, value));
+            }
+        }
+    }
+
+    fn subtract_scaled_small_pivot(&mut self, pivot: &SparseModRow, factor: u64, prime: u64) {
+        if self
+            .entries
+            .first()
+            .is_some_and(|&(col, value)| col == pivot.entries[0].0 && value == factor)
+        {
+            self.entries.remove(0);
+            for &(col, value) in pivot.entries.iter().skip(1) {
+                self.subtract_entry(col, mul_mod_u64(factor, value, prime), prime);
+            }
+        } else {
+            for &(col, value) in &pivot.entries {
+                self.subtract_entry(col, mul_mod_u64(factor, value, prime), prime);
+            }
+        }
+        self.rhs = sub_mod_u64(self.rhs, mul_mod_u64(factor, pivot.rhs, prime), prime);
+    }
+
     fn subtract_scaled(&mut self, pivot: &SparseModRow, factor: u64, prime: u64) {
         let factor = factor % prime;
         if factor == 0 {
+            return;
+        }
+        if pivot.entries.len() <= 4 {
+            self.subtract_scaled_small_pivot(pivot, factor, prime);
             return;
         }
 
@@ -898,7 +966,8 @@ where
         ),
         SparseModRowOrder::IncreasingNonzeros => {
             let mut indexed_rows = rows.into_iter().enumerate().collect::<Vec<_>>();
-            indexed_rows.sort_by_key(|(index, row)| (row.entries.len(), row.rhs == 0, *index));
+            indexed_rows
+                .sort_unstable_by_key(|(index, row)| (row.entries.len(), row.rhs == 0, *index));
             sparse_modular_linear_system_consistency_indexed(
                 indexed_rows,
                 num_vars,
@@ -1913,6 +1982,36 @@ mod tests {
 
         let row = SparseModRow::from_entries([(2, 5), (1, 3), (2, 96)], 204, prime);
         assert_eq!(row.rhs(), 2);
+        assert_eq!(row.entries(), &[(1, 3)]);
+        assert!(!row.is_tautology());
+        assert!(!row.is_contradiction());
+
+        let row = SparseModRow::new(7, prime);
+        assert!(row.is_contradiction());
+    }
+
+    #[test]
+    fn test_sparse_mod_sorted_add_fast_path_and_fallback() {
+        let prime = 101;
+        let mut row = SparseModRow::new(0, prime);
+
+        row.add_entry_sorted(1, 4, prime);
+        row.add_entry_sorted(3, 8, prime);
+        row.add_entry_sorted(2, 5, prime);
+        row.add_entry_sorted(3, 93, prime);
+
+        assert_eq!(row.entries(), &[(1, 4), (2, 5)]);
+    }
+
+    #[test]
+    fn test_sparse_mod_small_pivot_reduction_cancels_in_place() {
+        let prime = 101;
+        let pivot = SparseModRow::from_entries([(0, 1), (2, 4)], 7, prime);
+        let mut row = SparseModRow::from_entries([(0, 5), (1, 3), (2, 20)], 9, prime);
+
+        row.subtract_scaled(&pivot, 5, prime);
+
+        assert_eq!(row.rhs(), 75);
         assert_eq!(row.entries(), &[(1, 3)]);
     }
 

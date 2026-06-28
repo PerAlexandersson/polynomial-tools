@@ -521,7 +521,7 @@ fn recurrence_system_consistent_mod_prime(
                             continue;
                         }
                         let col = denom_col(i, j);
-                        row.add_signed_entry(col, mod_mul(pc, n_power, modulus), prime);
+                        row.add_signed_entry_sorted(col, mod_mul(pc, n_power, modulus), prime);
                     }
                 }
             }
@@ -548,7 +548,7 @@ fn recurrence_system_consistent_mod_prime(
                                     continue;
                                 }
                                 let col = coeff_col(r, d, sign_idx, i, j);
-                                row.add_signed_entry(
+                                row.add_signed_entry_sorted(
                                     col,
                                     mod_neg(mod_mul(rc, n_factor, modulus), modulus),
                                     prime,
@@ -562,10 +562,13 @@ fn recurrence_system_consistent_mod_prime(
             if !opts.homogeneous && l <= opts.inhomo_var_deg {
                 for (i, &n_power) in n_powers.iter().enumerate().take(opts.inhomo_idx_deg + 1) {
                     let col = inhomo_col(i, l);
-                    row.add_signed_entry(col, mod_neg(n_power, modulus), prime);
+                    row.add_signed_entry_sorted(col, mod_neg(n_power, modulus), prime);
                 }
             }
 
+            if row.is_contradiction() {
+                return Some(false);
+            }
             if !row.is_tautology() {
                 rows.push(row);
             }
