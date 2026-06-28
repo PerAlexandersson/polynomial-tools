@@ -259,12 +259,18 @@ Compute standard properties for each input polynomial:
 - log-concave
 - ultra-log-concave
 
+This tool accepts arbitrary-size integer coefficients.  In explicit
+`polynomials` input, write coefficients that may exceed `i64` as strings.
+Returned coefficients and gamma coefficients are strings so JSON clients do not
+lose precision.
+
 Example arguments:
 
 ```json
 {
   "polynomials": [
-    { "coefficients": [1, 11, 11, 1] }
+    { "coefficients": [1, 11, 11, 1] },
+    { "coefficients": ["1000000000000000000000000000000000000000000", "2", "1"] }
   ]
 }
 ```

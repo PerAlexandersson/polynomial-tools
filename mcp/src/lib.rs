@@ -1,3 +1,4 @@
+use num_bigint::BigInt;
 use polynomial_tools::recurrence::{
     find_recurrence_adaptive, find_recurrence_adaptive_rational, format_rational_coeff,
     parse_rational_coeff, AdaptiveSearchOptions, AdaptiveSearchResult, BigRational, RecurrenceJson,
@@ -50,6 +51,74 @@ impl JsonSchema for PolynomialInput {
         }))
         .expect("valid PolynomialInput schema")
     }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum BigIntCoefficientInput {
+    Integer(i64),
+    Text(String),
+}
+
+impl From<i64> for BigIntCoefficientInput {
+    fn from(value: i64) -> Self {
+        Self::Integer(value)
+    }
+}
+
+impl JsonSchema for BigIntCoefficientInput {
+    fn schema_name() -> Cow<'static, str> {
+        "BigIntCoefficientInput".into()
+    }
+
+    fn json_schema(_generator: &mut SchemaGenerator) -> Schema {
+        Schema::try_from(json!({
+            "anyOf": [
+                { "type": "integer" },
+                {
+                    "type": "string",
+                    "description": "Exact integer coefficient, e.g. \"42\" or \"1267650600228229401496703205376\"."
+                }
+            ]
+        }))
+        .expect("valid BigIntCoefficientInput schema")
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct BigIntPolynomialInput {
+    pub coefficients: Option<Vec<BigIntCoefficientInput>>,
+    pub expression: Option<String>,
+}
+
+impl JsonSchema for BigIntPolynomialInput {
+    fn schema_name() -> Cow<'static, str> {
+        "BigIntPolynomialInput".into()
+    }
+
+    fn json_schema(generator: &mut SchemaGenerator) -> Schema {
+        Schema::try_from(json!({
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "coefficients": <Vec<BigIntCoefficientInput>>::json_schema(generator),
+                "expression": String::json_schema(generator)
+            },
+            "oneOf": [
+                { "required": ["coefficients"] },
+                { "required": ["expression"] }
+            ]
+        }))
+        .expect("valid BigIntPolynomialInput schema")
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BigIntPolynomialBatchInput {
+    pub polynomials: Option<Vec<BigIntPolynomialInput>>,
+    pub text: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
@@ -246,6 +315,19 @@ pub struct NormalizedPolynomial {
 }
 
 #[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
+pub struct BigIntNormalizedPolynomial {
+    pub polynomial: String,
+    pub coefficients: Vec<String>,
+    pub degree: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct NormalizedBigIntPolynomial {
+    display: BigIntNormalizedPolynomial,
+    coefficients: Vec<BigInt>,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
 pub struct ParsePolynomialItem {
     pub index: usize,
     pub ok: bool,
@@ -271,7 +353,7 @@ pub struct PolynomialPropertiesItem {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub polynomial: Option<NormalizedPolynomial>,
+    pub polynomial: Option<BigIntNormalizedPolynomial>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub real_rooted: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -281,7 +363,7 @@ pub struct PolynomialPropertiesItem {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gamma_positive: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub gamma_coefficients: Option<Vec<i64>>,
+    pub gamma_coefficients: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub unimodal: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -553,6 +635,7 @@ pub struct CheckPolynomialFamilyResponse {
 }
 
 type ParsedBatch = Vec<Result<NormalizedPolynomial, String>>;
+type BigIntParsedBatch = Vec<Result<NormalizedBigIntPolynomial, String>>;
 type RationalParsedBatch = Vec<Result<Vec<BigRational>, String>>;
 type FamilySourceParse = (
     String,
@@ -578,6 +661,33 @@ fn parse_required_polynomial(input: &PolynomialInput, name: &str) -> Result<Vec<
     parse_polynomial_input(input).map_err(|e| invalid_params(format!("{name}: {e}")))
 }
 
+fn parse_bigint_coefficient(input: &BigIntCoefficientInput) -> Result<BigInt, String> {
+    match input {
+        BigIntCoefficientInput::Integer(value) => Ok(BigInt::from(*value)),
+        BigIntCoefficientInput::Text(value) => value
+            .parse::<BigInt>()
+            .map_err(|e| format!("invalid integer '{}': {}", value, e)),
+    }
+}
+
+fn parse_bigint_polynomial_input(input: &BigIntPolynomialInput) -> Result<Vec<BigInt>, String> {
+    match (&input.coefficients, &input.expression) {
+        (Some(coefficients), None) => coefficients
+            .iter()
+            .enumerate()
+            .map(|(index, coefficient)| {
+                parse_bigint_coefficient(coefficient)
+                    .map_err(|error| format!("coefficient {index}: {error}"))
+            })
+            .collect(),
+        (None, Some(expression)) => parse_polynomial_bigint(expression),
+        (Some(_), Some(_)) => {
+            Err("expected exactly one of `coefficients` or `expression`, got both".to_string())
+        }
+        (None, None) => Err("expected exactly one of `coefficients` or `expression`".to_string()),
+    }
+}
+
 fn normalize_coefficients(mut coefficients: Vec<i64>) -> Vec<i64> {
     while coefficients.len() > 1 && coefficients.last() == Some(&0) {
         coefficients.pop();
@@ -599,8 +709,29 @@ fn normalize_rational_coefficients(mut coefficients: Vec<BigRational>) -> Vec<Bi
     coefficients
 }
 
+fn normalize_bigint_coefficients(mut coefficients: Vec<BigInt>) -> Vec<BigInt> {
+    while coefficients.len() > 1 && coefficients.last() == Some(&BigInt::from(0)) {
+        coefficients.pop();
+    }
+    if coefficients.is_empty() {
+        coefficients.push(BigInt::from(0));
+    }
+    coefficients
+}
+
 fn degree(coefficients: &[i64]) -> usize {
     coefficients.iter().rposition(|&c| c != 0).unwrap_or(0)
+}
+
+fn bigint_degree(coefficients: &[BigInt]) -> usize {
+    coefficients
+        .iter()
+        .rposition(|c| c != &BigInt::from(0))
+        .unwrap_or(0)
+}
+
+fn bigint_strings(coefficients: &[BigInt]) -> Vec<String> {
+    coefficients.iter().map(ToString::to_string).collect()
 }
 
 fn normalize_polynomial(coefficients: Vec<i64>) -> NormalizedPolynomial {
@@ -608,6 +739,18 @@ fn normalize_polynomial(coefficients: Vec<i64>) -> NormalizedPolynomial {
     NormalizedPolynomial {
         polynomial: format_poly(&coefficients),
         degree: degree(&coefficients),
+        coefficients,
+    }
+}
+
+fn normalize_bigint_polynomial(coefficients: Vec<BigInt>) -> NormalizedBigIntPolynomial {
+    let coefficients = normalize_bigint_coefficients(coefficients);
+    NormalizedBigIntPolynomial {
+        display: BigIntNormalizedPolynomial {
+            polynomial: format_poly_bigint_coeffs(&coefficients),
+            coefficients: bigint_strings(&coefficients),
+            degree: bigint_degree(&coefficients),
+        },
         coefficients,
     }
 }
@@ -621,6 +764,25 @@ fn parse_batch(input: &PolynomialBatchInput) -> Result<ParsedBatch, McpError> {
         (None, Some(text)) => Ok(parse_polynomials(text)
             .into_iter()
             .map(|r| r.map(normalize_polynomial))
+            .collect()),
+        (Some(_), Some(_)) => Err(invalid_params(
+            "expected exactly one of `polynomials` or `text`, got both",
+        )),
+        (None, None) => Err(invalid_params(
+            "expected exactly one of `polynomials` or `text`",
+        )),
+    }
+}
+
+fn parse_bigint_batch(input: &BigIntPolynomialBatchInput) -> Result<BigIntParsedBatch, McpError> {
+    match (&input.polynomials, &input.text) {
+        (Some(polynomials), None) => Ok(polynomials
+            .iter()
+            .map(|p| parse_bigint_polynomial_input(p).map(normalize_bigint_polynomial))
+            .collect()),
+        (None, Some(text)) => Ok(parse_polynomials_bigint(text)
+            .into_iter()
+            .map(|r| r.map(normalize_bigint_polynomial))
             .collect()),
         (Some(_), Some(_)) => Err(invalid_params(
             "expected exactly one of `polynomials` or `text`, got both",
@@ -926,6 +1088,65 @@ fn family_report(index: usize, polynomial: NormalizedPolynomial) -> FamilyPolyno
         log_concave: is_log_concave(coefficients),
         ultra_log_concave: is_ultra_log_concave(coefficients),
         polynomial,
+    }
+}
+
+fn polynomial_properties_item_i64(
+    index: usize,
+    polynomial: BigIntNormalizedPolynomial,
+    coefficients: &[i64],
+) -> PolynomialPropertiesItem {
+    let gamma = gamma_coefficients_ignoring_initial_zeros(coefficients);
+    let gamma_positive = gamma
+        .as_ref()
+        .is_some_and(|gamma| gamma.iter().all(|&value| value >= 0));
+    let gamma_coefficients =
+        gamma.map(|gamma| gamma.into_iter().map(|value| value.to_string()).collect());
+    PolynomialPropertiesItem {
+        index,
+        ok: true,
+        error: None,
+        polynomial: Some(polynomial),
+        real_rooted: Some(is_real_rooted(coefficients)),
+        simple_roots: Some(has_simple_roots(coefficients)),
+        palindromic: Some(is_palindromic_ignoring_initial_zeros(coefficients)),
+        gamma_positive: Some(gamma_positive),
+        gamma_coefficients,
+        unimodal: Some(is_unimodal(coefficients)),
+        log_concave: Some(is_log_concave(coefficients)),
+        ultra_log_concave: Some(is_ultra_log_concave(coefficients)),
+    }
+}
+
+fn polynomial_properties_item_bigint(
+    index: usize,
+    polynomial: NormalizedBigIntPolynomial,
+) -> PolynomialPropertiesItem {
+    if let Some(coefficients) = bigint_coeffs_to_i64(&polynomial.coefficients) {
+        return polynomial_properties_item_i64(index, polynomial.display, &coefficients);
+    }
+
+    let zero = BigInt::from(0);
+    let gamma_coefficients =
+        gamma_coefficients_ignoring_initial_zeros_bigint_coeffs(&polynomial.coefficients);
+    let gamma_positive = gamma_coefficients
+        .as_ref()
+        .is_some_and(|gamma| gamma.iter().all(|value| value >= &zero));
+    PolynomialPropertiesItem {
+        index,
+        ok: true,
+        error: None,
+        polynomial: Some(polynomial.display),
+        real_rooted: Some(is_real_rooted_bigint_coeffs(&polynomial.coefficients)),
+        simple_roots: Some(has_simple_roots_bigint_coeffs(&polynomial.coefficients)),
+        palindromic: Some(is_palindromic_ignoring_initial_zeros_bigint_coeffs(
+            &polynomial.coefficients,
+        )),
+        gamma_positive: Some(gamma_positive),
+        gamma_coefficients: gamma_coefficients.map(|gamma| bigint_strings(&gamma)),
+        unimodal: Some(is_unimodal_bigint_coeffs(&polynomial.coefficients)),
+        log_concave: Some(is_log_concave_bigint_coeffs(&polynomial.coefficients)),
+        ultra_log_concave: Some(is_ultra_log_concave_bigint_coeffs(&polynomial.coefficients)),
     }
 }
 
@@ -1538,34 +1759,14 @@ impl PolynomialToolsServer {
     )]
     pub fn polynomial_properties(
         &self,
-        Parameters(input): Parameters<PolynomialBatchInput>,
+        Parameters(input): Parameters<BigIntPolynomialBatchInput>,
     ) -> Result<Json<PolynomialPropertiesResponse>, McpError> {
-        let batch = parse_batch(&input)?;
+        let batch = parse_bigint_batch(&input)?;
         let items = batch
             .into_iter()
             .enumerate()
             .map(|(index, item)| match item {
-                Ok(polynomial) => {
-                    let coefficients = polynomial.coefficients.clone();
-                    PolynomialPropertiesItem {
-                        index,
-                        ok: true,
-                        error: None,
-                        polynomial: Some(polynomial),
-                        real_rooted: Some(is_real_rooted(&coefficients)),
-                        simple_roots: Some(has_simple_roots(&coefficients)),
-                        palindromic: Some(is_palindromic_ignoring_initial_zeros(&coefficients)),
-                        gamma_positive: Some(is_gamma_positive_ignoring_initial_zeros(
-                            &coefficients,
-                        )),
-                        gamma_coefficients: gamma_coefficients_ignoring_initial_zeros(
-                            &coefficients,
-                        ),
-                        unimodal: Some(is_unimodal(&coefficients)),
-                        log_concave: Some(is_log_concave(&coefficients)),
-                        ultra_log_concave: Some(is_ultra_log_concave(&coefficients)),
-                    }
-                }
+                Ok(polynomial) => polynomial_properties_item_bigint(index, polynomial),
                 Err(error) => PolynomialPropertiesItem {
                     index,
                     ok: false,
@@ -2116,6 +2317,18 @@ mod tests {
         }
     }
 
+    fn bigint_coeffs(values: &[&str]) -> BigIntPolynomialInput {
+        BigIntPolynomialInput {
+            coefficients: Some(
+                values
+                    .iter()
+                    .map(|value| BigIntCoefficientInput::Text((*value).to_string()))
+                    .collect(),
+            ),
+            expression: None,
+        }
+    }
+
     #[test]
     fn parses_coefficients_and_expression() {
         assert_eq!(
@@ -2150,16 +2363,41 @@ mod tests {
     fn checks_eulerian_properties() {
         let server = PolynomialToolsServer::new();
         let Json(response) = server
-            .polynomial_properties(Parameters(PolynomialBatchInput {
-                polynomials: Some(vec![coeffs(&[1, 11, 11, 1])]),
+            .polynomial_properties(Parameters(BigIntPolynomialBatchInput {
+                polynomials: Some(vec![bigint_coeffs(&["1", "11", "11", "1"])]),
                 text: None,
             }))
             .unwrap();
         let item = &response.items[0];
         assert_eq!(item.real_rooted, Some(true));
         assert_eq!(item.gamma_positive, Some(true));
-        assert_eq!(item.gamma_coefficients, Some(vec![1, 8]));
+        assert_eq!(
+            item.gamma_coefficients,
+            Some(vec!["1".to_string(), "8".to_string()])
+        );
         assert_eq!(item.unimodal, Some(true));
+    }
+
+    #[test]
+    fn polynomial_properties_accepts_bigint_coefficients() {
+        let server = PolynomialToolsServer::new();
+        let large = "1000000000000000000000000000000000000000000";
+        let Json(response) = server
+            .polynomial_properties(Parameters(BigIntPolynomialBatchInput {
+                polynomials: Some(vec![bigint_coeffs(&[large, "2", "1"])]),
+                text: None,
+            }))
+            .unwrap();
+        let item = &response.items[0];
+        assert!(item.ok);
+        assert_eq!(
+            item.polynomial
+                .as_ref()
+                .and_then(|polynomial| polynomial.coefficients.first()),
+            Some(&large.to_string())
+        );
+        let value = serde_json::to_value(response).unwrap();
+        assert_eq!(value["items"][0]["polynomial"]["coefficients"][0], large);
     }
 
     #[test]

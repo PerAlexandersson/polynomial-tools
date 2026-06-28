@@ -2774,7 +2774,7 @@ pub fn find_recurrence_adaptive_rational(
             let complexity = candidate_complexity(opts);
             let unknowns = complexity.raw_unknowns;
             let weighted_unknowns = complexity.weighted_unknowns;
-            let Some(fit_len) = fitting_polynomial_count(polys, opts, search) else {
+            let Some(fit_len) = fitting_polynomial_count(polys, opts, &rational_search) else {
                 continue;
             };
             let fit_polys = &polys[..fit_len];

@@ -13,6 +13,7 @@ path = "src/main.rs"
 
 [dependencies]
 polynomial-tools = { path = ".." }
+num-bigint = "0.4"
 rmcp = { version = "0.16.0", features = ["server", "transport-io"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 serde = { version = "1", features = ["derive"] }

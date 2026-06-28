@@ -127,6 +127,7 @@ A text file `polys.txt` might look like:
 The commands `interlacing`, `interlacing-profile`, `properties`,
 `gamma-expansion`, `family-check`, `sequence`, `hstar-to-ehrhart`, and
 `ehrhart-to-hstar` also accept `--json` for machine-readable output.
+Large integer coefficients in JSON output are serialized as strings.
 
 ### Check real-rootedness
 
@@ -208,6 +209,10 @@ Supported sequence names are `eulerian`, `narayana`, `type-b-eulerian`,
 `family-check` reports properties, consecutive weak/strict interlacing, and
 optionally an adaptive recurrence search.  Requirement flags make the command
 exit nonzero at the first failed requested condition.
+Property checks accept arbitrary-size integer coefficients.  Consecutive
+interlacing and recurrence search currently require coefficients that fit in
+`i64`; oversized rows are preserved in the report and those checks are marked
+unavailable rather than silently dropped.
 
 ```sh
 polytool family-check \
