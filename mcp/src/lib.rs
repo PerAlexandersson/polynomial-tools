@@ -166,7 +166,7 @@ pub struct CheckPolynomialFamilyRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct InterlacingPairRequest {
+pub struct PolynomialPairRequest {
     pub p: PolynomialInput,
     pub q: PolynomialInput,
 }
@@ -2133,7 +2133,7 @@ impl PolynomialToolsServer {
     #[tool(description = "Compute the exact resultant of two polynomials.")]
     pub fn resultant(
         &self,
-        Parameters(input): Parameters<InterlacingPairRequest>,
+        Parameters(input): Parameters<PolynomialPairRequest>,
     ) -> Result<Json<ResultantResponse>, McpError> {
         let p = normalize_polynomial(parse_required_polynomial(&input.p, "p")?);
         let q = normalize_polynomial(parse_required_polynomial(&input.q, "q")?);
@@ -2531,7 +2531,7 @@ mod tests {
     fn computes_resultant_and_discriminant() {
         let server = PolynomialToolsServer::new();
         let Json(resultant) = server
-            .resultant(Parameters(InterlacingPairRequest {
+            .resultant(Parameters(PolynomialPairRequest {
                 p: coeffs(&[2, -3, 1]),
                 q: coeffs(&[-3, 1]),
             }))
@@ -2866,7 +2866,7 @@ mod tests {
     fn serializes_bigint_and_bigrational_as_strings() {
         let server = PolynomialToolsServer::new();
         let Json(resultant) = server
-            .resultant(Parameters(InterlacingPairRequest {
+            .resultant(Parameters(PolynomialPairRequest {
                 p: coeffs(&[1, 0, 1]),
                 q: coeffs(&[-1, 1]),
             }))
