@@ -66,8 +66,9 @@
 //!   derivative, evaluate, shift, reverse, dilate, GCD, division, Lagrange interpolation
 //! - [`linalg`] — Exact linear algebra: fraction-free Bareiss elimination,
 //!   modular/CRT determinant reconstruction, Gaussian elimination over ℚ,
-//!   positive definiteness/semi-definiteness, determinants, linear system
-//!   solving, total non-negativity via Neville elimination
+//!   sparse finite-field consistency/solution checks, positive
+//!   definiteness/semi-definiteness, determinants, linear system solving, total
+//!   non-negativity via Neville elimination
 //! - [`real_rootedness`] — exact real-rootedness wrappers, Bézout/Hermite
 //!   comparison paths, strict/weak interlacing (including same-degree via
 //!   Cauchy bound reduction), log-concavity, ultra-log-concavity, palindromic
@@ -113,7 +114,10 @@ pub use linalg::{
     check_tnn_neville, check_tnn_neville_bigint, check_total_positivity, determinant,
     is_positive_definite, is_positive_definite_bareiss, is_positive_definite_modular,
     is_positive_semidefinite, is_tnn, is_totally_nonnegative,
-    modular_leading_principal_minors_bigint, MODULAR_POSITIVE_DEFINITE_DIMENSION_THRESHOLD,
+    modular_leading_principal_minors_bigint, sparse_modular_linear_system_consistency,
+    sparse_modular_linear_system_consistent, sparse_modular_linear_system_solution,
+    SparseModEliminationError, SparseModEliminationResult, SparseModRow,
+    MODULAR_POSITIVE_DEFINITE_DIMENSION_THRESHOLD,
 };
 
 pub mod parse;
