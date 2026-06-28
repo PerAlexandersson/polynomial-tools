@@ -442,6 +442,24 @@ fn poly_coeff_mod_slice(coeffs: &[i64], coeff_idx: usize) -> i64 {
     coeffs.get(coeff_idx).copied().unwrap_or(0)
 }
 
+fn add_modular_solution_term(
+    lhs: &mut i64,
+    solution: &[u64],
+    col: usize,
+    coeff: i64,
+    modulus: i64,
+) {
+    let coeff = mod_norm(coeff, modulus);
+    if coeff == 0 {
+        return;
+    }
+    let term = mod_mul(coeff, solution[col] as i64, modulus);
+    *lhs += term;
+    if *lhs >= modulus {
+        *lhs -= modulus;
+    }
+}
+
 fn rational_polys_mod_prime(polys: &[Vec<BigRational>], modulus: i64) -> Option<Vec<Vec<i64>>> {
     polys
         .iter()
@@ -720,7 +738,6 @@ fn recurrence_solution_holds_from_mod_images(
         return false;
     }
 
-    let prime = modulus as u64;
     let max_poly_deg = polys
         .iter()
         .map(|p| poly_degree_rational(p))
@@ -750,7 +767,8 @@ fn recurrence_solution_holds_from_mod_images(
 
         for l in 0..=max_t_deg {
             let cur_l = poly_coeff_mod(polys_mod, current_idx, l);
-            let mut row = linalg::SparseModRow::new(mod_neg(cur_l, modulus) as u64, prime);
+            let rhs = mod_neg(cur_l, modulus);
+            let mut lhs = 0;
 
             if num_denom_vars > 0 {
                 for (i, &n_power) in n_powers.iter().enumerate().take(opts.denom_idx_deg + 1) {
@@ -765,10 +783,12 @@ fn recurrence_solution_holds_from_mod_images(
                         if pc == 0 {
                             continue;
                         }
-                        row.add_reduced_entry_sorted(
+                        add_modular_solution_term(
+                            &mut lhs,
+                            solution,
                             denom_col(i, j),
-                            mod_mul(pc, n_power, modulus) as u64,
-                            prime,
+                            mod_mul(pc, n_power, modulus),
+                            modulus,
                         );
                     }
                 }
@@ -795,10 +815,12 @@ fn recurrence_solution_holds_from_mod_images(
                                 if rc == 0 {
                                     continue;
                                 }
-                                row.add_reduced_entry_sorted(
+                                add_modular_solution_term(
+                                    &mut lhs,
+                                    solution,
                                     coeff_col(r, d, sign_idx, i, j),
-                                    mod_neg(mod_mul(rc, n_factor, modulus), modulus) as u64,
-                                    prime,
+                                    mod_neg(mod_mul(rc, n_factor, modulus), modulus),
+                                    modulus,
                                 );
                             }
                         }
@@ -808,17 +830,17 @@ fn recurrence_solution_holds_from_mod_images(
 
             if !opts.homogeneous && l <= opts.inhomo_var_deg {
                 for (i, &n_power) in n_powers.iter().enumerate().take(opts.inhomo_idx_deg + 1) {
-                    row.add_reduced_entry_sorted(
+                    add_modular_solution_term(
+                        &mut lhs,
+                        solution,
                         inhomo_col(i, l),
-                        mod_neg(n_power, modulus) as u64,
-                        prime,
+                        mod_neg(n_power, modulus),
+                        modulus,
                     );
                 }
             }
 
-            if row.is_contradiction()
-                || !row.is_tautology() && !row.is_satisfied_by(solution, prime)
-            {
+            if lhs != rhs {
                 return false;
             }
         }
