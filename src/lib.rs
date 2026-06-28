@@ -115,8 +115,9 @@ pub use linalg::{
     is_positive_definite, is_positive_definite_bareiss, is_positive_definite_modular,
     is_positive_semidefinite, is_tnn, is_totally_nonnegative,
     modular_leading_principal_minors_bigint, sparse_modular_linear_system_consistency,
-    sparse_modular_linear_system_consistent, sparse_modular_linear_system_solution,
-    SparseModEliminationError, SparseModEliminationResult, SparseModRow,
+    sparse_modular_linear_system_consistency_with_options, sparse_modular_linear_system_consistent,
+    sparse_modular_linear_system_solution, SparseModEliminationError, SparseModEliminationOptions,
+    SparseModEliminationResult, SparseModEliminationStats, SparseModRow, SparseModRowOrder,
     MODULAR_POSITIVE_DEFINITE_DIMENSION_THRESHOLD,
 };
 

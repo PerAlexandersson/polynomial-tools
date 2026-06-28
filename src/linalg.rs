@@ -523,12 +523,42 @@ impl SparseModRow {
         }
     }
 
+    /// Create a sparse row from unsigned `(column, value)` entries.
+    ///
+    /// Duplicate columns are combined modulo `prime`, and zero coefficients are
+    /// removed.
+    pub fn from_entries<I>(entries: I, rhs: u64, prime: u64) -> Self
+    where
+        I: IntoIterator<Item = (usize, u64)>,
+    {
+        let mut row = Self::new(rhs, prime);
+        for (col, value) in entries {
+            row.add_entry(col, value, prime);
+        }
+        row
+    }
+
     /// Create an empty sparse row with a signed right-hand side.
     pub fn from_signed_rhs(rhs: i64, prime: u64) -> Self {
         Self {
             entries: Vec::new(),
             rhs: signed_mod_u64(rhs, prime),
         }
+    }
+
+    /// Create a sparse row from signed `(column, value)` entries.
+    ///
+    /// Duplicate columns are combined modulo `prime`, and zero coefficients are
+    /// removed.
+    pub fn from_signed_entries<I>(entries: I, rhs: i64, prime: u64) -> Self
+    where
+        I: IntoIterator<Item = (usize, i64)>,
+    {
+        let mut row = Self::from_signed_rhs(rhs, prime);
+        for (col, value) in entries {
+            row.add_signed_entry(col, value, prime);
+        }
+        row
     }
 
     /// Return the nonzero column/value entries, sorted by column.
@@ -626,6 +656,55 @@ impl SparseModRow {
     }
 }
 
+/// Row ordering strategy for sparse modular elimination.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum SparseModRowOrder {
+    /// Process rows in input order.  This streams rows without collecting them.
+    #[default]
+    Input,
+    /// Process rows by increasing number of nonzero coefficients.
+    ///
+    /// This is a cheap fill-in heuristic.  The result still reports original
+    /// zero-based input row indices in `pivot_rows` and `inconsistent_row`.
+    IncreasingNonzeros,
+}
+
+/// Options for sparse modular elimination.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SparseModEliminationOptions {
+    /// Row ordering strategy.
+    pub row_order: SparseModRowOrder,
+    /// Whether to compute one solution when the system is consistent.
+    pub compute_solution: bool,
+}
+
+impl Default for SparseModEliminationOptions {
+    fn default() -> Self {
+        Self {
+            row_order: SparseModRowOrder::Input,
+            compute_solution: true,
+        }
+    }
+}
+
+/// Lightweight statistics from sparse modular elimination.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct SparseModEliminationStats {
+    /// Number of input rows seen by the solver.
+    pub input_rows: usize,
+    /// Number of nonzero coefficients in the input rows.
+    pub input_nonzeros: usize,
+    /// Number of tautological rows reduced to `0 = 0`.
+    pub zero_rows: usize,
+    /// Number of sparse row reductions against existing pivot rows.
+    pub row_reductions: usize,
+    /// Sum of nonzero coefficients in stored pivot rows.
+    pub pivot_nonzeros: usize,
+    /// Maximum number of nonzero coefficients in any active row during
+    /// elimination.
+    pub max_active_nonzeros: usize,
+}
+
 /// Summary of sparse Gaussian elimination over a prime field.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SparseModEliminationResult {
@@ -640,8 +719,11 @@ pub struct SparseModEliminationResult {
     /// Zero-based input row index witnessing inconsistency, if any.
     pub inconsistent_row: Option<usize>,
     /// One solution with all free variables set to zero, if the system is
-    /// consistent.
+    /// consistent and solution computation was requested.
     pub solution: Option<Vec<u64>>,
+    /// Sparse elimination statistics useful for tuning row-order and fill-in
+    /// heuristics.
+    pub stats: SparseModEliminationStats,
 }
 
 /// Errors for sparse modular linear-system elimination.
@@ -697,30 +779,24 @@ fn sparse_modular_solution_from_pivots(
     solution
 }
 
-/// Check consistency of a sparse linear system over the prime field `F_p`.
-///
-/// The rows are augmented rows `A_i x = b_i`.  The implementation performs
-/// incremental sparse Gaussian elimination, normalizing each stored pivot row.
-/// It is intended for sparse systems where one mostly needs rank/consistency
-/// information or a single solution over `F_p` before a more expensive exact
-/// solve.
-pub fn sparse_modular_linear_system_consistency<I>(
+fn sparse_modular_linear_system_consistency_indexed<I>(
     rows: I,
     num_vars: usize,
     prime: u64,
+    compute_solution: bool,
 ) -> Result<SparseModEliminationResult, SparseModEliminationError>
 where
-    I: IntoIterator<Item = SparseModRow>,
+    I: IntoIterator<Item = (usize, SparseModRow)>,
 {
-    if !is_prime_u64(prime) {
-        return Err(SparseModEliminationError::ModulusNotPrime { modulus: prime });
-    }
-
     let mut pivots = vec![None; num_vars];
     let mut pivot_rows = Vec::new();
     let mut pivot_columns = Vec::new();
+    let mut stats = SparseModEliminationStats::default();
 
-    for (row_index, mut row) in rows.into_iter().enumerate() {
+    for (row_index, mut row) in rows {
+        stats.input_rows += 1;
+        stats.input_nonzeros += row.entries.len();
+        stats.max_active_nonzeros = stats.max_active_nonzeros.max(row.entries.len());
         for &(column, _) in &row.entries {
             if column >= num_vars {
                 return Err(SparseModEliminationError::ColumnOutOfRange {
@@ -741,22 +817,28 @@ where
                         pivot_columns,
                         inconsistent_row: Some(row_index),
                         solution: None,
+                        stats,
                     });
                 }
+                stats.zero_rows += 1;
                 break;
             };
 
             let Some(pivot) = &pivots[pivot_col] else {
                 row.normalize_pivot(prime);
+                stats.pivot_nonzeros += row.entries.len();
                 pivots[pivot_col] = Some(row);
                 pivot_rows.push(row_index);
                 pivot_columns.push(pivot_col);
                 break;
             };
             row.subtract_scaled(pivot, pivot_coeff, prime);
+            stats.row_reductions += 1;
+            stats.max_active_nonzeros = stats.max_active_nonzeros.max(row.entries.len());
         }
     }
-    let solution = sparse_modular_solution_from_pivots(&pivots, num_vars, prime);
+    let solution =
+        compute_solution.then(|| sparse_modular_solution_from_pivots(&pivots, num_vars, prime));
 
     Ok(SparseModEliminationResult {
         consistent: true,
@@ -764,8 +846,67 @@ where
         pivot_rows,
         pivot_columns,
         inconsistent_row: None,
-        solution: Some(solution),
+        solution,
+        stats,
     })
+}
+
+/// Check consistency of a sparse linear system over the prime field `F_p`.
+///
+/// The rows are augmented rows `A_i x = b_i`.  The implementation performs
+/// incremental sparse Gaussian elimination, normalizing each stored pivot row.
+/// It is intended for sparse systems where one mostly needs rank/consistency
+/// information or a single solution over `F_p` before a more expensive exact
+/// solve.
+pub fn sparse_modular_linear_system_consistency<I>(
+    rows: I,
+    num_vars: usize,
+    prime: u64,
+) -> Result<SparseModEliminationResult, SparseModEliminationError>
+where
+    I: IntoIterator<Item = SparseModRow>,
+{
+    sparse_modular_linear_system_consistency_with_options(
+        rows,
+        num_vars,
+        prime,
+        SparseModEliminationOptions::default(),
+    )
+}
+
+/// Check consistency of a sparse linear system over `F_p` with explicit
+/// elimination options.
+pub fn sparse_modular_linear_system_consistency_with_options<I>(
+    rows: I,
+    num_vars: usize,
+    prime: u64,
+    options: SparseModEliminationOptions,
+) -> Result<SparseModEliminationResult, SparseModEliminationError>
+where
+    I: IntoIterator<Item = SparseModRow>,
+{
+    if !is_prime_u64(prime) {
+        return Err(SparseModEliminationError::ModulusNotPrime { modulus: prime });
+    }
+
+    match options.row_order {
+        SparseModRowOrder::Input => sparse_modular_linear_system_consistency_indexed(
+            rows.into_iter().enumerate(),
+            num_vars,
+            prime,
+            options.compute_solution,
+        ),
+        SparseModRowOrder::IncreasingNonzeros => {
+            let mut indexed_rows = rows.into_iter().enumerate().collect::<Vec<_>>();
+            indexed_rows.sort_by_key(|(index, row)| (row.entries.len(), row.rhs == 0, *index));
+            sparse_modular_linear_system_consistency_indexed(
+                indexed_rows,
+                num_vars,
+                prime,
+                options.compute_solution,
+            )
+        }
+    }
 }
 
 /// Convenience boolean wrapper around
@@ -778,7 +919,16 @@ pub fn sparse_modular_linear_system_consistent<I>(
 where
     I: IntoIterator<Item = SparseModRow>,
 {
-    sparse_modular_linear_system_consistency(rows, num_vars, prime).map(|result| result.consistent)
+    sparse_modular_linear_system_consistency_with_options(
+        rows,
+        num_vars,
+        prime,
+        SparseModEliminationOptions {
+            compute_solution: false,
+            ..SparseModEliminationOptions::default()
+        },
+    )
+    .map(|result| result.consistent)
 }
 
 /// Return one solution of a sparse linear system over `F_p`, if the system is
@@ -1760,6 +1910,10 @@ mod tests {
 
         assert_eq!(row.rhs(), 98);
         assert_eq!(row.entries(), &[(1, 100)]);
+
+        let row = SparseModRow::from_entries([(2, 5), (1, 3), (2, 96)], 204, prime);
+        assert_eq!(row.rhs(), 2);
+        assert_eq!(row.entries(), &[(1, 3)]);
     }
 
     #[test]
@@ -1803,6 +1957,50 @@ mod tests {
             prime,
             &direct_solution
         ));
+    }
+
+    #[test]
+    fn test_sparse_modular_solver_can_process_sparsest_rows_first() {
+        let prime = 101;
+        let num_vars = 3;
+        let aug = vec![vec![1, 1, 1, 1], vec![0, 1, 0, 2], vec![0, 0, 1, 3]];
+        let result = sparse_modular_linear_system_consistency_with_options(
+            sparse_rows_from_dense_aug(&aug, num_vars, prime),
+            num_vars,
+            prime,
+            SparseModEliminationOptions {
+                row_order: SparseModRowOrder::IncreasingNonzeros,
+                compute_solution: true,
+            },
+        )
+        .unwrap();
+
+        assert!(result.consistent);
+        assert_eq!(result.rank, 3);
+        assert_eq!(result.pivot_rows, vec![1, 2, 0]);
+        assert_eq!(result.pivot_columns, vec![1, 2, 0]);
+        assert_eq!(result.stats.input_rows, 3);
+        assert_eq!(result.stats.input_nonzeros, 5);
+        assert_eq!(result.stats.row_reductions, 0);
+        assert!(solution_satisfies_dense_aug(
+            &aug,
+            num_vars,
+            prime,
+            result.solution.as_ref().expect("consistent system")
+        ));
+
+        let result = sparse_modular_linear_system_consistency_with_options(
+            sparse_rows_from_dense_aug(&aug, num_vars, prime),
+            num_vars,
+            prime,
+            SparseModEliminationOptions {
+                row_order: SparseModRowOrder::IncreasingNonzeros,
+                compute_solution: false,
+            },
+        )
+        .unwrap();
+        assert!(result.consistent);
+        assert_eq!(result.solution, None);
     }
 
     #[test]
