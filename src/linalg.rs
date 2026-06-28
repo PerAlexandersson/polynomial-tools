@@ -1722,14 +1722,18 @@ pub fn solve_full_rank_square_linear_system(a: &[Vec<Q>], b: &[Q]) -> Option<Vec
         aug.swap(col, pivot_row);
 
         let pivot_val = aug[col][col].clone();
-        let pivot_snapshot: Vec<_> = aug[col][col + 1..=n].to_vec();
-        for row in col + 1..n {
-            if aug[row][col].is_zero() {
+        let (pivot_block, lower_rows) = aug.split_at_mut(col + 1);
+        let pivot_row = &pivot_block[col];
+        for row in lower_rows {
+            if row[col].is_zero() {
                 continue;
             }
-            let factor = aug[row][col].clone() / pivot_val.clone();
-            aug[row][col] = Q::zero();
-            for (aug_j, pivot_j) in aug[row][col + 1..=n].iter_mut().zip(pivot_snapshot.iter()) {
+            let factor = row[col].clone() / &pivot_val;
+            row[col] = Q::zero();
+            for (aug_j, pivot_j) in row[col + 1..=n]
+                .iter_mut()
+                .zip(pivot_row[col + 1..=n].iter())
+            {
                 let sub = pivot_j.clone() * &factor;
                 *aug_j -= sub;
             }
@@ -1744,7 +1748,7 @@ pub fn solve_full_rank_square_linear_system(a: &[Vec<Q>], b: &[Q]) -> Option<Vec
                 value -= coeff.clone() * &x[col];
             }
         }
-        x[row] = value / aug[row][row].clone();
+        x[row] = value / &aug[row][row];
     }
 
     Some(x)
