@@ -332,6 +332,7 @@ fn bivar_eval_n(poly: &BivarPoly, n: usize) -> Vec<BigRational> {
 use crate::linalg;
 
 const MODULAR_PREFILTER_PRIMES: [i64; 3] = [1_000_000_007, 1_000_000_009, 998_244_353];
+const MODULAR_PREFILTER_INCONSISTENT_PRIMES_TO_REJECT: usize = 2;
 
 fn mod_norm(value: i64, modulus: i64) -> i64 {
     value.rem_euclid(modulus)
@@ -597,19 +598,20 @@ fn modular_prefilter_rejects(
         return false;
     }
 
-    let mut usable_primes = 0;
     let mut inconsistent_primes = 0;
     for &prime in &MODULAR_PREFILTER_PRIMES {
         if let Some(consistent) = recurrence_system_consistent_mod_prime(polys, derivs, opts, prime)
         {
-            usable_primes += 1;
             if !consistent {
                 inconsistent_primes += 1;
+                if inconsistent_primes >= MODULAR_PREFILTER_INCONSISTENT_PRIMES_TO_REJECT {
+                    return true;
+                }
             }
         }
     }
 
-    usable_primes > 0 && usable_primes == inconsistent_primes
+    false
 }
 
 // ---------------------------------------------------------------------------
