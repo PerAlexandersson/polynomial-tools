@@ -69,7 +69,7 @@ fn json_bigint_vec(values: &[BigInt]) -> String {
         "[{}]",
         values
             .iter()
-            .map(ToString::to_string)
+            .map(|value| json_string(&value.to_string()))
             .collect::<Vec<_>>()
             .join(",")
     )
@@ -105,10 +105,11 @@ fn json_bool_option(value: Option<bool>) -> String {
 
 fn print_coefficient_input_help() {
     println!("Input:");
-    println!("  Read dense coefficient lists from stdin, one polynomial per line.");
-    println!("  Coefficients are in ascending degree order:");
+    println!("  Read one polynomial per line from stdin.");
+    println!("  Dense coefficient lists are in ascending degree order:");
     println!("    a_0, a_1, ..., a_d  represents  a_0 + a_1 t + ... + a_d t^d");
-    println!("  Brackets and whitespace-separated coefficients are also accepted.");
+    println!("  Brackets, whitespace-separated coefficients, and expanded notation");
+    println!("  such as 1 + 2t + 3t^2 are also accepted.");
     println!("  Blank lines and lines starting with # are ignored.");
 }
 
@@ -236,6 +237,24 @@ fn print_recurrence_generate_help() {
     println!();
     println!("Example:");
     println!("  polytool recurrence-generate --recurrence recurrence.json --rows 50");
+}
+
+fn next_option_value<'a>(
+    args: &'a [String],
+    index: &mut usize,
+    option: &str,
+) -> Result<&'a str, String> {
+    *index += 1;
+    args.get(*index)
+        .map(String::as_str)
+        .ok_or_else(|| format!("{option} expects a value"))
+}
+
+fn parse_usize_option(args: &[String], index: &mut usize, option: &str) -> Result<usize, String> {
+    let value = next_option_value(args, index, option)?;
+    value
+        .parse()
+        .map_err(|_| format!("{option} expects a nonnegative integer, got '{value}'"))
 }
 
 fn print_sequence_help() {
@@ -435,6 +454,12 @@ fn read_polys_bigint() -> Vec<Vec<BigInt>> {
         .collect()
 }
 
+fn read_poly_parse_results_bigint() -> Vec<Result<Vec<BigInt>, String>> {
+    let mut input = String::new();
+    io::stdin().read_to_string(&mut input).unwrap();
+    parse_polynomials_bigint(&input)
+}
+
 fn read_polys_rational() -> Vec<Vec<RecurrenceBigRational>> {
     let mut input = String::new();
     io::stdin().read_to_string(&mut input).unwrap();
@@ -554,6 +579,11 @@ struct PropertyReport {
 }
 
 fn property_report_i64(index: usize, coeffs: &[i64]) -> PropertyReport {
+    let gamma_coefficients = gamma_coefficients_ignoring_initial_zeros(coeffs)
+        .map(|gamma| gamma.into_iter().map(BigInt::from).collect::<Vec<_>>());
+    let gamma_positive = gamma_coefficients
+        .as_ref()
+        .is_some_and(|gamma| gamma.iter().all(|g| g >= &BigInt::from(0)));
     PropertyReport {
         index,
         coefficients: coeffs.iter().map(|&c| BigInt::from(c)).collect(),
@@ -562,9 +592,8 @@ fn property_report_i64(index: usize, coeffs: &[i64]) -> PropertyReport {
         real_rooted: is_real_rooted(coeffs),
         simple_roots: has_simple_roots(coeffs),
         palindromic: is_palindromic_ignoring_initial_zeros(coeffs),
-        gamma_positive: is_gamma_positive_ignoring_initial_zeros(coeffs),
-        gamma_coefficients: gamma_coefficients_ignoring_initial_zeros(coeffs)
-            .map(|gamma| gamma.into_iter().map(BigInt::from).collect()),
+        gamma_positive,
+        gamma_coefficients,
         unimodal: is_unimodal(coeffs),
         log_concave: is_log_concave(coeffs),
         ultra_log_concave: is_ultra_log_concave(coeffs),
@@ -576,6 +605,10 @@ fn property_report(index: usize, coeffs: &[BigInt]) -> PropertyReport {
         return property_report_i64(index, &coeffs_i64);
     }
 
+    let gamma_coefficients = gamma_coefficients_ignoring_initial_zeros_bigint_coeffs(coeffs);
+    let gamma_positive = gamma_coefficients
+        .as_ref()
+        .is_some_and(|gamma| gamma.iter().all(|g| g >= &BigInt::from(0)));
     PropertyReport {
         index,
         coefficients: coeffs.to_vec(),
@@ -584,8 +617,8 @@ fn property_report(index: usize, coeffs: &[BigInt]) -> PropertyReport {
         real_rooted: is_real_rooted_bigint_coeffs(coeffs),
         simple_roots: has_simple_roots_bigint_coeffs(coeffs),
         palindromic: is_palindromic_ignoring_initial_zeros_bigint_coeffs(coeffs),
-        gamma_positive: is_gamma_positive_ignoring_initial_zeros_bigint_coeffs(coeffs),
-        gamma_coefficients: gamma_coefficients_ignoring_initial_zeros_bigint_coeffs(coeffs),
+        gamma_positive,
+        gamma_coefficients,
         unimodal: is_unimodal_bigint_coeffs(coeffs),
         log_concave: is_log_concave_bigint_coeffs(coeffs),
         ultra_log_concave: is_ultra_log_concave_bigint_coeffs(coeffs),
@@ -711,6 +744,26 @@ fn interlacing_report(
         strict,
         weak,
         status: interlacing_status(strict, weak),
+    }
+}
+
+fn interlacing_unavailable_report(
+    pair_index: usize,
+    left_index: usize,
+    right_index: usize,
+    p: &str,
+    q: &str,
+    reason: &str,
+) -> InterlacingReport {
+    InterlacingReport {
+        pair_index,
+        left_index,
+        right_index,
+        p: p.to_string(),
+        q: q.to_string(),
+        strict: None,
+        weak: None,
+        status: reason.to_string(),
     }
 }
 
@@ -1209,8 +1262,14 @@ fn cmd_recurrence(args: &[String]) {
                 format = RecurrenceOutputFormat::Python;
             }
             "--format" => {
-                i += 1;
-                format = match args[i].as_str() {
+                let value = match next_option_value(args, &mut i, "--format") {
+                    Ok(value) => value,
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return;
+                    }
+                };
+                format = match value {
                     "text" => RecurrenceOutputFormat::Text,
                     "json" => RecurrenceOutputFormat::Json,
                     "python" => RecurrenceOutputFormat::Python,
@@ -1221,63 +1280,132 @@ fn cmd_recurrence(args: &[String]) {
                 };
             }
             "--skip-prefix" => {
-                i += 1;
-                search.skip_prefix = args[i].parse().unwrap();
+                search.skip_prefix = match parse_usize_option(args, &mut i, "--skip-prefix") {
+                    Ok(value) => value,
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return;
+                    }
+                };
             }
             "--min-rec-len" => {
-                i += 1;
-                search.min_rec_len = args[i].parse().unwrap();
+                search.min_rec_len = match parse_usize_option(args, &mut i, "--min-rec-len") {
+                    Ok(value) => value,
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return;
+                    }
+                };
             }
             "--max-rec-len" => {
-                i += 1;
-                search.max_rec_len = args[i].parse().unwrap();
+                search.max_rec_len = match parse_usize_option(args, &mut i, "--max-rec-len") {
+                    Ok(value) => value,
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return;
+                    }
+                };
             }
             "--min-var-deg" => {
-                i += 1;
-                search.min_var_deg = args[i].parse().unwrap();
+                search.min_var_deg = match parse_usize_option(args, &mut i, "--min-var-deg") {
+                    Ok(value) => value,
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return;
+                    }
+                };
             }
             "--max-var-deg" => {
-                i += 1;
-                search.max_var_deg = args[i].parse().unwrap();
+                search.max_var_deg = match parse_usize_option(args, &mut i, "--max-var-deg") {
+                    Ok(value) => value,
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return;
+                    }
+                };
             }
             "--min-idx-deg" => {
-                i += 1;
-                search.min_idx_deg = args[i].parse().unwrap();
+                search.min_idx_deg = match parse_usize_option(args, &mut i, "--min-idx-deg") {
+                    Ok(value) => value,
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return;
+                    }
+                };
             }
             "--max-idx-deg" => {
-                i += 1;
-                search.max_idx_deg = args[i].parse().unwrap();
+                search.max_idx_deg = match parse_usize_option(args, &mut i, "--max-idx-deg") {
+                    Ok(value) => value,
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return;
+                    }
+                };
             }
             "--min-diff-deg" => {
-                i += 1;
-                search.min_diff_deg = args[i].parse().unwrap();
+                search.min_diff_deg = match parse_usize_option(args, &mut i, "--min-diff-deg") {
+                    Ok(value) => value,
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return;
+                    }
+                };
             }
             "--max-diff-deg" => {
-                i += 1;
-                search.max_diff_deg = args[i].parse().unwrap();
+                search.max_diff_deg = match parse_usize_option(args, &mut i, "--max-diff-deg") {
+                    Ok(value) => value,
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return;
+                    }
+                };
             }
             "--inhomogeneous" => {
                 search.try_inhomogeneous = true;
             }
             "--min-inhomo-var-deg" => {
-                i += 1;
                 search.try_inhomogeneous = true;
-                search.min_inhomo_var_deg = args[i].parse().unwrap();
+                search.min_inhomo_var_deg =
+                    match parse_usize_option(args, &mut i, "--min-inhomo-var-deg") {
+                        Ok(value) => value,
+                        Err(error) => {
+                            eprintln!("{error}");
+                            return;
+                        }
+                    };
             }
             "--max-inhomo-var-deg" => {
-                i += 1;
                 search.try_inhomogeneous = true;
-                search.max_inhomo_var_deg = args[i].parse().unwrap();
+                search.max_inhomo_var_deg =
+                    match parse_usize_option(args, &mut i, "--max-inhomo-var-deg") {
+                        Ok(value) => value,
+                        Err(error) => {
+                            eprintln!("{error}");
+                            return;
+                        }
+                    };
             }
             "--min-inhomo-idx-deg" => {
-                i += 1;
                 search.try_inhomogeneous = true;
-                search.min_inhomo_idx_deg = args[i].parse().unwrap();
+                search.min_inhomo_idx_deg =
+                    match parse_usize_option(args, &mut i, "--min-inhomo-idx-deg") {
+                        Ok(value) => value,
+                        Err(error) => {
+                            eprintln!("{error}");
+                            return;
+                        }
+                    };
             }
             "--max-inhomo-idx-deg" => {
-                i += 1;
                 search.try_inhomogeneous = true;
-                search.max_inhomo_idx_deg = args[i].parse().unwrap();
+                search.max_inhomo_idx_deg =
+                    match parse_usize_option(args, &mut i, "--max-inhomo-idx-deg") {
+                        Ok(value) => value,
+                        Err(error) => {
+                            eprintln!("{error}");
+                            return;
+                        }
+                    };
             }
             "--denominator" | "--try-denominator" => {
                 search.try_denominator = true;
@@ -1286,22 +1414,44 @@ fn cmd_recurrence(args: &[String]) {
                 search.try_alternating_sign = true;
             }
             "--max-denom-var-deg" => {
-                i += 1;
                 search.try_denominator = true;
-                search.max_denom_var_deg = args[i].parse().unwrap();
+                search.max_denom_var_deg =
+                    match parse_usize_option(args, &mut i, "--max-denom-var-deg") {
+                        Ok(value) => value,
+                        Err(error) => {
+                            eprintln!("{error}");
+                            return;
+                        }
+                    };
             }
             "--max-denom-idx-deg" => {
-                i += 1;
                 search.try_denominator = true;
-                search.max_denom_idx_deg = args[i].parse().unwrap();
+                search.max_denom_idx_deg =
+                    match parse_usize_option(args, &mut i, "--max-denom-idx-deg") {
+                        Ok(value) => value,
+                        Err(error) => {
+                            eprintln!("{error}");
+                            return;
+                        }
+                    };
             }
             "--min-margin" => {
-                i += 1;
-                search.min_margin = args[i].parse().unwrap();
+                search.min_margin = match parse_usize_option(args, &mut i, "--min-margin") {
+                    Ok(value) => value,
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return;
+                    }
+                };
             }
             "--fit-extra-rows" => {
-                i += 1;
-                search.fit_extra_rows = args[i].parse().unwrap();
+                search.fit_extra_rows = match parse_usize_option(args, &mut i, "--fit-extra-rows") {
+                    Ok(value) => value,
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return;
+                    }
+                };
             }
             "--no-verify" => {
                 search.no_verify = true;
@@ -1606,6 +1756,12 @@ struct FamilyCheckOptions {
     require_weak_interlacing: bool,
 }
 
+#[derive(Clone, Debug)]
+struct ParseErrorReport {
+    index: usize,
+    error: String,
+}
+
 impl Default for FamilyCheckOptions {
     fn default() -> Self {
         Self {
@@ -1686,6 +1842,12 @@ fn first_family_failure(
     if options.require_weak_interlacing {
         for pair in pairs {
             if pair.weak != Some(true) {
+                if pair.status == "integer_coefficients_out_of_i64_range" {
+                    return Some(format!(
+                        "interlacing check for polynomials {} and {} requires coefficients that fit in i64",
+                        pair.left_index, pair.right_index
+                    ));
+                }
                 return Some(format!(
                     "polynomials {} and {} do not weakly interlace",
                     pair.left_index, pair.right_index
@@ -1749,6 +1911,28 @@ fn find_family_recurrence(polys: &[Vec<i64>]) -> RecurrenceSummary {
     }
 }
 
+fn family_recurrence_unavailable(error: impl Into<String>) -> RecurrenceSummary {
+    RecurrenceSummary {
+        found: false,
+        recurrence: None,
+        unknowns: None,
+        weighted_unknowns: None,
+        equations: None,
+        fit_polynomials: None,
+        verification_polynomials: None,
+        candidates_tried: None,
+        error: Some(error.into()),
+    }
+}
+
+fn parse_error_report_json(report: &ParseErrorReport) -> String {
+    format!(
+        "{{\"index\":{},\"error\":{}}}",
+        report.index,
+        json_string(&report.error)
+    )
+}
+
 fn recurrence_summary_json(summary: &RecurrenceSummary) -> String {
     format!(
         "{{\"found\":{},\"recurrence\":{},\"unknowns\":{},\"weighted_unknowns\":{},\
@@ -1800,25 +1984,76 @@ fn cmd_family_check(args: &[String]) {
             return;
         }
     };
-    let polys = read_polys()
-        .into_iter()
-        .map(|coeffs| strip_trailing_zeros(&coeffs).to_vec())
-        .collect::<Vec<_>>();
+    let mut parse_errors = Vec::new();
+    let mut polys = Vec::new();
+    for (index, item) in read_poly_parse_results_bigint().into_iter().enumerate() {
+        match item {
+            Ok(coeffs) => {
+                polys.push((index, strip_trailing_zeros_bigint(&coeffs).to_vec()));
+            }
+            Err(error) => parse_errors.push(ParseErrorReport { index, error }),
+        }
+    }
     let reports = polys
         .iter()
-        .enumerate()
-        .map(|(index, coeffs)| property_report_i64(index, coeffs))
+        .map(|(index, coeffs)| property_report(*index, coeffs))
         .collect::<Vec<_>>();
-    let pairs = polys
-        .windows(2)
-        .enumerate()
-        .map(|(index, pair)| interlacing_report(index, index, index + 1, &pair[0], &pair[1]))
+    let i64_polys = polys
+        .iter()
+        .map(|(_, coeffs)| bigint_coeffs_to_i64(coeffs))
         .collect::<Vec<_>>();
-    let recurrence = options.recurrence.then(|| find_family_recurrence(&polys));
-    let first_failure = first_family_failure(&reports, &pairs, recurrence.as_ref(), &options);
+    let pairs = if parse_errors.is_empty() {
+        (0..polys.len().saturating_sub(1))
+            .map(|pair_index| {
+                let left_index = polys[pair_index].0;
+                let right_index = polys[pair_index + 1].0;
+                match (&i64_polys[pair_index], &i64_polys[pair_index + 1]) {
+                    (Some(p), Some(q)) => {
+                        interlacing_report(pair_index, left_index, right_index, p, q)
+                    }
+                    _ => interlacing_unavailable_report(
+                        pair_index,
+                        left_index,
+                        right_index,
+                        &reports[pair_index].polynomial,
+                        &reports[pair_index + 1].polynomial,
+                        "integer_coefficients_out_of_i64_range",
+                    ),
+                }
+            })
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
+    let recurrence = options.recurrence.then(|| {
+        if !parse_errors.is_empty() {
+            return family_recurrence_unavailable(
+                "recurrence skipped because one or more polynomials failed to parse",
+            );
+        }
+        let Some(polys_i64) = i64_polys.iter().cloned().collect::<Option<Vec<_>>>() else {
+            return family_recurrence_unavailable(
+                "recurrence search currently requires coefficients that fit in i64",
+            );
+        };
+        find_family_recurrence(&polys_i64)
+    });
+    let first_failure = if let Some(error) = parse_errors.first() {
+        Some(format!(
+            "polynomial {} failed to parse: {}",
+            error.index, error.error
+        ))
+    } else {
+        first_family_failure(&reports, &pairs, recurrence.as_ref(), &options)
+    };
     let passed = first_failure.is_none();
 
     if options.format == OutputFormat::Json {
+        let parse_error_items = parse_errors
+            .iter()
+            .map(parse_error_report_json)
+            .collect::<Vec<_>>()
+            .join(",");
         let items = reports
             .iter()
             .map(property_report_json)
@@ -1839,11 +2074,12 @@ fn cmd_family_check(args: &[String]) {
             .unwrap_or_else(|| "null".to_string());
         println!(
             "{{\"item_count\":{},\"all_required_checks_passed\":{},\
-             \"first_failure\":{},\"items\":[{}],\"consecutive_pairs\":[{}],\
-             \"recurrence\":{}}}",
+             \"first_failure\":{},\"parse_errors\":[{}],\"items\":[{}],\
+             \"consecutive_pairs\":[{}],\"recurrence\":{}}}",
             reports.len(),
             passed,
             failure_json,
+            parse_error_items,
             items,
             pair_items,
             recurrence_json
@@ -1862,6 +2098,13 @@ fn cmd_family_check(args: &[String]) {
     );
     if let Some(failure) = &first_failure {
         println!("- First failure: {failure}");
+    }
+    if !parse_errors.is_empty() {
+        println!();
+        println!("Parse errors:");
+        for error in &parse_errors {
+            println!("{}: {}", error.index, error.error);
+        }
     }
     println!();
     println!("Properties:");

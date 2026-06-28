@@ -102,7 +102,7 @@ fn lists_tools_and_calls_properties() {
     let result = read_response(&mut stdout, 3);
     let structured = &result["result"]["structuredContent"];
     assert_eq!(structured["items"][0]["real_rooted"], true);
-    assert_eq!(structured["items"][0]["gamma_coefficients"], json!([1, 8]));
+    assert_eq!(structured["items"][0]["gamma_coefficients"], json!(["1", "8"]));
 
     send(
         &mut stdin,

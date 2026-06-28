@@ -1130,6 +1130,7 @@ name = "polynomial-tools-mcp"
 version = "0.2.1-rc.1"
 dependencies = [
  "anyhow",
+ "num-bigint",
  "polynomial-tools",
  "rmcp",
  "schemars",
