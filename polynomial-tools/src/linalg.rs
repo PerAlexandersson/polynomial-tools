@@ -835,6 +835,23 @@ impl Default for SparseModEliminationOptions {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum SparseModSolutionMode {
+    None,
+    AnyConsistent,
+    FullRank,
+}
+
+impl SparseModSolutionMode {
+    fn from_compute_solution(compute_solution: bool) -> Self {
+        if compute_solution {
+            Self::AnyConsistent
+        } else {
+            Self::None
+        }
+    }
+}
+
 /// Lightweight statistics from sparse modular elimination.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct SparseModEliminationStats {
@@ -1021,7 +1038,7 @@ fn sparse_modular_linear_system_consistency_indexed<I>(
     rows: I,
     num_vars: usize,
     prime: u64,
-    compute_solution: bool,
+    solution_mode: SparseModSolutionMode,
 ) -> Result<SparseModEliminationResult, SparseModEliminationError>
 where
     I: IntoIterator<Item = (usize, SparseModRow)>,
@@ -1097,14 +1114,14 @@ where
             stats.max_active_nonzeros = stats.max_active_nonzeros.max(row.entries.len());
         }
     }
-    let solution = if compute_solution {
-        full_rank_solution.or_else(|| {
+    let solution = match solution_mode {
+        SparseModSolutionMode::None => None,
+        SparseModSolutionMode::AnyConsistent => full_rank_solution.or_else(|| {
             Some(sparse_modular_solution_from_pivots(
                 &pivots, num_vars, prime,
             ))
-        })
-    } else {
-        None
+        }),
+        SparseModSolutionMode::FullRank => full_rank_solution,
     };
 
     Ok(SparseModEliminationResult {
@@ -1122,7 +1139,7 @@ fn sparse_modular_linear_system_consistency_dynamic_markowitz(
     rows: Vec<(usize, SparseModRow)>,
     num_vars: usize,
     prime: u64,
-    compute_solution: bool,
+    solution_mode: SparseModSolutionMode,
 ) -> Result<SparseModEliminationResult, SparseModEliminationError> {
     let mut active_rows = Vec::with_capacity(rows.len());
     let mut pivot_rows = Vec::new();
@@ -1222,7 +1239,12 @@ fn sparse_modular_linear_system_consistency_dynamic_markowitz(
                 pivot_rows,
                 pivot_columns,
                 inconsistent_row: None,
-                solution: compute_solution.then_some(solution),
+                solution: match solution_mode {
+                    SparseModSolutionMode::None => None,
+                    SparseModSolutionMode::AnyConsistent | SparseModSolutionMode::FullRank => {
+                        Some(solution)
+                    }
+                },
                 stats,
             });
         }
@@ -1240,14 +1262,15 @@ fn sparse_modular_linear_system_consistency_dynamic_markowitz(
         }
     }
 
-    let solution = compute_solution.then(|| {
-        sparse_modular_solution_from_ordered_pivots(
+    let solution = match solution_mode {
+        SparseModSolutionMode::None | SparseModSolutionMode::FullRank => None,
+        SparseModSolutionMode::AnyConsistent => Some(sparse_modular_solution_from_ordered_pivots(
             &ordered_pivots,
             &pivot_columns,
             num_vars,
             prime,
-        )
-    });
+        )),
+    };
 
     Ok(SparseModEliminationResult {
         consistent: true,
@@ -1312,12 +1335,31 @@ pub(crate) fn sparse_modular_linear_system_consistency_prime_unchecked_with_opti
 where
     I: IntoIterator<Item = SparseModRow>,
 {
-    match options.row_order {
+    sparse_modular_linear_system_consistency_prime_unchecked_with_solution_mode(
+        rows,
+        num_vars,
+        prime,
+        options.row_order,
+        SparseModSolutionMode::from_compute_solution(options.compute_solution),
+    )
+}
+
+pub(crate) fn sparse_modular_linear_system_consistency_prime_unchecked_with_solution_mode<I>(
+    rows: I,
+    num_vars: usize,
+    prime: u64,
+    row_order: SparseModRowOrder,
+    solution_mode: SparseModSolutionMode,
+) -> Result<SparseModEliminationResult, SparseModEliminationError>
+where
+    I: IntoIterator<Item = SparseModRow>,
+{
+    match row_order {
         SparseModRowOrder::Input => sparse_modular_linear_system_consistency_indexed(
             rows.into_iter().enumerate(),
             num_vars,
             prime,
-            options.compute_solution,
+            solution_mode,
         ),
         SparseModRowOrder::IncreasingNonzeros => {
             let mut indexed_rows = rows.into_iter().enumerate().collect::<Vec<_>>();
@@ -1327,7 +1369,7 @@ where
                 indexed_rows,
                 num_vars,
                 prime,
-                options.compute_solution,
+                solution_mode,
             )
         }
         SparseModRowOrder::IncreasingMarkowitzCost => {
@@ -1344,7 +1386,7 @@ where
                 indexed_rows,
                 num_vars,
                 prime,
-                options.compute_solution,
+                solution_mode,
             )
         }
         SparseModRowOrder::DynamicMarkowitz => {
@@ -1353,7 +1395,7 @@ where
                 indexed_rows,
                 num_vars,
                 prime,
-                options.compute_solution,
+                solution_mode,
             )
         }
     }
@@ -2522,6 +2564,63 @@ mod tests {
         assert_eq!(result.rank, 2);
         assert_eq!(result.inconsistent_row, Some(2));
         assert_eq!(result.stats.full_rank_checks, 1);
+    }
+
+    #[test]
+    fn test_sparse_modular_solver_full_rank_solution_mode() {
+        let prime = 101;
+        let num_vars = 3;
+        let rank_deficient_aug = vec![vec![1, 0, 0, 2], vec![0, 1, 0, 3]];
+        let full_rank_only =
+            sparse_modular_linear_system_consistency_prime_unchecked_with_solution_mode(
+                sparse_rows_from_dense_aug(&rank_deficient_aug, num_vars, prime),
+                num_vars,
+                prime,
+                SparseModRowOrder::IncreasingNonzeros,
+                SparseModSolutionMode::FullRank,
+            )
+            .unwrap();
+        assert!(full_rank_only.consistent);
+        assert_eq!(full_rank_only.rank, 2);
+        assert_eq!(full_rank_only.solution, None);
+
+        let any_consistent =
+            sparse_modular_linear_system_consistency_prime_unchecked_with_solution_mode(
+                sparse_rows_from_dense_aug(&rank_deficient_aug, num_vars, prime),
+                num_vars,
+                prime,
+                SparseModRowOrder::IncreasingNonzeros,
+                SparseModSolutionMode::AnyConsistent,
+            )
+            .unwrap();
+        assert_eq!(any_consistent.rank, 2);
+        assert!(solution_satisfies_dense_aug(
+            &rank_deficient_aug,
+            num_vars,
+            prime,
+            any_consistent
+                .solution
+                .as_ref()
+                .expect("rank-deficient solution")
+        ));
+
+        let full_rank_aug = vec![vec![1, 0, 0, 2], vec![0, 1, 0, 3], vec![0, 0, 1, 4]];
+        let full_rank =
+            sparse_modular_linear_system_consistency_prime_unchecked_with_solution_mode(
+                sparse_rows_from_dense_aug(&full_rank_aug, num_vars, prime),
+                num_vars,
+                prime,
+                SparseModRowOrder::IncreasingNonzeros,
+                SparseModSolutionMode::FullRank,
+            )
+            .unwrap();
+        assert_eq!(full_rank.rank, 3);
+        assert!(solution_satisfies_dense_aug(
+            &full_rank_aug,
+            num_vars,
+            prime,
+            full_rank.solution.as_ref().expect("full-rank solution")
+        ));
     }
 
     #[test]
