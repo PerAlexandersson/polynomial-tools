@@ -354,6 +354,9 @@ use crate::linalg;
 
 const MODULAR_PREFILTER_PRIMES: [i64; 3] = [1_000_000_007, 1_000_000_009, 998_244_353];
 const MODULAR_PREFILTER_INCONSISTENT_PRIMES_TO_REJECT: usize = 2;
+// Full-rank modular fits first check one held-out row, which cheaply rejects
+// many false prefix fits.  A full held-out sweep is reserved for larger spaces.
+const MODULAR_PREFILTER_FIRST_TAIL_VERIFY_MIN_UNKNOWNS: usize = 1;
 const MODULAR_PREFILTER_TAIL_VERIFY_MIN_UNKNOWNS: usize = 128;
 
 fn mod_norm(value: i64, modulus: i64) -> i64 {
@@ -645,7 +648,7 @@ fn recurrence_system_consistent_mod_images(
 
     let options = linalg::SparseModEliminationOptions {
         row_order: linalg::SparseModRowOrder::IncreasingNonzeros,
-        compute_solution: num_vars >= MODULAR_PREFILTER_TAIL_VERIFY_MIN_UNKNOWNS,
+        compute_solution: num_vars >= MODULAR_PREFILTER_FIRST_TAIL_VERIFY_MIN_UNKNOWNS,
     };
     let result = linalg::sparse_modular_linear_system_consistency_prime_unchecked_with_options(
         rows, num_vars, prime, options,
@@ -933,14 +936,23 @@ fn modular_prefilter_with_cache(
             opts,
             prime_images.modulus,
         );
-        let should_verify_tail = fit_len < polys.len()
-            && count_unknowns(opts) >= MODULAR_PREFILTER_TAIL_VERIFY_MIN_UNKNOWNS;
-        let tail_consistent = !should_verify_tail
+        let unknowns = count_unknowns(opts);
+        let tail_verify_end = if fit_len >= polys.len()
+            || unknowns < MODULAR_PREFILTER_FIRST_TAIL_VERIFY_MIN_UNKNOWNS
+        {
+            None
+        } else if unknowns >= MODULAR_PREFILTER_TAIL_VERIFY_MIN_UNKNOWNS {
+            Some(polys.len())
+        } else {
+            Some(fit_len + 1)
+        };
+        let tail_consistent = tail_verify_end.is_none()
             || result.full_rank_solution.as_ref().is_none_or(|solution| {
+                let verify_len = tail_verify_end.expect("tail verification length was checked");
                 recurrence_solution_holds_from_mod_images(
-                    polys,
-                    &prime_images.polys[..polys.len()],
-                    &prime_images.derivs[..polys.len()],
+                    &polys[..verify_len],
+                    &prime_images.polys[..verify_len],
+                    &prime_images.derivs[..verify_len],
                     opts,
                     prime_images.modulus,
                     solution,
