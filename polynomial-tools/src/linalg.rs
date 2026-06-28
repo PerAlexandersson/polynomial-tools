@@ -769,6 +769,9 @@ pub struct SparseModEliminationStats {
     pub zero_rows: usize,
     /// Number of sparse row reductions against existing pivot rows.
     pub row_reductions: usize,
+    /// Number of rows checked by evaluating the unique solution after full
+    /// column rank was reached.
+    pub full_rank_checks: usize,
     /// Sum of nonzero coefficients in stored pivot rows.
     pub pivot_nonzeros: usize,
     /// Maximum number of nonzero coefficients in any active row during
@@ -850,6 +853,14 @@ fn sparse_modular_solution_from_pivots(
     solution
 }
 
+fn sparse_modular_row_matches_solution(row: &SparseModRow, solution: &[u64], prime: u64) -> bool {
+    let mut lhs = 0;
+    for &(col, coeff) in &row.entries {
+        lhs = add_mod_u64(lhs, mul_mod_u64(coeff, solution[col], prime), prime);
+    }
+    lhs == row.rhs
+}
+
 fn sparse_modular_column_counts(
     indexed_rows: &[(usize, SparseModRow)],
     num_vars: usize,
@@ -898,6 +909,7 @@ where
     let mut pivot_rows = Vec::new();
     let mut pivot_columns = Vec::new();
     let mut stats = SparseModEliminationStats::default();
+    let mut full_rank_solution: Option<Vec<u64>> = None;
 
     for (row_index, mut row) in rows {
         stats.input_rows += 1;
@@ -911,6 +923,22 @@ where
                     num_vars,
                 });
             }
+        }
+
+        if let Some(solution) = &full_rank_solution {
+            stats.full_rank_checks += 1;
+            if !sparse_modular_row_matches_solution(&row, solution, prime) {
+                return Ok(SparseModEliminationResult {
+                    consistent: false,
+                    rank: pivot_columns.len(),
+                    pivot_rows,
+                    pivot_columns,
+                    inconsistent_row: Some(row_index),
+                    solution: None,
+                    stats,
+                });
+            }
+            continue;
         }
 
         loop {
@@ -936,6 +964,11 @@ where
                 pivots[pivot_col] = Some(row);
                 pivot_rows.push(row_index);
                 pivot_columns.push(pivot_col);
+                if pivot_columns.len() == num_vars {
+                    full_rank_solution = Some(sparse_modular_solution_from_pivots(
+                        &pivots, num_vars, prime,
+                    ));
+                }
                 break;
             };
             row.subtract_scaled(pivot, pivot_coeff, prime);
@@ -943,8 +976,15 @@ where
             stats.max_active_nonzeros = stats.max_active_nonzeros.max(row.entries.len());
         }
     }
-    let solution =
-        compute_solution.then(|| sparse_modular_solution_from_pivots(&pivots, num_vars, prime));
+    let solution = if compute_solution {
+        full_rank_solution.or_else(|| {
+            Some(sparse_modular_solution_from_pivots(
+                &pivots, num_vars, prime,
+            ))
+        })
+    } else {
+        None
+    };
 
     Ok(SparseModEliminationResult {
         consistent: true,
@@ -995,6 +1035,20 @@ where
         return Err(SparseModEliminationError::ModulusNotPrime { modulus: prime });
     }
 
+    sparse_modular_linear_system_consistency_prime_unchecked_with_options(
+        rows, num_vars, prime, options,
+    )
+}
+
+pub(crate) fn sparse_modular_linear_system_consistency_prime_unchecked_with_options<I>(
+    rows: I,
+    num_vars: usize,
+    prime: u64,
+    options: SparseModEliminationOptions,
+) -> Result<SparseModEliminationResult, SparseModEliminationError>
+where
+    I: IntoIterator<Item = SparseModRow>,
+{
     match options.row_order {
         SparseModRowOrder::Input => sparse_modular_linear_system_consistency_indexed(
             rows.into_iter().enumerate(),
@@ -2155,6 +2209,47 @@ mod tests {
         .unwrap();
         assert!(result.consistent);
         assert_eq!(result.solution, None);
+    }
+
+    #[test]
+    fn test_sparse_modular_solver_checks_tail_rows_after_full_rank() {
+        let prime = 101;
+        let num_vars = 2;
+        let aug = vec![vec![1, 0, 2], vec![0, 1, 3], vec![1, 1, 5], vec![2, 3, 13]];
+        let result = sparse_modular_linear_system_consistency_with_options(
+            sparse_rows_from_dense_aug(&aug, num_vars, prime),
+            num_vars,
+            prime,
+            SparseModEliminationOptions {
+                row_order: SparseModRowOrder::Input,
+                compute_solution: false,
+            },
+        )
+        .unwrap();
+
+        assert!(result.consistent);
+        assert_eq!(result.rank, 2);
+        assert_eq!(result.pivot_rows, vec![0, 1]);
+        assert_eq!(result.stats.row_reductions, 0);
+        assert_eq!(result.stats.full_rank_checks, 2);
+        assert_eq!(result.solution, None);
+
+        let inconsistent_aug = vec![vec![1, 0, 2], vec![0, 1, 3], vec![1, 1, 6]];
+        let result = sparse_modular_linear_system_consistency_with_options(
+            sparse_rows_from_dense_aug(&inconsistent_aug, num_vars, prime),
+            num_vars,
+            prime,
+            SparseModEliminationOptions {
+                row_order: SparseModRowOrder::Input,
+                compute_solution: false,
+            },
+        )
+        .unwrap();
+
+        assert!(!result.consistent);
+        assert_eq!(result.rank, 2);
+        assert_eq!(result.inconsistent_row, Some(2));
+        assert_eq!(result.stats.full_rank_checks, 1);
     }
 
     #[test]
