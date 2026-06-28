@@ -1292,6 +1292,7 @@ pub fn solve_linear_system(a: &[Vec<Q>], b: &[Q]) -> Option<Vec<Q>> {
         pivot_cols.push((pivot_row, col));
 
         let pivot_val = aug[pivot_row][col].clone();
+        let pivot_snapshot: Vec<_> = aug[pivot_row][col..=num_cols].to_vec();
 
         // Eliminate all other rows in this column.
         for row in 0..num_rows {
@@ -1299,7 +1300,6 @@ pub fn solve_linear_system(a: &[Vec<Q>], b: &[Q]) -> Option<Vec<Q>> {
                 continue;
             }
             let factor = aug[row][col].clone() / pivot_val.clone();
-            let pivot_snapshot: Vec<_> = aug[pivot_row][col..=num_cols].to_vec();
             for (aug_j, pivot_j) in aug[row][col..=num_cols]
                 .iter_mut()
                 .zip(pivot_snapshot.iter())
