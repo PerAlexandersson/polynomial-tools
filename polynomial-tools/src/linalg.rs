@@ -462,6 +462,9 @@ fn determinant_mod_prime_prefix(mat: &[Vec<u64>], size: usize, prime: u64) -> u6
 }
 
 fn mul_mod_u64(a: u64, b: u64, modulus: u64) -> u64 {
+    if modulus <= u32::MAX as u64 {
+        return (a * b) % modulus;
+    }
     ((a as u128 * b as u128) % modulus as u128) as u64
 }
 
@@ -474,7 +477,14 @@ fn sub_mod_u64(a: u64, b: u64, modulus: u64) -> u64 {
 }
 
 fn add_mod_u64(a: u64, b: u64, modulus: u64) -> u64 {
-    ((a as u128 + b as u128) % modulus as u128) as u64
+    let (sum, overflow) = a.overflowing_add(b);
+    if overflow {
+        ((a as u128 + b as u128) % modulus as u128) as u64
+    } else if sum >= modulus {
+        sum - modulus
+    } else {
+        sum
+    }
 }
 
 fn pow_mod_u64(mut base: u64, mut exponent: u64, modulus: u64) -> u64 {
@@ -1762,6 +1772,12 @@ pub fn solve_full_rank_square_linear_system(a: &[Vec<Q>], b: &[Q]) -> Option<Vec
         return Some(vec![]);
     }
 
+    if let Some(integer_aug) = square_rational_system_as_bigint_augmented(a, b) {
+        if let Some(solution) = solve_full_rank_square_integer_augmented(integer_aug) {
+            return Some(solution);
+        }
+    }
+
     let mut aug: Vec<Vec<Q>> = a
         .iter()
         .zip(b.iter())
@@ -1804,6 +1820,81 @@ pub fn solve_full_rank_square_linear_system(a: &[Vec<Q>], b: &[Q]) -> Option<Vec
             }
         }
         x[row] = value / &aug[row][row];
+    }
+
+    Some(x)
+}
+
+fn square_rational_system_as_bigint_augmented(a: &[Vec<Q>], b: &[Q]) -> Option<Vec<Vec<BigInt>>> {
+    a.iter()
+        .zip(b.iter())
+        .map(|row| {
+            let (row, rhs) = row;
+            let mut augmented = row
+                .iter()
+                .map(|entry| entry.denom().is_one().then(|| entry.numer().clone()))
+                .collect::<Option<Vec<_>>>()?;
+            augmented.push(rhs.denom().is_one().then(|| rhs.numer().clone())?);
+            Some(augmented)
+        })
+        .collect()
+}
+
+fn solve_full_rank_square_integer_augmented(mut aug: Vec<Vec<BigInt>>) -> Option<Vec<Q>> {
+    let n = aug.len();
+    if aug.iter().any(|row| row.len() != n + 1) {
+        return None;
+    }
+    if n == 0 {
+        return Some(vec![]);
+    }
+
+    let mut denom = BigInt::one();
+
+    for col in 0..n {
+        let pivot_row = (col..n).find(|&row| !aug[row][col].is_zero())?;
+        aug.swap(col, pivot_row);
+        let pivot = aug[col][col].clone();
+        if pivot.is_zero() {
+            return None;
+        }
+        if col == n - 1 {
+            break;
+        }
+
+        let mut next_entries = Vec::with_capacity((n - col - 1) * (n - col));
+        for row in (col + 1)..n {
+            let row_pivot = aug[row][col].clone();
+            for target_col in (col + 1)..=n {
+                let numerator = &aug[row][target_col] * &pivot - &row_pivot * &aug[col][target_col];
+                if &numerator % &denom != BigInt::zero() {
+                    return None;
+                }
+                next_entries.push((row, target_col, numerator / &denom));
+            }
+        }
+        for row in (col + 1)..n {
+            aug[row][col] = BigInt::zero();
+        }
+        for (row, target_col, value) in next_entries {
+            aug[row][target_col] = value;
+        }
+        denom = pivot;
+    }
+
+    let mut x = vec![Q::zero(); n];
+    for row in (0..n).rev() {
+        let diagonal = aug[row][row].clone();
+        if diagonal.is_zero() {
+            return None;
+        }
+        let mut value = Q::from_integer(aug[row][n].clone());
+        for (col, coeff) in aug[row].iter().enumerate().take(n).skip(row + 1) {
+            if !coeff.is_zero() {
+                value -= Q::from_integer(coeff.clone()) * &x[col];
+            }
+        }
+        x[row] = value / Q::from_integer(diagonal);
     }
 
     Some(x)
@@ -2433,6 +2524,55 @@ mod tests {
         let x = solve_full_rank_square_linear_system(&a, &b).unwrap();
         assert_eq!(x[0], Q::from_integer(bi(1)));
         assert_eq!(x[1], Q::from_integer(bi(2)));
+    }
+
+    #[test]
+    fn test_solve_full_rank_square_integer_row_swap() {
+        // Solution is (3, -1, 2); the first pivot requires a row swap.
+        let a = vec![
+            vec![
+                Q::from_integer(bi(0)),
+                Q::from_integer(bi(2)),
+                Q::from_integer(bi(1)),
+            ],
+            vec![
+                Q::from_integer(bi(1)),
+                Q::from_integer(bi(1)),
+                Q::from_integer(bi(0)),
+            ],
+            vec![
+                Q::from_integer(bi(2)),
+                Q::from_integer(bi(3)),
+                Q::from_integer(bi(1)),
+            ],
+        ];
+        let b = vec![
+            Q::from_integer(bi(0)),
+            Q::from_integer(bi(2)),
+            Q::from_integer(bi(5)),
+        ];
+        let x = solve_full_rank_square_linear_system(&a, &b).unwrap();
+        assert_eq!(
+            x,
+            vec![
+                Q::from_integer(bi(3)),
+                Q::from_integer(bi(-1)),
+                Q::from_integer(bi(2)),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_solve_full_rank_square_rational_fallback() {
+        // x - y = 0, x/2 + y = 2 -> x = y = 4/3.
+        let half = Q::new(bi(1), bi(2));
+        let a = vec![
+            vec![half, Q::one()],
+            vec![Q::one(), Q::from_integer(bi(-1))],
+        ];
+        let b = vec![Q::from_integer(bi(2)), Q::zero()];
+        let x = solve_full_rank_square_linear_system(&a, &b).unwrap();
+        assert_eq!(x, vec![Q::new(bi(4), bi(3)), Q::new(bi(4), bi(3))]);
     }
 
     #[test]
