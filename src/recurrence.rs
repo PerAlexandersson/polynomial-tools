@@ -646,14 +646,16 @@ fn recurrence_system_consistent_mod_images(
         }
     }
 
-    let options = linalg::SparseModEliminationOptions {
-        row_order: linalg::SparseModRowOrder::IncreasingNonzeros,
-        compute_solution: num_vars >= MODULAR_PREFILTER_FIRST_TAIL_VERIFY_MIN_UNKNOWNS,
-    };
-    let result = linalg::sparse_modular_linear_system_consistency_prime_unchecked_with_options(
-        rows, num_vars, prime, options,
-    )
-    .expect("recurrence modular prefilter builds a well-formed prime-field system");
+    let row_order = linalg::SparseModRowOrder::IncreasingNonzeros;
+    let result =
+        linalg::sparse_modular_linear_system_consistency_prime_unchecked_with_solution_mode(
+            rows,
+            num_vars,
+            prime,
+            row_order,
+            linalg::SparseModSolutionMode::FullRank,
+        )
+        .expect("recurrence modular prefilter builds a well-formed prime-field system");
     let full_rank = result.consistent && result.rank == num_vars;
     let full_rank_pivot_rows = full_rank.then(|| {
         result
@@ -913,7 +915,6 @@ fn modular_prefilter_with_cache(
     }
 
     let mut inconsistent_primes = 0;
-    let mut full_rank_pivot_rows = None;
     for prime_images in &cache.primes {
         if fit_len > polys.len()
             || polys.len() > prime_images.polys.len()
@@ -959,7 +960,16 @@ fn modular_prefilter_with_cache(
                     fit_len + 1,
                 )
             });
-        if !result.consistent || !tail_consistent {
+        if result.consistent && !tail_consistent {
+            // A full-rank modular fit has a unique solution with a nonzero
+            // pivot determinant modulo this prime. If a held-out row fails,
+            // the exact candidate cannot satisfy the same held-out equation.
+            return ModularPrefilterResult {
+                rejected: true,
+                full_rank_pivot_rows: None,
+            };
+        }
+        if !result.consistent {
             inconsistent_primes += 1;
             if inconsistent_primes >= MODULAR_PREFILTER_INCONSISTENT_PRIMES_TO_REJECT {
                 return ModularPrefilterResult {
@@ -967,14 +977,17 @@ fn modular_prefilter_with_cache(
                     full_rank_pivot_rows: None,
                 };
             }
-        } else if full_rank_pivot_rows.is_none() {
-            full_rank_pivot_rows = result.full_rank_pivot_rows;
+        } else if let Some(pivot_rows) = result.full_rank_pivot_rows {
+            return ModularPrefilterResult {
+                rejected: false,
+                full_rank_pivot_rows: Some(pivot_rows),
+            };
         }
     }
 
     ModularPrefilterResult {
         rejected: false,
-        full_rank_pivot_rows,
+        full_rank_pivot_rows: None,
     }
 }
 
