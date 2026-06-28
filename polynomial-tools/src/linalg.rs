@@ -473,6 +473,10 @@ fn sub_mod_u64(a: u64, b: u64, modulus: u64) -> u64 {
     }
 }
 
+fn add_mod_u64(a: u64, b: u64, modulus: u64) -> u64 {
+    ((a as u128 + b as u128) % modulus as u128) as u64
+}
+
 fn pow_mod_u64(mut base: u64, mut exponent: u64, modulus: u64) -> u64 {
     let mut result = 1u64;
     while exponent > 0 {
@@ -487,6 +491,311 @@ fn pow_mod_u64(mut base: u64, mut exponent: u64, modulus: u64) -> u64 {
 
 fn mod_inverse_prime(value: u64, prime: u64) -> Option<u64> {
     (value != 0).then(|| pow_mod_u64(value, prime - 2, prime))
+}
+
+fn signed_mod_u64(value: i64, prime: u64) -> u64 {
+    (i128::from(value).rem_euclid(i128::from(prime))) as u64
+}
+
+/// Sparse augmented row over the prime field `F_p`.
+///
+/// The row represents
+///
+/// ```text
+///   sum_i entries[i].1 * x_{entries[i].0} = rhs   (mod p).
+/// ```
+///
+/// Entries are stored sorted by column and normalized into `0..p`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SparseModRow {
+    entries: Vec<(usize, u64)>,
+    rhs: u64,
+}
+
+impl SparseModRow {
+    /// Create an empty sparse row with right-hand side `rhs mod prime`.
+    ///
+    /// The `prime` argument is not stored; it is used only to normalize input.
+    pub fn new(rhs: u64, prime: u64) -> Self {
+        Self {
+            entries: Vec::new(),
+            rhs: rhs % prime,
+        }
+    }
+
+    /// Create an empty sparse row with a signed right-hand side.
+    pub fn from_signed_rhs(rhs: i64, prime: u64) -> Self {
+        Self {
+            entries: Vec::new(),
+            rhs: signed_mod_u64(rhs, prime),
+        }
+    }
+
+    /// Return the nonzero column/value entries, sorted by column.
+    pub fn entries(&self) -> &[(usize, u64)] {
+        &self.entries
+    }
+
+    /// Return the right-hand side.
+    pub fn rhs(&self) -> u64 {
+        self.rhs
+    }
+
+    /// Add `value` to the coefficient of `col`, reducing modulo `prime`.
+    pub fn add_entry(&mut self, col: usize, value: u64, prime: u64) {
+        let value = value % prime;
+        if value == 0 {
+            return;
+        }
+        match self.entries.binary_search_by_key(&col, |&(col, _)| col) {
+            Ok(index) => {
+                let new_value = add_mod_u64(self.entries[index].1, value, prime);
+                if new_value == 0 {
+                    self.entries.remove(index);
+                } else {
+                    self.entries[index].1 = new_value;
+                }
+            }
+            Err(index) => self.entries.insert(index, (col, value)),
+        }
+    }
+
+    /// Add a signed value to the coefficient of `col`.
+    pub fn add_signed_entry(&mut self, col: usize, value: i64, prime: u64) {
+        self.add_entry(col, signed_mod_u64(value, prime), prime);
+    }
+
+    /// Return true if the row is the tautology `0 = 0`.
+    pub fn is_tautology(&self) -> bool {
+        self.entries.is_empty() && self.rhs == 0
+    }
+
+    fn leading_entry(&self) -> Option<(usize, u64)> {
+        self.entries.first().copied()
+    }
+
+    fn normalize_pivot(&mut self, prime: u64) {
+        let Some((_, pivot)) = self.leading_entry() else {
+            return;
+        };
+        let pivot_inv = mod_inverse_prime(pivot, prime)
+            .expect("nonzero element modulo prime should be invertible");
+        for (_, value) in &mut self.entries {
+            *value = mul_mod_u64(*value, pivot_inv, prime);
+        }
+        self.rhs = mul_mod_u64(self.rhs, pivot_inv, prime);
+    }
+
+    fn subtract_scaled(&mut self, pivot: &SparseModRow, factor: u64, prime: u64) {
+        let factor = factor % prime;
+        if factor == 0 {
+            return;
+        }
+
+        let mut merged = Vec::with_capacity(self.entries.len() + pivot.entries.len());
+        let mut lhs = 0;
+        let mut rhs = 0;
+        while lhs < self.entries.len() || rhs < pivot.entries.len() {
+            let next_col = match (self.entries.get(lhs), pivot.entries.get(rhs)) {
+                (Some(&(lhs_col, _)), Some(&(rhs_col, _))) => lhs_col.min(rhs_col),
+                (Some(&(lhs_col, _)), None) => lhs_col,
+                (None, Some(&(rhs_col, _))) => rhs_col,
+                (None, None) => break,
+            };
+
+            let mut value = 0;
+            if lhs < self.entries.len() && self.entries[lhs].0 == next_col {
+                value = self.entries[lhs].1;
+                lhs += 1;
+            }
+            if rhs < pivot.entries.len() && pivot.entries[rhs].0 == next_col {
+                value = sub_mod_u64(
+                    value,
+                    mul_mod_u64(factor, pivot.entries[rhs].1, prime),
+                    prime,
+                );
+                rhs += 1;
+            }
+            if value != 0 {
+                merged.push((next_col, value));
+            }
+        }
+
+        self.entries = merged;
+        self.rhs = sub_mod_u64(self.rhs, mul_mod_u64(factor, pivot.rhs, prime), prime);
+    }
+}
+
+/// Summary of sparse Gaussian elimination over a prime field.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SparseModEliminationResult {
+    /// Whether the input system is consistent.
+    pub consistent: bool,
+    /// Number of pivot rows found before termination.
+    pub rank: usize,
+    /// Zero-based input row indices that introduced new pivots.
+    pub pivot_rows: Vec<usize>,
+    /// Pivot columns in the order they were inserted.
+    pub pivot_columns: Vec<usize>,
+    /// Zero-based input row index witnessing inconsistency, if any.
+    pub inconsistent_row: Option<usize>,
+    /// One solution with all free variables set to zero, if the system is
+    /// consistent.
+    pub solution: Option<Vec<u64>>,
+}
+
+/// Errors for sparse modular linear-system elimination.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum SparseModEliminationError {
+    /// The modulus is not prime.  The elimination routine divides by nonzero
+    /// pivots, so it must run over a field.
+    ModulusNotPrime { modulus: u64 },
+    /// A row contains a column outside `0..num_vars`.
+    ColumnOutOfRange {
+        row: usize,
+        column: usize,
+        num_vars: usize,
+    },
+}
+
+impl std::fmt::Display for SparseModEliminationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ModulusNotPrime { modulus } => {
+                write!(f, "modulus {modulus} is not prime")
+            }
+            Self::ColumnOutOfRange {
+                row,
+                column,
+                num_vars,
+            } => write!(
+                f,
+                "row {row} contains column {column}, but the system has {num_vars} variables"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for SparseModEliminationError {}
+
+fn sparse_modular_solution_from_pivots(
+    pivots: &[Option<SparseModRow>],
+    num_vars: usize,
+    prime: u64,
+) -> Vec<u64> {
+    let mut solution = vec![0; num_vars];
+    for pivot_col in (0..num_vars).rev() {
+        let Some(row) = &pivots[pivot_col] else {
+            continue;
+        };
+        let mut value = row.rhs;
+        for &(col, coeff) in row.entries.iter().skip(1) {
+            value = sub_mod_u64(value, mul_mod_u64(coeff, solution[col], prime), prime);
+        }
+        solution[pivot_col] = value;
+    }
+    solution
+}
+
+/// Check consistency of a sparse linear system over the prime field `F_p`.
+///
+/// The rows are augmented rows `A_i x = b_i`.  The implementation performs
+/// incremental sparse Gaussian elimination, normalizing each stored pivot row.
+/// It is intended for sparse systems where one mostly needs rank/consistency
+/// information or a single solution over `F_p` before a more expensive exact
+/// solve.
+pub fn sparse_modular_linear_system_consistency<I>(
+    rows: I,
+    num_vars: usize,
+    prime: u64,
+) -> Result<SparseModEliminationResult, SparseModEliminationError>
+where
+    I: IntoIterator<Item = SparseModRow>,
+{
+    if !is_prime_u64(prime) {
+        return Err(SparseModEliminationError::ModulusNotPrime { modulus: prime });
+    }
+
+    let mut pivots = vec![None; num_vars];
+    let mut pivot_rows = Vec::new();
+    let mut pivot_columns = Vec::new();
+
+    for (row_index, mut row) in rows.into_iter().enumerate() {
+        for &(column, _) in &row.entries {
+            if column >= num_vars {
+                return Err(SparseModEliminationError::ColumnOutOfRange {
+                    row: row_index,
+                    column,
+                    num_vars,
+                });
+            }
+        }
+
+        loop {
+            let Some((pivot_col, pivot_coeff)) = row.leading_entry() else {
+                if row.rhs != 0 {
+                    return Ok(SparseModEliminationResult {
+                        consistent: false,
+                        rank: pivot_columns.len(),
+                        pivot_rows,
+                        pivot_columns,
+                        inconsistent_row: Some(row_index),
+                        solution: None,
+                    });
+                }
+                break;
+            };
+
+            let Some(pivot) = &pivots[pivot_col] else {
+                row.normalize_pivot(prime);
+                pivots[pivot_col] = Some(row);
+                pivot_rows.push(row_index);
+                pivot_columns.push(pivot_col);
+                break;
+            };
+            row.subtract_scaled(pivot, pivot_coeff, prime);
+        }
+    }
+    let solution = sparse_modular_solution_from_pivots(&pivots, num_vars, prime);
+
+    Ok(SparseModEliminationResult {
+        consistent: true,
+        rank: pivot_columns.len(),
+        pivot_rows,
+        pivot_columns,
+        inconsistent_row: None,
+        solution: Some(solution),
+    })
+}
+
+/// Convenience boolean wrapper around
+/// [`sparse_modular_linear_system_consistency`].
+pub fn sparse_modular_linear_system_consistent<I>(
+    rows: I,
+    num_vars: usize,
+    prime: u64,
+) -> Result<bool, SparseModEliminationError>
+where
+    I: IntoIterator<Item = SparseModRow>,
+{
+    sparse_modular_linear_system_consistency(rows, num_vars, prime).map(|result| result.consistent)
+}
+
+/// Return one solution of a sparse linear system over `F_p`, if the system is
+/// consistent.
+///
+/// Free variables are set to zero.  Use
+/// [`sparse_modular_linear_system_consistency`] when rank, pivot row indices,
+/// pivot columns, or an inconsistency witness are also needed.
+pub fn sparse_modular_linear_system_solution<I>(
+    rows: I,
+    num_vars: usize,
+    prime: u64,
+) -> Result<Option<Vec<u64>>, SparseModEliminationError>
+where
+    I: IntoIterator<Item = SparseModRow>,
+{
+    sparse_modular_linear_system_consistency(rows, num_vars, prime).map(|result| result.solution)
 }
 
 fn previous_prime_at_or_below(mut n: u64) -> Option<u64> {
@@ -1359,6 +1668,179 @@ mod tests {
         let a = vec![vec![Q::one(), Q::one()], vec![Q::one(), Q::one()]];
         let b = vec![Q::one(), Q::from_integer(bi(2))];
         assert!(solve_linear_system(&a, &b).is_none());
+    }
+
+    // -----------------------------------------------------------------------
+    // Sparse modular linear systems
+    // -----------------------------------------------------------------------
+
+    fn dense_modular_linear_system_consistent(
+        mut aug: Vec<Vec<u64>>,
+        num_vars: usize,
+        prime: u64,
+    ) -> bool {
+        let num_rows = aug.len();
+        let mut pivot_row = 0;
+
+        for col in 0..num_vars {
+            let Some(pr) = (pivot_row..num_rows).find(|&row| aug[row][col] != 0) else {
+                continue;
+            };
+            aug.swap(pivot_row, pr);
+            let pivot_inv = mod_inverse_prime(aug[pivot_row][col], prime)
+                .expect("nonzero element modulo prime is invertible");
+            let pivot_snapshot = aug[pivot_row][col..=num_vars].to_vec();
+
+            for aug_row in aug.iter_mut().take(num_rows).skip(pivot_row + 1) {
+                if aug_row[col] == 0 {
+                    continue;
+                }
+                let factor = mul_mod_u64(aug_row[col], pivot_inv, prime);
+                for (entry, pivot_entry) in aug_row[col..=num_vars]
+                    .iter_mut()
+                    .zip(pivot_snapshot.iter())
+                {
+                    *entry = sub_mod_u64(*entry, mul_mod_u64(factor, *pivot_entry, prime), prime);
+                }
+            }
+
+            pivot_row += 1;
+            if pivot_row == num_rows {
+                return true;
+            }
+        }
+
+        aug[pivot_row..]
+            .iter()
+            .all(|row| row[..num_vars].iter().any(|&entry| entry != 0) || row[num_vars] == 0)
+    }
+
+    fn sparse_rows_from_dense_aug(
+        aug: &[Vec<u64>],
+        num_vars: usize,
+        prime: u64,
+    ) -> Vec<SparseModRow> {
+        aug.iter()
+            .map(|dense_row| {
+                let mut row = SparseModRow::new(dense_row[num_vars], prime);
+                for (col, &value) in dense_row.iter().take(num_vars).enumerate() {
+                    row.add_entry(col, value, prime);
+                }
+                row
+            })
+            .filter(|row| !row.is_tautology())
+            .collect()
+    }
+
+    fn solution_satisfies_dense_aug(
+        aug: &[Vec<u64>],
+        num_vars: usize,
+        prime: u64,
+        solution: &[u64],
+    ) -> bool {
+        aug.iter().all(|row| {
+            let lhs = row
+                .iter()
+                .take(num_vars)
+                .zip(solution.iter())
+                .fold(0, |acc, (&coeff, &value)| {
+                    add_mod_u64(acc, mul_mod_u64(coeff, value, prime), prime)
+                });
+            lhs == row[num_vars] % prime
+        })
+    }
+
+    #[test]
+    fn test_sparse_mod_row_normalizes_and_cancels_entries() {
+        let prime = 101;
+        let mut row = SparseModRow::from_signed_rhs(-3, prime);
+        row.add_signed_entry(2, -2, prime);
+        row.add_entry(2, 103, prime);
+        row.add_signed_entry(1, -1, prime);
+
+        assert_eq!(row.rhs(), 98);
+        assert_eq!(row.entries(), &[(1, 100)]);
+    }
+
+    #[test]
+    fn test_sparse_modular_solver_matches_dense_consistency() {
+        let prime = 101;
+        let num_vars = 3;
+        let aug = vec![
+            vec![1, 2, 0, 5],
+            vec![0, 3, 4, 7],
+            vec![2, 7, 4, 17],
+            vec![0, 0, 0, 0],
+        ];
+        let sparse_rows = sparse_rows_from_dense_aug(&aug, num_vars, prime);
+        let result =
+            sparse_modular_linear_system_consistency(sparse_rows, num_vars, prime).unwrap();
+
+        assert_eq!(
+            result.consistent,
+            dense_modular_linear_system_consistent(aug.clone(), num_vars, prime)
+        );
+        assert_eq!(result.rank, 2);
+        assert_eq!(result.pivot_rows, vec![0, 1]);
+        assert_eq!(result.pivot_columns, vec![0, 1]);
+        assert_eq!(result.inconsistent_row, None);
+        let solution = result.solution.as_ref().expect("consistent system");
+        assert_eq!(solution.len(), num_vars);
+        assert!(solution_satisfies_dense_aug(
+            &aug, num_vars, prime, solution
+        ));
+
+        let direct_solution = sparse_modular_linear_system_solution(
+            sparse_rows_from_dense_aug(&aug, num_vars, prime),
+            num_vars,
+            prime,
+        )
+        .unwrap()
+        .expect("consistent system");
+        assert!(solution_satisfies_dense_aug(
+            &aug,
+            num_vars,
+            prime,
+            &direct_solution
+        ));
+    }
+
+    #[test]
+    fn test_sparse_modular_solver_detects_inconsistency() {
+        let prime = 101;
+        let num_vars = 2;
+        let aug = vec![vec![1, 1, 1], vec![2, 2, 3]];
+        let sparse_rows = sparse_rows_from_dense_aug(&aug, num_vars, prime);
+        let result =
+            sparse_modular_linear_system_consistency(sparse_rows, num_vars, prime).unwrap();
+
+        assert!(!result.consistent);
+        assert_eq!(result.rank, 1);
+        assert_eq!(result.pivot_rows, vec![0]);
+        assert_eq!(result.pivot_columns, vec![0]);
+        assert_eq!(result.inconsistent_row, Some(1));
+        assert_eq!(result.solution, None);
+    }
+
+    #[test]
+    fn test_sparse_modular_solver_rejects_bad_inputs() {
+        let row = {
+            let mut row = SparseModRow::new(0, 101);
+            row.add_entry(3, 1, 101);
+            row
+        };
+        assert_eq!(
+            sparse_modular_linear_system_consistency(vec![row], 3, 101),
+            Err(SparseModEliminationError::ColumnOutOfRange {
+                row: 0,
+                column: 3,
+                num_vars: 3
+            })
+        );
+        assert_eq!(
+            sparse_modular_linear_system_consistency(Vec::new(), 3, 100),
+            Err(SparseModEliminationError::ModulusNotPrime { modulus: 100 })
+        );
     }
 
     // -----------------------------------------------------------------------

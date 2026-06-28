@@ -345,14 +345,6 @@ fn mod_neg(value: i64, modulus: i64) -> i64 {
     }
 }
 
-fn mod_add(lhs: i64, rhs: i64, modulus: i64) -> i64 {
-    ((lhs as i128 + rhs as i128).rem_euclid(modulus as i128)) as i64
-}
-
-fn mod_sub(lhs: i64, rhs: i64, modulus: i64) -> i64 {
-    ((lhs as i128 - rhs as i128).rem_euclid(modulus as i128)) as i64
-}
-
 fn mod_mul(lhs: i64, rhs: i64, modulus: i64) -> i64 {
     ((lhs as i128 * rhs as i128).rem_euclid(modulus as i128)) as i64
 }
@@ -432,43 +424,6 @@ fn rational_derivs_mod_prime(
         .collect()
 }
 
-fn modular_linear_system_consistent(mut aug: Vec<Vec<i64>>, num_vars: usize, modulus: i64) -> bool {
-    let num_rows = aug.len();
-    let mut pivot_row = 0;
-
-    for col in 0..num_vars {
-        let Some(pr) = (pivot_row..num_rows).find(|&row| aug[row][col] != 0) else {
-            continue;
-        };
-        aug.swap(pivot_row, pr);
-        let pivot_inv = mod_inv(aug[pivot_row][col], modulus)
-            .expect("nonzero element modulo prime is invertible");
-        let pivot_snapshot = aug[pivot_row][col..=num_vars].to_vec();
-
-        for aug_row in aug.iter_mut().take(num_rows).skip(pivot_row + 1) {
-            if aug_row[col] == 0 {
-                continue;
-            }
-            let factor = mod_mul(aug_row[col], pivot_inv, modulus);
-            for (entry, pivot_entry) in aug_row[col..=num_vars]
-                .iter_mut()
-                .zip(pivot_snapshot.iter())
-            {
-                *entry = mod_sub(*entry, mod_mul(factor, *pivot_entry, modulus), modulus);
-            }
-        }
-
-        pivot_row += 1;
-        if pivot_row == num_rows {
-            return true;
-        }
-    }
-
-    aug[pivot_row..]
-        .iter()
-        .all(|row| row[..num_vars].iter().any(|&entry| entry != 0) || row[num_vars] == 0)
-}
-
 fn recurrence_system_consistent_mod_prime(
     polys: &[Vec<BigRational>],
     derivs: &[Vec<Vec<BigRational>>],
@@ -515,6 +470,7 @@ fn recurrence_system_consistent_mod_prime(
     if num_vars == 0 {
         return Some(true);
     }
+    let prime = modulus as u64;
 
     let max_poly_deg = polys
         .iter()
@@ -531,10 +487,9 @@ fn recurrence_system_consistent_mod_prime(
         });
     let max_t_deg = max_j + max_poly_deg;
     let eqs_per_nn = max_t_deg + 1;
-    let num_rows = (m - opts.rec_len) * eqs_per_nn;
-    let mut aug = vec![vec![0; num_vars + 1]; num_rows];
+    let mut rows = Vec::with_capacity((m - opts.rec_len) * eqs_per_nn);
 
-    for (eq_idx, nn) in (opts.rec_len + 1..=m).enumerate() {
+    for nn in opts.rec_len + 1..=m {
         let current_idx = nn - 1;
         let max_n_pow = opts
             .idx_deg
@@ -549,9 +504,8 @@ fn recurrence_system_consistent_mod_prime(
             .collect::<Vec<_>>();
 
         for l in 0..=max_t_deg {
-            let row = eq_idx * eqs_per_nn + l;
             let cur_l = poly_coeff_mod(&polys_mod, current_idx, l);
-            aug[row][num_vars] = mod_neg(cur_l, modulus);
+            let mut row = linalg::SparseModRow::from_signed_rhs(mod_neg(cur_l, modulus), prime);
 
             if num_denom_vars > 0 {
                 for (i, &n_power) in n_powers.iter().enumerate().take(opts.denom_idx_deg + 1) {
@@ -567,8 +521,7 @@ fn recurrence_system_consistent_mod_prime(
                             continue;
                         }
                         let col = denom_col(i, j);
-                        aug[row][col] =
-                            mod_add(aug[row][col], mod_mul(pc, n_power, modulus), modulus);
+                        row.add_signed_entry(col, mod_mul(pc, n_power, modulus), prime);
                     }
                 }
             }
@@ -595,10 +548,10 @@ fn recurrence_system_consistent_mod_prime(
                                     continue;
                                 }
                                 let col = coeff_col(r, d, sign_idx, i, j);
-                                aug[row][col] = mod_add(
-                                    aug[row][col],
+                                row.add_signed_entry(
+                                    col,
                                     mod_neg(mod_mul(rc, n_factor, modulus), modulus),
-                                    modulus,
+                                    prime,
                                 );
                             }
                         }
@@ -609,13 +562,20 @@ fn recurrence_system_consistent_mod_prime(
             if !opts.homogeneous && l <= opts.inhomo_var_deg {
                 for (i, &n_power) in n_powers.iter().enumerate().take(opts.inhomo_idx_deg + 1) {
                     let col = inhomo_col(i, l);
-                    aug[row][col] = mod_add(aug[row][col], mod_neg(n_power, modulus), modulus);
+                    row.add_signed_entry(col, mod_neg(n_power, modulus), prime);
                 }
+            }
+
+            if !row.is_tautology() {
+                rows.push(row);
             }
         }
     }
 
-    Some(modular_linear_system_consistent(aug, num_vars, modulus))
+    Some(
+        linalg::sparse_modular_linear_system_consistent(rows, num_vars, prime)
+            .expect("recurrence modular prefilter builds a well-formed prime-field system"),
+    )
 }
 
 fn modular_prefilter_rejects(
