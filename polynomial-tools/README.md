@@ -129,11 +129,21 @@ The commands `interlacing`, `interlacing-profile`, `properties`,
 `ehrhart-to-hstar` also accept `--json` for machine-readable output.
 Large integer coefficients in JSON output are serialized as strings.
 
+The exact property commands `real-rooted`, `interlacing`,
+`interlacing-profile`, `properties`, `gamma-expansion`, and the non-recurrence
+checks inside `family-check` accept arbitrary-size integer coefficients.
+Recurrence search, standard sequence generation, resultants, discriminants,
+Ehrhart conversion, and Stapledon decomposition currently use narrower
+coefficient formats described in their command help.
+
 ### Check real-rootedness
 
 ```sh
 polytool real-rooted < polys.txt
 ```
+
+`real-rooted` accepts arbitrary-size integer coefficients in dense-list and
+expanded-polynomial input.
 
 Output (one line per polynomial):
 
@@ -163,9 +173,7 @@ polytool interlacing-profile --json < polys.txt
 The JSON output includes `previous_count`, `checked_previous_count`, and
 `interlacing_previous_count`, plus the checked pair reports.
 Both commands accept arbitrary-size integer coefficients in dense-list and
-expanded-polynomial input.  Rows whose coefficients fit in `i64` use the
-small-coefficient fast path; larger rows use the exact BigInt interlacing
-backend.
+expanded-polynomial input.
 
 ### Check unimodality, log-concavity, palindromicity, gamma-positivity
 
@@ -192,6 +200,9 @@ polytool gamma-expansion < polys.txt
 polytool gamma-expansion --json < polys.txt
 ```
 
+`gamma-expansion` accepts arbitrary-size integer coefficients.  In JSON output,
+both input coefficients and gamma coefficients are serialized as strings.
+
 Example output:
 
 ```text
@@ -207,6 +218,7 @@ polytool sequence narayana 5 --json
 
 Supported sequence names are `eulerian`, `narayana`, `type-b-eulerian`,
 `chebyshev-t`, `chebyshev-u`, and `hermite`.
+Generated coefficients currently must fit in `i64`.
 
 ### Check a family in one pass
 
@@ -347,6 +359,9 @@ echo "1, 0, 1
 echo "1, 0, -3, 1" | polytool discriminant
 ```
 
+Inputs for these CLI commands currently must fit in `i64`; the exact resultant
+or discriminant output may be larger and is printed as an integer.
+
 ### Ehrhart ↔ h\*-vector conversion
 
 ```sh
@@ -356,6 +371,18 @@ echo "1, 8, 35, 32, 9" | polytool hstar-to-ehrhart
 # Ehrhart polynomial → h*-vector (coefficients as rationals: num/den)
 echo "1, 2, 2" | polytool ehrhart-to-hstar
 ```
+
+For `hstar-to-ehrhart`, h\*-vector entries currently must fit in `i64`.
+For `ehrhart-to-hstar`, input coefficients may be exact rationals, but the
+resulting h\*-vector entries currently must fit in `i64`.
+
+### Stapledon decomposition
+
+```sh
+echo "1, 11, 11, 1" | polytool stapledon 3
+```
+
+CLI Stapledon input coefficients currently must fit in `i64`.
 
 ## Library usage
 

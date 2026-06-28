@@ -276,6 +276,8 @@ fn print_sequence_help() {
     println!("  --json           Emit machine-readable JSON");
     println!("  -h, --help       Print this help text");
     println!();
+    println!("Note: generated coefficients currently must fit in i64.");
+    println!();
     println!("Example:");
     println!("  polytool sequence eulerian 5");
 }
@@ -314,6 +316,8 @@ fn print_stapledon_help() {
     println!("Compute the Stapledon decomposition with respect to degree bound n.");
     println!();
     print_coefficient_input_help();
+    println!();
+    println!("Note: coefficients currently must fit in i64.");
 }
 
 fn print_command_help(command: &str) -> bool {
@@ -321,7 +325,13 @@ fn print_command_help(command: &str) -> bool {
         "real-rooted" => print_stdin_command_help(
             "real-rooted",
             "Check whether each input polynomial has only real roots.",
-            &["Example:", "  echo '1, 3, 2' | polytool real-rooted"],
+            &[
+                "Note:",
+                "  Accepts arbitrary-size integer coefficients.",
+                "",
+                "Example:",
+                "  echo '1, 3, 2' | polytool real-rooted",
+            ],
         ),
         "interlacing" => print_stdin_command_help(
             "interlacing",
@@ -331,7 +341,7 @@ fn print_command_help(command: &str) -> bool {
                 "  --json    Emit machine-readable JSON",
                 "",
                 "Note:",
-                "  Accepts arbitrary-size integer coefficients; small rows use the i64 fast path.",
+                "  Accepts arbitrary-size integer coefficients.",
                 "",
                 "Example:",
                 "  printf '2,-3,1\\n-1,1\\n' | polytool interlacing",
@@ -345,7 +355,7 @@ fn print_command_help(command: &str) -> bool {
                 "  --json    Emit machine-readable JSON, including checked previous-pair reports",
                 "",
                 "Note:",
-                "  Accepts arbitrary-size integer coefficients; small rows use the i64 fast path.",
+                "  Accepts arbitrary-size integer coefficients.",
                 "",
                 "Example:",
                 "  printf '1\\n1,1\\n1,2,1\\n' | polytool interlacing-profile",
@@ -362,7 +372,7 @@ fn print_command_help(command: &str) -> bool {
                 "  --json    Emit machine-readable JSON",
                 "",
                 "Note:",
-                "  Accepts arbitrary-size integer coefficients; small rows use the i64 fast path.",
+                "  Accepts arbitrary-size integer coefficients.",
                 "",
                 "Example:",
                 "  echo '1, 11, 11, 1' | polytool properties",
@@ -377,6 +387,9 @@ fn print_command_help(command: &str) -> bool {
             &[
                 "Options:",
                 "  --json    Emit machine-readable JSON",
+                "",
+                "Note:",
+                "  Accepts arbitrary-size integer coefficients.",
                 "",
                 "Aliases:",
                 "  polytool gamma",
@@ -394,6 +407,9 @@ fn print_command_help(command: &str) -> bool {
             "resultant",
             "Compute the resultant of the first two input polynomials.",
             &[
+                "Note:",
+                "  Input coefficients currently must fit in i64; the exact output may be larger.",
+                "",
                 "Example:",
                 "  printf '1,0,1\\n-1,1\\n' | polytool resultant",
             ],
@@ -401,7 +417,13 @@ fn print_command_help(command: &str) -> bool {
         "discriminant" => print_stdin_command_help(
             "discriminant",
             "Compute the discriminant of each input polynomial.",
-            &["Example:", "  echo '1, 0, 1' | polytool discriminant"],
+            &[
+                "Note:",
+                "  Input coefficients currently must fit in i64; the exact output may be larger.",
+                "",
+                "Example:",
+                "  echo '1, 0, 1' | polytool discriminant",
+            ],
         ),
         "hstar-to-ehrhart" => print_stdin_command_help(
             "hstar-to-ehrhart",
@@ -409,6 +431,9 @@ fn print_command_help(command: &str) -> bool {
             &[
                 "Options:",
                 "  --json    Emit machine-readable JSON",
+                "",
+                "Note:",
+                "  h*-vector entries currently must fit in i64.",
                 "",
                 "Example:",
                 "  echo '1, 2, 1' | polytool hstar-to-ehrhart",
@@ -422,6 +447,9 @@ fn print_command_help(command: &str) -> bool {
                 "",
                 "Options:",
                 "  --json    Emit machine-readable JSON",
+                "",
+                "Note:",
+                "  Resulting h*-vector entries currently must fit in i64.",
                 "",
                 "Example:",
                 "  echo '1, 2, 2' | polytool ehrhart-to-hstar",
@@ -700,12 +728,12 @@ fn print_property_reports_json(reports: &[PropertyReport]) {
 }
 
 fn cmd_real_rooted() {
-    for coeffs in read_polys() {
-        let c = strip_trailing_zeros(&coeffs);
-        let rr = is_real_rooted(c);
+    for coeffs in read_polys_bigint() {
+        let c = strip_trailing_zeros_bigint(&coeffs);
+        let rr = is_real_rooted_bigint_coeffs(c);
         println!(
             "{}: {}",
-            format_poly(c),
+            format_poly_bigint_coeffs(c),
             if rr { "real-rooted" } else { "NOT real-rooted" }
         );
     }
@@ -1000,11 +1028,11 @@ fn cmd_gamma_expansion(args: &[String]) {
     };
     let mut had_error = false;
     let mut json_items = Vec::new();
-    for (index, coeffs) in read_polys().into_iter().enumerate() {
-        let c = strip_trailing_zeros(&coeffs);
-        match gamma_coefficients(c) {
+    for (index, coeffs) in read_polys_bigint().into_iter().enumerate() {
+        let c = strip_trailing_zeros_bigint(&coeffs);
+        match gamma_coefficients_bigint_coeffs(c) {
             Some(gamma) => {
-                let polynomial = format_poly(c);
+                let polynomial = format_poly_bigint_coeffs(c);
                 let expansion = format_gamma_expansion(&gamma, c.len().saturating_sub(1));
                 if format == OutputFormat::Json {
                     json_items.push(format!(
@@ -1012,9 +1040,9 @@ fn cmd_gamma_expansion(args: &[String]) {
                          \"degree\":{},\"gamma\":{},\"expansion\":{}}}",
                         index,
                         json_string(&polynomial),
-                        json_i64_vec(c),
-                        polynomial_degree(c),
-                        json_i64_vec(&gamma),
+                        json_bigint_vec(c),
+                        polynomial_degree_bigint(c),
+                        json_bigint_vec(&gamma),
                         json_string(&expansion)
                     ));
                 } else {
@@ -1022,7 +1050,7 @@ fn cmd_gamma_expansion(args: &[String]) {
                 }
             }
             None => {
-                let polynomial = format_poly(c);
+                let polynomial = format_poly_bigint_coeffs(c);
                 let error = "not palindromic; no gamma expansion";
                 if format == OutputFormat::Json {
                     json_items.push(format!(
@@ -1030,8 +1058,8 @@ fn cmd_gamma_expansion(args: &[String]) {
                          \"degree\":{},\"error\":{}}}",
                         index,
                         json_string(&polynomial),
-                        json_i64_vec(c),
-                        polynomial_degree(c),
+                        json_bigint_vec(c),
+                        polynomial_degree_bigint(c),
                         json_string(error)
                     ));
                 } else {
@@ -1053,28 +1081,35 @@ fn cmd_gamma_expansion(args: &[String]) {
     }
 }
 
-fn format_gamma_expansion(gamma: &[i64], degree: usize) -> String {
+fn format_gamma_expansion(gamma: &[BigInt], degree: usize) -> String {
     let mut out = String::new();
-    for (i, &coeff) in gamma.iter().enumerate() {
-        if coeff == 0 {
+    let zero = BigInt::from(0);
+    let one = BigInt::from(1);
+    for (i, coeff) in gamma.iter().enumerate() {
+        if coeff == &zero {
             continue;
         }
-        let abs_coeff = coeff.abs();
+        let negative = coeff < &zero;
+        let abs_coeff = if negative {
+            -coeff.clone()
+        } else {
+            coeff.clone()
+        };
         let factor = gamma_basis_factor(i, degree.saturating_sub(2 * i));
         let body = if factor == "1" {
             abs_coeff.to_string()
-        } else if abs_coeff == 1 {
+        } else if abs_coeff == one {
             factor
         } else {
             format!("{abs_coeff} {factor}")
         };
 
         if out.is_empty() {
-            if coeff < 0 {
+            if negative {
                 out.push('-');
             }
             out.push_str(&body);
-        } else if coeff < 0 {
+        } else if negative {
             out.push_str(" - ");
             out.push_str(&body);
         } else {
