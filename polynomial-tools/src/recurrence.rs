@@ -937,6 +937,15 @@ fn modular_prefilter_with_cache(
     }
 
     let mut inconsistent_primes = 0;
+    let unknowns = count_unknowns(opts);
+    let tail_verify_end =
+        if fit_len >= polys.len() || unknowns < MODULAR_PREFILTER_FIRST_TAIL_VERIFY_MIN_UNKNOWNS {
+            None
+        } else if unknowns >= MODULAR_PREFILTER_TAIL_VERIFY_MIN_UNKNOWNS {
+            Some(polys.len())
+        } else {
+            Some(fit_len + 1)
+        };
     for prime_images in &cache.primes {
         if fit_len > polys.len()
             || polys.len() > prime_images.polys.len()
@@ -959,16 +968,6 @@ fn modular_prefilter_with_cache(
             opts,
             prime_images.modulus,
         );
-        let unknowns = count_unknowns(opts);
-        let tail_verify_end = if fit_len >= polys.len()
-            || unknowns < MODULAR_PREFILTER_FIRST_TAIL_VERIFY_MIN_UNKNOWNS
-        {
-            None
-        } else if unknowns >= MODULAR_PREFILTER_TAIL_VERIFY_MIN_UNKNOWNS {
-            Some(polys.len())
-        } else {
-            Some(fit_len + 1)
-        };
         let tail_consistent = tail_verify_end.is_none()
             || result.full_rank_solution.as_ref().is_none_or(|solution| {
                 let verify_len = tail_verify_end.expect("tail verification length was checked");
