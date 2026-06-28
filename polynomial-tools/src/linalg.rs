@@ -583,6 +583,15 @@ impl SparseModRow {
         lhs == self.rhs
     }
 
+    fn is_satisfied_by_validated_solution(&self, solution: &[u64], prime: u64) -> bool {
+        let mut lhs = 0;
+        for &(col, coeff) in &self.entries {
+            debug_assert!(col < solution.len());
+            lhs = add_mod_u64(lhs, mul_mod_u64(coeff, solution[col], prime), prime);
+        }
+        lhs == self.rhs
+    }
+
     /// Add `value` to the coefficient of `col`, reducing modulo `prime`.
     pub fn add_entry(&mut self, col: usize, value: u64, prime: u64) {
         let value = value % prime;
@@ -707,9 +716,55 @@ impl SparseModRow {
         self.rhs = sub_mod_u64(self.rhs, mul_mod_u64(factor, pivot.rhs, prime), prime);
     }
 
+    fn subtract_scaled_leading_pivot(&mut self, pivot: &SparseModRow, factor: u64, prime: u64) {
+        let mut merged = Vec::with_capacity(
+            self.entries
+                .len()
+                .saturating_add(pivot.entries.len().saturating_sub(2)),
+        );
+        let mut lhs = 1;
+        let mut rhs = 1;
+        while lhs < self.entries.len() || rhs < pivot.entries.len() {
+            let next_col = match (self.entries.get(lhs), pivot.entries.get(rhs)) {
+                (Some(&(lhs_col, _)), Some(&(rhs_col, _))) => lhs_col.min(rhs_col),
+                (Some(&(lhs_col, _)), None) => lhs_col,
+                (None, Some(&(rhs_col, _))) => rhs_col,
+                (None, None) => break,
+            };
+
+            let mut value = 0;
+            if lhs < self.entries.len() && self.entries[lhs].0 == next_col {
+                value = self.entries[lhs].1;
+                lhs += 1;
+            }
+            if rhs < pivot.entries.len() && pivot.entries[rhs].0 == next_col {
+                value = sub_mod_u64(
+                    value,
+                    mul_mod_u64(factor, pivot.entries[rhs].1, prime),
+                    prime,
+                );
+                rhs += 1;
+            }
+            if value != 0 {
+                merged.push((next_col, value));
+            }
+        }
+
+        self.entries = merged;
+        self.rhs = sub_mod_u64(self.rhs, mul_mod_u64(factor, pivot.rhs, prime), prime);
+    }
+
     fn subtract_scaled(&mut self, pivot: &SparseModRow, factor: u64, prime: u64) {
         let factor = factor % prime;
         if factor == 0 {
+            return;
+        }
+        if self
+            .entries
+            .first()
+            .is_some_and(|&(col, value)| col == pivot.entries[0].0 && value == factor)
+        {
+            self.subtract_scaled_leading_pivot(pivot, factor, prime);
             return;
         }
         if pivot.entries.len() <= 4 {
@@ -967,7 +1022,7 @@ fn sparse_modular_solution_from_ordered_pivots(
 }
 
 fn sparse_modular_row_matches_solution(row: &SparseModRow, solution: &[u64], prime: u64) -> bool {
-    row.is_satisfied_by(solution, prime)
+    row.is_satisfied_by_validated_solution(solution, prime)
 }
 
 fn sparse_modular_column_counts(
