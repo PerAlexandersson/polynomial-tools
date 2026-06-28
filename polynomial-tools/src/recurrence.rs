@@ -2659,11 +2659,20 @@ pub fn recurrence_holds_at_rational(
     rec: &Recurrence,
     nn: usize,
 ) -> bool {
+    recurrence_holds_at_rational_with_degree(polys, rec, nn, recurrence_n_degree(rec))
+}
+
+fn recurrence_holds_at_rational_with_degree(
+    polys: &[Vec<BigRational>],
+    rec: &Recurrence,
+    nn: usize,
+    rec_n_degree: usize,
+) -> bool {
     if nn == 0 || nn > polys.len() {
         return false;
     }
 
-    let n_powers = rational_index_powers(nn, recurrence_n_degree(rec));
+    let n_powers = rational_index_powers(nn, rec_n_degree);
     let current = &polys[nn - 1];
     let lhs = if let Some(denom) = &rec.denominator {
         poly_mul_rational(&bivar_eval_n_with_powers(denom, &n_powers), current)
@@ -2698,17 +2707,18 @@ pub fn recurrence_holds_at_rational(
     poly_equal_rational(&lhs, &rhs)
 }
 
-fn recurrence_holds_at_rational_with_derivs(
+fn recurrence_holds_at_rational_with_derivs_and_degree(
     polys: &[Vec<BigRational>],
     derivs: &[Vec<Vec<BigRational>>],
     rec: &Recurrence,
     nn: usize,
+    rec_n_degree: usize,
 ) -> bool {
     if nn == 0 || nn > polys.len() || nn > derivs.len() {
         return false;
     }
 
-    let n_powers = rational_index_powers(nn, recurrence_n_degree(rec));
+    let n_powers = rational_index_powers(nn, rec_n_degree);
     let current = &polys[nn - 1];
     let lhs = if let Some(denom) = &rec.denominator {
         poly_mul_rational(&bivar_eval_n_with_powers(denom, &n_powers), current)
@@ -2758,7 +2768,9 @@ pub fn recurrence_holds_from_rational(
     start_nn: usize,
 ) -> bool {
     let first = start_nn.max(rec_len + 1);
-    (first..=polys.len()).all(|nn| recurrence_holds_at_rational(polys, rec, nn))
+    let rec_n_degree = recurrence_n_degree(rec);
+    (first..=polys.len())
+        .all(|nn| recurrence_holds_at_rational_with_degree(polys, rec, nn, rec_n_degree))
 }
 
 fn recurrence_holds_from_rational_with_derivs(
@@ -2769,7 +2781,10 @@ fn recurrence_holds_from_rational_with_derivs(
     start_nn: usize,
 ) -> bool {
     let first = start_nn.max(rec_len + 1);
-    (first..=polys.len()).all(|nn| recurrence_holds_at_rational_with_derivs(polys, derivs, rec, nn))
+    let rec_n_degree = recurrence_n_degree(rec);
+    (first..=polys.len()).all(|nn| {
+        recurrence_holds_at_rational_with_derivs_and_degree(polys, derivs, rec, nn, rec_n_degree)
+    })
 }
 
 /// Check whether a recurrence holds on every admissible row.
