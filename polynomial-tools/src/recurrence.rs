@@ -572,9 +572,16 @@ fn recurrence_system_consistent_mod_prime(
         }
     }
 
+    let options = linalg::SparseModEliminationOptions {
+        row_order: linalg::SparseModRowOrder::IncreasingNonzeros,
+        compute_solution: false,
+    };
     Some(
-        linalg::sparse_modular_linear_system_consistent(rows, num_vars, prime)
-            .expect("recurrence modular prefilter builds a well-formed prime-field system"),
+        linalg::sparse_modular_linear_system_consistency_with_options(
+            rows, num_vars, prime, options,
+        )
+        .expect("recurrence modular prefilter builds a well-formed prime-field system")
+        .consistent,
     )
 }
 
