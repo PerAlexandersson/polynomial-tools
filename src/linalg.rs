@@ -533,6 +533,13 @@ impl SparseModRow {
         }
     }
 
+    pub(crate) fn with_capacity(rhs: u64, prime: u64, capacity: usize) -> Self {
+        Self {
+            entries: Vec::with_capacity(capacity),
+            rhs: rhs % prime,
+        }
+    }
+
     /// Create a sparse row from unsigned `(column, value)` entries.
     ///
     /// Duplicate columns are combined modulo `prime`, and zero coefficients are
