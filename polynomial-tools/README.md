@@ -395,6 +395,9 @@ polytool bench recurrence-fixtures --only 23_sparse --repeat 5
 polytool bench recurrence-fixtures --only oeis --repeat 1
 polytool bench recurrence-fixtures --only oeis --repeat 3 \
   --summary --report bench-results/recurrence-fixtures/oeis.md
+polytool bench recurrence-fixtures --only oeis --repeat 3 --format json \
+  > bench-results/recurrence-fixtures/oeis.json
+polytool bench compare old.json new.json --top 10
 ```
 
 Run consecutive interlacing timings for a generated sequence:
@@ -406,9 +409,12 @@ polytool bench interlacing --sequence eulerian --max-n 30 --repeat 5
 Both benchmark subcommands print tab-separated output so results can be
 redirected to a log or pasted into project notes. The recurrence fixture
 benchmark can also append fixture/category summaries with `--summary` and write
-a Markdown report with `--report <path.md>`. The recurrence fixture suite
-contains synthetic stress tests and natural OEIS-derived recurrences from the
-curated `real-rooted-oeis` sequence queue.
+a Markdown report with `--report <path.md>`. Use `--format json` for
+machine-readable per-run records, fixture/category summaries, and adaptive
+search diagnostics; `polytool bench compare` compares two such JSON runs and
+highlights fixture/category speedups or regressions. The recurrence fixture
+suite contains synthetic stress tests and natural OEIS-derived recurrences from
+the curated `real-rooted-oeis` sequence queue.
 
 ## Library usage
 

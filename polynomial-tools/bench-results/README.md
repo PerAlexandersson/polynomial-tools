@@ -18,6 +18,22 @@ polytool bench recurrence-fixtures --only oeis --repeat 3 \
   --summary --report bench-results/recurrence-fixtures/oeis.md
 ```
 
+Machine-readable focused OEIS command:
+
+```sh
+polytool bench recurrence-fixtures --only oeis --repeat 3 --format json \
+  > bench-results/recurrence-fixtures/oeis.json
+```
+
+Compare two JSON runs:
+
+```sh
+polytool bench compare old.json new.json --top 10
+polytool bench compare old.json new.json --format json > comparison.json
+```
+
 The per-run TSV printed to stdout can still be redirected separately when raw
 timings are needed. The Markdown report stores category summaries and fixture
 summaries, which is usually enough for code review and handoff notes.
+The JSON output additionally stores adaptive search diagnostics, so it is the
+preferred format before and after search or solver changes.
