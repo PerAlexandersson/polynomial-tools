@@ -189,20 +189,24 @@ fn rational_zero_poly() -> Vec<BigRational> {
 fn poly_nth_derivative_rational(coeffs: &[BigRational], d: usize) -> Vec<BigRational> {
     let mut result = coeffs.to_vec();
     for _ in 0..d {
-        if result.len() <= 1 {
-            return rational_zero_poly();
-        }
-        result = result[1..]
-            .iter()
-            .enumerate()
-            .map(|(i, c)| c.clone() * BigRational::from_integer(BigInt::from(i + 1)))
-            .collect();
+        result = poly_derivative_once_rational(&result);
     }
     if result.is_empty() {
         rational_zero_poly()
     } else {
         result
     }
+}
+
+fn poly_derivative_once_rational(coeffs: &[BigRational]) -> Vec<BigRational> {
+    if coeffs.len() <= 1 {
+        return rational_zero_poly();
+    }
+    coeffs[1..]
+        .iter()
+        .enumerate()
+        .map(|(i, c)| c.clone() * BigRational::from_integer(BigInt::from(i + 1)))
+        .collect()
 }
 
 /// Coefficient of t^k (0 when k is out of range).
@@ -1342,9 +1346,13 @@ fn rational_derivatives_up_to(
     polys
         .iter()
         .map(|p| {
-            (0..=max_diff_deg)
-                .map(|d| poly_nth_derivative_rational(p, d))
-                .collect()
+            let mut derivatives = Vec::with_capacity(max_diff_deg + 1);
+            derivatives.push(p.clone());
+            for d in 1..=max_diff_deg {
+                let next = poly_derivative_once_rational(&derivatives[d - 1]);
+                derivatives.push(next);
+            }
+            derivatives
         })
         .collect()
 }
