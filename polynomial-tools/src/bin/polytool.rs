@@ -7,6 +7,7 @@ use num_bigint::BigInt;
 use polynomial_tools::recurrence::BigRational as RecurrenceBigRational;
 use polynomial_tools::recurrence::*;
 use polynomial_tools::*;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::hint::black_box;
 use std::io::{self, Read};
@@ -1673,6 +1674,8 @@ fn print_bench_help() {
     println!("  --only <substring>        Run only fixture slugs containing substring");
     println!("  --repeat <n>              Repeat each fixture n times (default: 1)");
     println!("  --no-modular-prefilter    Disable modular recurrence prefilter");
+    println!("  --summary                 Append fixture and category summaries to stdout");
+    println!("  --report <path.md>        Write a Markdown benchmark report");
     println!();
     println!("Interlacing options:");
     println!("  --sequence <name>         Sequence name (default: eulerian)");
@@ -1686,6 +1689,8 @@ struct BenchRecurrenceOptions {
     repeat: usize,
     modular_prefilter: bool,
     only: Option<String>,
+    summary: bool,
+    report: Option<PathBuf>,
 }
 
 impl Default for BenchRecurrenceOptions {
@@ -1697,6 +1702,8 @@ impl Default for BenchRecurrenceOptions {
             repeat: 1,
             modular_prefilter: true,
             only: None,
+            summary: false,
+            report: None,
         }
     }
 }
@@ -1704,8 +1711,26 @@ impl Default for BenchRecurrenceOptions {
 #[derive(Debug)]
 struct RecurrenceFixtureManifestRow {
     slug: String,
+    title: String,
+    description: String,
     suggested_args: String,
     rows_file: String,
+}
+
+#[derive(Debug)]
+struct BenchRecurrenceRun {
+    slug: String,
+    title: String,
+    description: String,
+    categories: Vec<String>,
+    found: bool,
+    elapsed_ms: f64,
+    candidates: usize,
+    unknowns: usize,
+    weighted_unknowns: usize,
+    fit_rows: usize,
+    verify_rows: usize,
+    recurrence: String,
 }
 
 fn cmd_bench(args: &[String]) {
@@ -1754,6 +1779,14 @@ fn parse_bench_recurrence_options(args: &[String]) -> Result<BenchRecurrenceOpti
                     .max(1);
             }
             "--no-modular-prefilter" => options.modular_prefilter = false,
+            "--summary" => options.summary = true,
+            "--report" => {
+                i += 1;
+                let value = args
+                    .get(i)
+                    .ok_or_else(|| "--report expects a path".to_string())?;
+                options.report = Some(PathBuf::from(value));
+            }
             other => return Err(format!("unknown recurrence benchmark option: {other}")),
         }
         i += 1;
@@ -1777,6 +1810,8 @@ fn parse_recurrence_fixture_manifest(
             }
             Ok(RecurrenceFixtureManifestRow {
                 slug: cols[0].to_string(),
+                title: cols[1].to_string(),
+                description: cols[2].to_string(),
                 suggested_args: cols[3].to_string(),
                 rows_file: cols[5].to_string(),
             })
@@ -1853,6 +1888,251 @@ fn parse_fixture_search_options(
     Ok(search)
 }
 
+fn recurrence_fixture_categories(
+    fixture: &RecurrenceFixtureManifestRow,
+    search: &AdaptiveSearchOptions,
+) -> Vec<String> {
+    let mut categories = vec![if fixture.slug.contains("_oeis_") {
+        "oeis".to_string()
+    } else {
+        "synthetic".to_string()
+    }];
+    if search.skip_prefix > 0 {
+        categories.push("skip-prefix".to_string());
+    }
+    if search.max_rec_len >= 4 {
+        categories.push("high-order".to_string());
+    }
+    if search.max_diff_deg > 0 {
+        categories.push("derivative".to_string());
+    }
+    if search.max_diff_deg >= 2 {
+        categories.push("higher-derivative".to_string());
+    }
+    if search.max_idx_deg > 0
+        || (search.try_denominator && search.max_denom_idx_deg > 0)
+        || (search.try_inhomogeneous && search.max_inhomo_idx_deg > 0)
+    {
+        categories.push("index-dependent".to_string());
+    }
+    if search.try_denominator {
+        categories.push("denominator".to_string());
+    }
+    if search.try_inhomogeneous {
+        categories.push("inhomogeneous".to_string());
+    }
+    if search.try_alternating_sign {
+        categories.push("alternating-sign".to_string());
+    }
+    if fixture.slug.contains("closed_form") {
+        categories.push("closed-form".to_string());
+    }
+    categories
+}
+
+fn bench_mean(values: &[f64]) -> f64 {
+    values.iter().sum::<f64>() / values.len() as f64
+}
+
+fn bench_median(values: &mut [f64]) -> f64 {
+    values.sort_by(|a, b| a.total_cmp(b));
+    let middle = values.len() / 2;
+    if values.len().is_multiple_of(2) {
+        (values[middle - 1] + values[middle]) / 2.0
+    } else {
+        values[middle]
+    }
+}
+
+fn markdown_cell(text: &str) -> String {
+    text.replace('\n', " ").replace('|', "\\|")
+}
+
+fn print_recurrence_bench_summary(records: &[BenchRecurrenceRun]) {
+    if records.is_empty() {
+        println!("# fixture_summary");
+        println!("slug\ttitle\tcategories\truns\tfound_runs\tmin_ms\tmedian_ms\tmean_ms\tmax_ms\tcandidates\tunknowns\tweighted\tfit_rows\tverify_rows");
+        println!("# category_summary");
+        println!("category\tfixtures\truns\tfound_runs\tmean_ms\tmax_ms");
+        return;
+    }
+
+    let mut by_fixture: BTreeMap<&str, Vec<&BenchRecurrenceRun>> = BTreeMap::new();
+    for record in records {
+        by_fixture.entry(&record.slug).or_default().push(record);
+    }
+
+    println!("# fixture_summary");
+    println!("slug\ttitle\tcategories\truns\tfound_runs\tmin_ms\tmedian_ms\tmean_ms\tmax_ms\tcandidates\tunknowns\tweighted\tfit_rows\tverify_rows");
+    for (slug, runs) in by_fixture {
+        let found_runs = runs.iter().filter(|record| record.found).count();
+        let mut elapsed = runs
+            .iter()
+            .map(|record| record.elapsed_ms)
+            .collect::<Vec<_>>();
+        let min_ms = elapsed.iter().copied().fold(f64::INFINITY, f64::min);
+        let max_ms = elapsed.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        let mean_ms = bench_mean(&elapsed);
+        let median_ms = bench_median(&mut elapsed);
+        let sample = runs[0];
+        println!(
+            "{}\t{}\t{}\t{}\t{}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{}\t{}\t{}\t{}\t{}",
+            slug,
+            sample.title,
+            sample.categories.join(","),
+            runs.len(),
+            found_runs,
+            min_ms,
+            median_ms,
+            mean_ms,
+            max_ms,
+            sample.candidates,
+            sample.unknowns,
+            sample.weighted_unknowns,
+            sample.fit_rows,
+            sample.verify_rows,
+        );
+    }
+
+    println!("# category_summary");
+    println!("category\tfixtures\truns\tfound_runs\tmean_ms\tmax_ms");
+    for (category, fixtures, runs) in recurrence_bench_category_summaries(records) {
+        let found_runs = runs.iter().filter(|record| record.found).count();
+        let elapsed = runs
+            .iter()
+            .map(|record| record.elapsed_ms)
+            .collect::<Vec<_>>();
+        let max_ms = elapsed.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        println!(
+            "{}\t{}\t{}\t{}\t{:.3}\t{:.3}",
+            category,
+            fixtures.len(),
+            runs.len(),
+            found_runs,
+            bench_mean(&elapsed),
+            max_ms,
+        );
+    }
+}
+
+fn recurrence_bench_category_summaries(
+    records: &[BenchRecurrenceRun],
+) -> Vec<(String, BTreeSet<&str>, Vec<&BenchRecurrenceRun>)> {
+    let mut categories: BTreeMap<String, (BTreeSet<&str>, Vec<&BenchRecurrenceRun>)> =
+        BTreeMap::new();
+    for record in records {
+        for category in &record.categories {
+            let entry = categories.entry(category.clone()).or_default();
+            entry.0.insert(&record.slug);
+            entry.1.push(record);
+        }
+    }
+    categories
+        .into_iter()
+        .map(|(category, (fixtures, runs))| (category, fixtures, runs))
+        .collect()
+}
+
+fn write_recurrence_bench_report(
+    options: &BenchRecurrenceOptions,
+    records: &[BenchRecurrenceRun],
+) -> Result<(), String> {
+    let Some(path) = &options.report else {
+        return Ok(());
+    };
+
+    let mut report = String::new();
+    report.push_str("# Recurrence Fixture Benchmark Report\n\n");
+    report.push_str(&format!("- Base: `{}`\n", options.base.display()));
+    report.push_str(&format!("- Repeat: `{}`\n", options.repeat));
+    report.push_str(&format!(
+        "- Modular prefilter: `{}`\n",
+        if options.modular_prefilter {
+            "enabled"
+        } else {
+            "disabled"
+        }
+    ));
+    if let Some(only) = &options.only {
+        report.push_str(&format!("- Filter: `{}`\n", only));
+    }
+    report.push_str("\n## Category Summary\n\n");
+    report.push_str("| category | fixtures | runs | found | mean ms | max ms |\n");
+    report.push_str("|---|---:|---:|---:|---:|---:|\n");
+    for (category, fixtures, runs) in recurrence_bench_category_summaries(records) {
+        let found_runs = runs.iter().filter(|record| record.found).count();
+        let elapsed = runs
+            .iter()
+            .map(|record| record.elapsed_ms)
+            .collect::<Vec<_>>();
+        let mean_ms = if elapsed.is_empty() {
+            0.0
+        } else {
+            bench_mean(&elapsed)
+        };
+        let max_ms = elapsed.iter().copied().fold(0.0, f64::max);
+        report.push_str(&format!(
+            "| {} | {} | {} | {} | {:.3} | {:.3} |\n",
+            markdown_cell(&category),
+            fixtures.len(),
+            runs.len(),
+            found_runs,
+            mean_ms,
+            max_ms,
+        ));
+    }
+
+    let mut by_fixture: BTreeMap<&str, Vec<&BenchRecurrenceRun>> = BTreeMap::new();
+    for record in records {
+        by_fixture.entry(&record.slug).or_default().push(record);
+    }
+
+    report.push_str("\n## Fixture Summary\n\n");
+    report.push_str("| slug | title | description | categories | runs | found | min ms | median ms | mean ms | max ms | unknowns | weighted | recurrence |\n");
+    report.push_str("|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|\n");
+    for (slug, runs) in by_fixture {
+        let found_runs = runs.iter().filter(|record| record.found).count();
+        let mut elapsed = runs
+            .iter()
+            .map(|record| record.elapsed_ms)
+            .collect::<Vec<_>>();
+        let min_ms = elapsed.iter().copied().fold(f64::INFINITY, f64::min);
+        let max_ms = elapsed.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        let mean_ms = bench_mean(&elapsed);
+        let median_ms = bench_median(&mut elapsed);
+        let sample = runs[0];
+        report.push_str(&format!(
+            "| {} | {} | {} | {} | {} | {} | {:.3} | {:.3} | {:.3} | {:.3} | {} | {} | {} |\n",
+            markdown_cell(slug),
+            markdown_cell(&sample.title),
+            markdown_cell(&sample.description),
+            markdown_cell(&sample.categories.join(", ")),
+            runs.len(),
+            found_runs,
+            min_ms,
+            median_ms,
+            mean_ms,
+            max_ms,
+            sample.unknowns,
+            sample.weighted_unknowns,
+            markdown_cell(&sample.recurrence),
+        ));
+    }
+
+    if records.is_empty() {
+        report.push_str("\nNo fixtures matched this benchmark filter.\n");
+    }
+
+    if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("failed to create `{}`: {e}", parent.display()))?;
+    }
+    fs::write(path, report).map_err(|e| format!("failed to write `{}`: {e}", path.display()))
+}
+
 fn parse_fixture_usize(flag: &str, value: Option<&str>) -> Result<usize, String> {
     let value = value.ok_or_else(|| format!("{flag} expects a value"))?;
     value
@@ -1879,6 +2159,7 @@ fn cmd_bench_recurrence_fixtures(args: &[String]) {
     println!(
         "slug\trun\tfound\telapsed_ms\tcandidates\tunknowns\tweighted\tfit_rows\tverify_rows\trecurrence"
     );
+    let mut records = Vec::new();
     for fixture in manifest {
         if options
             .only
@@ -1905,11 +2186,13 @@ fn cmd_bench_recurrence_fixtures(args: &[String]) {
                 std::process::exit(1);
             }
         };
+        let categories = recurrence_fixture_categories(&fixture, &search);
         for run in 1..=options.repeat {
             let start = Instant::now();
             let result = find_recurrence_adaptive_rational(black_box(&rows), black_box(&search));
             let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
             if let Some(result) = result {
+                let recurrence = result.recurrence.to_string();
                 println!(
                     "{}\t{}\ttrue\t{:.3}\t{}\t{}\t{}\t{}\t{}\t{}",
                     fixture.slug,
@@ -1920,15 +2203,50 @@ fn cmd_bench_recurrence_fixtures(args: &[String]) {
                     result.weighted_unknowns,
                     result.fit_polynomials,
                     result.verification_polynomials,
-                    result.recurrence,
+                    recurrence,
                 );
+                records.push(BenchRecurrenceRun {
+                    slug: fixture.slug.clone(),
+                    title: fixture.title.clone(),
+                    description: fixture.description.clone(),
+                    categories: categories.clone(),
+                    found: true,
+                    elapsed_ms,
+                    candidates: result.candidates_tried,
+                    unknowns: result.num_unknowns,
+                    weighted_unknowns: result.weighted_unknowns,
+                    fit_rows: result.fit_polynomials,
+                    verify_rows: result.verification_polynomials,
+                    recurrence,
+                });
             } else {
                 println!(
                     "{}\t{}\tfalse\t{:.3}\t0\t0\t0\t0\t0\t",
                     fixture.slug, run, elapsed_ms
                 );
+                records.push(BenchRecurrenceRun {
+                    slug: fixture.slug.clone(),
+                    title: fixture.title.clone(),
+                    description: fixture.description.clone(),
+                    categories: categories.clone(),
+                    found: false,
+                    elapsed_ms,
+                    candidates: 0,
+                    unknowns: 0,
+                    weighted_unknowns: 0,
+                    fit_rows: 0,
+                    verify_rows: 0,
+                    recurrence: String::new(),
+                });
             }
         }
+    }
+    if options.summary {
+        print_recurrence_bench_summary(&records);
+    }
+    if let Err(error) = write_recurrence_bench_report(&options, &records) {
+        eprintln!("{error}");
+        std::process::exit(1);
     }
 }
 

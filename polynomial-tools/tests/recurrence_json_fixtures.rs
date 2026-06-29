@@ -112,7 +112,7 @@ fn recurrence_benchmark_manifest_matches_generated_files() {
 fn recurrence_json_fixtures_regenerate_raw_rows() {
     let fixtures = parse_manifest();
     assert!(
-        fixtures.len() >= 32,
+        fixtures.len() >= 45,
         "expected the synthetic plus OEIS benchmark fixture suite"
     );
 
