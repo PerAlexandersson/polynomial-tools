@@ -1,0 +1,108 @@
+{
+  "schema": "polynomial-tools.recurrence.v1",
+  "first_index": 1,
+  "initial_polynomials": [
+    [
+      "1"
+    ]
+  ],
+  "recurrence": {
+    "terms": [
+      {
+        "offset": 1,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "4",
+              "1",
+              "0"
+            ],
+            [
+              "-4",
+              "0",
+              "0"
+            ],
+            [
+              "1",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 1,
+        "deriv_order": 1,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "-3",
+              "0"
+            ],
+            [
+              "0",
+              "2",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 1,
+        "deriv_order": 2,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "0",
+              "1"
+            ],
+            [
+              "0",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  "search": {
+    "recurrence_text": "P(n) = (4 - 4n + n^2 + t) P(n-1) + (-3t + 2nt) P'(n-1) + t^2 P^(2)(n-1)",
+    "source_rows": 60,
+    "skip_prefix": 0,
+    "unknowns": 27,
+    "weighted_unknowns": 45,
+    "equations": 40,
+    "fit_polynomials": 6,
+    "verification_polynomials": 54,
+    "candidates_tried": 18,
+    "options": {
+      "var_deg": 2,
+      "idx_deg": 2,
+      "diff_deg": 2,
+      "rec_len": 1,
+      "homogeneous": true,
+      "inhomo_var_deg": 0,
+      "inhomo_idx_deg": 0,
+      "denom_var_deg": 0,
+      "denom_idx_deg": 0,
+      "alternating_sign": false
+    }
+  }
+}

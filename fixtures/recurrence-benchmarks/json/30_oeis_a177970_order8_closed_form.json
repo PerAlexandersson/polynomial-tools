@@ -1,0 +1,245 @@
+{
+  "schema": "polynomial-tools.recurrence.v1",
+  "first_index": 1,
+  "initial_polynomials": [
+    [
+      "1",
+      "26",
+      "1"
+    ],
+    [
+      "1",
+      "99",
+      "99",
+      "1"
+    ],
+    [
+      "1",
+      "244",
+      "622",
+      "244",
+      "1"
+    ],
+    [
+      "1",
+      "485",
+      "2300",
+      "2300",
+      "485",
+      "1"
+    ],
+    [
+      "1",
+      "846",
+      "6423",
+      "12000",
+      "6423",
+      "846",
+      "1"
+    ],
+    [
+      "1",
+      "1351",
+      "15001",
+      "45031",
+      "45031",
+      "15001",
+      "1351",
+      "1"
+    ],
+    [
+      "1",
+      "2024",
+      "30924",
+      "136120",
+      "218774",
+      "136120",
+      "30924",
+      "2024",
+      "1"
+    ],
+    [
+      "1",
+      "2889",
+      "58122",
+      "352698",
+      "831384",
+      "831384",
+      "352698",
+      "58122",
+      "2889",
+      "1"
+    ]
+  ],
+  "recurrence": {
+    "terms": [
+      {
+        "offset": 1,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "6",
+              "6",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 2,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "-15",
+              "-24",
+              "-15",
+              "0",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 3,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "20",
+              "38",
+              "38",
+              "20",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 4,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "-15",
+              "-32",
+              "-35",
+              "-32",
+              "-15",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 5,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "6",
+              "18",
+              "12",
+              "12",
+              "18",
+              "6",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 6,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "-1",
+              "-8",
+              "3",
+              "-4",
+              "3",
+              "-8",
+              "-1"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 7,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "2",
+              "-2",
+              "0",
+              "0",
+              "-2",
+              "2"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 8,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "0",
+              "-1",
+              "4",
+              "-6",
+              "4",
+              "-1"
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  "search": {
+    "recurrence_text": "P(n) = (6 + 6t) P(n-1) + (-15 - 24t - 15t^2) P(n-2) + (20 + 38t + 38t^2 + 20t^3) P(n-3) + (-15 - 32t - 35t^2 - 32t^3 - 15t^4) P(n-4) + (6 + 18t + 12t^2 + 12t^3 + 18t^4 + 6t^5) P(n-5) + (-1 - 8t + 3t^2 - 4t^3 + 3t^4 - 8t^5 - t^6) P(n-6) + (2t - 2t^2 - 2t^5 + 2t^6) P(n-7) + (-t^2 + 4t^3 - 6t^4 + 4t^5 - t^6) P(n-8)",
+    "source_rows": 60,
+    "skip_prefix": 0,
+    "unknowns": 56,
+    "weighted_unknowns": 56,
+    "equations": 80,
+    "fit_polynomials": 12,
+    "verification_polynomials": 48,
+    "candidates_tried": 1,
+    "options": {
+      "var_deg": 6,
+      "idx_deg": 0,
+      "diff_deg": 0,
+      "rec_len": 8,
+      "homogeneous": true,
+      "inhomo_var_deg": 0,
+      "inhomo_idx_deg": 0,
+      "denom_var_deg": 0,
+      "denom_idx_deg": 0,
+      "alternating_sign": false
+    }
+  }
+}
