@@ -1680,6 +1680,7 @@ fn print_bench_help() {
     println!("  --report <path.md>        Write a Markdown benchmark report");
     println!("  --format <tsv|json>       Output format (default: tsv)");
     println!("  --json                    Alias for --format json");
+    println!("                            JSON includes adaptive counters and timing buckets");
     println!();
     println!("Compare options:");
     println!("  polytool bench compare [options] <old.json> <new.json>");
@@ -2233,6 +2234,15 @@ fn recurrence_diagnostics_json(diagnostics: &AdaptiveSearchDiagnostics) -> Value
         "failed_exact_solves": diagnostics.failed_exact_solves,
         "heldout_verification_failures": diagnostics.heldout_verification_failures,
         "denominator_escalation_entered": diagnostics.denominator_escalation_entered,
+        "derivative_precompute_ms": diagnostics.derivative_precompute_ms,
+        "modular_cache_build_ms": diagnostics.modular_cache_build_ms,
+        "candidate_generation_ms": diagnostics.candidate_generation_ms,
+        "fit_selection_ms": diagnostics.fit_selection_ms,
+        "equation_count_ms": diagnostics.equation_count_ms,
+        "degree_bound_ms": diagnostics.degree_bound_ms,
+        "modular_prefilter_ms": diagnostics.modular_prefilter_ms,
+        "exact_solve_ms": diagnostics.exact_solve_ms,
+        "heldout_verify_ms": diagnostics.heldout_verify_ms,
     })
 }
 

@@ -1862,22 +1862,21 @@ fn solve_full_rank_square_integer_augmented(mut aug: Vec<Vec<BigInt>>) -> Option
             break;
         }
 
-        let mut next_entries = Vec::with_capacity((n - col - 1) * (n - col));
+        let pivot_tail = aug[col][col + 1..=n].to_vec();
         for row in (col + 1)..n {
             let row_pivot = aug[row][col].clone();
-            for target_col in (col + 1)..=n {
-                let numerator = &aug[row][target_col] * &pivot - &row_pivot * &aug[col][target_col];
+            aug[row][col] = BigInt::zero();
+            for (offset, target_col) in ((col + 1)..=n).enumerate() {
+                let numerator = if row_pivot.is_zero() {
+                    &aug[row][target_col] * &pivot
+                } else {
+                    &aug[row][target_col] * &pivot - &row_pivot * &pivot_tail[offset]
+                };
                 if &numerator % &denom != BigInt::zero() {
                     return None;
                 }
-                next_entries.push((row, target_col, numerator / &denom));
+                aug[row][target_col] = numerator / &denom;
             }
-        }
-        for row in (col + 1)..n {
-            aug[row][col] = BigInt::zero();
-        }
-        for (row, target_col, value) in next_entries {
-            aug[row][target_col] = value;
         }
         denom = pivot;
     }

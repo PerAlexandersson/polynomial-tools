@@ -36,4 +36,6 @@ The per-run TSV printed to stdout can still be redirected separately when raw
 timings are needed. The Markdown report stores category summaries and fixture
 summaries, which is usually enough for code review and handoff notes.
 The JSON output additionally stores adaptive search diagnostics, so it is the
-preferred format before and after search or solver changes.
+preferred format before and after search or solver changes. Those diagnostics
+include both search rejection counters and cumulative timing buckets for the
+main recurrence-finder stages.
