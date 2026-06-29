@@ -133,9 +133,10 @@ The exact property commands `real-rooted`, `interlacing`,
 `interlacing-profile`, `properties`, `gamma-expansion`, and the non-recurrence
 checks inside `family-check` accept arbitrary-size integer coefficients.
 Standard sequence generation, resultants, discriminants, Ehrhart conversion,
-and Stapledon decomposition also use arbitrary-size exact integers in the CLI.
-The main remaining compatibility exception is `family-check --recurrence`,
-which currently requires coefficients that fit in `i64`.
+Stapledon decomposition, and the standalone `recurrence` command also use
+arbitrary-size exact integers in the CLI. The main remaining compatibility
+exception is `family-check --recurrence`, which currently requires
+coefficients that fit in `i64`.
 
 ### Check real-rootedness
 
@@ -637,12 +638,10 @@ Available MCP tools:
 - `analyze_decomposition`
 - `generate_sequence`
 
-The MCP property, interlacing, resultant, discriminant, Ehrhart conversion, and
-sequence-generation tools accept arbitrary-size integer coefficients. JSON
-integers may be provided directly when they fit the client stack, and larger
-exact integers should be sent as strings. The recurrence and full family-check
-surfaces still use the narrower recurrence input path where noted in the MCP
-README.
+The MCP property, interlacing, resultant, discriminant, Ehrhart conversion,
+sequence-generation, and recurrence tools accept arbitrary-size integer
+coefficients. JSON integers may be provided directly when they fit the client
+stack, and larger exact integers should be sent as strings.
 
 See [`mcp/README.md`](mcp/README.md) for request schemas, examples, and
 development notes.
