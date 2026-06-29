@@ -132,9 +132,10 @@ Large integer coefficients in JSON output are serialized as strings.
 The exact property commands `real-rooted`, `interlacing`,
 `interlacing-profile`, `properties`, `gamma-expansion`, and the non-recurrence
 checks inside `family-check` accept arbitrary-size integer coefficients.
-Recurrence search, standard sequence generation, resultants, discriminants,
-Ehrhart conversion, and Stapledon decomposition currently use narrower
-coefficient formats described in their command help.
+Standard sequence generation, resultants, discriminants, Ehrhart conversion,
+and Stapledon decomposition also use arbitrary-size exact integers in the CLI.
+The main remaining compatibility exception is `family-check --recurrence`,
+which currently requires coefficients that fit in `i64`.
 
 ### Check real-rootedness
 
@@ -218,7 +219,7 @@ polytool sequence narayana 5 --json
 
 Supported sequence names are `eulerian`, `narayana`, `type-b-eulerian`,
 `chebyshev-t`, `chebyshev-u`, and `hermite`.
-Generated coefficients currently must fit in `i64`.
+Generated coefficients use arbitrary-size integers.
 
 ### Check a family in one pass
 
@@ -359,8 +360,8 @@ echo "1, 0, 1
 echo "1, 0, -3, 1" | polytool discriminant
 ```
 
-Inputs for these CLI commands currently must fit in `i64`; the exact resultant
-or discriminant output may be larger and is printed as an integer.
+Inputs for these CLI commands may have arbitrary-size integer coefficients.
+The exact resultant or discriminant output is printed as an integer.
 
 ### Ehrhart ↔ h\*-vector conversion
 
@@ -372,9 +373,9 @@ echo "1, 8, 35, 32, 9" | polytool hstar-to-ehrhart
 echo "1, 2, 2" | polytool ehrhart-to-hstar
 ```
 
-For `hstar-to-ehrhart`, h\*-vector entries currently must fit in `i64`.
-For `ehrhart-to-hstar`, input coefficients may be exact rationals, but the
-resulting h\*-vector entries currently must fit in `i64`.
+For `hstar-to-ehrhart`, h\*-vector entries may be arbitrary-size integers.
+For `ehrhart-to-hstar`, input coefficients may be exact rationals and the
+resulting h\*-vector entries are arbitrary-size integers.
 
 ### Stapledon decomposition
 
@@ -382,7 +383,25 @@ resulting h\*-vector entries currently must fit in `i64`.
 echo "1, 11, 11, 1" | polytool stapledon 3
 ```
 
-CLI Stapledon input coefficients currently must fit in `i64`.
+CLI Stapledon input coefficients may be arbitrary-size integers.
+
+### Benchmark recurrence and interlacing performance
+
+Run the recurrence fixture timing suite:
+
+```sh
+polytool bench recurrence-fixtures --repeat 3
+polytool bench recurrence-fixtures --only 23_sparse --repeat 5
+```
+
+Run consecutive interlacing timings for a generated sequence:
+
+```sh
+polytool bench interlacing --sequence eulerian --max-n 30 --repeat 5
+```
+
+Both benchmark subcommands print tab-separated output so results can be
+redirected to a log or pasted into project notes.
 
 ## Library usage
 
@@ -600,9 +619,12 @@ Available MCP tools:
 - `analyze_decomposition`
 - `generate_sequence`
 
-The MCP interlacing and property tools accept arbitrary-size integer
-coefficients.  JSON integers may be provided directly when they fit the client
-stack, and larger exact integers should be sent as strings.
+The MCP property, interlacing, resultant, discriminant, Ehrhart conversion, and
+sequence-generation tools accept arbitrary-size integer coefficients. JSON
+integers may be provided directly when they fit the client stack, and larger
+exact integers should be sent as strings. The recurrence and full family-check
+surfaces still use the narrower recurrence input path where noted in the MCP
+README.
 
 See [`mcp/README.md`](mcp/README.md) for request schemas, examples, and
 development notes.

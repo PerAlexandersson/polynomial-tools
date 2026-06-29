@@ -462,6 +462,10 @@ coefficients are exact rational strings in ascending powers of `t`.
 
 Compute the exact resultant of two polynomials.
 
+This tool accepts arbitrary-size integer coefficients. In explicit coefficient
+input, write coefficients that may exceed `i64` as strings. Returned normalized
+polynomial coefficients and the resultant are strings.
+
 Example arguments:
 
 ```json
@@ -471,11 +475,13 @@ Example arguments:
 }
 ```
 
-The resultant is returned as a string.
-
 ### `discriminant`
 
 Compute exact discriminants for one or more polynomials.
+
+This tool accepts arbitrary-size integer coefficients. In explicit coefficient
+input, write coefficients that may exceed `i64` as strings. Returned normalized
+polynomial coefficients and discriminants are strings.
 
 Example arguments:
 
@@ -485,11 +491,13 @@ Example arguments:
 }
 ```
 
-Discriminants are returned as strings.
-
 ### `ehrhart_hstar`
 
 Convert between h*-vectors and Ehrhart polynomial coefficient vectors.
+
+h*-vectors and common-denominator numerator vectors accept arbitrary-size
+integer entries. Entries that may exceed `i64` should be sent as strings. The
+returned h*-vector and Ehrhart coefficients are exact strings.
 
 h*-vector to Ehrhart polynomial:
 
@@ -537,6 +545,8 @@ Example arguments:
 ### `generate_sequence`
 
 Generate standard polynomial sequences.
+
+Generated coefficients use arbitrary-size integers and are returned as strings.
 
 Supported `sequence` values:
 

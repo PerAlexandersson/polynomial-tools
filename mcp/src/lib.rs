@@ -5,8 +5,10 @@ use polynomial_tools::recurrence::{
     RecurrenceJsonSearch, RecurrenceOptionsJson,
 };
 use polynomial_tools::sequences::{
-    chebyshev_polynomials_t, chebyshev_polynomials_u, eulerian_polynomials, hermite_polynomials,
-    narayana_polynomials, type_b_eulerian_polynomials,
+    chebyshev_polynomials_t, chebyshev_polynomials_t_bigint, chebyshev_polynomials_u,
+    chebyshev_polynomials_u_bigint, eulerian_polynomials, eulerian_polynomials_bigint,
+    hermite_polynomials, hermite_polynomials_bigint, narayana_polynomials,
+    narayana_polynomials_bigint, type_b_eulerian_polynomials, type_b_eulerian_polynomials_bigint,
 };
 use polynomial_tools::*;
 use rmcp::{
@@ -166,14 +168,7 @@ pub struct CheckPolynomialFamilyRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct PolynomialPairRequest {
-    pub p: PolynomialInput,
-    pub q: PolynomialInput,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct BigIntInterlacingPairRequest {
+pub struct BigIntPolynomialPairRequest {
     pub p: BigIntPolynomialInput,
     pub q: BigIntPolynomialInput,
 }
@@ -283,10 +278,10 @@ impl JsonSchema for FindRecurrenceRequest {
 #[serde(deny_unknown_fields)]
 pub struct EhrhartHstarRequest {
     pub mode: EhrhartHstarMode,
-    pub hstar: Option<Vec<i64>>,
+    pub hstar: Option<Vec<BigIntCoefficientInput>>,
     pub ehrhart_coefficients: Option<Vec<String>>,
-    pub numerator_coefficients: Option<Vec<i64>>,
-    pub denominator: Option<i64>,
+    pub numerator_coefficients: Option<Vec<BigIntCoefficientInput>>,
+    pub denominator: Option<BigIntCoefficientInput>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
@@ -513,8 +508,8 @@ pub struct GenerateRecurrenceRowsResponse {
 
 #[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
 pub struct ResultantResponse {
-    pub p: NormalizedPolynomial,
-    pub q: NormalizedPolynomial,
+    pub p: BigIntNormalizedPolynomial,
+    pub q: BigIntNormalizedPolynomial,
     pub resultant: String,
 }
 
@@ -525,7 +520,7 @@ pub struct DiscriminantItem {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub polynomial: Option<NormalizedPolynomial>,
+    pub polynomial: Option<BigIntNormalizedPolynomial>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub discriminant: Option<String>,
 }
@@ -539,7 +534,7 @@ pub struct DiscriminantResponse {
 pub struct EhrhartHstarResponse {
     pub mode: EhrhartHstarMode,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub hstar: Option<Vec<i64>>,
+    pub hstar: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ehrhart_coefficients: Option<Vec<String>>,
 }
@@ -599,7 +594,7 @@ pub struct DecompositionResponse {
 pub struct GenerateSequenceResponse {
     pub sequence: SequenceKind,
     pub max_n: usize,
-    pub polynomials: Vec<NormalizedPolynomial>,
+    pub polynomials: Vec<BigIntNormalizedPolynomial>,
 }
 
 #[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
@@ -674,10 +669,6 @@ fn parse_polynomial_input(input: &PolynomialInput) -> Result<Vec<i64>, String> {
     }
 }
 
-fn parse_required_polynomial(input: &PolynomialInput, name: &str) -> Result<Vec<i64>, McpError> {
-    parse_polynomial_input(input).map_err(|e| invalid_params(format!("{name}: {e}")))
-}
-
 fn parse_bigint_coefficient(input: &BigIntCoefficientInput) -> Result<BigInt, String> {
     match input {
         BigIntCoefficientInput::Integer(value) => Ok(BigInt::from(*value)),
@@ -685,6 +676,14 @@ fn parse_bigint_coefficient(input: &BigIntCoefficientInput) -> Result<BigInt, St
             .parse::<BigInt>()
             .map_err(|e| format!("invalid integer '{}': {}", value, e)),
     }
+}
+
+fn parse_bigint_coefficients(input: &[BigIntCoefficientInput]) -> Result<Vec<BigInt>, McpError> {
+    input
+        .iter()
+        .map(parse_bigint_coefficient)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(invalid_params)
 }
 
 fn parse_bigint_polynomial_input(input: &BigIntPolynomialInput) -> Result<Vec<BigInt>, String> {
@@ -1259,6 +1258,20 @@ fn generated_sequence_polynomials(sequence: &SequenceKind, max_n: usize) -> Vec<
         SequenceKind::ChebyshevT => chebyshev_polynomials_t(max_n),
         SequenceKind::ChebyshevU => chebyshev_polynomials_u(max_n),
         SequenceKind::Hermite => hermite_polynomials(max_n),
+    }
+}
+
+fn generated_sequence_polynomials_bigint(
+    sequence: &SequenceKind,
+    max_n: usize,
+) -> Vec<Vec<BigInt>> {
+    match sequence {
+        SequenceKind::Eulerian => eulerian_polynomials_bigint(max_n),
+        SequenceKind::Narayana => narayana_polynomials_bigint(max_n),
+        SequenceKind::TypeBEulerian => type_b_eulerian_polynomials_bigint(max_n),
+        SequenceKind::ChebyshevT => chebyshev_polynomials_t_bigint(max_n),
+        SequenceKind::ChebyshevU => chebyshev_polynomials_u_bigint(max_n),
+        SequenceKind::Hermite => hermite_polynomials_bigint(max_n),
     }
 }
 
@@ -1848,7 +1861,7 @@ impl PolynomialToolsServer {
     )]
     pub fn check_interlacing_pair(
         &self,
-        Parameters(input): Parameters<BigIntInterlacingPairRequest>,
+        Parameters(input): Parameters<BigIntPolynomialPairRequest>,
     ) -> Result<Json<InterlacingPairResult>, McpError> {
         let p = normalize_bigint_polynomial(parse_required_bigint_polynomial(&input.p, "p")?);
         let q = normalize_bigint_polynomial(parse_required_bigint_polynomial(&input.q, "q")?);
@@ -2133,20 +2146,25 @@ impl PolynomialToolsServer {
     #[tool(description = "Compute the exact resultant of two polynomials.")]
     pub fn resultant(
         &self,
-        Parameters(input): Parameters<PolynomialPairRequest>,
+        Parameters(input): Parameters<BigIntPolynomialPairRequest>,
     ) -> Result<Json<ResultantResponse>, McpError> {
-        let p = normalize_polynomial(parse_required_polynomial(&input.p, "p")?);
-        let q = normalize_polynomial(parse_required_polynomial(&input.q, "q")?);
-        let resultant = polynomial_tools::resultant(&p.coefficients, &q.coefficients).to_string();
-        Ok(Json(ResultantResponse { p, q, resultant }))
+        let p = normalize_bigint_polynomial(parse_required_bigint_polynomial(&input.p, "p")?);
+        let q = normalize_bigint_polynomial(parse_required_bigint_polynomial(&input.q, "q")?);
+        let resultant =
+            polynomial_tools::resultant_bigint_coeffs(&p.coefficients, &q.coefficients).to_string();
+        Ok(Json(ResultantResponse {
+            p: p.display,
+            q: q.display,
+            resultant,
+        }))
     }
 
     #[tool(description = "Compute exact discriminants for one or more polynomials.")]
     pub fn discriminant(
         &self,
-        Parameters(input): Parameters<PolynomialBatchInput>,
+        Parameters(input): Parameters<BigIntPolynomialBatchInput>,
     ) -> Result<Json<DiscriminantResponse>, McpError> {
-        let batch = parse_batch(&input)?;
+        let batch = parse_bigint_batch(&input)?;
         let items = batch
             .into_iter()
             .enumerate()
@@ -2156,9 +2174,10 @@ impl PolynomialToolsServer {
                     ok: true,
                     error: None,
                     discriminant: Some(
-                        polynomial_tools::discriminant(&polynomial.coefficients).to_string(),
+                        polynomial_tools::discriminant_bigint_coeffs(&polynomial.coefficients)
+                            .to_string(),
                     ),
-                    polynomial: Some(polynomial),
+                    polynomial: Some(polynomial.display),
                 },
                 Err(error) => DiscriminantItem {
                     index,
@@ -2181,16 +2200,17 @@ impl PolynomialToolsServer {
     ) -> Result<Json<EhrhartHstarResponse>, McpError> {
         match input.mode {
             EhrhartHstarMode::HstarToEhrhart => {
-                let hstar = input
+                let hstar_input = input
                     .hstar
                     .ok_or_else(|| invalid_params("`hstar` is required for hstar_to_ehrhart"))?;
-                let ehrhart = hstar_to_ehrhart(&hstar)
+                let hstar = parse_bigint_coefficients(&hstar_input)?;
+                let ehrhart = hstar_to_ehrhart_bigint_coeffs(&hstar)
                     .into_iter()
                     .map(format_rational)
                     .collect();
                 Ok(Json(EhrhartHstarResponse {
                     mode: EhrhartHstarMode::HstarToEhrhart,
-                    hstar: Some(hstar),
+                    hstar: Some(bigint_strings(&hstar)),
                     ehrhart_coefficients: Some(ehrhart),
                 }))
             }
@@ -2203,13 +2223,21 @@ impl PolynomialToolsServer {
                     (Some(coefficients), None, None) => {
                         let coefficients: Result<Vec<_>, _> =
                             coefficients.iter().map(|c| parse_rational(c)).collect();
-                        ehrhart_to_hstar(&coefficients.map_err(invalid_params)?)
+                        ehrhart_to_hstar_bigint(&coefficients.map_err(invalid_params)?)
                     }
                     (None, Some(numerator_coefficients), Some(denominator)) => {
-                        if denominator == 0 {
+                        let numerator_coefficients =
+                            parse_bigint_coefficients(&numerator_coefficients)?;
+                        let denominator =
+                            parse_bigint_coefficient(&denominator).map_err(invalid_params)?;
+                        if denominator == BigInt::from(0) {
                             return Err(invalid_params("`denominator` must be nonzero"));
                         }
-                        ehrhart_to_hstar_with_denom(&numerator_coefficients, denominator)
+                        let coefficients = numerator_coefficients
+                            .into_iter()
+                            .map(|numerator| BigRational::new(numerator, denominator.clone()))
+                            .collect::<Vec<_>>();
+                        ehrhart_to_hstar_bigint(&coefficients)
                     }
                     _ => {
                         return Err(invalid_params(
@@ -2219,7 +2247,7 @@ impl PolynomialToolsServer {
                 };
                 Ok(Json(EhrhartHstarResponse {
                     mode: EhrhartHstarMode::EhrhartToHstar,
-                    hstar: Some(hstar),
+                    hstar: Some(bigint_strings(&hstar)),
                     ehrhart_coefficients: None,
                 }))
             }
@@ -2318,9 +2346,9 @@ impl PolynomialToolsServer {
         &self,
         Parameters(input): Parameters<GenerateSequenceRequest>,
     ) -> Result<Json<GenerateSequenceResponse>, McpError> {
-        let polynomials = generated_sequence_polynomials(&input.sequence, input.max_n)
+        let polynomials = generated_sequence_polynomials_bigint(&input.sequence, input.max_n)
             .into_iter()
-            .map(normalize_polynomial)
+            .map(|coefficients| normalize_bigint_polynomial(coefficients).display)
             .collect();
 
         Ok(Json(GenerateSequenceResponse {
@@ -2465,7 +2493,7 @@ mod tests {
     fn checks_strict_and_weak_interlacing() {
         let server = PolynomialToolsServer::new();
         let Json(strict) = server
-            .check_interlacing_pair(Parameters(BigIntInterlacingPairRequest {
+            .check_interlacing_pair(Parameters(BigIntPolynomialPairRequest {
                 p: bigint_coeffs(&["-2", "1"]),
                 q: bigint_coeffs(&["3", "-4", "1"]),
             }))
@@ -2473,7 +2501,7 @@ mod tests {
         assert_eq!(strict.strict, Some(true));
 
         let Json(weak) = server
-            .check_interlacing_pair(Parameters(BigIntInterlacingPairRequest {
+            .check_interlacing_pair(Parameters(BigIntPolynomialPairRequest {
                 p: bigint_coeffs(&["-1", "1"]),
                 q: bigint_coeffs(&["2", "-3", "1"]),
             }))
@@ -2486,7 +2514,7 @@ mod tests {
         let server = PolynomialToolsServer::new();
         let center = "100000000000000000000";
         let Json(result) = server
-            .check_interlacing_pair(Parameters(BigIntInterlacingPairRequest {
+            .check_interlacing_pair(Parameters(BigIntPolynomialPairRequest {
                 p: bigint_coeffs(&["-100000000000000000000", "1"]),
                 q: bigint_coeffs(&[
                     "9999999999999999999999999999999999999999",
@@ -2528,23 +2556,53 @@ mod tests {
     }
 
     #[test]
+    fn generate_sequence_returns_bigint_coefficients() {
+        let server = PolynomialToolsServer::new();
+        let Json(response) = server
+            .generate_sequence(Parameters(GenerateSequenceRequest {
+                sequence: SequenceKind::ChebyshevT,
+                max_n: 64,
+            }))
+            .unwrap();
+
+        let last = response.polynomials.last().expect("T_64");
+        assert_eq!(last.degree, 64);
+        assert_eq!(
+            last.coefficients.last().map(String::as_str),
+            Some("9223372036854775808")
+        );
+    }
+
+    #[test]
     fn computes_resultant_and_discriminant() {
         let server = PolynomialToolsServer::new();
         let Json(resultant) = server
-            .resultant(Parameters(PolynomialPairRequest {
-                p: coeffs(&[2, -3, 1]),
-                q: coeffs(&[-3, 1]),
+            .resultant(Parameters(BigIntPolynomialPairRequest {
+                p: bigint_coeffs(&["2", "-3", "1"]),
+                q: bigint_coeffs(&["-3", "1"]),
             }))
             .unwrap();
         assert_eq!(resultant.resultant, "2");
 
         let Json(discriminant) = server
-            .discriminant(Parameters(PolynomialBatchInput {
-                polynomials: Some(vec![coeffs(&[-1, 0, 1])]),
+            .discriminant(Parameters(BigIntPolynomialBatchInput {
+                polynomials: Some(vec![bigint_coeffs(&["-1", "0", "1"])]),
                 text: None,
             }))
             .unwrap();
         assert_eq!(discriminant.items[0].discriminant.as_deref(), Some("4"));
+
+        let large = "1000000000000000000000000000000";
+        let Json(large_discriminant) = server
+            .discriminant(Parameters(BigIntPolynomialBatchInput {
+                polynomials: Some(vec![bigint_coeffs(&["1", "0", large])]),
+                text: None,
+            }))
+            .unwrap();
+        assert_eq!(
+            large_discriminant.items[0].discriminant.as_deref(),
+            Some("-4000000000000000000000000000000")
+        );
     }
 
     #[test]
@@ -2553,7 +2611,7 @@ mod tests {
         let Json(to_ehrhart) = server
             .ehrhart_hstar(Parameters(EhrhartHstarRequest {
                 mode: EhrhartHstarMode::HstarToEhrhart,
-                hstar: Some(vec![1, 1, 0]),
+                hstar: Some(vec![1.into(), 1.into(), 0.into()]),
                 ehrhart_coefficients: None,
                 numerator_coefficients: None,
                 denominator: None,
@@ -2573,7 +2631,24 @@ mod tests {
                 denominator: None,
             }))
             .unwrap();
-        assert_eq!(to_hstar.hstar, Some(vec![1, 1, 0]));
+        assert_eq!(
+            to_hstar.hstar,
+            Some(vec!["1".to_string(), "1".to_string(), "0".to_string()])
+        );
+
+        let Json(common_denominator) = server
+            .ehrhart_hstar(Parameters(EhrhartHstarRequest {
+                mode: EhrhartHstarMode::EhrhartToHstar,
+                hstar: None,
+                ehrhart_coefficients: None,
+                numerator_coefficients: Some(vec![2.into(), 3.into(), 1.into()]),
+                denominator: Some(2.into()),
+            }))
+            .unwrap();
+        assert_eq!(
+            common_denominator.hstar,
+            Some(vec!["1".to_string(), "0".to_string(), "0".to_string()])
+        );
     }
 
     #[test]
@@ -2866,18 +2941,19 @@ mod tests {
     fn serializes_bigint_and_bigrational_as_strings() {
         let server = PolynomialToolsServer::new();
         let Json(resultant) = server
-            .resultant(Parameters(PolynomialPairRequest {
-                p: coeffs(&[1, 0, 1]),
-                q: coeffs(&[-1, 1]),
+            .resultant(Parameters(BigIntPolynomialPairRequest {
+                p: bigint_coeffs(&["1", "0", "1"]),
+                q: bigint_coeffs(&["-1", "1"]),
             }))
             .unwrap();
         let value = serde_json::to_value(resultant).unwrap();
         assert_eq!(value["resultant"], "2");
+        assert_eq!(value["p"]["coefficients"][0], "1");
 
         let Json(ehrhart) = server
             .ehrhart_hstar(Parameters(EhrhartHstarRequest {
                 mode: EhrhartHstarMode::HstarToEhrhart,
-                hstar: Some(vec![1, 0, 0]),
+                hstar: Some(vec![1.into(), 0.into(), 0.into()]),
                 ehrhart_coefficients: None,
                 numerator_coefficients: None,
                 denominator: None,

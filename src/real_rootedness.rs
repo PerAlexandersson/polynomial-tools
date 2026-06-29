@@ -546,7 +546,25 @@ pub fn is_gamma_positive_ignoring_initial_zeros_bigint_coeffs(coeffs: &[BigInt])
 /// `(n-1)/2`. This returns the coefficient vectors of `(a(x), b(x))` in ascending
 /// degree order, or `None` if `deg(p) > n`.
 pub fn stapledon_decomposition(coeffs: &[i64], n: usize) -> Option<(Vec<i64>, Vec<i64>)> {
-    crate::polynomial::Polynomial::<i64>::from_i64_coeffs(coeffs)
+    let coeffs = coeffs.iter().map(|&c| BigInt::from(c)).collect::<Vec<_>>();
+    stapledon_decomposition_bigint_coeffs(&coeffs, n).map(|(a, b)| {
+        (
+            a.iter()
+                .map(|c| i64::try_from(c).expect("Stapledon coefficient too large for i64"))
+                .collect(),
+            b.iter()
+                .map(|c| i64::try_from(c).expect("Stapledon coefficient too large for i64"))
+                .collect(),
+        )
+    })
+}
+
+/// Compute the Stapledon decomposition for a `BigInt` coefficient polynomial.
+pub fn stapledon_decomposition_bigint_coeffs(
+    coeffs: &[BigInt],
+    n: usize,
+) -> Option<(Vec<BigInt>, Vec<BigInt>)> {
+    crate::polynomial::Polynomial::<BigInt>::new(coeffs.to_vec())
         .stapledon_decomposition(n)
         .map(|(a, b)| (a.coeffs().to_vec(), b.coeffs().to_vec()))
 }
@@ -1617,7 +1635,14 @@ fn determinant_bigint(mat: &[Vec<BigInt>]) -> BigInt {
 ///
 /// Returns the resultant as a `BigInt`.
 pub fn resultant(f: &[i64], g: &[i64]) -> BigInt {
-    match sylvester_matrix(f, g) {
+    let f_big = f.iter().map(|&c| BigInt::from(c)).collect::<Vec<_>>();
+    let g_big = g.iter().map(|&c| BigInt::from(c)).collect::<Vec<_>>();
+    resultant_bigint_coeffs(&f_big, &g_big)
+}
+
+/// Compute the resultant for `BigInt` coefficient polynomials.
+pub fn resultant_bigint_coeffs(f: &[BigInt], g: &[BigInt]) -> BigInt {
+    match sylvester_matrix_bigint_coeffs(f, g) {
         Some(mat) => determinant_bigint(&mat),
         None => BigInt::from(0),
     }
@@ -1635,7 +1660,13 @@ pub fn resultant(f: &[i64], g: &[i64]) -> BigInt {
 /// roots r_1, ..., r_n, disc(f) = lc(f)^{2n-2} * prod_{i<j} (r_i - r_j)^2
 /// (up to the sign convention).
 pub fn discriminant(f: &[i64]) -> BigInt {
-    let n = match poly_degree_trimmed(f) {
+    let f_big = f.iter().map(|&c| BigInt::from(c)).collect::<Vec<_>>();
+    discriminant_bigint_coeffs(&f_big)
+}
+
+/// Compute the discriminant for a `BigInt` coefficient polynomial.
+pub fn discriminant_bigint_coeffs(f: &[BigInt]) -> BigInt {
+    let n = match poly_degree_trimmed_bigint(f) {
         Some(n) => n,
         None => return BigInt::from(0),
     };
@@ -1643,17 +1674,16 @@ pub fn discriminant(f: &[i64]) -> BigInt {
         return BigInt::from(1);
     }
 
-    let f_big: Vec<BigInt> = f.iter().map(|&c| BigInt::from(c)).collect();
     let mut fp: Vec<BigInt> = Vec::with_capacity(n);
     for k in 0..n {
-        fp.push(BigInt::from(k + 1) * &f_big[k + 1]);
+        fp.push(BigInt::from(k + 1) * &f[k + 1]);
     }
 
-    let res = match sylvester_matrix_bigint_coeffs(&f_big, &fp) {
+    let res = match sylvester_matrix_bigint_coeffs(f, &fp) {
         Some(mat) => determinant_bigint(&mat),
         None => BigInt::from(0),
     };
-    let lc = f_big[n].clone();
+    let lc = f[n].clone();
     let sign_exp = n * (n - 1) / 2;
     let sign = if sign_exp % 2 == 0 {
         BigInt::from(1)
@@ -1681,12 +1711,18 @@ pub fn discriminant(f: &[i64]) -> BigInt {
 /// Returns the polynomial coefficients as rationals in ascending degree order.
 /// For a valid h\*-vector of a lattice polytope, L(t) has degree d = len(hstar) - 1.
 pub fn hstar_to_ehrhart(hstar: &[i64]) -> Vec<Q> {
+    let hstar = hstar.iter().map(|&c| BigInt::from(c)).collect::<Vec<_>>();
+    hstar_to_ehrhart_bigint_coeffs(&hstar)
+}
+
+/// Convert an arbitrary-size integer h\*-vector to an Ehrhart polynomial.
+pub fn hstar_to_ehrhart_bigint_coeffs(hstar: &[BigInt]) -> Vec<Q> {
     if hstar.is_empty() {
         return vec![];
     }
     let d = hstar.len() - 1;
     if d == 0 {
-        return vec![Q::from_integer(BigInt::from(hstar[0]))];
+        return vec![Q::from_integer(hstar[0].clone())];
     }
 
     let zero = Q::from_integer(BigInt::from(0));
@@ -1699,8 +1735,8 @@ pub fn hstar_to_ehrhart(hstar: &[i64]) -> Vec<Q> {
         d_fact *= Q::from_integer(BigInt::from(j as i64));
     }
 
-    for (i, &hi) in hstar.iter().enumerate() {
-        if hi == 0 {
+    for (i, hi) in hstar.iter().enumerate() {
+        if hi == &BigInt::from(0) {
             continue;
         }
         // Build C(t + d - i, d) as a polynomial in t.
@@ -1723,7 +1759,7 @@ pub fn hstar_to_ehrhart(hstar: &[i64]) -> Vec<Q> {
         }
 
         // Divide by d! and scale by h*_i
-        let scale = Q::from_integer(BigInt::from(hi)) / d_fact.clone();
+        let scale = Q::from_integer(hi.clone()) / d_fact.clone();
         for (k, c) in poly.iter().enumerate() {
             if k <= d {
                 result[k] = result[k].clone() + scale.clone() * c.clone();
@@ -1751,6 +1787,14 @@ pub fn hstar_to_ehrhart(hstar: &[i64]) -> Vec<Q> {
 /// The h\*-vector entries are always integers for Ehrhart polynomials of lattice
 /// polytopes. The function rounds the exact rational result to the nearest integer.
 pub fn ehrhart_to_hstar(ehrhart_coeffs: &[Q]) -> Vec<i64> {
+    ehrhart_to_hstar_bigint(ehrhart_coeffs)
+        .into_iter()
+        .map(|n| i64::try_from(&n).expect("h*-vector entry too large for i64"))
+        .collect()
+}
+
+/// Convert an Ehrhart polynomial to an arbitrary-size integer h\*-vector.
+pub fn ehrhart_to_hstar_bigint(ehrhart_coeffs: &[Q]) -> Vec<BigInt> {
     if ehrhart_coeffs.is_empty() {
         return vec![];
     }
@@ -1795,8 +1839,7 @@ pub fn ehrhart_to_hstar(ehrhart_coeffs: &[Q]) -> Vec<i64> {
             "h*-vector entry is not an integer: {}",
             val
         );
-        let n = val.to_integer();
-        hstar.push(i64::try_from(&n).expect("h*-vector entry too large for i64"));
+        hstar.push(val.to_integer());
     }
 
     hstar
