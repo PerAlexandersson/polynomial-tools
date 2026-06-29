@@ -7,6 +7,7 @@ use num_bigint::BigInt;
 use polynomial_tools::recurrence::BigRational as RecurrenceBigRational;
 use polynomial_tools::recurrence::*;
 use polynomial_tools::*;
+use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::hint::black_box;
@@ -1667,6 +1668,7 @@ fn print_bench_help() {
     println!();
     println!("Subcommands:");
     println!("  recurrence-fixtures   Time adaptive recurrence search on fixture rows");
+    println!("  compare               Compare two recurrence-fixture JSON benchmark runs");
     println!("  interlacing           Time consecutive interlacing checks on a sequence");
     println!();
     println!("Recurrence fixture options:");
@@ -1676,6 +1678,13 @@ fn print_bench_help() {
     println!("  --no-modular-prefilter    Disable modular recurrence prefilter");
     println!("  --summary                 Append fixture and category summaries to stdout");
     println!("  --report <path.md>        Write a Markdown benchmark report");
+    println!("  --format <tsv|json>       Output format (default: tsv)");
+    println!("  --json                    Alias for --format json");
+    println!();
+    println!("Compare options:");
+    println!("  polytool bench compare [options] <old.json> <new.json>");
+    println!("  --top <n>                 Number of worst regressions to show (default: 10)");
+    println!("  --format <tsv|json>       Output format (default: tsv)");
     println!();
     println!("Interlacing options:");
     println!("  --sequence <name>         Sequence name (default: eulerian)");
@@ -1691,6 +1700,7 @@ struct BenchRecurrenceOptions {
     only: Option<String>,
     summary: bool,
     report: Option<PathBuf>,
+    format: BenchOutputFormat,
 }
 
 impl Default for BenchRecurrenceOptions {
@@ -1704,6 +1714,23 @@ impl Default for BenchRecurrenceOptions {
             only: None,
             summary: false,
             report: None,
+            format: BenchOutputFormat::Tsv,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum BenchOutputFormat {
+    Tsv,
+    Json,
+}
+
+impl BenchOutputFormat {
+    fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "tsv" | "text" => Ok(Self::Tsv),
+            "json" => Ok(Self::Json),
+            other => Err(format!("unknown bench output format `{other}`")),
         }
     }
 }
@@ -1723,6 +1750,7 @@ struct BenchRecurrenceRun {
     title: String,
     description: String,
     categories: Vec<String>,
+    run: usize,
     found: bool,
     elapsed_ms: f64,
     candidates: usize,
@@ -1731,6 +1759,37 @@ struct BenchRecurrenceRun {
     fit_rows: usize,
     verify_rows: usize,
     recurrence: String,
+    diagnostics: Option<AdaptiveSearchDiagnostics>,
+}
+
+#[derive(Debug)]
+struct BenchRecurrenceFixtureSummary {
+    slug: String,
+    title: String,
+    description: String,
+    categories: Vec<String>,
+    runs: usize,
+    found_runs: usize,
+    min_ms: f64,
+    median_ms: f64,
+    mean_ms: f64,
+    max_ms: f64,
+    candidates: usize,
+    unknowns: usize,
+    weighted_unknowns: usize,
+    fit_rows: usize,
+    verify_rows: usize,
+    recurrence: String,
+}
+
+#[derive(Debug)]
+struct BenchRecurrenceCategorySummary {
+    category: String,
+    fixtures: usize,
+    runs: usize,
+    found_runs: usize,
+    mean_ms: f64,
+    max_ms: f64,
 }
 
 fn cmd_bench(args: &[String]) {
@@ -1740,6 +1799,7 @@ fn cmd_bench(args: &[String]) {
     };
     match subcommand.as_str() {
         "recurrence-fixtures" | "recurrence" => cmd_bench_recurrence_fixtures(rest),
+        "compare" => cmd_bench_compare(rest),
         "interlacing" => cmd_bench_interlacing(rest),
         _ => {
             eprintln!("unknown bench subcommand: {subcommand}");
@@ -1787,6 +1847,14 @@ fn parse_bench_recurrence_options(args: &[String]) -> Result<BenchRecurrenceOpti
                     .ok_or_else(|| "--report expects a path".to_string())?;
                 options.report = Some(PathBuf::from(value));
             }
+            "--format" => {
+                i += 1;
+                let value = args
+                    .get(i)
+                    .ok_or_else(|| "--format expects tsv or json".to_string())?;
+                options.format = BenchOutputFormat::parse(value)?;
+            }
+            "--json" => options.format = BenchOutputFormat::Json,
             other => return Err(format!("unknown recurrence benchmark option: {other}")),
         }
         i += 1;
@@ -1948,6 +2016,73 @@ fn markdown_cell(text: &str) -> String {
     text.replace('\n', " ").replace('|', "\\|")
 }
 
+fn recurrence_bench_fixture_summaries(
+    records: &[BenchRecurrenceRun],
+) -> Vec<BenchRecurrenceFixtureSummary> {
+    let mut by_fixture: BTreeMap<&str, Vec<&BenchRecurrenceRun>> = BTreeMap::new();
+    for record in records {
+        by_fixture.entry(&record.slug).or_default().push(record);
+    }
+
+    by_fixture
+        .into_iter()
+        .map(|(slug, runs)| {
+            let found_runs = runs.iter().filter(|record| record.found).count();
+            let mut elapsed = runs
+                .iter()
+                .map(|record| record.elapsed_ms)
+                .collect::<Vec<_>>();
+            let min_ms = elapsed.iter().copied().fold(f64::INFINITY, f64::min);
+            let max_ms = elapsed.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+            let mean_ms = bench_mean(&elapsed);
+            let median_ms = bench_median(&mut elapsed);
+            let sample = runs[0];
+            BenchRecurrenceFixtureSummary {
+                slug: slug.to_string(),
+                title: sample.title.clone(),
+                description: sample.description.clone(),
+                categories: sample.categories.clone(),
+                runs: runs.len(),
+                found_runs,
+                min_ms,
+                median_ms,
+                mean_ms,
+                max_ms,
+                candidates: sample.candidates,
+                unknowns: sample.unknowns,
+                weighted_unknowns: sample.weighted_unknowns,
+                fit_rows: sample.fit_rows,
+                verify_rows: sample.verify_rows,
+                recurrence: sample.recurrence.clone(),
+            }
+        })
+        .collect()
+}
+
+fn recurrence_bench_category_summary_values(
+    records: &[BenchRecurrenceRun],
+) -> Vec<BenchRecurrenceCategorySummary> {
+    recurrence_bench_category_summaries(records)
+        .into_iter()
+        .map(|(category, fixtures, runs)| {
+            let found_runs = runs.iter().filter(|record| record.found).count();
+            let elapsed = runs
+                .iter()
+                .map(|record| record.elapsed_ms)
+                .collect::<Vec<_>>();
+            let max_ms = elapsed.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+            BenchRecurrenceCategorySummary {
+                category,
+                fixtures: fixtures.len(),
+                runs: runs.len(),
+                found_runs,
+                mean_ms: bench_mean(&elapsed),
+                max_ms,
+            }
+        })
+        .collect()
+}
+
 fn print_recurrence_bench_summary(records: &[BenchRecurrenceRun]) {
     if records.is_empty() {
         println!("# fixture_summary");
@@ -1957,60 +2092,39 @@ fn print_recurrence_bench_summary(records: &[BenchRecurrenceRun]) {
         return;
     }
 
-    let mut by_fixture: BTreeMap<&str, Vec<&BenchRecurrenceRun>> = BTreeMap::new();
-    for record in records {
-        by_fixture.entry(&record.slug).or_default().push(record);
-    }
-
     println!("# fixture_summary");
     println!("slug\ttitle\tcategories\truns\tfound_runs\tmin_ms\tmedian_ms\tmean_ms\tmax_ms\tcandidates\tunknowns\tweighted\tfit_rows\tverify_rows");
-    for (slug, runs) in by_fixture {
-        let found_runs = runs.iter().filter(|record| record.found).count();
-        let mut elapsed = runs
-            .iter()
-            .map(|record| record.elapsed_ms)
-            .collect::<Vec<_>>();
-        let min_ms = elapsed.iter().copied().fold(f64::INFINITY, f64::min);
-        let max_ms = elapsed.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-        let mean_ms = bench_mean(&elapsed);
-        let median_ms = bench_median(&mut elapsed);
-        let sample = runs[0];
+    for summary in recurrence_bench_fixture_summaries(records) {
         println!(
             "{}\t{}\t{}\t{}\t{}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{}\t{}\t{}\t{}\t{}",
-            slug,
-            sample.title,
-            sample.categories.join(","),
-            runs.len(),
-            found_runs,
-            min_ms,
-            median_ms,
-            mean_ms,
-            max_ms,
-            sample.candidates,
-            sample.unknowns,
-            sample.weighted_unknowns,
-            sample.fit_rows,
-            sample.verify_rows,
+            summary.slug,
+            summary.title,
+            summary.categories.join(","),
+            summary.runs,
+            summary.found_runs,
+            summary.min_ms,
+            summary.median_ms,
+            summary.mean_ms,
+            summary.max_ms,
+            summary.candidates,
+            summary.unknowns,
+            summary.weighted_unknowns,
+            summary.fit_rows,
+            summary.verify_rows,
         );
     }
 
     println!("# category_summary");
     println!("category\tfixtures\truns\tfound_runs\tmean_ms\tmax_ms");
-    for (category, fixtures, runs) in recurrence_bench_category_summaries(records) {
-        let found_runs = runs.iter().filter(|record| record.found).count();
-        let elapsed = runs
-            .iter()
-            .map(|record| record.elapsed_ms)
-            .collect::<Vec<_>>();
-        let max_ms = elapsed.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    for summary in recurrence_bench_category_summary_values(records) {
         println!(
             "{}\t{}\t{}\t{}\t{:.3}\t{:.3}",
-            category,
-            fixtures.len(),
-            runs.len(),
-            found_runs,
-            bench_mean(&elapsed),
-            max_ms,
+            summary.category,
+            summary.fixtures,
+            summary.runs,
+            summary.found_runs,
+            summary.mean_ms,
+            summary.max_ms,
         );
     }
 }
@@ -2059,63 +2173,37 @@ fn write_recurrence_bench_report(
     report.push_str("\n## Category Summary\n\n");
     report.push_str("| category | fixtures | runs | found | mean ms | max ms |\n");
     report.push_str("|---|---:|---:|---:|---:|---:|\n");
-    for (category, fixtures, runs) in recurrence_bench_category_summaries(records) {
-        let found_runs = runs.iter().filter(|record| record.found).count();
-        let elapsed = runs
-            .iter()
-            .map(|record| record.elapsed_ms)
-            .collect::<Vec<_>>();
-        let mean_ms = if elapsed.is_empty() {
-            0.0
-        } else {
-            bench_mean(&elapsed)
-        };
-        let max_ms = elapsed.iter().copied().fold(0.0, f64::max);
+    for summary in recurrence_bench_category_summary_values(records) {
         report.push_str(&format!(
             "| {} | {} | {} | {} | {:.3} | {:.3} |\n",
-            markdown_cell(&category),
-            fixtures.len(),
-            runs.len(),
-            found_runs,
-            mean_ms,
-            max_ms,
+            markdown_cell(&summary.category),
+            summary.fixtures,
+            summary.runs,
+            summary.found_runs,
+            summary.mean_ms,
+            summary.max_ms,
         ));
-    }
-
-    let mut by_fixture: BTreeMap<&str, Vec<&BenchRecurrenceRun>> = BTreeMap::new();
-    for record in records {
-        by_fixture.entry(&record.slug).or_default().push(record);
     }
 
     report.push_str("\n## Fixture Summary\n\n");
     report.push_str("| slug | title | description | categories | runs | found | min ms | median ms | mean ms | max ms | unknowns | weighted | recurrence |\n");
     report.push_str("|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|\n");
-    for (slug, runs) in by_fixture {
-        let found_runs = runs.iter().filter(|record| record.found).count();
-        let mut elapsed = runs
-            .iter()
-            .map(|record| record.elapsed_ms)
-            .collect::<Vec<_>>();
-        let min_ms = elapsed.iter().copied().fold(f64::INFINITY, f64::min);
-        let max_ms = elapsed.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-        let mean_ms = bench_mean(&elapsed);
-        let median_ms = bench_median(&mut elapsed);
-        let sample = runs[0];
+    for summary in recurrence_bench_fixture_summaries(records) {
         report.push_str(&format!(
             "| {} | {} | {} | {} | {} | {} | {:.3} | {:.3} | {:.3} | {:.3} | {} | {} | {} |\n",
-            markdown_cell(slug),
-            markdown_cell(&sample.title),
-            markdown_cell(&sample.description),
-            markdown_cell(&sample.categories.join(", ")),
-            runs.len(),
-            found_runs,
-            min_ms,
-            median_ms,
-            mean_ms,
-            max_ms,
-            sample.unknowns,
-            sample.weighted_unknowns,
-            markdown_cell(&sample.recurrence),
+            markdown_cell(&summary.slug),
+            markdown_cell(&summary.title),
+            markdown_cell(&summary.description),
+            markdown_cell(&summary.categories.join(", ")),
+            summary.runs,
+            summary.found_runs,
+            summary.min_ms,
+            summary.median_ms,
+            summary.mean_ms,
+            summary.max_ms,
+            summary.unknowns,
+            summary.weighted_unknowns,
+            markdown_cell(&summary.recurrence),
         ));
     }
 
@@ -2131,6 +2219,446 @@ fn write_recurrence_bench_report(
             .map_err(|e| format!("failed to create `{}`: {e}", parent.display()))?;
     }
     fs::write(path, report).map_err(|e| format!("failed to write `{}`: {e}", path.display()))
+}
+
+fn recurrence_diagnostics_json(diagnostics: &AdaptiveSearchDiagnostics) -> Value {
+    json!({
+        "generated_candidates": diagnostics.generated_candidates,
+        "considered_candidates": diagnostics.considered_candidates,
+        "insufficient_fit_rows": diagnostics.insufficient_fit_rows,
+        "equation_bound_rejections": diagnostics.equation_bound_rejections,
+        "degree_bound_rejections": diagnostics.degree_bound_rejections,
+        "modular_prefilter_rejections": diagnostics.modular_prefilter_rejections,
+        "exact_solve_attempts": diagnostics.exact_solve_attempts,
+        "failed_exact_solves": diagnostics.failed_exact_solves,
+        "heldout_verification_failures": diagnostics.heldout_verification_failures,
+        "denominator_escalation_entered": diagnostics.denominator_escalation_entered,
+    })
+}
+
+fn recurrence_bench_run_json(record: &BenchRecurrenceRun) -> Value {
+    json!({
+        "slug": &record.slug,
+        "title": &record.title,
+        "description": &record.description,
+        "categories": &record.categories,
+        "run": record.run,
+        "found": record.found,
+        "elapsed_ms": record.elapsed_ms,
+        "candidates": record.candidates,
+        "unknowns": record.unknowns,
+        "weighted_unknowns": record.weighted_unknowns,
+        "fit_rows": record.fit_rows,
+        "verify_rows": record.verify_rows,
+        "recurrence": &record.recurrence,
+        "diagnostics": record
+            .diagnostics
+            .as_ref()
+            .map(recurrence_diagnostics_json)
+            .unwrap_or(Value::Null),
+    })
+}
+
+fn recurrence_bench_fixture_summary_json(summary: &BenchRecurrenceFixtureSummary) -> Value {
+    json!({
+        "slug": &summary.slug,
+        "title": &summary.title,
+        "description": &summary.description,
+        "categories": &summary.categories,
+        "runs": summary.runs,
+        "found_runs": summary.found_runs,
+        "min_ms": summary.min_ms,
+        "median_ms": summary.median_ms,
+        "mean_ms": summary.mean_ms,
+        "max_ms": summary.max_ms,
+        "candidates": summary.candidates,
+        "unknowns": summary.unknowns,
+        "weighted_unknowns": summary.weighted_unknowns,
+        "fit_rows": summary.fit_rows,
+        "verify_rows": summary.verify_rows,
+        "recurrence": &summary.recurrence,
+    })
+}
+
+fn recurrence_bench_category_summary_json(summary: &BenchRecurrenceCategorySummary) -> Value {
+    json!({
+        "category": &summary.category,
+        "fixtures": summary.fixtures,
+        "runs": summary.runs,
+        "found_runs": summary.found_runs,
+        "mean_ms": summary.mean_ms,
+        "max_ms": summary.max_ms,
+    })
+}
+
+fn recurrence_bench_json(
+    options: &BenchRecurrenceOptions,
+    records: &[BenchRecurrenceRun],
+) -> Value {
+    let fixture_summaries = recurrence_bench_fixture_summaries(records);
+    let category_summaries = recurrence_bench_category_summary_values(records);
+    json!({
+        "schema": "polynomial-tools.bench.recurrence-fixtures.v1",
+        "command": "recurrence-fixtures",
+        "options": {
+            "base": options.base.display().to_string(),
+            "repeat": options.repeat,
+            "modular_prefilter": options.modular_prefilter,
+            "only": &options.only,
+        },
+        "runs": records.iter().map(recurrence_bench_run_json).collect::<Vec<_>>(),
+        "fixture_summaries": fixture_summaries
+            .iter()
+            .map(recurrence_bench_fixture_summary_json)
+            .collect::<Vec<_>>(),
+        "category_summaries": category_summaries
+            .iter()
+            .map(recurrence_bench_category_summary_json)
+            .collect::<Vec<_>>(),
+    })
+}
+
+#[derive(Debug)]
+struct BenchCompareOptions {
+    old_path: PathBuf,
+    new_path: PathBuf,
+    top: usize,
+    format: BenchOutputFormat,
+}
+
+#[derive(Debug, Clone)]
+struct BenchComparePoint {
+    mean_ms: f64,
+    found_runs: usize,
+    runs: usize,
+}
+
+#[derive(Debug)]
+struct BenchCompareRow {
+    kind: String,
+    name: String,
+    old_mean_ms: Option<f64>,
+    new_mean_ms: Option<f64>,
+    speedup: Option<f64>,
+    delta_ms: Option<f64>,
+    old_found_runs: Option<usize>,
+    old_runs: Option<usize>,
+    new_found_runs: Option<usize>,
+    new_runs: Option<usize>,
+    status: String,
+}
+
+fn parse_bench_compare_options(args: &[String]) -> Result<BenchCompareOptions, String> {
+    let mut top = 10;
+    let mut format = BenchOutputFormat::Tsv;
+    let mut paths = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--top" => {
+                i += 1;
+                let value = args
+                    .get(i)
+                    .ok_or_else(|| "--top expects a positive integer".to_string())?;
+                top = value
+                    .parse::<usize>()
+                    .map_err(|_| format!("--top expects a positive integer, got '{value}'"))?
+                    .max(1);
+            }
+            "--format" => {
+                i += 1;
+                let value = args
+                    .get(i)
+                    .ok_or_else(|| "--format expects tsv or json".to_string())?;
+                format = BenchOutputFormat::parse(value)?;
+            }
+            "--json" => format = BenchOutputFormat::Json,
+            other if other.starts_with('-') => {
+                return Err(format!("unknown benchmark compare option: {other}"));
+            }
+            path => paths.push(PathBuf::from(path)),
+        }
+        i += 1;
+    }
+
+    if paths.len() != 2 {
+        return Err("bench compare expects exactly two JSON paths".to_string());
+    }
+    Ok(BenchCompareOptions {
+        old_path: paths.remove(0),
+        new_path: paths.remove(0),
+        top,
+        format,
+    })
+}
+
+fn read_benchmark_json(path: &Path) -> Result<Value, String> {
+    let text = fs::read_to_string(path)
+        .map_err(|e| format!("failed to read benchmark JSON `{}`: {e}", path.display()))?;
+    let value: Value = serde_json::from_str(&text)
+        .map_err(|e| format!("failed to parse benchmark JSON `{}`: {e}", path.display()))?;
+    let schema = value
+        .get("schema")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("benchmark JSON `{}` has no schema", path.display()))?;
+    if schema != "polynomial-tools.bench.recurrence-fixtures.v1" {
+        return Err(format!(
+            "unsupported benchmark JSON schema `{schema}` in `{}`",
+            path.display()
+        ));
+    }
+    Ok(value)
+}
+
+fn value_usize(value: &Value, key: &str) -> Result<usize, String> {
+    value
+        .get(key)
+        .and_then(Value::as_u64)
+        .and_then(|n| usize::try_from(n).ok())
+        .ok_or_else(|| format!("benchmark summary entry is missing integer `{key}`"))
+}
+
+fn value_f64(value: &Value, key: &str) -> Result<f64, String> {
+    value
+        .get(key)
+        .and_then(Value::as_f64)
+        .ok_or_else(|| format!("benchmark summary entry is missing number `{key}`"))
+}
+
+fn value_string(value: &Value, key: &str) -> Result<String, String> {
+    value
+        .get(key)
+        .and_then(Value::as_str)
+        .map(ToString::to_string)
+        .ok_or_else(|| format!("benchmark summary entry is missing string `{key}`"))
+}
+
+fn extract_benchmark_points(
+    report: &Value,
+    array_key: &str,
+    name_key: &str,
+) -> Result<BTreeMap<String, BenchComparePoint>, String> {
+    let entries = report
+        .get(array_key)
+        .and_then(Value::as_array)
+        .ok_or_else(|| format!("benchmark JSON missing array `{array_key}`"))?;
+    let mut map = BTreeMap::new();
+    for entry in entries {
+        let name = value_string(entry, name_key)?;
+        map.insert(
+            name,
+            BenchComparePoint {
+                mean_ms: value_f64(entry, "mean_ms")?,
+                found_runs: value_usize(entry, "found_runs")?,
+                runs: value_usize(entry, "runs")?,
+            },
+        );
+    }
+    Ok(map)
+}
+
+fn compare_status(
+    old: Option<&BenchComparePoint>,
+    new: Option<&BenchComparePoint>,
+    speedup: Option<f64>,
+) -> String {
+    match (old, new) {
+        (None, Some(_)) => "new".to_string(),
+        (Some(_), None) => "removed".to_string(),
+        (None, None) => "missing".to_string(),
+        (Some(old), Some(new)) if old.found_runs > 0 && new.found_runs == 0 => "lost".to_string(),
+        (Some(old), Some(new)) if old.found_runs == 0 && new.found_runs > 0 => {
+            "newly_found".to_string()
+        }
+        (Some(_), Some(_)) => {
+            let speedup = speedup.unwrap_or(1.0);
+            if speedup >= 1.10 {
+                "faster".to_string()
+            } else if speedup <= 0.90 {
+                "slower".to_string()
+            } else {
+                "flat".to_string()
+            }
+        }
+    }
+}
+
+fn benchmark_compare_rows(
+    kind: &str,
+    old: &BTreeMap<String, BenchComparePoint>,
+    new: &BTreeMap<String, BenchComparePoint>,
+) -> Vec<BenchCompareRow> {
+    let names = old
+        .keys()
+        .chain(new.keys())
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    names
+        .into_iter()
+        .map(|name| {
+            let old_point = old.get(&name);
+            let new_point = new.get(&name);
+            let speedup = match (old_point, new_point) {
+                (Some(old), Some(new)) if new.mean_ms > 0.0 => Some(old.mean_ms / new.mean_ms),
+                _ => None,
+            };
+            let delta_ms = match (old_point, new_point) {
+                (Some(old), Some(new)) => Some(new.mean_ms - old.mean_ms),
+                _ => None,
+            };
+            BenchCompareRow {
+                kind: kind.to_string(),
+                name,
+                old_mean_ms: old_point.map(|point| point.mean_ms),
+                new_mean_ms: new_point.map(|point| point.mean_ms),
+                speedup,
+                delta_ms,
+                old_found_runs: old_point.map(|point| point.found_runs),
+                old_runs: old_point.map(|point| point.runs),
+                new_found_runs: new_point.map(|point| point.found_runs),
+                new_runs: new_point.map(|point| point.runs),
+                status: compare_status(old_point, new_point, speedup),
+            }
+        })
+        .collect()
+}
+
+fn format_optional_f64(value: Option<f64>) -> String {
+    value.map(|value| format!("{value:.3}")).unwrap_or_default()
+}
+
+fn format_optional_usize(value: Option<usize>) -> String {
+    value.map(|value| value.to_string()).unwrap_or_default()
+}
+
+fn print_compare_rows(section: &str, rows: &[&BenchCompareRow]) {
+    println!("# {section}");
+    println!(
+        "kind\tname\told_mean_ms\tnew_mean_ms\tspeedup\tdelta_ms\told_found\told_runs\tnew_found\tnew_runs\tstatus"
+    );
+    for row in rows {
+        println!(
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            row.kind,
+            row.name,
+            format_optional_f64(row.old_mean_ms),
+            format_optional_f64(row.new_mean_ms),
+            format_optional_f64(row.speedup),
+            format_optional_f64(row.delta_ms),
+            format_optional_usize(row.old_found_runs),
+            format_optional_usize(row.old_runs),
+            format_optional_usize(row.new_found_runs),
+            format_optional_usize(row.new_runs),
+            row.status,
+        );
+    }
+}
+
+fn compare_row_json(row: &BenchCompareRow) -> Value {
+    json!({
+        "kind": &row.kind,
+        "name": &row.name,
+        "old_mean_ms": row.old_mean_ms,
+        "new_mean_ms": row.new_mean_ms,
+        "speedup": row.speedup,
+        "delta_ms": row.delta_ms,
+        "old_found_runs": row.old_found_runs,
+        "old_runs": row.old_runs,
+        "new_found_runs": row.new_found_runs,
+        "new_runs": row.new_runs,
+        "status": &row.status,
+    })
+}
+
+fn cmd_bench_compare(args: &[String]) {
+    let options = match parse_bench_compare_options(args) {
+        Ok(options) => options,
+        Err(error) => {
+            eprintln!("{error}");
+            print_bench_help();
+            std::process::exit(1);
+        }
+    };
+    let old_report = match read_benchmark_json(&options.old_path) {
+        Ok(report) => report,
+        Err(error) => {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+    };
+    let new_report = match read_benchmark_json(&options.new_path) {
+        Ok(report) => report,
+        Err(error) => {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+    };
+
+    let old_fixtures = match extract_benchmark_points(&old_report, "fixture_summaries", "slug") {
+        Ok(points) => points,
+        Err(error) => {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+    };
+    let new_fixtures = match extract_benchmark_points(&new_report, "fixture_summaries", "slug") {
+        Ok(points) => points,
+        Err(error) => {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+    };
+    let old_categories =
+        match extract_benchmark_points(&old_report, "category_summaries", "category") {
+            Ok(points) => points,
+            Err(error) => {
+                eprintln!("{error}");
+                std::process::exit(1);
+            }
+        };
+    let new_categories =
+        match extract_benchmark_points(&new_report, "category_summaries", "category") {
+            Ok(points) => points,
+            Err(error) => {
+                eprintln!("{error}");
+                std::process::exit(1);
+            }
+        };
+
+    let fixture_rows = benchmark_compare_rows("fixture", &old_fixtures, &new_fixtures);
+    let category_rows = benchmark_compare_rows("category", &old_categories, &new_categories);
+    let mut worst_regressions = fixture_rows
+        .iter()
+        .filter(|row| row.old_mean_ms.is_some() && row.new_mean_ms.is_some())
+        .collect::<Vec<_>>();
+    worst_regressions.sort_by(|a, b| {
+        let a_ratio = a.new_mean_ms.unwrap_or(0.0) / a.old_mean_ms.unwrap_or(1.0);
+        let b_ratio = b.new_mean_ms.unwrap_or(0.0) / b.old_mean_ms.unwrap_or(1.0);
+        b_ratio.total_cmp(&a_ratio)
+    });
+    worst_regressions.truncate(options.top);
+
+    if options.format == BenchOutputFormat::Json {
+        let output = json!({
+            "schema": "polynomial-tools.bench.compare.v1",
+            "old": options.old_path.display().to_string(),
+            "new": options.new_path.display().to_string(),
+            "fixture_compare": fixture_rows.iter().map(compare_row_json).collect::<Vec<_>>(),
+            "category_compare": category_rows.iter().map(compare_row_json).collect::<Vec<_>>(),
+            "worst_regressions": worst_regressions
+                .iter()
+                .map(|row| compare_row_json(row))
+                .collect::<Vec<_>>(),
+        });
+        println!("{}", serde_json::to_string_pretty(&output).unwrap());
+    } else {
+        print_compare_rows("fixture_compare", &fixture_rows.iter().collect::<Vec<_>>());
+        print_compare_rows(
+            "category_compare",
+            &category_rows.iter().collect::<Vec<_>>(),
+        );
+        print_compare_rows("worst_regressions", &worst_regressions);
+    }
 }
 
 fn parse_fixture_usize(flag: &str, value: Option<&str>) -> Result<usize, String> {
@@ -2156,9 +2684,11 @@ fn cmd_bench_recurrence_fixtures(args: &[String]) {
             std::process::exit(1);
         }
     };
-    println!(
-        "slug\trun\tfound\telapsed_ms\tcandidates\tunknowns\tweighted\tfit_rows\tverify_rows\trecurrence"
-    );
+    if options.format == BenchOutputFormat::Tsv {
+        println!(
+            "slug\trun\tfound\telapsed_ms\tcandidates\tunknowns\tweighted\tfit_rows\tverify_rows\trecurrence"
+        );
+    }
     let mut records = Vec::new();
     for fixture in manifest {
         if options
@@ -2193,23 +2723,26 @@ fn cmd_bench_recurrence_fixtures(args: &[String]) {
             let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
             if let Some(result) = result {
                 let recurrence = result.recurrence.to_string();
-                println!(
-                    "{}\t{}\ttrue\t{:.3}\t{}\t{}\t{}\t{}\t{}\t{}",
-                    fixture.slug,
-                    run,
-                    elapsed_ms,
-                    result.candidates_tried,
-                    result.num_unknowns,
-                    result.weighted_unknowns,
-                    result.fit_polynomials,
-                    result.verification_polynomials,
-                    recurrence,
-                );
+                if options.format == BenchOutputFormat::Tsv {
+                    println!(
+                        "{}\t{}\ttrue\t{:.3}\t{}\t{}\t{}\t{}\t{}\t{}",
+                        fixture.slug,
+                        run,
+                        elapsed_ms,
+                        result.candidates_tried,
+                        result.num_unknowns,
+                        result.weighted_unknowns,
+                        result.fit_polynomials,
+                        result.verification_polynomials,
+                        recurrence,
+                    );
+                }
                 records.push(BenchRecurrenceRun {
                     slug: fixture.slug.clone(),
                     title: fixture.title.clone(),
                     description: fixture.description.clone(),
                     categories: categories.clone(),
+                    run,
                     found: true,
                     elapsed_ms,
                     candidates: result.candidates_tried,
@@ -2218,17 +2751,21 @@ fn cmd_bench_recurrence_fixtures(args: &[String]) {
                     fit_rows: result.fit_polynomials,
                     verify_rows: result.verification_polynomials,
                     recurrence,
+                    diagnostics: Some(result.diagnostics),
                 });
             } else {
-                println!(
-                    "{}\t{}\tfalse\t{:.3}\t0\t0\t0\t0\t0\t",
-                    fixture.slug, run, elapsed_ms
-                );
+                if options.format == BenchOutputFormat::Tsv {
+                    println!(
+                        "{}\t{}\tfalse\t{:.3}\t0\t0\t0\t0\t0\t",
+                        fixture.slug, run, elapsed_ms
+                    );
+                }
                 records.push(BenchRecurrenceRun {
                     slug: fixture.slug.clone(),
                     title: fixture.title.clone(),
                     description: fixture.description.clone(),
                     categories: categories.clone(),
+                    run,
                     found: false,
                     elapsed_ms,
                     candidates: 0,
@@ -2237,16 +2774,23 @@ fn cmd_bench_recurrence_fixtures(args: &[String]) {
                     fit_rows: 0,
                     verify_rows: 0,
                     recurrence: String::new(),
+                    diagnostics: None,
                 });
             }
         }
     }
-    if options.summary {
+    if options.format == BenchOutputFormat::Tsv && options.summary {
         print_recurrence_bench_summary(&records);
     }
     if let Err(error) = write_recurrence_bench_report(&options, &records) {
         eprintln!("{error}");
         std::process::exit(1);
+    }
+    if options.format == BenchOutputFormat::Json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&recurrence_bench_json(&options, &records)).unwrap()
+        );
     }
 }
 

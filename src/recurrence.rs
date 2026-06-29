@@ -3061,6 +3061,33 @@ pub struct AdaptiveSearchResult {
     pub verification_polynomials: usize,
     /// Number of candidates actually solved (not just counted).
     pub candidates_tried: usize,
+    /// Counters for the adaptive search stages up to the returned result.
+    pub diagnostics: AdaptiveSearchDiagnostics,
+}
+
+/// Counters describing how adaptive recurrence search reached a result.
+#[derive(Debug, Clone, Default)]
+pub struct AdaptiveSearchDiagnostics {
+    /// Number of parameter candidates generated in the searched candidate lists.
+    pub generated_candidates: usize,
+    /// Number of candidates inspected before the search returned.
+    pub considered_candidates: usize,
+    /// Candidates skipped because no prefix had enough rows/equations.
+    pub insufficient_fit_rows: usize,
+    /// Candidates rejected by the equation-count margin after selecting a fit prefix.
+    pub equation_bound_rejections: usize,
+    /// Homogeneous candidates rejected by the degree-bound precheck.
+    pub degree_bound_rejections: usize,
+    /// Candidates rejected by the modular prefilter before exact rational solving.
+    pub modular_prefilter_rejections: usize,
+    /// Candidates sent to exact rational recurrence solving.
+    pub exact_solve_attempts: usize,
+    /// Exact rational solves that did not produce a recurrence.
+    pub failed_exact_solves: usize,
+    /// Prefix fits that failed held-out verification.
+    pub heldout_verification_failures: usize,
+    /// Whether the automatic denominator escalation pass was entered.
+    pub denominator_escalation_entered: bool,
 }
 
 /// Generate candidate parameter sets.
@@ -3269,22 +3296,30 @@ pub fn find_recurrence_adaptive_rational(
     // First pass: use the options as given.
     let candidates = generate_candidates(m, search);
     let mut tried = 0;
+    let mut diagnostics = AdaptiveSearchDiagnostics {
+        generated_candidates: candidates.len(),
+        ..Default::default()
+    };
 
     for opts in &candidates {
+        diagnostics.considered_candidates += 1;
         let complexity = candidate_complexity(opts);
         let unknowns = complexity.raw_unknowns;
         let weighted_unknowns = complexity.weighted_unknowns;
         let Some(fit_len) = fitting_polynomial_count(polys, opts, search) else {
+            diagnostics.insufficient_fit_rows += 1;
             continue;
         };
         let fit_polys = &polys[..fit_len];
         let equations = count_equations_rational(fit_polys, opts);
 
         if equations < unknowns + search.min_margin {
+            diagnostics.equation_bound_rejections += 1;
             continue;
         }
 
         if homogeneous_degree_bound_rejects(polys, &derivs, opts, fit_len) {
+            diagnostics.degree_bound_rejections += 1;
             continue;
         }
 
@@ -3318,6 +3353,7 @@ pub fn find_recurrence_adaptive_rational(
         let cached_solve_opts = if let Some(cache) = &modular_cache {
             let prefilter = modular_prefilter_with_cache(polys, fit_len, opts, cache);
             if prefilter.rejected {
+                diagnostics.modular_prefilter_rejections += 1;
                 continue;
             }
             exact_row_indices = prefilter.full_rank_pivot_rows;
@@ -3328,6 +3364,7 @@ pub fn find_recurrence_adaptive_rational(
             None
         };
         let solve_opts = cached_solve_opts.as_ref().unwrap_or(opts);
+        diagnostics.exact_solve_attempts += 1;
         if let Some(rec) = find_polynomial_recurrence_rational_with_derivs_and_rows(
             fit_polys,
             fit_derivs,
@@ -3335,6 +3372,7 @@ pub fn find_recurrence_adaptive_rational(
             exact_row_indices.as_deref(),
         ) {
             if !verify_heldout_tail(polys, &derivs, &rec, opts, fit_len, search) {
+                diagnostics.heldout_verification_failures += 1;
                 if search.verbose {
                     eprintln!("  -> fitted prefix but failed held-out verification");
                 }
@@ -3352,7 +3390,10 @@ pub fn find_recurrence_adaptive_rational(
                 fit_polynomials: fit_len,
                 verification_polynomials: m - fit_len,
                 candidates_tried: tried,
+                diagnostics,
             });
+        } else {
+            diagnostics.failed_exact_solves += 1;
         }
     }
 
@@ -3368,26 +3409,35 @@ pub fn find_recurrence_adaptive_rational(
         }
 
         let rational_candidates = generate_candidates(m, &rational_search);
+        diagnostics.denominator_escalation_entered = true;
+        diagnostics.generated_candidates += rational_candidates
+            .iter()
+            .filter(|opts| opts.denom_var_deg > 0 || opts.denom_idx_deg > 0)
+            .count();
         for opts in &rational_candidates {
             // Skip candidates without a denominator (already tried above).
             if opts.denom_var_deg == 0 && opts.denom_idx_deg == 0 {
                 continue;
             }
 
+            diagnostics.considered_candidates += 1;
             let complexity = candidate_complexity(opts);
             let unknowns = complexity.raw_unknowns;
             let weighted_unknowns = complexity.weighted_unknowns;
             let Some(fit_len) = fitting_polynomial_count(polys, opts, &rational_search) else {
+                diagnostics.insufficient_fit_rows += 1;
                 continue;
             };
             let fit_polys = &polys[..fit_len];
             let equations = count_equations_rational(fit_polys, opts);
 
             if equations < unknowns + search.min_margin {
+                diagnostics.equation_bound_rejections += 1;
                 continue;
             }
 
             if homogeneous_degree_bound_rejects(polys, &derivs, opts, fit_len) {
+                diagnostics.degree_bound_rejections += 1;
                 continue;
             }
 
@@ -3418,6 +3468,7 @@ pub fn find_recurrence_adaptive_rational(
             let cached_solve_opts = if let Some(cache) = &modular_cache {
                 let prefilter = modular_prefilter_with_cache(polys, fit_len, opts, cache);
                 if prefilter.rejected {
+                    diagnostics.modular_prefilter_rejections += 1;
                     continue;
                 }
                 exact_row_indices = prefilter.full_rank_pivot_rows;
@@ -3428,6 +3479,7 @@ pub fn find_recurrence_adaptive_rational(
                 None
             };
             let solve_opts = cached_solve_opts.as_ref().unwrap_or(opts);
+            diagnostics.exact_solve_attempts += 1;
             if let Some(rec) = find_polynomial_recurrence_rational_with_derivs_and_rows(
                 fit_polys,
                 fit_derivs,
@@ -3435,6 +3487,7 @@ pub fn find_recurrence_adaptive_rational(
                 exact_row_indices.as_deref(),
             ) {
                 if !verify_heldout_tail(polys, &derivs, &rec, opts, fit_len, search) {
+                    diagnostics.heldout_verification_failures += 1;
                     if search.verbose {
                         eprintln!("  -> fitted prefix but failed held-out verification");
                     }
@@ -3452,7 +3505,10 @@ pub fn find_recurrence_adaptive_rational(
                     fit_polynomials: fit_len,
                     verification_polynomials: m - fit_len,
                     candidates_tried: tried,
+                    diagnostics,
                 });
+            } else {
+                diagnostics.failed_exact_solves += 1;
             }
         }
     }

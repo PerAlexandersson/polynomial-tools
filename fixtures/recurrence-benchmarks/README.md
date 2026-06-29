@@ -26,12 +26,20 @@ polytool bench recurrence-fixtures --repeat 3
 polytool bench recurrence-fixtures --only 23_sparse --repeat 5
 polytool bench recurrence-fixtures --only oeis --repeat 3 \
   --summary --report bench-results/recurrence-fixtures/oeis.md
+polytool bench recurrence-fixtures --only oeis --repeat 3 --format json \
+  > bench-results/recurrence-fixtures/oeis.json
+polytool bench compare old.json new.json --top 10
 ```
 
 The default output is per-run TSV. The optional `--summary` flag appends
 fixture-level and category-level TSV summaries. The optional `--report <path>`
 writes the same benchmark run as a Markdown report suitable for checked-in
 benchmark notes or project handoffs.
+The JSON output includes per-run records, fixture/category summaries, and
+adaptive search diagnostics such as generated candidates, exact solve attempts,
+modular-prefilter rejections, and held-out verification failures. The compare
+subcommand reads two JSON benchmark outputs and reports speedups, slowdowns,
+new fixtures, removed fixtures, and worst regressions.
 
 Example one-off timing command:
 

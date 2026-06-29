@@ -132,3 +132,61 @@ fn bench_recurrence_fixture_reports_tsv() {
     assert!(report.contains("| 01_scalar_geometric |"));
     let _ = fs::remove_file(report_path);
 }
+
+#[test]
+fn bench_recurrence_fixture_reports_json_and_compare() {
+    let output = run_polytool(
+        &[
+            "bench",
+            "recurrence-fixtures",
+            "--only",
+            "01_scalar_geometric",
+            "--repeat",
+            "1",
+            "--format",
+            "json",
+        ],
+        "",
+    );
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).expect("stdout is utf8");
+    assert!(stdout.contains("\"schema\": \"polynomial-tools.bench.recurrence-fixtures.v1\""));
+    assert!(stdout.contains("\"fixture_summaries\""));
+    assert!(stdout.contains("\"diagnostics\""));
+    assert!(stdout.contains("\"generated_candidates\""));
+
+    let old_path = std::env::temp_dir().join(format!(
+        "polytool-recurrence-bench-old-{}.json",
+        std::process::id()
+    ));
+    let new_path = std::env::temp_dir().join(format!(
+        "polytool-recurrence-bench-new-{}.json",
+        std::process::id()
+    ));
+    fs::write(&old_path, &stdout).expect("write old benchmark JSON");
+    fs::write(&new_path, &stdout).expect("write new benchmark JSON");
+    let old_arg = old_path.to_string_lossy().into_owned();
+    let new_arg = new_path.to_string_lossy().into_owned();
+
+    let compare = run_polytool(&["bench", "compare", &old_arg, &new_arg, "--top", "1"], "");
+    assert!(compare.status.success());
+    let compare_stdout = String::from_utf8(compare.stdout).expect("compare stdout is utf8");
+    assert!(compare_stdout.contains("# fixture_compare\n"));
+    assert!(compare_stdout.contains("01_scalar_geometric"));
+
+    let compare_json = run_polytool(
+        &[
+            "bench", "compare", &old_arg, &new_arg, "--top", "1", "--format", "json",
+        ],
+        "",
+    );
+    assert!(compare_json.status.success());
+    let compare_json_stdout =
+        String::from_utf8(compare_json.stdout).expect("compare JSON stdout is utf8");
+    assert!(compare_json_stdout.contains("\"schema\": \"polynomial-tools.bench.compare.v1\""));
+    assert!(compare_json_stdout.contains("\"worst_regressions\""));
+
+    let _ = fs::remove_file(old_path);
+    let _ = fs::remove_file(new_path);
+}
