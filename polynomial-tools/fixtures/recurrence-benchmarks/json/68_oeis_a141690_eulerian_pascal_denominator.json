@@ -1,0 +1,162 @@
+{
+  "schema": "polynomial-tools.recurrence.v1",
+  "first_index": 1,
+  "initial_polynomials": [
+    [
+      "1",
+      "6",
+      "1"
+    ],
+    [
+      "1",
+      "19",
+      "19",
+      "1"
+    ]
+  ],
+  "recurrence": {
+    "terms": [
+      {
+        "offset": 1,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "1",
+              "1",
+              "0",
+              "0"
+            ],
+            [
+              "-2",
+              "-1",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "-1",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 1,
+        "deriv_order": 1,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "1",
+              "-1",
+              "0"
+            ],
+            [
+              "0",
+              "-1",
+              "1",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 2,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "0",
+              "0",
+              "0"
+            ],
+            [
+              "1",
+              "1",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "1",
+              "1",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 2,
+        "deriv_order": 1,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "0",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "1",
+              "0",
+              "-1"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      }
+    ],
+    "denominator": {
+      "coeffs": [
+        [
+          "1"
+        ],
+        [
+          "-1"
+        ]
+      ]
+    }
+  },
+  "search": {
+    "recurrence_text": "(1 - n) P(n) = (1 - 2n + t - nt - n^2t) P(n-1) + (t - nt - t^2 + nt^2) P'(n-1) + (n + nt + n^2t + n^2t^2) P(n-2) + (nt - nt^3) P'(n-2)",
+    "source_rows": 60,
+    "skip_prefix": 0,
+    "unknowns": 49,
+    "weighted_unknowns": 74,
+    "equations": 1044,
+    "fit_polynomials": 31,
+    "verification_polynomials": 29,
+    "candidates_tried": 42,
+    "options": {
+      "var_deg": 3,
+      "idx_deg": 2,
+      "diff_deg": 1,
+      "rec_len": 2,
+      "homogeneous": true,
+      "inhomo_var_deg": 0,
+      "inhomo_idx_deg": 0,
+      "denom_var_deg": 0,
+      "denom_idx_deg": 1,
+      "alternating_sign": false
+    }
+  }
+}

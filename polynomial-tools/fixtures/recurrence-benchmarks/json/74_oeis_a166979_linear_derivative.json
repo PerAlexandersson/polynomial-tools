@@ -1,0 +1,64 @@
+{
+  "schema": "polynomial-tools.recurrence.v1",
+  "first_index": 1,
+  "initial_polynomials": [
+    [
+      "1",
+      "11",
+      "1"
+    ]
+  ],
+  "recurrence": {
+    "terms": [
+      {
+        "offset": 1,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "1",
+              "1"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 1,
+        "deriv_order": 1,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "9"
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  "search": {
+    "recurrence_text": "P(n) = (1 + t) P(n-1) + 9t P'(n-1)",
+    "source_rows": 60,
+    "skip_prefix": 0,
+    "unknowns": 4,
+    "weighted_unknowns": 6,
+    "equations": 725,
+    "fit_polynomials": 26,
+    "verification_polynomials": 34,
+    "candidates_tried": 2,
+    "options": {
+      "var_deg": 1,
+      "idx_deg": 0,
+      "diff_deg": 1,
+      "rec_len": 1,
+      "homogeneous": true,
+      "inhomo_var_deg": 0,
+      "inhomo_idx_deg": 0,
+      "denom_var_deg": 0,
+      "denom_idx_deg": 0,
+      "alternating_sign": false
+    }
+  }
+}
