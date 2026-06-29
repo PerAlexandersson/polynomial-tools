@@ -206,7 +206,16 @@ fn poly_derivative_once_rational(coeffs: &[BigRational]) -> Vec<BigRational> {
     coeffs[1..]
         .iter()
         .enumerate()
-        .map(|(i, c)| c.clone() * BigRational::from_integer(BigInt::from(i + 1)))
+        .map(|(i, c)| {
+            let factor = BigInt::from(i + 1);
+            if c.denom().is_one() {
+                BigRational::from_integer(c.numer() * factor)
+            } else if factor.is_one() {
+                c.clone()
+            } else {
+                BigRational::new(c.numer() * factor, c.denom().clone())
+            }
+        })
         .collect()
 }
 
@@ -475,23 +484,6 @@ struct ScaledIntegerRecurrence {
     n_degree: usize,
 }
 
-fn rational_poly_has_integer_coeffs(poly: &[BigRational]) -> bool {
-    poly.iter().all(|coeff| coeff.denom().is_one())
-}
-
-fn rational_polys_and_derivs_have_integer_coeffs(
-    polys: &[Vec<BigRational>],
-    derivs: &[Vec<Vec<BigRational>>],
-) -> bool {
-    polys
-        .iter()
-        .all(|poly| rational_poly_has_integer_coeffs(poly))
-        && derivs
-            .iter()
-            .flat_map(|poly_derivs| poly_derivs.iter())
-            .all(|poly| rational_poly_has_integer_coeffs(poly))
-}
-
 fn update_bivar_denominator_lcm(scale: &mut BigInt, poly: &BivarPoly) {
     for coeff in poly.coeffs.iter().flat_map(|row| row.iter()) {
         if !coeff.is_zero() && !coeff.denom().is_one() {
@@ -512,6 +504,16 @@ fn recurrence_denominator_lcm(rec: &Recurrence) -> BigInt {
         update_bivar_denominator_lcm(&mut scale, inhomogeneous);
     }
     scale
+}
+
+fn rational_poly_has_integer_coeffs(poly: &[BigRational]) -> bool {
+    poly.iter().all(|coeff| coeff.denom().is_one())
+}
+
+fn rational_polys_have_integer_coeffs(polys: &[Vec<BigRational>]) -> bool {
+    polys
+        .iter()
+        .all(|poly| rational_poly_has_integer_coeffs(poly))
 }
 
 fn scale_bivar_poly_to_integer(poly: &BivarPoly, scale: &BigInt) -> ScaledIntegerBivarPoly {
@@ -573,13 +575,40 @@ fn bigint_index_powers(n: usize, max_power: usize) -> Vec<BigInt> {
     powers
 }
 
-fn poly_add_integer_poly_scaled_assign(
+fn update_poly_denominator_lcm(scale: &mut BigInt, poly: &[BigRational]) {
+    for coeff in poly {
+        if !coeff.is_zero() && !coeff.denom().is_one() {
+            *scale = lcm(scale.clone(), coeff.denom().clone());
+        }
+    }
+}
+
+fn row_denominator_lcm_for_recurrence(
+    polys: &[Vec<BigRational>],
+    derivs: &[Vec<Vec<BigRational>>],
+    rec: &ScaledIntegerRecurrence,
+    nn: usize,
+) -> Option<BigInt> {
+    let mut scale = BigInt::one();
+    update_poly_denominator_lcm(&mut scale, polys.get(nn - 1)?);
+    for term in &rec.terms {
+        if term.offset == 0 || term.offset >= nn {
+            return None;
+        }
+        let deriv = derivs.get(nn - 1 - term.offset)?.get(term.deriv_order)?;
+        update_poly_denominator_lcm(&mut scale, deriv);
+    }
+    Some(scale)
+}
+
+fn poly_add_rational_poly_scaled_assign(
     target: &mut Vec<BigInt>,
     source: &[BigRational],
-    scale: &BigInt,
+    source_scale: &BigInt,
+    coeff_scale: &BigInt,
     subtract: bool,
 ) {
-    if scale.is_zero() || poly_is_zero_rational(source) {
+    if source_scale.is_zero() || coeff_scale.is_zero() || poly_is_zero_rational(source) {
         return;
     }
     if target.len() < source.len() {
@@ -589,7 +618,11 @@ fn poly_add_integer_poly_scaled_assign(
         if coeff.is_zero() {
             continue;
         }
-        let value = coeff.numer() * scale;
+        let value = if source_scale.is_one() && coeff.denom().is_one() {
+            coeff.numer() * coeff_scale
+        } else {
+            coeff.numer() * (source_scale / coeff.denom()) * coeff_scale
+        };
         if subtract {
             target[idx] -= value;
         } else {
@@ -602,6 +635,7 @@ fn poly_add_scaled_bivar_eval_signed_assign(
     target: &mut Vec<BigInt>,
     poly: &ScaledIntegerBivarPoly,
     n_powers: &[BigInt],
+    source_scale: &BigInt,
     subtract: bool,
 ) {
     let width = poly.coeffs.iter().map(Vec::len).max().unwrap_or(0);
@@ -622,7 +656,11 @@ fn poly_add_scaled_bivar_eval_signed_assign(
             if coeff.is_zero() {
                 continue;
             }
-            let value = coeff * n_power;
+            let value = if source_scale.is_one() {
+                coeff * n_power
+            } else {
+                coeff * n_power * source_scale
+            };
             if subtract {
                 target[j] -= value;
             } else {
@@ -632,11 +670,12 @@ fn poly_add_scaled_bivar_eval_signed_assign(
     }
 }
 
-fn poly_add_scaled_bivar_eval_times_integer_poly_signed_assign(
+fn poly_add_scaled_bivar_eval_times_rational_poly_signed_assign(
     target: &mut Vec<BigInt>,
     coeff_poly: &ScaledIntegerBivarPoly,
     n_powers: &[BigInt],
     source: &[BigRational],
+    source_scale: &BigInt,
     subtract: bool,
 ) {
     if poly_is_zero_rational(source) {
@@ -670,7 +709,11 @@ fn poly_add_scaled_bivar_eval_times_integer_poly_signed_assign(
                 if source_coeff.is_zero() {
                     continue;
                 }
-                let value = &scale * source_coeff.numer();
+                let value = if source_scale.is_one() && source_coeff.denom().is_one() {
+                    &scale * source_coeff.numer()
+                } else {
+                    &scale * source_coeff.numer() * (source_scale / source_coeff.denom())
+                };
                 if subtract {
                     target[j + k] -= value;
                 } else {
@@ -685,11 +728,12 @@ fn integer_residual_is_zero(residual: &[BigInt]) -> bool {
     residual.iter().all(|coeff| coeff.is_zero())
 }
 
-fn scaled_integer_recurrence_holds_at_with_derivs(
+fn scaled_recurrence_holds_at_with_derivs_and_source_scale(
     polys: &[Vec<BigRational>],
     derivs: &[Vec<Vec<BigRational>>],
     rec: &ScaledIntegerRecurrence,
     nn: usize,
+    source_scale: &BigInt,
 ) -> bool {
     if nn == 0 || nn > polys.len() || nn > derivs.len() {
         return false;
@@ -699,15 +743,22 @@ fn scaled_integer_recurrence_holds_at_with_derivs(
     let current = &polys[nn - 1];
     let mut residual = vec![BigInt::zero()];
     if let Some(denom) = &rec.denominator {
-        poly_add_scaled_bivar_eval_times_integer_poly_signed_assign(
+        poly_add_scaled_bivar_eval_times_rational_poly_signed_assign(
             &mut residual,
             denom,
             &n_powers,
             current,
+            source_scale,
             false,
         );
     } else {
-        poly_add_integer_poly_scaled_assign(&mut residual, current, &rec.scale, false);
+        poly_add_rational_poly_scaled_assign(
+            &mut residual,
+            current,
+            source_scale,
+            &rec.scale,
+            false,
+        );
     }
 
     for term in &rec.terms {
@@ -725,26 +776,55 @@ fn scaled_integer_recurrence_holds_at_with_derivs(
             RecurrenceSign::AlternatingN if nn % 2 == 1 => false,
             RecurrenceSign::AlternatingN => true,
         };
-        poly_add_scaled_bivar_eval_times_integer_poly_signed_assign(
+        poly_add_scaled_bivar_eval_times_rational_poly_signed_assign(
             &mut residual,
             &term.coeff,
             &n_powers,
             deriv,
+            source_scale,
             subtract,
         );
     }
 
     if let Some(inhomogeneous) = &rec.inhomogeneous {
-        poly_add_scaled_bivar_eval_signed_assign(&mut residual, inhomogeneous, &n_powers, true);
+        poly_add_scaled_bivar_eval_signed_assign(
+            &mut residual,
+            inhomogeneous,
+            &n_powers,
+            source_scale,
+            true,
+        );
     }
 
     integer_residual_is_zero(&residual)
+}
+
+fn scaled_integer_recurrence_holds_at_with_derivs(
+    polys: &[Vec<BigRational>],
+    derivs: &[Vec<Vec<BigRational>>],
+    rec: &ScaledIntegerRecurrence,
+    nn: usize,
+) -> bool {
+    scaled_recurrence_holds_at_with_derivs_and_source_scale(polys, derivs, rec, nn, &BigInt::one())
+}
+
+fn scaled_rational_recurrence_holds_at_with_derivs(
+    polys: &[Vec<BigRational>],
+    derivs: &[Vec<Vec<BigRational>>],
+    rec: &ScaledIntegerRecurrence,
+    nn: usize,
+) -> bool {
+    let Some(source_scale) = row_denominator_lcm_for_recurrence(polys, derivs, rec, nn) else {
+        return false;
+    };
+    scaled_recurrence_holds_at_with_derivs_and_source_scale(polys, derivs, rec, nn, &source_scale)
 }
 
 use crate::linalg;
 
 const MODULAR_PREFILTER_PRIMES: [i64; 3] = [1_000_000_007, 1_000_000_009, 998_244_353];
 const MODULAR_PREFILTER_INCONSISTENT_PRIMES_TO_REJECT: usize = 2;
+const MODULAR_PREFILTER_PRECOMPUTED_PRIMES: usize = 2;
 // Full-rank modular fits first check one held-out row, which cheaply rejects
 // many false prefix fits.  A full held-out sweep is reserved for larger spaces.
 const MODULAR_PREFILTER_FIRST_TAIL_VERIFY_MIN_UNKNOWNS: usize = 1;
@@ -883,6 +963,36 @@ fn rational_derivs_mod_prime(
                         .collect()
                 })
                 .collect()
+        })
+        .collect()
+}
+
+fn mod_poly_derivative_once(coeffs: &[i64], modulus: i64) -> Vec<i64> {
+    if coeffs.len() <= 1 {
+        return vec![0];
+    }
+    coeffs[1..]
+        .iter()
+        .enumerate()
+        .map(|(idx, &coeff)| mod_mul(coeff, (idx + 1) as i64, modulus))
+        .collect()
+}
+
+fn modular_derivatives_up_to(
+    polys_mod: &[Vec<i64>],
+    modulus: i64,
+    max_diff_deg: usize,
+) -> Vec<Vec<Vec<i64>>> {
+    polys_mod
+        .iter()
+        .map(|poly| {
+            let mut derivatives = Vec::with_capacity(max_diff_deg + 1);
+            derivatives.push(poly.clone());
+            for d in 1..=max_diff_deg {
+                let next = mod_poly_derivative_once(&derivatives[d - 1], modulus);
+                derivatives.push(next);
+            }
+            derivatives
         })
         .collect()
 }
@@ -1287,16 +1397,13 @@ struct ModularPrefilterCache {
 }
 
 impl ModularPrefilterCache {
-    fn new(
-        polys: &[Vec<BigRational>],
-        derivs: &[Vec<Vec<BigRational>>],
-        max_diff_deg: usize,
-    ) -> Self {
+    fn new(polys: &[Vec<BigRational>], max_diff_deg: usize) -> Self {
         let primes = MODULAR_PREFILTER_PRIMES
             .iter()
+            .take(MODULAR_PREFILTER_PRECOMPUTED_PRIMES)
             .filter_map(|&modulus| {
                 let polys_mod = rational_polys_mod_prime(polys, modulus)?;
-                let derivs_mod = rational_derivs_mod_prime(derivs, modulus, max_diff_deg)?;
+                let derivs_mod = modular_derivatives_up_to(&polys_mod, modulus, max_diff_deg);
                 Some(ModularPrefilterPrimeImages {
                     modulus,
                     polys: polys_mod,
@@ -3347,63 +3454,6 @@ fn recurrence_holds_at_rational_with_degree(
     poly_is_zero_rational(&residual)
 }
 
-fn recurrence_holds_at_rational_with_derivs_and_degree(
-    polys: &[Vec<BigRational>],
-    derivs: &[Vec<Vec<BigRational>>],
-    rec: &Recurrence,
-    nn: usize,
-    rec_n_degree: usize,
-) -> bool {
-    if nn == 0 || nn > polys.len() || nn > derivs.len() {
-        return false;
-    }
-
-    let n_powers = rational_index_powers(nn, rec_n_degree);
-    let current = &polys[nn - 1];
-    let mut residual = rational_zero_poly();
-    if let Some(denom) = &rec.denominator {
-        poly_add_bivar_eval_times_poly_signed_assign(
-            &mut residual,
-            denom,
-            &n_powers,
-            current,
-            false,
-        );
-    } else {
-        poly_add_signed_assign(&mut residual, current, false);
-    }
-
-    for term in &rec.terms {
-        if term.offset == 0 || term.offset >= nn {
-            return false;
-        }
-        let Some(poly_derivs) = derivs.get(nn - 1 - term.offset) else {
-            return false;
-        };
-        let Some(deriv) = poly_derivs.get(term.deriv_order) else {
-            return false;
-        };
-        let subtract = match term.sign {
-            RecurrenceSign::None => true,
-            RecurrenceSign::AlternatingN if nn % 2 == 1 => false,
-            RecurrenceSign::AlternatingN => true,
-        };
-        poly_add_bivar_eval_times_poly_signed_assign(
-            &mut residual,
-            &term.coeff,
-            &n_powers,
-            deriv,
-            subtract,
-        );
-    }
-
-    if let Some(inhomogeneous) = &rec.inhomogeneous {
-        poly_add_bivar_eval_signed_assign(&mut residual, inhomogeneous, &n_powers, true);
-    }
-
-    poly_is_zero_rational(&residual)
-}
-
 /// Check whether a recurrence holds for all admissible rows from `start_nn`.
 ///
 /// The row index is 1-based. Rows before `rec_len + 1` are skipped because
@@ -3428,16 +3478,14 @@ fn recurrence_holds_from_rational_with_derivs(
     start_nn: usize,
 ) -> bool {
     let first = start_nn.max(rec_len + 1);
-    if rational_polys_and_derivs_have_integer_coeffs(polys, derivs) {
-        let scaled = scale_recurrence_to_integer(rec);
+    let scaled = scale_recurrence_to_integer(rec);
+    if rational_polys_have_integer_coeffs(polys) {
         return (first..=polys.len())
             .all(|nn| scaled_integer_recurrence_holds_at_with_derivs(polys, derivs, &scaled, nn));
     }
 
-    let rec_n_degree = recurrence_n_degree(rec);
-    (first..=polys.len()).all(|nn| {
-        recurrence_holds_at_rational_with_derivs_and_degree(polys, derivs, rec, nn, rec_n_degree)
-    })
+    (first..=polys.len())
+        .all(|nn| scaled_rational_recurrence_holds_at_with_derivs(polys, derivs, &scaled, nn))
 }
 
 /// Check whether a recurrence holds on every admissible row.
@@ -3950,11 +3998,7 @@ pub fn find_recurrence_adaptive_rational(
     diagnostics.derivative_precompute_ms += elapsed_ms(timer);
     let timer = Instant::now();
     let modular_cache = if search.modular_prefilter {
-        Some(ModularPrefilterCache::new(
-            polys,
-            &derivs,
-            search.max_diff_deg,
-        ))
+        Some(ModularPrefilterCache::new(polys, search.max_diff_deg))
     } else {
         None
     };
@@ -4501,8 +4545,7 @@ mod tests {
     #[test]
     fn modular_prefilter_rejects_rank_deficient_prefix_with_bad_heldout_row() {
         let polys = i64_polys_to_rational(&[vec![0], vec![0], vec![0], vec![1]]);
-        let derivs = rational_derivatives_up_to(&polys, 0);
-        let cache = ModularPrefilterCache::new(&polys, &derivs, 0);
+        let cache = ModularPrefilterCache::new(&polys, 0);
         let opts = RecurrenceOptions {
             var_deg: 0,
             idx_deg: 0,
