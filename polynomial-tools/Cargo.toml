@@ -1,6 +1,6 @@
 [package]
 name = "polynomial-tools"
-version = "0.2.1-rc.4"
+version = "0.2.1-rc.5"
 edition = "2021"
 license = "MIT"
 authors = ["Per Alexandersson <per.w.alexandersson@gmail.com>"]

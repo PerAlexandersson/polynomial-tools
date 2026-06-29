@@ -481,3 +481,36 @@ pub fn parse_and_format(input: &str) -> String {
     }
     serde_json::to_string(&results).unwrap()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::find_recurrence;
+    use serde_json::Value;
+
+    const EULERIAN_INPUT: &str = "\
+1
+1, 1
+1, 4, 1
+1, 11, 11, 1
+1, 26, 66, 26, 1
+1, 57, 302, 302, 57, 1
+1, 120, 1191, 2416, 1191, 120, 1
+1, 247, 4293, 15619, 15619, 4293, 247, 1
+1, 502, 14608, 88234, 156190, 88234, 14608, 502, 1
+1, 1013, 47840, 455192, 1310354, 1310354, 455192, 47840, 1013, 1
+1, 2036, 152637, 2203488, 9738114, 15724248, 9738114, 2203488, 152637, 2036, 1
+1, 4083, 478271, 10187685, 66318474, 162512286, 162512286, 66318474, 10187685, 478271, 4083, 1
+1, 8178, 1479726, 45533450, 423281535, 1505621508, 2275172004, 1505621508, 423281535, 45533450, 1479726, 8178, 1
+1, 16369, 4537314, 198410786, 2571742175, 12843262863, 27971176092, 27971176092, 12843262863, 2571742175, 198410786, 4537314, 16369, 1";
+
+    #[test]
+    fn recurrence_export_handles_eulerian_example() {
+        let raw = find_recurrence(EULERIAN_INPUT, 3, 2, 2, 1, false, false, false);
+        let value: Value = serde_json::from_str(&raw).expect("recurrence result is valid JSON");
+        assert_eq!(value["found"], true);
+        assert_eq!(
+            value["recurrence"],
+            "P(n) = (1 - t + nt) P(n-1) + (t - t^2) P'(n-1)"
+        );
+    }
+}
