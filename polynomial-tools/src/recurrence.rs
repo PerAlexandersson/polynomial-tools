@@ -749,7 +749,7 @@ const MODULAR_PREFILTER_INCONSISTENT_PRIMES_TO_REJECT: usize = 2;
 // many false prefix fits.  A full held-out sweep is reserved for larger spaces.
 const MODULAR_PREFILTER_FIRST_TAIL_VERIFY_MIN_UNKNOWNS: usize = 1;
 const MODULAR_PREFILTER_TAIL_VERIFY_MIN_UNKNOWNS: usize = 128;
-const MODULAR_LIFT_RANK_DEFICIENT_MIN_UNKNOWNS: usize = 64;
+const MODULAR_LIFT_RANK_DEFICIENT_MIN_UNKNOWNS: usize = 16;
 
 fn mod_norm(value: i64, modulus: i64) -> i64 {
     value.rem_euclid(modulus)
@@ -1492,6 +1492,81 @@ fn centered_modular_rational(residue: u64, modulus: i64) -> BigRational {
     BigRational::from_integer(centered)
 }
 
+fn gcd_i128(mut lhs: i128, mut rhs: i128) -> i128 {
+    lhs = lhs.abs();
+    rhs = rhs.abs();
+    while rhs != 0 {
+        let rem = lhs % rhs;
+        lhs = rhs;
+        rhs = rem;
+    }
+    lhs
+}
+
+fn isqrt_i128(value: i128) -> i128 {
+    if value <= 0 {
+        return 0;
+    }
+    let mut lo = 1_i128;
+    let mut hi = value;
+    let mut ans = 0_i128;
+    while lo <= hi {
+        let mid = lo + (hi - lo) / 2;
+        if mid <= value / mid {
+            ans = mid;
+            lo = mid + 1;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    ans
+}
+
+fn rational_reconstruction_mod_prime(residue: u64, modulus: i64) -> Option<BigRational> {
+    let modulus_i = modulus as i128;
+    let bound = isqrt_i128(modulus_i / 2);
+    let mut u = (1_i128, 0_i128, modulus_i);
+    let mut v = (0_i128, 1_i128, residue as i128);
+
+    while v.2.abs() > bound {
+        if v.2 == 0 {
+            return None;
+        }
+        let q = u.2 / v.2;
+        let next = (u.0 - q * v.0, u.1 - q * v.1, u.2 - q * v.2);
+        u = v;
+        v = next;
+    }
+
+    let mut numerator = v.2;
+    let mut denominator = v.1;
+    if denominator == 0 || denominator.abs() > bound {
+        return None;
+    }
+    if gcd_i128(numerator, denominator) != 1 {
+        return None;
+    }
+    if denominator < 0 {
+        numerator = -numerator;
+        denominator = -denominator;
+    }
+
+    let denominator_inv = mod_inv(denominator as i64, modulus)?;
+    let reconstructed = mod_mul(
+        mod_norm(numerator as i64, modulus),
+        denominator_inv,
+        modulus,
+    );
+    if reconstructed != residue as i64 {
+        return None;
+    }
+
+    Some(BigRational::new(
+        BigInt::from(numerator),
+        BigInt::from(denominator),
+    ))
+}
+
 fn recurrence_from_solution_vector(
     solution: &[BigRational],
     opts: &RecurrenceOptions,
@@ -1614,13 +1689,31 @@ fn recurrence_from_centered_modular_solution(
     recurrence_from_solution_vector(&solution, opts)
 }
 
+fn recurrence_from_reconstructed_modular_solution(
+    candidate: &ModularCandidateSolution,
+    opts: &RecurrenceOptions,
+) -> Option<Recurrence> {
+    let solution = candidate
+        .solution
+        .iter()
+        .map(|&residue| rational_reconstruction_mod_prime(residue, candidate.modulus))
+        .collect::<Option<Vec<_>>>()?;
+    recurrence_from_solution_vector(&solution, opts)
+}
+
 fn verified_recurrence_from_modular_lift(
     polys: &[Vec<BigRational>],
     derivs: &[Vec<Vec<BigRational>>],
     opts: &RecurrenceOptions,
     candidate: &ModularCandidateSolution,
 ) -> Option<Recurrence> {
-    let rec = recurrence_from_centered_modular_solution(candidate, opts)?;
+    if let Some(rec) = recurrence_from_centered_modular_solution(candidate, opts) {
+        if recurrence_holds_rational_with_derivs(polys, derivs, &rec, opts.rec_len) {
+            return Some(rec);
+        }
+    }
+
+    let rec = recurrence_from_reconstructed_modular_solution(candidate, opts)?;
     recurrence_holds_rational_with_derivs(polys, derivs, &rec, opts.rec_len).then_some(rec)
 }
 
@@ -4986,6 +5079,34 @@ mod tests {
         assert_eq!(result.diagnostics.modular_lift_attempts, 1);
         assert_eq!(result.diagnostics.modular_lift_successes, 1);
         assert_eq!(result.diagnostics.exact_solve_attempts, 0);
+    }
+
+    #[test]
+    fn modular_lift_reconstructs_fractional_solution() {
+        let polys = i64_polys_to_rational(&[vec![2], vec![2], vec![2], vec![2], vec![2]]);
+        let derivs = rational_derivatives_up_to(&polys, 0);
+        let opts = RecurrenceOptions {
+            var_deg: 0,
+            idx_deg: 0,
+            diff_deg: 0,
+            rec_len: 1,
+            homogeneous: false,
+            inhomo_var_deg: 0,
+            inhomo_idx_deg: 0,
+            ..Default::default()
+        };
+        let modulus = MODULAR_PREFILTER_PRIMES[0];
+        let candidate = ModularCandidateSolution {
+            modulus,
+            solution: vec![
+                rational_mod_prime(&br(1, 2), modulus).unwrap() as u64,
+                rational_mod_prime(&BigRational::one(), modulus).unwrap() as u64,
+            ],
+            full_rank: true,
+        };
+        let rec = verified_recurrence_from_modular_lift(&polys, &derivs, &opts, &candidate)
+            .expect("fractional modular solution should lift");
+        assert_eq!(format!("{rec}"), "P(n) = 1/2 P(n-1) + 1");
     }
 
     #[test]
