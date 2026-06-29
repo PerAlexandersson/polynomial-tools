@@ -42,3 +42,76 @@ fn gamma_expansion_json_accepts_bigint_coefficients() {
     assert!(stdout.contains("\"gamma\":[\"1\",\"99999999999999999998\"]"));
     assert!(stdout.contains("\"expansion\":\"(1+t)^2 + 99999999999999999998 t\""));
 }
+
+#[test]
+fn sequence_json_generates_bigint_coefficients() {
+    let output = run_polytool(&["sequence", "chebyshev-t", "64", "--json"], "");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).expect("stdout is utf8");
+    assert!(stdout.contains("\"degree\":64"));
+    assert!(stdout.contains("\"9223372036854775808\""));
+}
+
+#[test]
+fn resultant_and_discriminant_accept_bigint_coefficients() {
+    let resultant = run_polytool(
+        &["resultant"],
+        "-100000000000000000000,1\n-100000000000000000001,1\n",
+    );
+    assert!(resultant.status.success());
+    let stdout = String::from_utf8(resultant.stdout).expect("stdout is utf8");
+    assert!(stdout.contains("= -1"));
+
+    let discriminant = run_polytool(&["discriminant"], "1,0,1000000000000000000000000000000\n");
+    assert!(discriminant.status.success());
+    let stdout = String::from_utf8(discriminant.stdout).expect("stdout is utf8");
+    assert!(stdout.contains("-4000000000000000000000000000000"));
+}
+
+#[test]
+fn bench_interlacing_reports_tsv() {
+    let output = run_polytool(
+        &[
+            "bench",
+            "interlacing",
+            "--sequence",
+            "eulerian",
+            "--max-n",
+            "4",
+            "--repeat",
+            "1",
+        ],
+        "",
+    );
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).expect("stdout is utf8");
+    assert!(
+        stdout.starts_with("sequence\tleft_index\tright_index\tdegree\trepeat\tavg_us\tresult\n")
+    );
+    assert!(stdout.contains("eulerian\t"));
+}
+
+#[test]
+fn bench_recurrence_fixture_reports_tsv() {
+    let output = run_polytool(
+        &[
+            "bench",
+            "recurrence-fixtures",
+            "--only",
+            "01_scalar_geometric",
+            "--repeat",
+            "1",
+        ],
+        "",
+    );
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).expect("stdout is utf8");
+    assert!(stdout.starts_with(
+        "slug\trun\tfound\telapsed_ms\tcandidates\tunknowns\tweighted\tfit_rows\tverify_rows\trecurrence\n"
+    ));
+    assert!(stdout.contains("01_scalar_geometric\t1\ttrue\t"));
+    assert!(stdout.contains("P(n) = 2 P(n-1)"));
+}

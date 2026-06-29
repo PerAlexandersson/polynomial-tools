@@ -8,7 +8,10 @@ use polynomial_tools::recurrence::BigRational as RecurrenceBigRational;
 use polynomial_tools::recurrence::*;
 use polynomial_tools::*;
 use std::fs;
+use std::hint::black_box;
 use std::io::{self, Read};
+use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 fn is_help_arg(arg: &str) -> bool {
     matches!(arg, "-h" | "--help" | "help")
@@ -51,17 +54,6 @@ fn json_escape(input: &str) -> String {
 
 fn json_string(input: &str) -> String {
     format!("\"{}\"", json_escape(input))
-}
-
-fn json_i64_vec(values: &[i64]) -> String {
-    format!(
-        "[{}]",
-        values
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>()
-            .join(",")
-    )
 }
 
 fn json_bigint_vec(values: &[BigInt]) -> String {
@@ -144,6 +136,7 @@ fn print_top_level_help() {
     println!("  recurrence        Search for a polynomial recurrence");
     println!("  recurrence-generate");
     println!("                    Generate coefficient rows from recurrence JSON");
+    println!("  bench             Run built-in timing suites");
     println!("  bkw-scout         Scout BKW equal-modulus loci for a recurrence symbol");
     println!("  resultant         Compute the resultant of two polynomials");
     println!("  discriminant      Compute the discriminant of each polynomial");
@@ -276,7 +269,7 @@ fn print_sequence_help() {
     println!("  --json           Emit machine-readable JSON");
     println!("  -h, --help       Print this help text");
     println!();
-    println!("Note: generated coefficients currently must fit in i64.");
+    println!("Note: generated coefficients use arbitrary-size integers.");
     println!();
     println!("Example:");
     println!("  polytool sequence eulerian 5");
@@ -304,8 +297,8 @@ fn print_family_check_help() {
     println!("  --json                        Emit machine-readable JSON");
     println!("  -h, --help                    Print this help text");
     println!();
-    println!("Note: properties and interlacing accept arbitrary-size integer coefficients;");
-    println!("      recurrence search currently requires coefficients that fit in i64.");
+    println!("Note: non-recurrence checks accept arbitrary-size integer coefficients;");
+    println!("      family-check --recurrence currently requires coefficients that fit in i64.");
 }
 
 fn print_stapledon_help() {
@@ -317,7 +310,7 @@ fn print_stapledon_help() {
     println!();
     print_coefficient_input_help();
     println!();
-    println!("Note: coefficients currently must fit in i64.");
+    println!("Note: accepts arbitrary-size integer coefficients.");
 }
 
 fn print_command_help(command: &str) -> bool {
@@ -402,13 +395,14 @@ fn print_command_help(command: &str) -> bool {
         "sequence" => print_sequence_help(),
         "recurrence" => print_recurrence_help(),
         "recurrence-generate" => print_recurrence_generate_help(),
+        "bench" => print_bench_help(),
         "bkw-scout" => bkw_scout_usage(),
         "resultant" => print_stdin_command_help(
             "resultant",
             "Compute the resultant of the first two input polynomials.",
             &[
                 "Note:",
-                "  Input coefficients currently must fit in i64; the exact output may be larger.",
+                "  Accepts arbitrary-size integer coefficients.",
                 "",
                 "Example:",
                 "  printf '1,0,1\\n-1,1\\n' | polytool resultant",
@@ -419,7 +413,7 @@ fn print_command_help(command: &str) -> bool {
             "Compute the discriminant of each input polynomial.",
             &[
                 "Note:",
-                "  Input coefficients currently must fit in i64; the exact output may be larger.",
+                "  Accepts arbitrary-size integer coefficients.",
                 "",
                 "Example:",
                 "  echo '1, 0, 1' | polytool discriminant",
@@ -433,7 +427,7 @@ fn print_command_help(command: &str) -> bool {
                 "  --json    Emit machine-readable JSON",
                 "",
                 "Note:",
-                "  h*-vector entries currently must fit in i64.",
+                "  Accepts arbitrary-size integer h*-vector entries.",
                 "",
                 "Example:",
                 "  echo '1, 2, 1' | polytool hstar-to-ehrhart",
@@ -449,7 +443,7 @@ fn print_command_help(command: &str) -> bool {
                 "  --json    Emit machine-readable JSON",
                 "",
                 "Note:",
-                "  Resulting h*-vector entries currently must fit in i64.",
+                "  Returns arbitrary-size integer h*-vector entries.",
                 "",
                 "Example:",
                 "  echo '1, 2, 2' | polytool ehrhart-to-hstar",
@@ -459,21 +453,6 @@ fn print_command_help(command: &str) -> bool {
         _ => return false,
     }
     true
-}
-
-fn read_polys() -> Vec<Vec<i64>> {
-    let mut input = String::new();
-    io::stdin().read_to_string(&mut input).unwrap();
-    parse_polynomials(&input)
-        .into_iter()
-        .filter_map(|r| match r {
-            Ok(p) => Some(p),
-            Err(e) => {
-                eprintln!("Warning: {}", e);
-                None
-            }
-        })
-        .collect()
 }
 
 fn read_polys_bigint() -> Vec<Vec<BigInt>> {
@@ -573,11 +552,6 @@ fn strip_coeff_list_brackets(s: &str) -> &str {
     } else {
         s
     }
-}
-
-fn strip_trailing_zeros(coeffs: &[i64]) -> &[i64] {
-    let end = coeffs.iter().rposition(|&c| c != 0).map_or(0, |i| i + 1);
-    &coeffs[..end]
 }
 
 fn strip_trailing_zeros_bigint(coeffs: &[BigInt]) -> &[BigInt] {
@@ -1179,14 +1153,16 @@ impl SequenceKind {
         }
     }
 
-    fn polynomials(self, max_n: usize) -> Vec<Vec<i64>> {
+    fn polynomials(self, max_n: usize) -> Vec<Vec<BigInt>> {
         match self {
-            Self::Eulerian => polynomial_tools::sequences::eulerian_polynomials(max_n),
-            Self::Narayana => polynomial_tools::sequences::narayana_polynomials(max_n),
-            Self::TypeBEulerian => polynomial_tools::sequences::type_b_eulerian_polynomials(max_n),
-            Self::ChebyshevT => polynomial_tools::sequences::chebyshev_polynomials_t(max_n),
-            Self::ChebyshevU => polynomial_tools::sequences::chebyshev_polynomials_u(max_n),
-            Self::Hermite => polynomial_tools::sequences::hermite_polynomials(max_n),
+            Self::Eulerian => polynomial_tools::sequences::eulerian_polynomials_bigint(max_n),
+            Self::Narayana => polynomial_tools::sequences::narayana_polynomials_bigint(max_n),
+            Self::TypeBEulerian => {
+                polynomial_tools::sequences::type_b_eulerian_polynomials_bigint(max_n)
+            }
+            Self::ChebyshevT => polynomial_tools::sequences::chebyshev_polynomials_t_bigint(max_n),
+            Self::ChebyshevU => polynomial_tools::sequences::chebyshev_polynomials_u_bigint(max_n),
+            Self::Hermite => polynomial_tools::sequences::hermite_polynomials_bigint(max_n),
         }
     }
 
@@ -1233,15 +1209,15 @@ fn cmd_sequence(args: &[String]) {
             .iter()
             .enumerate()
             .map(|(index, coeffs)| {
-                let c = strip_trailing_zeros(coeffs);
+                let c = strip_trailing_zeros_bigint(coeffs);
                 format!(
                     "{{\"index\":{},\"label\":{},\"polynomial\":{},\"coefficients\":{},\
                      \"degree\":{}}}",
                     index,
                     json_string(&kind.label(index)),
-                    json_string(&format_poly(c)),
-                    json_i64_vec(c),
-                    polynomial_degree(c)
+                    json_string(&format_poly_bigint_coeffs(c)),
+                    json_bigint_vec(c),
+                    polynomial_degree_bigint(c)
                 )
             })
             .collect::<Vec<_>>()
@@ -1255,8 +1231,8 @@ fn cmd_sequence(args: &[String]) {
         return;
     }
     for (index, coeffs) in polynomials.iter().enumerate() {
-        let c = strip_trailing_zeros(coeffs);
-        println!("{} = {}", kind.label(index), format_poly(c));
+        let c = strip_trailing_zeros_bigint(coeffs);
+        println!("{} = {}", kind.label(index), format_poly_bigint_coeffs(c));
     }
 }
 
@@ -1680,26 +1656,394 @@ fn cmd_recurrence_generate(args: &[String]) {
     }
 }
 
+fn print_bench_help() {
+    println!("Usage:");
+    println!("  polytool bench recurrence-fixtures [options]");
+    println!("  polytool bench interlacing [options]");
+    println!("  polytool bench --help");
+    println!();
+    println!("Run built-in timing suites and print tab-separated results.");
+    println!();
+    println!("Subcommands:");
+    println!("  recurrence-fixtures   Time adaptive recurrence search on fixture rows");
+    println!("  interlacing           Time consecutive interlacing checks on a sequence");
+    println!();
+    println!("Recurrence fixture options:");
+    println!("  --base <dir>              Fixture directory containing manifest.tsv");
+    println!("  --only <substring>        Run only fixture slugs containing substring");
+    println!("  --repeat <n>              Repeat each fixture n times (default: 1)");
+    println!("  --no-modular-prefilter    Disable modular recurrence prefilter");
+    println!();
+    println!("Interlacing options:");
+    println!("  --sequence <name>         Sequence name (default: eulerian)");
+    println!("  --max-n <n>               Maximum n/index to generate (default: 20)");
+    println!("  --repeat <n>              Repeat each pair n times (default: 3)");
+}
+
+#[derive(Debug)]
+struct BenchRecurrenceOptions {
+    base: PathBuf,
+    repeat: usize,
+    modular_prefilter: bool,
+    only: Option<String>,
+}
+
+impl Default for BenchRecurrenceOptions {
+    fn default() -> Self {
+        Self {
+            base: Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("fixtures")
+                .join("recurrence-benchmarks"),
+            repeat: 1,
+            modular_prefilter: true,
+            only: None,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct RecurrenceFixtureManifestRow {
+    slug: String,
+    suggested_args: String,
+    rows_file: String,
+}
+
+fn cmd_bench(args: &[String]) {
+    let Some((subcommand, rest)) = args.split_first() else {
+        print_bench_help();
+        std::process::exit(1);
+    };
+    match subcommand.as_str() {
+        "recurrence-fixtures" | "recurrence" => cmd_bench_recurrence_fixtures(rest),
+        "interlacing" => cmd_bench_interlacing(rest),
+        _ => {
+            eprintln!("unknown bench subcommand: {subcommand}");
+            print_bench_help();
+            std::process::exit(1);
+        }
+    }
+}
+
+fn parse_bench_recurrence_options(args: &[String]) -> Result<BenchRecurrenceOptions, String> {
+    let mut options = BenchRecurrenceOptions::default();
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--base" => {
+                i += 1;
+                let value = args
+                    .get(i)
+                    .ok_or_else(|| "--base expects a directory".to_string())?;
+                options.base = PathBuf::from(value);
+            }
+            "--only" => {
+                i += 1;
+                let value = args
+                    .get(i)
+                    .ok_or_else(|| "--only expects a substring".to_string())?;
+                options.only = Some(value.clone());
+            }
+            "--repeat" => {
+                i += 1;
+                let value = args
+                    .get(i)
+                    .ok_or_else(|| "--repeat expects a positive integer".to_string())?;
+                options.repeat = value
+                    .parse::<usize>()
+                    .map_err(|_| format!("--repeat expects a positive integer, got '{value}'"))?
+                    .max(1);
+            }
+            "--no-modular-prefilter" => options.modular_prefilter = false,
+            other => return Err(format!("unknown recurrence benchmark option: {other}")),
+        }
+        i += 1;
+    }
+    Ok(options)
+}
+
+fn parse_recurrence_fixture_manifest(
+    base: &Path,
+) -> Result<Vec<RecurrenceFixtureManifestRow>, String> {
+    let manifest_path = base.join("manifest.tsv");
+    let manifest = fs::read_to_string(&manifest_path)
+        .map_err(|e| format!("failed to read `{}`: {e}", manifest_path.display()))?;
+    manifest
+        .lines()
+        .skip(1)
+        .map(|line| {
+            let cols = line.split('\t').collect::<Vec<_>>();
+            if cols.len() != 7 {
+                return Err(format!("manifest row should have 7 columns: {line}"));
+            }
+            Ok(RecurrenceFixtureManifestRow {
+                slug: cols[0].to_string(),
+                suggested_args: cols[3].to_string(),
+                rows_file: cols[5].to_string(),
+            })
+        })
+        .collect()
+}
+
+fn read_recurrence_fixture_rows(path: &Path) -> Result<Vec<Vec<RecurrenceBigRational>>, String> {
+    let input = fs::read_to_string(path)
+        .map_err(|e| format!("failed to read `{}`: {e}", path.display()))?;
+    input
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| {
+            line.split(',')
+                .map(|coeff| {
+                    parse_rational_coeff(coeff.trim())
+                        .map_err(|e| format!("failed to parse `{}`: {e}", line.trim()))
+                })
+                .collect()
+        })
+        .collect()
+}
+
+fn parse_fixture_search_options(
+    suggested_args: &str,
+    modular_prefilter: bool,
+) -> Result<AdaptiveSearchOptions, String> {
+    let mut search = AdaptiveSearchOptions {
+        modular_prefilter,
+        ..Default::default()
+    };
+    let mut args = suggested_args.split_whitespace();
+    while let Some(arg) = args.next() {
+        match arg {
+            "--skip-prefix" => search.skip_prefix = parse_fixture_usize(arg, args.next())?,
+            "--min-rec-len" => search.min_rec_len = parse_fixture_usize(arg, args.next())?,
+            "--max-rec-len" => search.max_rec_len = parse_fixture_usize(arg, args.next())?,
+            "--min-var-deg" => search.min_var_deg = parse_fixture_usize(arg, args.next())?,
+            "--max-var-deg" => search.max_var_deg = parse_fixture_usize(arg, args.next())?,
+            "--min-idx-deg" => search.min_idx_deg = parse_fixture_usize(arg, args.next())?,
+            "--max-idx-deg" => search.max_idx_deg = parse_fixture_usize(arg, args.next())?,
+            "--min-diff-deg" => search.min_diff_deg = parse_fixture_usize(arg, args.next())?,
+            "--max-diff-deg" => search.max_diff_deg = parse_fixture_usize(arg, args.next())?,
+            "--inhomogeneous" => search.try_inhomogeneous = true,
+            "--min-inhomo-var-deg" => {
+                search.min_inhomo_var_deg = parse_fixture_usize(arg, args.next())?;
+            }
+            "--max-inhomo-var-deg" => {
+                search.max_inhomo_var_deg = parse_fixture_usize(arg, args.next())?;
+            }
+            "--min-inhomo-idx-deg" => {
+                search.min_inhomo_idx_deg = parse_fixture_usize(arg, args.next())?;
+            }
+            "--max-inhomo-idx-deg" => {
+                search.max_inhomo_idx_deg = parse_fixture_usize(arg, args.next())?;
+            }
+            "--denominator" | "--try-denominator" => search.try_denominator = true,
+            "--max-denom-var-deg" => {
+                search.try_denominator = true;
+                search.max_denom_var_deg = parse_fixture_usize(arg, args.next())?;
+            }
+            "--max-denom-idx-deg" => {
+                search.try_denominator = true;
+                search.max_denom_idx_deg = parse_fixture_usize(arg, args.next())?;
+            }
+            "--alternating-sign" => search.try_alternating_sign = true,
+            "--min-margin" => search.min_margin = parse_fixture_usize(arg, args.next())?,
+            "--fit-extra-rows" => search.fit_extra_rows = parse_fixture_usize(arg, args.next())?,
+            "--no-verify" => search.no_verify = true,
+            other => return Err(format!("unsupported fixture search option `{other}`")),
+        }
+    }
+    Ok(search)
+}
+
+fn parse_fixture_usize(flag: &str, value: Option<&str>) -> Result<usize, String> {
+    let value = value.ok_or_else(|| format!("{flag} expects a value"))?;
+    value
+        .parse()
+        .map_err(|_| format!("{flag} expects a nonnegative integer, got '{value}'"))
+}
+
+fn cmd_bench_recurrence_fixtures(args: &[String]) {
+    let options = match parse_bench_recurrence_options(args) {
+        Ok(options) => options,
+        Err(error) => {
+            eprintln!("{error}");
+            print_bench_help();
+            std::process::exit(1);
+        }
+    };
+    let manifest = match parse_recurrence_fixture_manifest(&options.base) {
+        Ok(manifest) => manifest,
+        Err(error) => {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+    };
+    println!(
+        "slug\trun\tfound\telapsed_ms\tcandidates\tunknowns\tweighted\tfit_rows\tverify_rows\trecurrence"
+    );
+    for fixture in manifest {
+        if options
+            .only
+            .as_ref()
+            .is_some_and(|needle| !fixture.slug.contains(needle))
+        {
+            continue;
+        }
+        let rows_path = options.base.join(&fixture.rows_file);
+        let rows = match read_recurrence_fixture_rows(&rows_path) {
+            Ok(rows) => rows,
+            Err(error) => {
+                eprintln!("{error}");
+                std::process::exit(1);
+            }
+        };
+        let search = match parse_fixture_search_options(
+            &fixture.suggested_args,
+            options.modular_prefilter,
+        ) {
+            Ok(search) => search,
+            Err(error) => {
+                eprintln!("{}: {error}", fixture.slug);
+                std::process::exit(1);
+            }
+        };
+        for run in 1..=options.repeat {
+            let start = Instant::now();
+            let result = find_recurrence_adaptive_rational(black_box(&rows), black_box(&search));
+            let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
+            if let Some(result) = result {
+                println!(
+                    "{}\t{}\ttrue\t{:.3}\t{}\t{}\t{}\t{}\t{}\t{}",
+                    fixture.slug,
+                    run,
+                    elapsed_ms,
+                    result.candidates_tried,
+                    result.num_unknowns,
+                    result.weighted_unknowns,
+                    result.fit_polynomials,
+                    result.verification_polynomials,
+                    result.recurrence,
+                );
+            } else {
+                println!(
+                    "{}\t{}\tfalse\t{:.3}\t0\t0\t0\t0\t0\t",
+                    fixture.slug, run, elapsed_ms
+                );
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+struct BenchInterlacingOptions {
+    sequence: SequenceKind,
+    max_n: usize,
+    repeat: usize,
+}
+
+impl Default for BenchInterlacingOptions {
+    fn default() -> Self {
+        Self {
+            sequence: SequenceKind::Eulerian,
+            max_n: 20,
+            repeat: 3,
+        }
+    }
+}
+
+fn parse_bench_interlacing_options(args: &[String]) -> Result<BenchInterlacingOptions, String> {
+    let mut options = BenchInterlacingOptions::default();
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--sequence" => {
+                i += 1;
+                let value = args
+                    .get(i)
+                    .ok_or_else(|| "--sequence expects a sequence name".to_string())?;
+                options.sequence = SequenceKind::parse(value)
+                    .ok_or_else(|| format!("unknown sequence: {value}"))?;
+            }
+            "--max-n" => {
+                i += 1;
+                let value = args
+                    .get(i)
+                    .ok_or_else(|| "--max-n expects a nonnegative integer".to_string())?;
+                options.max_n = value
+                    .parse()
+                    .map_err(|_| format!("--max-n expects a nonnegative integer, got '{value}'"))?;
+            }
+            "--repeat" => {
+                i += 1;
+                let value = args
+                    .get(i)
+                    .ok_or_else(|| "--repeat expects a positive integer".to_string())?;
+                options.repeat = value
+                    .parse::<usize>()
+                    .map_err(|_| format!("--repeat expects a positive integer, got '{value}'"))?
+                    .max(1);
+            }
+            other => return Err(format!("unknown interlacing benchmark option: {other}")),
+        }
+        i += 1;
+    }
+    Ok(options)
+}
+
+fn cmd_bench_interlacing(args: &[String]) {
+    let options = match parse_bench_interlacing_options(args) {
+        Ok(options) => options,
+        Err(error) => {
+            eprintln!("{error}");
+            print_bench_help();
+            std::process::exit(1);
+        }
+    };
+    let polynomials = options.sequence.polynomials(options.max_n);
+    println!("sequence\tleft_index\tright_index\tdegree\trepeat\tavg_us\tresult");
+    for right in 1..polynomials.len() {
+        let left = right - 1;
+        let p = strip_trailing_zeros_bigint(&polynomials[left]);
+        let q = strip_trailing_zeros_bigint(&polynomials[right]);
+        let mut result = None;
+        let start = Instant::now();
+        for _ in 0..options.repeat {
+            result = check_interlacing_bigint_coeffs(black_box(p), black_box(q));
+        }
+        let avg_us = start.elapsed().as_secs_f64() * 1_000_000.0 / options.repeat as f64;
+        println!(
+            "{}\t{}\t{}\t{}\t{}\t{:.3}\t{}",
+            options.sequence.name(),
+            left,
+            right,
+            polynomial_degree_bigint(q),
+            options.repeat,
+            avg_us,
+            json_bool_option(result),
+        );
+    }
+}
+
 fn cmd_resultant() {
-    let polys = read_polys();
+    let polys = read_polys_bigint();
     if polys.len() < 2 {
         eprintln!("Need exactly two polynomials for resultant.");
         return;
     }
-    let r = resultant(&polys[0], &polys[1]);
+    let p = strip_trailing_zeros_bigint(&polys[0]);
+    let q = strip_trailing_zeros_bigint(&polys[1]);
+    let r = resultant_bigint_coeffs(p, q);
     println!(
         "Res({}, {}) = {}",
-        format_poly(&polys[0]),
-        format_poly(&polys[1]),
+        format_poly_bigint_coeffs(p),
+        format_poly_bigint_coeffs(q),
         r
     );
 }
 
 fn cmd_discriminant() {
-    for coeffs in read_polys() {
-        let c = strip_trailing_zeros(&coeffs);
-        let d = discriminant(c);
-        println!("disc({}) = {}", format_poly(c), d);
+    for coeffs in read_polys_bigint() {
+        let c = strip_trailing_zeros_bigint(&coeffs);
+        let d = discriminant_bigint_coeffs(c);
+        println!("disc({}) = {}", format_poly_bigint_coeffs(c), d);
     }
 }
 
@@ -1712,20 +2056,21 @@ fn cmd_hstar_to_ehrhart(args: &[String]) {
         }
     };
     let mut json_items = Vec::new();
-    for (index, coeffs) in read_polys().into_iter().enumerate() {
-        let ehrhart = hstar_to_ehrhart(&coeffs);
+    for (index, coeffs) in read_polys_bigint().into_iter().enumerate() {
+        let c = strip_trailing_zeros_bigint(&coeffs);
+        let ehrhart = hstar_to_ehrhart_bigint_coeffs(c);
         let display: Vec<String> = ehrhart.iter().map(|r| format!("{}", r)).collect();
         if format == OutputFormat::Json {
             json_items.push(format!(
                 "{{\"index\":{},\"hstar\":{},\"ehrhart_coefficients\":{}}}",
                 index,
-                json_i64_vec(&coeffs),
+                json_bigint_vec(c),
                 json_string_vec(&display)
             ));
         } else {
             println!(
                 "h*={} => L(n) coeffs: [{}]",
-                format_poly(&coeffs),
+                format_poly_bigint_coeffs(c),
                 display.join(", ")
             );
         }
@@ -1745,20 +2090,20 @@ fn cmd_ehrhart_to_hstar(args: &[String]) {
     };
     let mut json_items = Vec::new();
     for (index, coeffs) in read_polys_rational().into_iter().enumerate() {
-        let hstar = ehrhart_to_hstar(&coeffs);
+        let hstar = ehrhart_to_hstar_bigint(&coeffs);
         let display: Vec<String> = coeffs.iter().map(ToString::to_string).collect();
         if format == OutputFormat::Json {
             json_items.push(format!(
                 "{{\"index\":{},\"ehrhart_coefficients\":{},\"hstar\":{}}}",
                 index,
                 json_string_vec(&display),
-                json_i64_vec(&hstar)
+                json_bigint_vec(&hstar)
             ));
         } else {
             println!(
                 "L(n) coeffs: [{}] => h*={}",
                 display.join(", "),
-                format_poly(&hstar)
+                format_poly_bigint_coeffs(&hstar)
             );
         }
     }
@@ -2172,21 +2517,21 @@ fn cmd_stapledon(args: &[String]) {
         }
     };
 
-    for coeffs in read_polys() {
-        let c = strip_trailing_zeros(&coeffs);
-        match stapledon_decomposition(c, n) {
+    for coeffs in read_polys_bigint() {
+        let c = strip_trailing_zeros_bigint(&coeffs);
+        match stapledon_decomposition_bigint_coeffs(c, n) {
             Some((a, b)) => {
                 println!(
                     "{} = {} + x ({})",
-                    format_poly(c),
-                    format_poly(&a),
-                    format_poly(&b),
+                    format_poly_bigint_coeffs(c),
+                    format_poly_bigint_coeffs(&a),
+                    format_poly_bigint_coeffs(&b),
                 );
             }
             None => {
                 eprintln!(
                     "{} has degree greater than the requested bound {}.",
-                    format_poly(c),
+                    format_poly_bigint_coeffs(c),
                     n,
                 );
             }
@@ -2565,6 +2910,7 @@ fn main() {
         "sequence" => cmd_sequence(rest),
         "recurrence" => cmd_recurrence(rest),
         "recurrence-generate" => cmd_recurrence_generate(rest),
+        "bench" => cmd_bench(rest),
         "bkw-scout" => cmd_bkw_scout(rest),
         "resultant" => cmd_resultant(),
         "discriminant" => cmd_discriminant(),

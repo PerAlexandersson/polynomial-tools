@@ -167,7 +167,10 @@ pub use real_rootedness::{
     check_weak_interlacing,
     check_weak_interlacing_bigint_coeffs,
     discriminant,
+    // Ehrhart polynomial <-> h*-vector
+    discriminant_bigint_coeffs,
     ehrhart_to_hstar,
+    ehrhart_to_hstar_bigint,
     ehrhart_to_hstar_with_denom,
     // Display
     format_poly,
@@ -183,8 +186,8 @@ pub use real_rootedness::{
     has_simple_roots_bigint_coeffs,
     hermite_biehler_parts,
     hermite_matrix_bigint_coeffs,
-    // Ehrhart polynomial <-> h*-vector
     hstar_to_ehrhart,
+    hstar_to_ehrhart_bigint_coeffs,
     is_gamma_positive,
     is_gamma_positive_bigint_coeffs,
     is_gamma_positive_ignoring_initial_zeros,
@@ -217,8 +220,10 @@ pub use real_rootedness::{
     real_roots,
     // Resultant and discriminant
     resultant,
+    resultant_bigint_coeffs,
     squarefree_part_bigint_coeffs,
     stapledon_decomposition,
+    stapledon_decomposition_bigint_coeffs,
     strip_initial_zeros,
     strip_initial_zeros_bigint_coeffs,
     sylvester_matrix,

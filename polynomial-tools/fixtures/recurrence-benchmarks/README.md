@@ -16,7 +16,14 @@ cargo run -p polynomial-tools --example generate_recurrence_benchmarks
 bash polynomial-tools/fixtures/recurrence-benchmarks/regenerate-json.sh
 ```
 
-Example timing command:
+Run the built-in timing suite:
+
+```sh
+polytool bench recurrence-fixtures --repeat 3
+polytool bench recurrence-fixtures --only 23_sparse --repeat 5
+```
+
+Example one-off timing command:
 
 ```sh
 time cargo run -q -p polynomial-tools --bin polytool -- recurrence \

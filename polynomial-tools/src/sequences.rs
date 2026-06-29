@@ -13,6 +13,8 @@
 //! | Chebyshev T_n, U_n | no | no | yes | yes |
 //! | Hermite He_n | no | no | yes | yes |
 
+use num_bigint::BigInt;
+
 /// Compute Eulerian polynomials A_1(t), A_2(t), ..., A_n(t).
 ///
 /// The Eulerian polynomial A_n(t) = sum_{k=0}^{n-1} A(n,k) t^k where A(n,k) is
@@ -25,51 +27,244 @@
 ///
 /// Returns `polys[i]` = A_{i+1}(t), so `polys[0]` = A_1 = `[1]`.
 pub fn eulerian_polynomials(max_n: usize) -> Vec<Vec<i64>> {
+    bigint_polys_to_i64(eulerian_polynomials_bigint(max_n))
+}
+
+/// Compute Eulerian polynomials with arbitrary-size integer coefficients.
+pub fn eulerian_polynomials_bigint(max_n: usize) -> Vec<Vec<BigInt>> {
     if max_n == 0 {
         return vec![];
     }
     let mut polys = Vec::with_capacity(max_n);
-    polys.push(vec![1i64]); // A_1 = 1
+    polys.push(vec![BigInt::from(1)]); // A_1 = 1
 
     for n in 2..=max_n {
         let prev = &polys[n - 2];
         let d = prev.len();
 
         // Derivative of prev
-        let mut dp = vec![0i64; d.saturating_sub(1)];
+        let mut dp = vec![BigInt::from(0); d.saturating_sub(1)];
         for k in 1..d {
-            dp[k - 1] = checked_mul(prev[k], usize_to_i64(k));
+            dp[k - 1] = &prev[k] * usize_to_bigint(k);
         }
 
         // (1 + (n-1)t) * prev
-        let mut term1 = vec![0i64; d + 1];
-        let n_minus_one = checked_sub(usize_to_i64(n), 1);
+        let mut term1 = vec![BigInt::from(0); d + 1];
+        let n_minus_one = usize_to_bigint(n - 1);
         for k in 0..d {
-            term1[k] = checked_add(term1[k], prev[k]);
-            term1[k + 1] = checked_add(term1[k + 1], checked_mul(prev[k], n_minus_one));
+            term1[k] += &prev[k];
+            term1[k + 1] += &prev[k] * &n_minus_one;
         }
 
         // t(1-t) * dp = t*dp - t^2*dp
         let dp_len = dp.len();
-        let mut term2 = vec![0i64; dp_len + 2];
+        let mut term2 = vec![BigInt::from(0); dp_len + 2];
         for k in 0..dp_len {
-            term2[k + 1] = checked_add(term2[k + 1], dp[k]);
-            term2[k + 2] = checked_sub(term2[k + 2], dp[k]);
+            term2[k + 1] += &dp[k];
+            term2[k + 2] -= &dp[k];
         }
 
         // Sum
         let len = term1.len().max(term2.len());
-        let mut result = vec![0i64; len];
+        let mut result = vec![BigInt::from(0); len];
         for k in 0..term1.len() {
-            result[k] = checked_add(result[k], term1[k]);
+            result[k] += &term1[k];
         }
         for k in 0..term2.len() {
-            result[k] = checked_add(result[k], term2[k]);
+            result[k] += &term2[k];
         }
-        while result.last() == Some(&0) {
-            result.pop();
-        }
+        trim_trailing_zeros_bigint(&mut result);
         polys.push(result);
+    }
+    polys
+}
+
+fn trim_trailing_zeros_bigint(coeffs: &mut Vec<BigInt>) {
+    while coeffs.last() == Some(&BigInt::from(0)) {
+        coeffs.pop();
+    }
+}
+
+fn bigint_polys_to_i64(polys: Vec<Vec<BigInt>>) -> Vec<Vec<i64>> {
+    polys
+        .into_iter()
+        .map(|row| {
+            row.into_iter()
+                .map(|c| i64::try_from(&c).expect("sequence coefficient overflow"))
+                .collect()
+        })
+        .collect()
+}
+
+fn usize_to_bigint(value: usize) -> BigInt {
+    BigInt::from(value)
+}
+
+fn bigint_two() -> BigInt {
+    BigInt::from(2)
+}
+
+fn bigint_zero_vec(len: usize) -> Vec<BigInt> {
+    vec![BigInt::from(0); len]
+}
+
+fn add_polys_bigint(lhs: &[BigInt], rhs: &[BigInt]) -> Vec<BigInt> {
+    let len = lhs.len().max(rhs.len());
+    let mut result = bigint_zero_vec(len);
+    for (k, c) in lhs.iter().enumerate() {
+        result[k] += c;
+    }
+    for (k, c) in rhs.iter().enumerate() {
+        result[k] += c;
+    }
+    trim_trailing_zeros_bigint(&mut result);
+    result
+}
+
+fn sub_polys_bigint(lhs: &[BigInt], rhs: &[BigInt]) -> Vec<BigInt> {
+    let len = lhs.len().max(rhs.len());
+    let mut result = bigint_zero_vec(len);
+    for (k, c) in lhs.iter().enumerate() {
+        result[k] += c;
+    }
+    for (k, c) in rhs.iter().enumerate() {
+        result[k] -= c;
+    }
+    trim_trailing_zeros_bigint(&mut result);
+    result
+}
+
+fn shift_scale_bigint(poly: &[BigInt], scale: &BigInt, shift: usize) -> Vec<BigInt> {
+    let mut result = bigint_zero_vec(poly.len() + shift);
+    for (k, c) in poly.iter().enumerate() {
+        result[k + shift] = c * scale;
+    }
+    trim_trailing_zeros_bigint(&mut result);
+    result
+}
+
+fn scale_bigint(poly: &[BigInt], scale: &BigInt) -> Vec<BigInt> {
+    let mut result = poly.iter().map(|c| c * scale).collect::<Vec<_>>();
+    trim_trailing_zeros_bigint(&mut result);
+    result
+}
+
+fn binomial_row_bigint(n: usize) -> Vec<BigInt> {
+    let mut row = vec![BigInt::from(1); n + 1];
+    for j in 1..=n {
+        row[j] = &row[j - 1] * usize_to_bigint(n - j + 1) / usize_to_bigint(j);
+    }
+    row
+}
+
+fn exact_div_bigint(numerator: BigInt, denominator: BigInt) -> BigInt {
+    debug_assert!(denominator != BigInt::from(0));
+    debug_assert_eq!(&numerator % &denominator, BigInt::from(0));
+    numerator / denominator
+}
+
+/// Compute Narayana polynomials with arbitrary-size integer coefficients.
+pub fn narayana_polynomials_bigint(max_n: usize) -> Vec<Vec<BigInt>> {
+    if max_n == 0 {
+        return vec![];
+    }
+    let mut polys = Vec::with_capacity(max_n);
+
+    for n in 1..=max_n {
+        let binom_n = binomial_row_bigint(n);
+        let n_big = usize_to_bigint(n);
+        let mut coeffs = Vec::with_capacity(n);
+        for k in 0..n {
+            let j = k + 1;
+            coeffs.push(exact_div_bigint(
+                &binom_n[j] * &binom_n[j - 1],
+                n_big.clone(),
+            ));
+        }
+        trim_trailing_zeros_bigint(&mut coeffs);
+        polys.push(coeffs);
+    }
+    polys
+}
+
+/// Compute type-B Eulerian polynomials with arbitrary-size integer coefficients.
+pub fn type_b_eulerian_polynomials_bigint(max_n: usize) -> Vec<Vec<BigInt>> {
+    let mut polys = Vec::with_capacity(max_n + 1);
+    polys.push(vec![BigInt::from(1)]); // B_0 = 1
+
+    for n in 1..=max_n {
+        let prev = &polys[n - 1];
+        let d = prev.len();
+
+        let mut dp = bigint_zero_vec(d.saturating_sub(1));
+        for k in 1..d {
+            dp[k - 1] = &prev[k] * usize_to_bigint(k);
+        }
+
+        let mut term1 = bigint_zero_vec(d + 1);
+        let two_n_minus_one = usize_to_bigint(2 * n - 1);
+        for k in 0..d {
+            term1[k] += &prev[k];
+            term1[k + 1] += &prev[k] * &two_n_minus_one;
+        }
+
+        let mut term2 = bigint_zero_vec(dp.len() + 2);
+        for k in 0..dp.len() {
+            let twice = &dp[k] * bigint_two();
+            term2[k + 1] += &twice;
+            term2[k + 2] -= &twice;
+        }
+
+        polys.push(add_polys_bigint(&term1, &term2));
+    }
+    polys
+}
+
+/// Compute Chebyshev polynomials of the first kind with arbitrary-size integer coefficients.
+pub fn chebyshev_polynomials_t_bigint(max_n: usize) -> Vec<Vec<BigInt>> {
+    let mut polys = Vec::with_capacity(max_n + 1);
+    polys.push(vec![BigInt::from(1)]);
+    if max_n == 0 {
+        return polys;
+    }
+    polys.push(vec![BigInt::from(0), BigInt::from(1)]);
+
+    for n in 2..=max_n {
+        let term1 = shift_scale_bigint(&polys[n - 1], &bigint_two(), 1);
+        polys.push(sub_polys_bigint(&term1, &polys[n - 2]));
+    }
+    polys
+}
+
+/// Compute Chebyshev polynomials of the second kind with arbitrary-size integer coefficients.
+pub fn chebyshev_polynomials_u_bigint(max_n: usize) -> Vec<Vec<BigInt>> {
+    let mut polys = Vec::with_capacity(max_n + 1);
+    polys.push(vec![BigInt::from(1)]);
+    if max_n == 0 {
+        return polys;
+    }
+    polys.push(vec![BigInt::from(0), BigInt::from(2)]);
+
+    for n in 2..=max_n {
+        let term1 = shift_scale_bigint(&polys[n - 1], &bigint_two(), 1);
+        polys.push(sub_polys_bigint(&term1, &polys[n - 2]));
+    }
+    polys
+}
+
+/// Compute probabilist's Hermite polynomials with arbitrary-size integer coefficients.
+pub fn hermite_polynomials_bigint(max_n: usize) -> Vec<Vec<BigInt>> {
+    let mut polys = Vec::with_capacity(max_n + 1);
+    polys.push(vec![BigInt::from(1)]);
+    if max_n == 0 {
+        return polys;
+    }
+    polys.push(vec![BigInt::from(0), BigInt::from(1)]);
+
+    for n in 2..=max_n {
+        let term1 = shift_scale_bigint(&polys[n - 1], &BigInt::from(1), 1);
+        let term2 = scale_bigint(&polys[n - 2], &usize_to_bigint(n - 1));
+        polys.push(sub_polys_bigint(&term1, &term2));
     }
     polys
 }
@@ -86,34 +281,7 @@ pub fn eulerian_polynomials(max_n: usize) -> Vec<Vec<i64>> {
 ///
 /// Returns `polys[i]` = N_{i+1}(t), so `polys[0]` = N_1 = `[1]`.
 pub fn narayana_polynomials(max_n: usize) -> Vec<Vec<i64>> {
-    if max_n == 0 {
-        return vec![];
-    }
-    let mut polys = Vec::with_capacity(max_n);
-
-    for n in 1..=max_n {
-        let mut coeffs = Vec::with_capacity(n);
-        // N(n, k+1) for k = 0, ..., n-1
-        // N(n, j) = C(n, j) * C(n, j-1) / n  for j = 1, ..., n
-        let mut binom_n = vec![1i64; n + 1]; // C(n, j)
-        let n_i64 = usize_to_i64(n);
-        for j in 1..=n {
-            let numerator = i128::from(binom_n[j - 1])
-                * i128::from(checked_add(checked_sub(n_i64, usize_to_i64(j)), 1));
-            binom_n[j] = checked_exact_i128_div_to_i64(numerator, i128::from(usize_to_i64(j)));
-        }
-        for k in 0..n {
-            let j = k + 1; // Narayana number N(n, j)
-            let numerator = i128::from(binom_n[j]) * i128::from(binom_n[j - 1]);
-            let nar = checked_exact_i128_div_to_i64(numerator, i128::from(n_i64));
-            coeffs.push(nar);
-        }
-        while coeffs.last() == Some(&0) {
-            coeffs.pop();
-        }
-        polys.push(coeffs);
-    }
-    polys
+    bigint_polys_to_i64(narayana_polynomials_bigint(max_n))
 }
 
 /// Compute type-B Eulerian polynomials B_0(t), B_1(t), ..., B_n(t).
@@ -127,50 +295,7 @@ pub fn narayana_polynomials(max_n: usize) -> Vec<Vec<i64>> {
 ///
 /// Returns `polys[i]` = B_i(t), so `polys[0]` = B_0 = `[1]`.
 pub fn type_b_eulerian_polynomials(max_n: usize) -> Vec<Vec<i64>> {
-    let mut polys = Vec::with_capacity(max_n + 1);
-    polys.push(vec![1i64]); // B_0 = 1
-
-    for n in 1..=max_n {
-        let prev = &polys[n - 1];
-        let d = prev.len();
-
-        // Derivative of prev
-        let mut dp = vec![0i64; d.saturating_sub(1)];
-        for k in 1..d {
-            dp[k - 1] = checked_mul(prev[k], usize_to_i64(k));
-        }
-
-        // (1 + (2n-1)t) * prev
-        let mut term1 = vec![0i64; d + 1];
-        let two_n_minus_one = checked_sub(checked_mul(usize_to_i64(n), 2), 1);
-        for k in 0..d {
-            term1[k] = checked_add(term1[k], prev[k]);
-            term1[k + 1] = checked_add(term1[k + 1], checked_mul(prev[k], two_n_minus_one));
-        }
-
-        // 2t(1-t) * dp = 2t*dp - 2t^2*dp
-        let dp_len = dp.len();
-        let mut term2 = vec![0i64; dp_len + 2];
-        for k in 0..dp_len {
-            let twice = checked_mul(2, dp[k]);
-            term2[k + 1] = checked_add(term2[k + 1], twice);
-            term2[k + 2] = checked_sub(term2[k + 2], twice);
-        }
-
-        let len = term1.len().max(term2.len());
-        let mut result = vec![0i64; len];
-        for k in 0..term1.len() {
-            result[k] = checked_add(result[k], term1[k]);
-        }
-        for k in 0..term2.len() {
-            result[k] = checked_add(result[k], term2[k]);
-        }
-        while result.last() == Some(&0) {
-            result.pop();
-        }
-        polys.push(result);
-    }
-    polys
+    bigint_polys_to_i64(type_b_eulerian_polynomials_bigint(max_n))
 }
 
 /// Compute Chebyshev polynomials of the first kind T_0(t), T_1(t), ..., T_n(t).
@@ -181,38 +306,7 @@ pub fn type_b_eulerian_polynomials(max_n: usize) -> Vec<Vec<i64>> {
 ///
 /// Returns `polys[i]` = T_i(t).
 pub fn chebyshev_polynomials_t(max_n: usize) -> Vec<Vec<i64>> {
-    let mut polys = Vec::with_capacity(max_n + 1);
-    polys.push(vec![1i64]); // T_0 = 1
-    if max_n == 0 {
-        return polys;
-    }
-    polys.push(vec![0, 1]); // T_1 = t
-
-    for n in 2..=max_n {
-        let prev = &polys[n - 1];
-        let pprev = &polys[n - 2];
-
-        // 2t * prev
-        let mut term1 = vec![0i64; prev.len() + 1];
-        for (k, &c) in prev.iter().enumerate() {
-            term1[k + 1] = checked_add(term1[k + 1], checked_mul(2, c));
-        }
-
-        // - pprev
-        let len = term1.len().max(pprev.len());
-        let mut result = vec![0i64; len];
-        for k in 0..term1.len() {
-            result[k] = checked_add(result[k], term1[k]);
-        }
-        for (k, &c) in pprev.iter().enumerate() {
-            result[k] = checked_sub(result[k], c);
-        }
-        while result.last() == Some(&0) {
-            result.pop();
-        }
-        polys.push(result);
-    }
-    polys
+    bigint_polys_to_i64(chebyshev_polynomials_t_bigint(max_n))
 }
 
 /// Compute Chebyshev polynomials of the second kind U_0(t), U_1(t), ..., U_n(t).
@@ -224,36 +318,7 @@ pub fn chebyshev_polynomials_t(max_n: usize) -> Vec<Vec<i64>> {
 ///
 /// Returns `polys[i]` = U_i(t).
 pub fn chebyshev_polynomials_u(max_n: usize) -> Vec<Vec<i64>> {
-    let mut polys = Vec::with_capacity(max_n + 1);
-    polys.push(vec![1i64]); // U_0 = 1
-    if max_n == 0 {
-        return polys;
-    }
-    polys.push(vec![0, 2]); // U_1 = 2t
-
-    for n in 2..=max_n {
-        let prev = &polys[n - 1];
-        let pprev = &polys[n - 2];
-
-        let mut term1 = vec![0i64; prev.len() + 1];
-        for (k, &c) in prev.iter().enumerate() {
-            term1[k + 1] = checked_add(term1[k + 1], checked_mul(2, c));
-        }
-
-        let len = term1.len().max(pprev.len());
-        let mut result = vec![0i64; len];
-        for k in 0..term1.len() {
-            result[k] = checked_add(result[k], term1[k]);
-        }
-        for (k, &c) in pprev.iter().enumerate() {
-            result[k] = checked_sub(result[k], c);
-        }
-        while result.last() == Some(&0) {
-            result.pop();
-        }
-        polys.push(result);
-    }
-    polys
+    bigint_polys_to_i64(chebyshev_polynomials_u_bigint(max_n))
 }
 
 /// Compute probabilist's Hermite polynomials He_0(t), He_1(t), ..., He_n(t).
@@ -265,65 +330,7 @@ pub fn chebyshev_polynomials_u(max_n: usize) -> Vec<Vec<i64>> {
 ///
 /// Returns `polys[i]` = He_i(t).
 pub fn hermite_polynomials(max_n: usize) -> Vec<Vec<i64>> {
-    let mut polys = Vec::with_capacity(max_n + 1);
-    polys.push(vec![1i64]); // He_0 = 1
-    if max_n == 0 {
-        return polys;
-    }
-    polys.push(vec![0, 1]); // He_1 = t
-
-    for n in 2..=max_n {
-        let prev = &polys[n - 1];
-        let pprev = &polys[n - 2];
-
-        // t * prev
-        let mut term1 = vec![0i64; prev.len() + 1];
-        for (k, &c) in prev.iter().enumerate() {
-            term1[k + 1] = checked_add(term1[k + 1], c);
-        }
-
-        // -(n-1) * pprev
-        let len = term1.len().max(pprev.len());
-        let mut result = vec![0i64; len];
-        for k in 0..term1.len() {
-            result[k] = checked_add(result[k], term1[k]);
-        }
-        let n_minus_one = checked_sub(usize_to_i64(n), 1);
-        for (k, &c) in pprev.iter().enumerate() {
-            result[k] = checked_sub(result[k], checked_mul(n_minus_one, c));
-        }
-        while result.last() == Some(&0) {
-            result.pop();
-        }
-        polys.push(result);
-    }
-    polys
-}
-
-fn usize_to_i64(value: usize) -> i64 {
-    i64::try_from(value).expect("sequence index overflow")
-}
-
-fn checked_add(lhs: i64, rhs: i64) -> i64 {
-    lhs.checked_add(rhs).expect("sequence coefficient overflow")
-}
-
-fn checked_sub(lhs: i64, rhs: i64) -> i64 {
-    lhs.checked_sub(rhs).expect("sequence coefficient overflow")
-}
-
-fn checked_mul(lhs: i64, rhs: i64) -> i64 {
-    lhs.checked_mul(rhs).expect("sequence coefficient overflow")
-}
-
-fn checked_exact_i128_div_to_i64(numerator: i128, denominator: i128) -> i64 {
-    assert_ne!(denominator, 0, "sequence denominator must be nonzero");
-    assert_eq!(
-        numerator % denominator,
-        0,
-        "sequence recurrence division must be exact"
-    );
-    i64::try_from(numerator / denominator).expect("sequence coefficient overflow")
+    bigint_polys_to_i64(hermite_polynomials_bigint(max_n))
 }
 
 // ---------------------------------------------------------------------------
