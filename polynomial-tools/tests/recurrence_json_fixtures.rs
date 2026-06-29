@@ -51,9 +51,15 @@ fn read_rows(path: PathBuf) -> Vec<Vec<BigRational>> {
 }
 
 fn format_rows(rows: &[Vec<BigRational>]) -> Vec<String> {
+    let zero = parse_rational_coeff("0").expect("parse zero");
     rows.iter()
         .map(|row| {
-            row.iter()
+            let end = row
+                .iter()
+                .rposition(|coeff| coeff != &zero)
+                .map_or(1, |i| i + 1);
+            row[..end]
+                .iter()
                 .map(format_rational_coeff)
                 .collect::<Vec<_>>()
                 .join(", ")
@@ -105,7 +111,10 @@ fn recurrence_benchmark_manifest_matches_generated_files() {
 #[test]
 fn recurrence_json_fixtures_regenerate_raw_rows() {
     let fixtures = parse_manifest();
-    assert_eq!(fixtures.len(), 23, "expected the benchmark fixture suite");
+    assert!(
+        fixtures.len() >= 32,
+        "expected the synthetic plus OEIS benchmark fixture suite"
+    );
 
     for fixture in fixtures {
         let expected = read_rows(Path::new(BASE).join(&fixture.rows_file));
@@ -113,26 +122,34 @@ fn recurrence_json_fixtures_regenerate_raw_rows() {
             fs::read_to_string(Path::new(BASE).join(&fixture.json_file)).expect("read JSON file");
         let recurrence_json: RecurrenceJson =
             serde_json::from_str(&json_text).expect("parse recurrence JSON");
+        let skip_prefix = recurrence_json
+            .search
+            .as_ref()
+            .map(|search| search.skip_prefix)
+            .unwrap_or(0);
+        let expected_generated = expected
+            .get(skip_prefix..)
+            .unwrap_or_else(|| panic!("{} has invalid skip_prefix", fixture.slug));
         let (recurrence, first_index, initial_polys) = recurrence_json
             .to_recurrence_parts()
             .expect("convert recurrence JSON");
         let generated = recurrence
-            .generate_rows_rational(&initial_polys, first_index, expected.len())
+            .generate_rows_rational(&initial_polys, first_index, expected_generated.len())
             .unwrap_or_else(|err| panic!("generate rows for {}: {err}", fixture.slug));
         assert_eq!(
             format_rows(&generated),
-            format_rows(&expected),
+            format_rows(expected_generated),
             "JSON recurrence should regenerate {}",
             fixture.slug
         );
 
         let extended = recurrence
-            .generate_rows_rational(&initial_polys, first_index, expected.len() + 5)
+            .generate_rows_rational(&initial_polys, first_index, expected_generated.len() + 5)
             .unwrap_or_else(|err| panic!("extend rows for {}: {err}", fixture.slug));
-        assert_eq!(extended.len(), expected.len() + 5);
+        assert_eq!(extended.len(), expected_generated.len() + 5);
         assert_eq!(
-            format_rows(&extended[..expected.len()]),
-            format_rows(&expected),
+            format_rows(&extended[..expected_generated.len()]),
+            format_rows(expected_generated),
             "extended JSON recurrence should preserve fixture prefix {}",
             fixture.slug
         );
