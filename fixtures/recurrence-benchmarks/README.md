@@ -24,7 +24,14 @@ Run the built-in timing suite:
 ```sh
 polytool bench recurrence-fixtures --repeat 3
 polytool bench recurrence-fixtures --only 23_sparse --repeat 5
+polytool bench recurrence-fixtures --only oeis --repeat 3 \
+  --summary --report bench-results/recurrence-fixtures/oeis.md
 ```
+
+The default output is per-run TSV. The optional `--summary` flag appends
+fixture-level and category-level TSV summaries. The optional `--report <path>`
+writes the same benchmark run as a Markdown report suitable for checked-in
+benchmark notes or project handoffs.
 
 Example one-off timing command:
 
@@ -76,3 +83,16 @@ polytool recurrence-generate \
 | `30_oeis_a177970_order8_closed_form` | natural OEIS recurrence, closed-form-derived, order 8 | `--min-rec-len 8 --max-rec-len 8 --min-var-deg 6 --max-var-deg 6 --max-idx-deg 0 --max-diff-deg 0` | `P(n) = (6 + 6t) P(n-1) + (-15t^2 - 24t - 15) P(n-2) + ... + (-t^6 + 4t^5 - 6t^4 + 4t^3 - t^2) P(n-8)` |
 | `31_oeis_a321331_signed_derivative_lag` | natural OEIS recurrence, signed terms, derivative lag | `--min-rec-len 2 --max-rec-len 2 --max-var-deg 2 --max-idx-deg 0 --max-diff-deg 1` | `P(n) = (1 + 2t) P(n-1) + t P'(n-1) - t^2 P(n-2) - t^2 P'(n-2)` |
 | `32_oeis_a390433_quadratic_index_second_derivative` | natural OEIS recurrence, quadratic index, second derivative | `--min-rec-len 1 --max-rec-len 1 --max-var-deg 2 --max-idx-deg 2 --max-diff-deg 2` | `P(n) = (4 - 4n + n^2 + t) P(n-1) + (-3t + 2nt) P'(n-1) + t^2 P^(2)(n-1)` |
+| `33_oeis_a008292_eulerian_variant_derivative` | natural OEIS recurrence, Eulerian-like first derivative | `--min-rec-len 1 --max-rec-len 1 --max-var-deg 2 --max-idx-deg 1 --max-diff-deg 1` | `P(n) = (1 - t + nt) P(n-1) + (t - t^2) P'(n-1)` |
+| `34_oeis_a019538_derivative_appell` | natural OEIS recurrence, first derivative | `--min-rec-len 1 --max-rec-len 1 --max-var-deg 2 --max-idx-deg 0 --max-diff-deg 1` | `P(n) = (1 + 2t) P(n-1) + (t + t^2) P'(n-1)` |
+| `35_oeis_a035607_two_lag_constant_t` | natural OEIS recurrence, two-lag t-dependent coefficients | `--min-rec-len 2 --max-rec-len 2 --max-var-deg 1 --max-idx-deg 0 --max-diff-deg 0` | `P(n) = (1 + t) P(n-1) + t P(n-2)` |
+| `36_oeis_a049218_quadratic_index_lag` | natural OEIS recurrence, quadratic index, second order | `--min-rec-len 2 --max-rec-len 2 --max-var-deg 1 --max-idx-deg 2 --max-diff-deg 0` | `P(n) = t P(n-1) + (-n - n^2) P(n-2)` |
+| `37_oeis_a088729_second_derivative_sturm` | natural OEIS recurrence, second derivative | `--min-rec-len 1 --max-rec-len 1 --max-var-deg 1 --max-idx-deg 0 --max-diff-deg 2` | `P(n) = (3 + t) P(n-1) + (4 + 3t) P'(n-1) + 2t P^(2)(n-1)` |
+| `38_oeis_a104684_denominator_second_order` | natural OEIS recurrence, denominator, second order | `--min-rec-len 2 --max-rec-len 2 --max-var-deg 2 --max-idx-deg 1 --max-diff-deg 0 --denominator --max-denom-var-deg 0 --max-denom-idx-deg 1` | `(1 - n) P(n) = (6 - 4n + 3t - 2nt) P(n-1) + (-2t^2 + nt^2) P(n-2)` |
+| `39_oeis_a130749_denominator_two_lag_derivative` | natural OEIS recurrence, denominator, two-lag derivative | `--min-rec-len 2 --max-rec-len 2 --max-var-deg 2 --max-idx-deg 1 --max-diff-deg 1 --denominator --max-denom-var-deg 0 --max-denom-idx-deg 1` | `(1 + 1/2n) P(n) = (1 + 3/2n + t + 3/2nt) P(n-1) + (t - t^2) P'(n-1) + (-n - 3/2nt) P(n-2)` |
+| `40_oeis_a257142_denominator_three_lag_derivative` | natural OEIS recurrence, denominator, three-lag derivative | `--min-rec-len 3 --max-rec-len 3 --max-var-deg 2 --max-idx-deg 1 --max-diff-deg 1 --denominator --max-denom-var-deg 0 --max-denom-idx-deg 1` | `(1 + 1/3n) P(n) = (7/3 + 4/3n + t + nt) P(n-1) + ... + (-2/3 + 1/3n) P(n-3)` |
+| `41_oeis_a348576_two_lag_derivative_dense` | natural OEIS recurrence, dense two-lag derivative | `--min-rec-len 2 --max-rec-len 2 --max-var-deg 3 --max-idx-deg 1 --max-diff-deg 1` | `P(n) = (1 + 2t + nt) P(n-1) + (t + t^2) P'(n-1) + (-t^2 - nt^2) P(n-2) + (-t^2 - nt^2 - t^3 - nt^3) P'(n-2)` |
+| `42_oeis_a375853_denominator_derivative` | natural OEIS recurrence, denominator, first derivative | `--min-rec-len 1 --max-rec-len 1 --max-var-deg 2 --max-idx-deg 1 --max-diff-deg 1 --denominator --max-denom-var-deg 0 --max-denom-idx-deg 1` | `(1 - n) P(n) = (-2 - n + 2t - 3nt) P(n-1) + (-2t + 2t^2) P'(n-1)` |
+| `43_oeis_a395454_two_lag_index_derivative` | natural OEIS recurrence, two-lag index derivative | `--min-rec-len 2 --max-rec-len 2 --max-var-deg 2 --max-idx-deg 1 --max-diff-deg 1` | `P(n) = (-2 + n - 2t + nt) P(n-1) + (t - t^2) P'(n-1) + (-4t + 2nt) P(n-2)` |
+| `44_oeis_a109954_third_order_constant` | natural OEIS recurrence, third order t-dependent coefficients | `--min-rec-len 3 --max-rec-len 3 --max-var-deg 1 --max-idx-deg 0 --max-diff-deg 0` | `P(n) = (-3 + t) P(n-1) + (-3 + t) P(n-2) - P(n-3)` |
+| `45_oeis_a176231_second_derivative_signed` | natural OEIS recurrence, signed second derivative | `--min-rec-len 1 --max-rec-len 1 --max-var-deg 1 --max-idx-deg 0 --max-diff-deg 2` | `P(n) = (-1 + t) P(n-1) + (2 - 4t) P'(n-1) + 4t P^(2)(n-1)` |

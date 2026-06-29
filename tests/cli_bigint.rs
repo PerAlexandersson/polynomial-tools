@@ -1,3 +1,4 @@
+use std::fs;
 use std::io::Write;
 use std::process::{Command, Output, Stdio};
 
@@ -95,6 +96,11 @@ fn bench_interlacing_reports_tsv() {
 
 #[test]
 fn bench_recurrence_fixture_reports_tsv() {
+    let report_path = std::env::temp_dir().join(format!(
+        "polytool-recurrence-bench-report-{}.md",
+        std::process::id()
+    ));
+    let report_arg = report_path.to_string_lossy().into_owned();
     let output = run_polytool(
         &[
             "bench",
@@ -103,6 +109,9 @@ fn bench_recurrence_fixture_reports_tsv() {
             "01_scalar_geometric",
             "--repeat",
             "1",
+            "--summary",
+            "--report",
+            &report_arg,
         ],
         "",
     );
@@ -114,4 +123,12 @@ fn bench_recurrence_fixture_reports_tsv() {
     ));
     assert!(stdout.contains("01_scalar_geometric\t1\ttrue\t"));
     assert!(stdout.contains("P(n) = 2 P(n-1)"));
+    assert!(stdout.contains("# fixture_summary\n"));
+    assert!(stdout.contains("# category_summary\n"));
+
+    let report = fs::read_to_string(&report_path).expect("read benchmark report");
+    assert!(report.contains("# Recurrence Fixture Benchmark Report"));
+    assert!(report.contains("| synthetic | 1 | 1 | 1 |"));
+    assert!(report.contains("| 01_scalar_geometric |"));
+    let _ = fs::remove_file(report_path);
 }

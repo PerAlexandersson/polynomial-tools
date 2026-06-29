@@ -393,6 +393,8 @@ Run the recurrence fixture timing suite:
 polytool bench recurrence-fixtures --repeat 3
 polytool bench recurrence-fixtures --only 23_sparse --repeat 5
 polytool bench recurrence-fixtures --only oeis --repeat 1
+polytool bench recurrence-fixtures --only oeis --repeat 3 \
+  --summary --report bench-results/recurrence-fixtures/oeis.md
 ```
 
 Run consecutive interlacing timings for a generated sequence:
@@ -402,7 +404,9 @@ polytool bench interlacing --sequence eulerian --max-n 30 --repeat 5
 ```
 
 Both benchmark subcommands print tab-separated output so results can be
-redirected to a log or pasted into project notes. The recurrence fixture suite
+redirected to a log or pasted into project notes. The recurrence fixture
+benchmark can also append fixture/category summaries with `--summary` and write
+a Markdown report with `--report <path.md>`. The recurrence fixture suite
 contains synthetic stress tests and natural OEIS-derived recurrences from the
 curated `real-rooted-oeis` sequence queue.
 
