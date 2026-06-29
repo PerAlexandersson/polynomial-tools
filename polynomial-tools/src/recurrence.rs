@@ -1001,6 +1001,70 @@ fn modular_derivatives_up_to(
         .collect()
 }
 
+enum ModularPolySupport {
+    Dense,
+    Sparse(Vec<(usize, i64)>),
+}
+
+impl ModularPolySupport {
+    #[inline]
+    fn for_each_nonzero(&self, coeffs: &[i64], mut visit: impl FnMut(usize, i64)) {
+        match self {
+            Self::Dense => {
+                for (idx, &coeff) in coeffs.iter().enumerate() {
+                    visit(idx, coeff);
+                }
+            }
+            Self::Sparse(entries) => {
+                for &(idx, coeff) in entries {
+                    visit(idx, coeff);
+                }
+            }
+        }
+    }
+}
+
+fn modular_poly_support(coeffs: &[i64]) -> ModularPolySupport {
+    if coeffs.iter().all(|&coeff| coeff != 0) {
+        return ModularPolySupport::Dense;
+    }
+
+    ModularPolySupport::Sparse(
+        coeffs
+            .iter()
+            .copied()
+            .enumerate()
+            .filter(|&(_, coeff)| coeff != 0)
+            .collect(),
+    )
+}
+
+fn modular_poly_supports(polys_mod: &[Vec<i64>]) -> Vec<ModularPolySupport> {
+    polys_mod
+        .iter()
+        .map(|poly| modular_poly_support(poly))
+        .collect()
+}
+
+fn modular_derivative_supports(derivs_mod: &[Vec<Vec<i64>>]) -> Vec<Vec<ModularPolySupport>> {
+    derivs_mod
+        .iter()
+        .map(|poly_derivs| {
+            poly_derivs
+                .iter()
+                .map(|poly| modular_poly_support(poly))
+                .collect()
+        })
+        .collect()
+}
+
+struct ModularImageView<'a> {
+    polys: &'a [Vec<i64>],
+    derivs: &'a [Vec<Vec<i64>>],
+    poly_supports: &'a [ModularPolySupport],
+    deriv_supports: &'a [Vec<ModularPolySupport>],
+}
+
 struct ModularSystemResult {
     consistent: bool,
     full_rank_pivot_rows: Option<Vec<usize>>,
@@ -1039,6 +1103,29 @@ fn recurrence_system_consistent_mod_images(
     polys: &[Vec<BigRational>],
     polys_mod: &[Vec<i64>],
     derivs_mod: &[Vec<Vec<i64>>],
+    opts: &RecurrenceOptions,
+    modulus: i64,
+    solve_request: ModularSolveRequest,
+) -> ModularSystemResult {
+    let poly_supports = modular_poly_supports(polys_mod);
+    let deriv_supports = modular_derivative_supports(derivs_mod);
+    recurrence_system_consistent_mod_supports(
+        polys,
+        ModularImageView {
+            polys: polys_mod,
+            derivs: derivs_mod,
+            poly_supports: &poly_supports,
+            deriv_supports: &deriv_supports,
+        },
+        opts,
+        modulus,
+        solve_request,
+    )
+}
+
+fn recurrence_system_consistent_mod_supports(
+    polys: &[Vec<BigRational>],
+    images: ModularImageView<'_>,
     opts: &RecurrenceOptions,
     modulus: i64,
     solve_request: ModularSolveRequest,
@@ -1124,7 +1211,7 @@ fn recurrence_system_consistent_mod_images(
     for nn in opts.rec_len + 1..=m {
         let current_idx = nn - 1;
         for l in 0..=max_t_deg {
-            let cur_l = poly_coeff_mod(polys_mod, current_idx, l);
+            let cur_l = poly_coeff_mod(images.polys, current_idx, l);
             raw_rows.push(linalg::SparseModRow::with_capacity(
                 mod_neg(cur_l, modulus) as u64,
                 prime,
@@ -1151,25 +1238,25 @@ fn recurrence_system_consistent_mod_images(
                     if n_power == 0 {
                         continue;
                     }
-                    for (k, &pc) in polys_mod[nn - 1].iter().enumerate() {
-                        if pc == 0 {
-                            continue;
-                        }
-                        let l = k + j;
-                        if l <= max_t_deg {
-                            raw_rows[row_index(eq_idx, l)].add_reduced_entry_sorted(
-                                col,
-                                mod_mul(pc, n_power, modulus) as u64,
-                                prime,
-                            );
-                        }
-                    }
+                    images.poly_supports[nn - 1].for_each_nonzero(
+                        &images.polys[nn - 1],
+                        |k, pc| {
+                            let l = k + j;
+                            if l <= max_t_deg {
+                                raw_rows[row_index(eq_idx, l)].add_reduced_entry_sorted(
+                                    col,
+                                    mod_mul(pc, n_power, modulus) as u64,
+                                    prime,
+                                );
+                            }
+                        },
+                    );
                 }
             }
         }
     }
 
-    let derivative_order_indices = derivs_mod.first().map(Vec::as_slice).unwrap_or(&[]);
+    let derivative_order_indices = images.derivs.first().map(Vec::as_slice).unwrap_or(&[]);
     for r in 1..=opts.rec_len {
         for (d, _) in derivative_order_indices
             .iter()
@@ -1190,20 +1277,19 @@ fn recurrence_system_consistent_mod_images(
                             if n_factor == 0 {
                                 continue;
                             }
-                            let ref_poly = &derivs_mod[nn - 1 - r][d];
-                            for (k, &rc) in ref_poly.iter().enumerate() {
-                                if rc == 0 {
-                                    continue;
-                                }
-                                let l = k + j;
-                                if l <= max_t_deg {
-                                    raw_rows[row_index(eq_idx, l)].add_reduced_entry_sorted(
-                                        col,
-                                        mod_neg(mod_mul(rc, n_factor, modulus), modulus) as u64,
-                                        prime,
-                                    );
-                                }
-                            }
+                            images.deriv_supports[nn - 1 - r][d].for_each_nonzero(
+                                &images.derivs[nn - 1 - r][d],
+                                |k, rc| {
+                                    let l = k + j;
+                                    if l <= max_t_deg {
+                                        raw_rows[row_index(eq_idx, l)].add_reduced_entry_sorted(
+                                            col,
+                                            mod_neg(mod_mul(rc, n_factor, modulus), modulus) as u64,
+                                            prime,
+                                        );
+                                    }
+                                },
+                            );
                         }
                     }
                 }
@@ -1457,6 +1543,8 @@ struct ModularPrefilterPrimeImages {
     modulus: i64,
     polys: Vec<Vec<i64>>,
     derivs: Vec<Vec<Vec<i64>>>,
+    poly_supports: Vec<ModularPolySupport>,
+    deriv_supports: Vec<Vec<ModularPolySupport>>,
 }
 
 struct ModularPrefilterCache {
@@ -1471,10 +1559,14 @@ impl ModularPrefilterCache {
             .filter_map(|&modulus| {
                 let polys_mod = rational_polys_mod_prime(polys, modulus)?;
                 let derivs_mod = modular_derivatives_up_to(&polys_mod, modulus, max_diff_deg);
+                let poly_supports = modular_poly_supports(&polys_mod);
+                let deriv_supports = modular_derivative_supports(&derivs_mod);
                 Some(ModularPrefilterPrimeImages {
                     modulus,
                     polys: polys_mod,
                     derivs: derivs_mod,
+                    poly_supports,
+                    deriv_supports,
                 })
             })
             .collect();
@@ -1551,10 +1643,14 @@ fn modular_prefilter_with_cache(
             continue;
         }
 
-        let result = recurrence_system_consistent_mod_images(
+        let result = recurrence_system_consistent_mod_supports(
             &polys[..fit_len],
-            &prime_images.polys[..fit_len],
-            &prime_images.derivs[..fit_len],
+            ModularImageView {
+                polys: &prime_images.polys[..fit_len],
+                derivs: &prime_images.derivs[..fit_len],
+                poly_supports: &prime_images.poly_supports[..fit_len],
+                deriv_supports: &prime_images.deriv_supports[..fit_len],
+            },
             opts,
             prime_images.modulus,
             if unknowns >= MODULAR_LIFT_RANK_DEFICIENT_MIN_UNKNOWNS {
@@ -1617,10 +1713,14 @@ fn modular_prefilter_with_cache(
                     // unique held-out solution can be checked.  Add the
                     // held-out rows modulo the same prime before paying for an
                     // exact rational solve.
-                    let extended = recurrence_system_consistent_mod_images(
+                    let extended = recurrence_system_consistent_mod_supports(
                         &polys[..verify_len],
-                        &prime_images.polys[..verify_len],
-                        &prime_images.derivs[..verify_len],
+                        ModularImageView {
+                            polys: &prime_images.polys[..verify_len],
+                            derivs: &prime_images.derivs[..verify_len],
+                            poly_supports: &prime_images.poly_supports[..verify_len],
+                            deriv_supports: &prime_images.deriv_supports[..verify_len],
+                        },
                         opts,
                         prime_images.modulus,
                         ModularSolveRequest::ConsistencyOnly,
