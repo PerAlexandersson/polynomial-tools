@@ -1,0 +1,152 @@
+{
+  "schema": "polynomial-tools.recurrence.v1",
+  "first_index": 1,
+  "initial_polynomials": [
+    [
+      "1"
+    ],
+    [
+      "1",
+      "1"
+    ],
+    [
+      "1",
+      "2",
+      "1"
+    ],
+    [
+      "1",
+      "9",
+      "9",
+      "1"
+    ],
+    [
+      "1",
+      "20",
+      "54",
+      "20",
+      "1"
+    ]
+  ],
+  "recurrence": {
+    "terms": [
+      {
+        "offset": 1,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "11/4",
+              "11/4",
+              "0",
+              "0"
+            ],
+            [
+              "-13/10",
+              "-13/10",
+              "0",
+              "0"
+            ],
+            [
+              "3/20",
+              "3/20",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 2,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "-5/2",
+              "-1",
+              "-5/2",
+              "0"
+            ],
+            [
+              "5/4",
+              "7/10",
+              "5/4",
+              "0"
+            ],
+            [
+              "-3/20",
+              "-1/10",
+              "-3/20",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 3,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "3/4",
+              "-3/4",
+              "-3/4",
+              "3/4"
+            ],
+            [
+              "-2/5",
+              "2/5",
+              "2/5",
+              "-2/5"
+            ],
+            [
+              "1/20",
+              "-1/20",
+              "-1/20",
+              "1/20"
+            ]
+          ]
+        }
+      }
+    ],
+    "denominator": {
+      "coeffs": [
+        [
+          "1"
+        ],
+        [
+          "-9/20"
+        ],
+        [
+          "1/20"
+        ]
+      ]
+    }
+  },
+  "search": {
+    "recurrence_text": "(1 - 9/20n + 1/20n^2) P(n) = (11/4 - 13/10n + 3/20n^2 + 11/4t - 13/10nt + 3/20n^2t) P(n-1) + (-5/2 + 5/4n - 3/20n^2 - t + 7/10nt - 1/10n^2t - 5/2t^2 + 5/4nt^2 - 3/20n^2t^2) P(n-2) + (3/4 - 2/5n + 1/20n^2 - 3/4t + 2/5nt - 1/20n^2t - 3/4t^2 + 2/5nt^2 - 1/20n^2t^2 + 3/4t^3 - 2/5nt^3 + 1/20n^2t^3) P(n-3)",
+    "source_rows": 60,
+    "skip_prefix": 0,
+    "unknowns": 50,
+    "weighted_unknowns": 52,
+    "equations": 588,
+    "fit_polynomials": 25,
+    "verification_polynomials": 35,
+    "candidates_tried": 415,
+    "options": {
+      "var_deg": 3,
+      "idx_deg": 2,
+      "diff_deg": 0,
+      "rec_len": 4,
+      "homogeneous": true,
+      "inhomo_var_deg": 0,
+      "inhomo_idx_deg": 0,
+      "denom_var_deg": 0,
+      "denom_idx_deg": 2,
+      "alternating_sign": false
+    }
+  }
+}

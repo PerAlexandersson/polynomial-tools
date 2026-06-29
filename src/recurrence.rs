@@ -55,8 +55,8 @@ pub struct RecurrenceOptions {
     /// Use modular consistency checks to reject candidates before exact solving.
     ///
     /// This is a probabilistic prefilter: bad primes can make a rationally
-    /// solvable system look inconsistent modulo every tested prime. Keep it
-    /// disabled for fully exact exhaustive searches.
+    /// solvable system look inconsistent modulo every tested prime. Disable it
+    /// only when comparing against the exact-only search path.
     pub modular_prefilter: bool,
 }
 
@@ -73,7 +73,7 @@ impl Default for RecurrenceOptions {
             denom_var_deg: 0,
             denom_idx_deg: 0,
             alternating_sign: false,
-            modular_prefilter: false,
+            modular_prefilter: true,
         }
     }
 }
@@ -2685,6 +2685,26 @@ impl Recurrence {
         self.terms.iter().map(|term| term.offset).max().unwrap_or(0)
     }
 
+    /// Number of available initial rows needed for robust JSON generation.
+    ///
+    /// A denominator recurrence cannot be evaluated at an index where the
+    /// evaluated LHS factor is the zero polynomial.  If such singular indices
+    /// occur inside the known prefix, keep those rows as initial conditions so
+    /// `recurrence-generate` can still reproduce and extend the checked rows.
+    pub fn generation_initial_count(&self, first_index: usize, available_rows: usize) -> usize {
+        let count = self.max_offset().min(available_rows);
+        let mut required = count;
+        if let Some(denominator) = &self.denominator {
+            for offset in count..available_rows {
+                let n = first_index + offset;
+                if poly_is_zero_rational(&bivar_eval_n(denominator, n)) {
+                    required = offset + 1;
+                }
+            }
+        }
+        required
+    }
+
     fn term_to_mathematica_code(&self, term: &RecurrenceTerm) -> String {
         let coeff = term.coeff.to_mathematica_code();
         let idx = if term.offset == 0 {
@@ -3908,7 +3928,7 @@ impl Default for AdaptiveSearchOptions {
             min_margin: 1,
             no_verify: false,
             fit_extra_rows: 1,
-            modular_prefilter: false,
+            modular_prefilter: true,
             verbose: false,
         }
     }
@@ -5629,6 +5649,26 @@ mod tests {
             .generate_rows_rational(&initial_polys, first_index, polys.len())
             .unwrap();
         assert_eq!(generated, polys);
+    }
+
+    #[test]
+    fn generation_initial_count_keeps_singular_denominator_rows() {
+        let recurrence = Recurrence {
+            terms: vec![RecurrenceTerm::new(
+                1,
+                0,
+                BivarPoly {
+                    coeffs: vec![vec![BigRational::one()]],
+                },
+            )],
+            denominator: Some(BivarPoly {
+                coeffs: vec![vec![br(20, 1)], vec![br(-9, 1)], vec![br(1, 1)]],
+            }),
+            inhomogeneous: None,
+        };
+
+        assert_eq!(recurrence.generation_initial_count(1, 7), 5);
+        assert_eq!(recurrence.generation_initial_count(1, 4), 4);
     }
 
     #[test]

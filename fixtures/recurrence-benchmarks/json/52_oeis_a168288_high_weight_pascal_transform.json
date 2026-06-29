@@ -1,0 +1,190 @@
+{
+  "schema": "polynomial-tools.recurrence.v1",
+  "first_index": 1,
+  "initial_polynomials": [
+    [
+      "1"
+    ],
+    [
+      "1",
+      "1"
+    ],
+    [
+      "1",
+      "5",
+      "1"
+    ]
+  ],
+  "recurrence": {
+    "terms": [
+      {
+        "offset": 1,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "5/3",
+              "-1/3",
+              "0",
+              "0"
+            ],
+            [
+              "-2/3",
+              "1",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "-1/3",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 1,
+        "deriv_order": 1,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "1",
+              "-1",
+              "0"
+            ],
+            [
+              "0",
+              "-1/3",
+              "1/3",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 2,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "-2/3",
+              "8/3",
+              "4/3",
+              "0"
+            ],
+            [
+              "1/3",
+              "-8/3",
+              "-4/3",
+              "0"
+            ],
+            [
+              "0",
+              "2/3",
+              "1/3",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 2,
+        "deriv_order": 1,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "-2/3",
+              "0",
+              "2/3"
+            ],
+            [
+              "0",
+              "1/3",
+              "0",
+              "-1/3"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 3,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "-2",
+              "-2",
+              "0"
+            ],
+            [
+              "0",
+              "5/3",
+              "5/3",
+              "0"
+            ],
+            [
+              "0",
+              "-1/3",
+              "-1/3",
+              "0"
+            ]
+          ]
+        }
+      }
+    ],
+    "denominator": {
+      "coeffs": [
+        [
+          "1"
+        ],
+        [
+          "-1/3"
+        ]
+      ]
+    }
+  },
+  "search": {
+    "recurrence_text": "(1 - 1/3n) P(n) = (5/3 - 2/3n - 1/3t + nt - 1/3n^2t) P(n-1) + (t - 1/3nt - t^2 + 1/3nt^2) P'(n-1) + (-2/3 + 1/3n + 8/3t - 8/3nt + 2/3n^2t + 4/3t^2 - 4/3nt^2 + 1/3n^2t^2) P(n-2) + (-2/3t + 1/3nt + 2/3t^3 - 1/3nt^3) P'(n-2) + (-2t + 5/3nt - 1/3n^2t - 2t^2 + 5/3nt^2 - 1/3n^2t^2) P(n-3)",
+    "source_rows": 80,
+    "skip_prefix": 0,
+    "unknowns": 73,
+    "weighted_unknowns": 110,
+    "equations": 891,
+    "fit_polynomials": 30,
+    "verification_polynomials": 50,
+    "candidates_tried": 5751,
+    "options": {
+      "var_deg": 3,
+      "idx_deg": 2,
+      "diff_deg": 1,
+      "rec_len": 3,
+      "homogeneous": true,
+      "inhomo_var_deg": 0,
+      "inhomo_idx_deg": 0,
+      "denom_var_deg": 0,
+      "denom_idx_deg": 1,
+      "alternating_sign": false
+    }
+  }
+}

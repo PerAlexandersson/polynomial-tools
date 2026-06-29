@@ -1,0 +1,256 @@
+{
+  "schema": "polynomial-tools.recurrence.v1",
+  "first_index": 1,
+  "initial_polynomials": [
+    [
+      "1"
+    ],
+    [
+      "1",
+      "1"
+    ],
+    [
+      "1",
+      "7",
+      "1"
+    ]
+  ],
+  "recurrence": {
+    "terms": [
+      {
+        "offset": 1,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "1",
+              "-1",
+              "0",
+              "0"
+            ],
+            [
+              "-5/2",
+              "3/2",
+              "0",
+              "0"
+            ],
+            [
+              "1",
+              "-3/2",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "1/2",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 1,
+        "deriv_order": 1,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "1",
+              "-1",
+              "0"
+            ],
+            [
+              "0",
+              "-3/2",
+              "3/2",
+              "0"
+            ],
+            [
+              "0",
+              "1/2",
+              "-1/2",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 2,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "0",
+              "0",
+              "0"
+            ],
+            [
+              "1",
+              "-1/2",
+              "-2",
+              "0"
+            ],
+            [
+              "-1/2",
+              "1",
+              "2",
+              "0"
+            ],
+            [
+              "0",
+              "-1/2",
+              "-1/2",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 2,
+        "deriv_order": 1,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "0",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "1",
+              "0",
+              "-1"
+            ],
+            [
+              "0",
+              "-1/2",
+              "0",
+              "1/2"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 3,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "0",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "-1/2",
+              "3/2",
+              "0"
+            ],
+            [
+              "0",
+              "1/2",
+              "-2",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "1/2",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 3,
+        "deriv_order": 1,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "0",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "-1/2",
+              "1/2"
+            ],
+            [
+              "0",
+              "0",
+              "1/2",
+              "-1/2"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      }
+    ],
+    "denominator": {
+      "coeffs": [
+        [
+          "1"
+        ],
+        [
+          "-3/2"
+        ],
+        [
+          "1/2"
+        ]
+      ]
+    }
+  },
+  "search": {
+    "recurrence_text": "(1 - 3/2n + 1/2n^2) P(n) = (1 - 5/2n + n^2 - t + 3/2nt - 3/2n^2t + 1/2n^3t) P(n-1) + (t - 3/2nt + 1/2n^2t - t^2 + 3/2nt^2 - 1/2n^2t^2) P'(n-1) + (n - 1/2n^2 - 1/2nt + n^2t - 1/2n^3t - 2nt^2 + 2n^2t^2 - 1/2n^3t^2) P(n-2) + (nt - 1/2n^2t - nt^3 + 1/2n^2t^3) P'(n-2) + (-1/2nt + 1/2n^2t + 3/2nt^2 - 2n^2t^2 + 1/2n^3t^2) P(n-3) + (-1/2nt^2 + 1/2n^2t^2 + 1/2nt^3 - 1/2n^2t^3) P'(n-3)",
+    "source_rows": 80,
+    "skip_prefix": 0,
+    "unknowns": 98,
+    "weighted_unknowns": 148,
+    "equations": 952,
+    "fit_polynomials": 31,
+    "verification_polynomials": 49,
+    "candidates_tried": 6586,
+    "options": {
+      "var_deg": 3,
+      "idx_deg": 3,
+      "diff_deg": 1,
+      "rec_len": 3,
+      "homogeneous": true,
+      "inhomo_var_deg": 0,
+      "inhomo_idx_deg": 0,
+      "denom_var_deg": 0,
+      "denom_idx_deg": 2,
+      "alternating_sign": false
+    }
+  }
+}
