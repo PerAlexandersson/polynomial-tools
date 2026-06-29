@@ -4262,6 +4262,229 @@ fn structural_zero_row_rejects(
     false
 }
 
+struct FoundAdaptiveCandidate {
+    recurrence: Recurrence,
+    opts: RecurrenceOptions,
+    num_unknowns: usize,
+    weighted_unknowns: usize,
+    num_equations: usize,
+    fit_polynomials: usize,
+    verification_polynomials: usize,
+    candidates_tried: usize,
+}
+
+impl FoundAdaptiveCandidate {
+    fn into_result(self, diagnostics: AdaptiveSearchDiagnostics) -> AdaptiveSearchResult {
+        AdaptiveSearchResult {
+            recurrence: self.recurrence,
+            opts: self.opts,
+            num_unknowns: self.num_unknowns,
+            weighted_unknowns: self.weighted_unknowns,
+            num_equations: self.num_equations,
+            fit_polynomials: self.fit_polynomials,
+            verification_polynomials: self.verification_polynomials,
+            candidates_tried: self.candidates_tried,
+            diagnostics,
+        }
+    }
+}
+
+struct AdaptiveCandidateContext<'a> {
+    polys: &'a [Vec<BigRational>],
+    derivs: &'a [Vec<Vec<BigRational>>],
+    prefix_max_degrees: &'a [usize],
+    modular_cache: Option<&'a ModularPrefilterCache>,
+    search: &'a AdaptiveSearchOptions,
+    fit_search: &'a AdaptiveSearchOptions,
+    pass_label: Option<&'static str>,
+}
+
+fn adaptive_pass_suffix(pass_label: Option<&str>) -> &'static str {
+    match pass_label {
+        Some("rational") => " (rational)",
+        _ => "",
+    }
+}
+
+fn evaluate_adaptive_candidate(
+    ctx: &AdaptiveCandidateContext<'_>,
+    opts: &RecurrenceOptions,
+    diagnostics: &mut AdaptiveSearchDiagnostics,
+    tried: &mut usize,
+) -> Option<FoundAdaptiveCandidate> {
+    diagnostics.considered_candidates += 1;
+    let m = ctx.polys.len();
+    let complexity = candidate_complexity(opts);
+    let unknowns = complexity.raw_unknowns;
+    let weighted_unknowns = complexity.weighted_unknowns;
+
+    let timer = Instant::now();
+    let fit_len = fitting_polynomial_count_with_prefix_degrees(
+        ctx.polys,
+        opts,
+        ctx.fit_search,
+        ctx.prefix_max_degrees,
+    );
+    diagnostics.fit_selection_ms += elapsed_ms(timer);
+    let Some(fit_len) = fit_len else {
+        diagnostics.insufficient_fit_rows += 1;
+        return None;
+    };
+
+    let fit_polys = &ctx.polys[..fit_len];
+    let timer = Instant::now();
+    let equations = count_equations_from_prefix_degrees(fit_len, opts, ctx.prefix_max_degrees);
+    diagnostics.equation_count_ms += elapsed_ms(timer);
+    if equations < unknowns + ctx.search.min_margin {
+        diagnostics.equation_bound_rejections += 1;
+        return None;
+    }
+
+    let timer = Instant::now();
+    let degree_bound_rejects =
+        homogeneous_degree_bound_rejects(ctx.polys, ctx.derivs, opts, fit_len);
+    diagnostics.degree_bound_ms += elapsed_ms(timer);
+    if degree_bound_rejects {
+        diagnostics.degree_bound_rejections += 1;
+        return None;
+    }
+
+    let timer = Instant::now();
+    let structural_zero_rejects =
+        structural_zero_row_rejects(ctx.polys, ctx.derivs, opts, fit_len, ctx.prefix_max_degrees);
+    diagnostics.structural_zero_ms += elapsed_ms(timer);
+    if structural_zero_rejects {
+        diagnostics.structural_zero_rejections += 1;
+        return None;
+    }
+
+    *tried += 1;
+
+    if ctx.search.verbose {
+        let label = adaptive_pass_suffix(ctx.pass_label);
+        eprintln!(
+            "  try #{tried}{label}: rec_len={} var_deg={} idx_deg={} diff_deg={} \
+             alternating={} denom=({},{}) homog={} inhomo=({},{}) \
+             fit_rows={} verify_rows={} \
+             (unknowns={unknowns}, weighted={weighted_unknowns}, \
+             equations={equations}, margin={})",
+            opts.rec_len,
+            opts.var_deg,
+            opts.idx_deg,
+            opts.diff_deg,
+            opts.alternating_sign,
+            opts.denom_var_deg,
+            opts.denom_idx_deg,
+            opts.homogeneous,
+            opts.inhomo_var_deg,
+            opts.inhomo_idx_deg,
+            fit_len,
+            m - fit_len,
+            equations - unknowns,
+        );
+    }
+
+    let fit_derivs = &ctx.derivs[..fit_len];
+    let mut exact_row_indices = None;
+    let mut modular_candidate = None;
+    let cached_solve_opts = if let Some(cache) = ctx.modular_cache {
+        let timer = Instant::now();
+        let prefilter = modular_prefilter_with_cache(ctx.polys, fit_len, opts, cache);
+        diagnostics.modular_prefilter_ms += elapsed_ms(timer);
+        if prefilter.rejected {
+            diagnostics.modular_prefilter_rejections += 1;
+            return None;
+        }
+        exact_row_indices = prefilter.full_rank_pivot_rows;
+        modular_candidate = prefilter.modular_solution;
+        let mut solve_opts = opts.clone();
+        solve_opts.modular_prefilter = false;
+        Some(solve_opts)
+    } else {
+        None
+    };
+    let solve_opts = cached_solve_opts.as_ref().unwrap_or(opts);
+
+    if let Some(candidate) = modular_candidate.as_ref() {
+        diagnostics.modular_lift_attempts += 1;
+        let timer = Instant::now();
+        let lifted = verified_recurrence_from_modular_lift(fit_polys, fit_derivs, opts, candidate);
+        diagnostics.modular_lift_ms += elapsed_ms(timer);
+        if let Some(rec) = lifted {
+            let timer = Instant::now();
+            let verified =
+                verify_heldout_tail(ctx.polys, ctx.derivs, &rec, opts, fit_len, ctx.search);
+            diagnostics.heldout_verify_ms += elapsed_ms(timer);
+            if verified {
+                diagnostics.modular_lift_successes += 1;
+                if ctx.search.verbose {
+                    let suffix = adaptive_pass_suffix(ctx.pass_label);
+                    eprintln!("  -> found by modular lift{suffix}!");
+                }
+                return Some(FoundAdaptiveCandidate {
+                    recurrence: rec,
+                    opts: opts.clone(),
+                    num_unknowns: unknowns,
+                    weighted_unknowns,
+                    num_equations: equations,
+                    fit_polynomials: fit_len,
+                    verification_polynomials: m - fit_len,
+                    candidates_tried: *tried,
+                });
+            }
+            diagnostics.heldout_verification_failures += 1;
+            if ctx.search.verbose {
+                eprintln!("  -> modular lift fit prefix but failed held-out verification");
+            }
+            diagnostics.modular_lift_failures += 1;
+            if candidate.full_rank {
+                return None;
+            }
+        } else {
+            diagnostics.modular_lift_failures += 1;
+        }
+    }
+
+    diagnostics.exact_solve_attempts += 1;
+    let timer = Instant::now();
+    let rec = find_polynomial_recurrence_rational_with_derivs_and_rows(
+        fit_polys,
+        fit_derivs,
+        solve_opts,
+        exact_row_indices.as_deref(),
+    );
+    diagnostics.exact_solve_ms += elapsed_ms(timer);
+    if let Some(rec) = rec {
+        let timer = Instant::now();
+        let verified = verify_heldout_tail(ctx.polys, ctx.derivs, &rec, opts, fit_len, ctx.search);
+        diagnostics.heldout_verify_ms += elapsed_ms(timer);
+        if !verified {
+            diagnostics.heldout_verification_failures += 1;
+            if ctx.search.verbose {
+                eprintln!("  -> fitted prefix but failed held-out verification");
+            }
+            return None;
+        }
+        if ctx.search.verbose {
+            let suffix = adaptive_pass_suffix(ctx.pass_label);
+            eprintln!("  -> found{suffix}!");
+        }
+        Some(FoundAdaptiveCandidate {
+            recurrence: rec,
+            opts: opts.clone(),
+            num_unknowns: unknowns,
+            weighted_unknowns,
+            num_equations: equations,
+            fit_polynomials: fit_len,
+            verification_polynomials: m - fit_len,
+            candidates_tried: *tried,
+        })
+    } else {
+        diagnostics.failed_exact_solves += 1;
+        None
+    }
+}
+
 /// Search for the simplest polynomial recurrence by trying parameter
 /// combinations in order of ascending complexity.
 pub fn find_recurrence_adaptive_rational(
@@ -4293,168 +4516,20 @@ pub fn find_recurrence_adaptive_rational(
     let mut tried = 0;
     diagnostics.generated_candidates = candidates.len();
 
+    let primary_context = AdaptiveCandidateContext {
+        polys,
+        derivs: &derivs,
+        prefix_max_degrees: &prefix_max_degrees,
+        modular_cache: modular_cache.as_ref(),
+        search,
+        fit_search: search,
+        pass_label: None,
+    };
     for opts in &candidates {
-        diagnostics.considered_candidates += 1;
-        let complexity = candidate_complexity(opts);
-        let unknowns = complexity.raw_unknowns;
-        let weighted_unknowns = complexity.weighted_unknowns;
-        let timer = Instant::now();
-        let fit_len =
-            fitting_polynomial_count_with_prefix_degrees(polys, opts, search, &prefix_max_degrees);
-        diagnostics.fit_selection_ms += elapsed_ms(timer);
-        let Some(fit_len) = fit_len else {
-            diagnostics.insufficient_fit_rows += 1;
-            continue;
-        };
-        let fit_polys = &polys[..fit_len];
-        let timer = Instant::now();
-        let equations = count_equations_from_prefix_degrees(fit_len, opts, &prefix_max_degrees);
-        diagnostics.equation_count_ms += elapsed_ms(timer);
-
-        if equations < unknowns + search.min_margin {
-            diagnostics.equation_bound_rejections += 1;
-            continue;
-        }
-
-        let timer = Instant::now();
-        let degree_bound_rejects = homogeneous_degree_bound_rejects(polys, &derivs, opts, fit_len);
-        diagnostics.degree_bound_ms += elapsed_ms(timer);
-        if degree_bound_rejects {
-            diagnostics.degree_bound_rejections += 1;
-            continue;
-        }
-
-        let timer = Instant::now();
-        let structural_zero_rejects =
-            structural_zero_row_rejects(polys, &derivs, opts, fit_len, &prefix_max_degrees);
-        diagnostics.structural_zero_ms += elapsed_ms(timer);
-        if structural_zero_rejects {
-            diagnostics.structural_zero_rejections += 1;
-            continue;
-        }
-
-        tried += 1;
-
-        if search.verbose {
-            eprintln!(
-                "  try #{tried}: rec_len={} var_deg={} idx_deg={} diff_deg={} \
-                 alternating={} denom=({},{}) homog={} \
-                 inhomo=({},{}) fit_rows={} verify_rows={} \
-                 (unknowns={unknowns}, weighted={weighted_unknowns}, \
-                 equations={equations}, margin={})",
-                opts.rec_len,
-                opts.var_deg,
-                opts.idx_deg,
-                opts.diff_deg,
-                opts.alternating_sign,
-                opts.denom_var_deg,
-                opts.denom_idx_deg,
-                opts.homogeneous,
-                opts.inhomo_var_deg,
-                opts.inhomo_idx_deg,
-                fit_len,
-                m - fit_len,
-                equations - unknowns,
-            );
-        }
-
-        let fit_derivs = &derivs[..fit_len];
-        let mut exact_row_indices = None;
-        let mut modular_candidate = None;
-        let cached_solve_opts = if let Some(cache) = &modular_cache {
-            let timer = Instant::now();
-            let prefilter = modular_prefilter_with_cache(polys, fit_len, opts, cache);
-            diagnostics.modular_prefilter_ms += elapsed_ms(timer);
-            if prefilter.rejected {
-                diagnostics.modular_prefilter_rejections += 1;
-                continue;
-            }
-            exact_row_indices = prefilter.full_rank_pivot_rows;
-            modular_candidate = prefilter.modular_solution;
-            let mut solve_opts = opts.clone();
-            solve_opts.modular_prefilter = false;
-            Some(solve_opts)
-        } else {
-            None
-        };
-        let solve_opts = cached_solve_opts.as_ref().unwrap_or(opts);
-
-        if let Some(candidate) = modular_candidate.as_ref() {
-            diagnostics.modular_lift_attempts += 1;
-            let timer = Instant::now();
-            let lifted =
-                verified_recurrence_from_modular_lift(fit_polys, fit_derivs, opts, candidate);
-            diagnostics.modular_lift_ms += elapsed_ms(timer);
-            if let Some(rec) = lifted {
-                let timer = Instant::now();
-                let verified = verify_heldout_tail(polys, &derivs, &rec, opts, fit_len, search);
-                diagnostics.heldout_verify_ms += elapsed_ms(timer);
-                if verified {
-                    diagnostics.modular_lift_successes += 1;
-                    if search.verbose {
-                        eprintln!("  -> found by modular lift!");
-                    }
-                    return Some(AdaptiveSearchResult {
-                        recurrence: rec,
-                        opts: opts.clone(),
-                        num_unknowns: unknowns,
-                        weighted_unknowns,
-                        num_equations: equations,
-                        fit_polynomials: fit_len,
-                        verification_polynomials: m - fit_len,
-                        candidates_tried: tried,
-                        diagnostics,
-                    });
-                }
-                diagnostics.heldout_verification_failures += 1;
-                if search.verbose {
-                    eprintln!("  -> modular lift fit prefix but failed held-out verification");
-                }
-                diagnostics.modular_lift_failures += 1;
-                if candidate.full_rank {
-                    continue;
-                }
-            } else {
-                diagnostics.modular_lift_failures += 1;
-            }
-        }
-
-        diagnostics.exact_solve_attempts += 1;
-        let timer = Instant::now();
-        let rec = find_polynomial_recurrence_rational_with_derivs_and_rows(
-            fit_polys,
-            fit_derivs,
-            solve_opts,
-            exact_row_indices.as_deref(),
-        );
-        diagnostics.exact_solve_ms += elapsed_ms(timer);
-        if let Some(rec) = rec {
-            let timer = Instant::now();
-            let verified = verify_heldout_tail(polys, &derivs, &rec, opts, fit_len, search);
-            diagnostics.heldout_verify_ms += elapsed_ms(timer);
-            if !verified {
-                diagnostics.heldout_verification_failures += 1;
-                if search.verbose {
-                    eprintln!("  -> fitted prefix but failed held-out verification");
-                }
-                continue;
-            }
-            if search.verbose {
-                eprintln!("  -> found!");
-            }
-            return Some(AdaptiveSearchResult {
-                recurrence: rec,
-                opts: opts.clone(),
-                num_unknowns: unknowns,
-                weighted_unknowns,
-                num_equations: equations,
-                fit_polynomials: fit_len,
-                verification_polynomials: m - fit_len,
-                candidates_tried: tried,
-                diagnostics,
-            });
-        } else {
-            diagnostics.failed_exact_solves += 1;
+        if let Some(found) =
+            evaluate_adaptive_candidate(&primary_context, opts, &mut diagnostics, &mut tried)
+        {
+            return Some(found.into_result(diagnostics));
         }
     }
 
@@ -4477,175 +4552,25 @@ pub fn find_recurrence_adaptive_rational(
             .iter()
             .filter(|opts| opts.denom_var_deg > 0 || opts.denom_idx_deg > 0)
             .count();
+        let rational_context = AdaptiveCandidateContext {
+            polys,
+            derivs: &derivs,
+            prefix_max_degrees: &prefix_max_degrees,
+            modular_cache: modular_cache.as_ref(),
+            search,
+            fit_search: &rational_search,
+            pass_label: Some("rational"),
+        };
         for opts in &rational_candidates {
             // Skip candidates without a denominator (already tried above).
             if opts.denom_var_deg == 0 && opts.denom_idx_deg == 0 {
                 continue;
             }
 
-            diagnostics.considered_candidates += 1;
-            let complexity = candidate_complexity(opts);
-            let unknowns = complexity.raw_unknowns;
-            let weighted_unknowns = complexity.weighted_unknowns;
-            let timer = Instant::now();
-            let fit_len = fitting_polynomial_count_with_prefix_degrees(
-                polys,
-                opts,
-                &rational_search,
-                &prefix_max_degrees,
-            );
-            diagnostics.fit_selection_ms += elapsed_ms(timer);
-            let Some(fit_len) = fit_len else {
-                diagnostics.insufficient_fit_rows += 1;
-                continue;
-            };
-            let fit_polys = &polys[..fit_len];
-            let timer = Instant::now();
-            let equations = count_equations_from_prefix_degrees(fit_len, opts, &prefix_max_degrees);
-            diagnostics.equation_count_ms += elapsed_ms(timer);
-
-            if equations < unknowns + search.min_margin {
-                diagnostics.equation_bound_rejections += 1;
-                continue;
-            }
-
-            let timer = Instant::now();
-            let degree_bound_rejects =
-                homogeneous_degree_bound_rejects(polys, &derivs, opts, fit_len);
-            diagnostics.degree_bound_ms += elapsed_ms(timer);
-            if degree_bound_rejects {
-                diagnostics.degree_bound_rejections += 1;
-                continue;
-            }
-
-            let timer = Instant::now();
-            let structural_zero_rejects =
-                structural_zero_row_rejects(polys, &derivs, opts, fit_len, &prefix_max_degrees);
-            diagnostics.structural_zero_ms += elapsed_ms(timer);
-            if structural_zero_rejects {
-                diagnostics.structural_zero_rejections += 1;
-                continue;
-            }
-
-            tried += 1;
-
-            if search.verbose {
-                eprintln!(
-                    "  try #{tried} (rational): rec_len={} var_deg={} idx_deg={} diff_deg={} \
-                     alternating={} denom=({},{}) \
-                     fit_rows={} verify_rows={} \
-                     (unknowns={unknowns}, weighted={weighted_unknowns}, \
-                     equations={equations}, margin={})",
-                    opts.rec_len,
-                    opts.var_deg,
-                    opts.idx_deg,
-                    opts.diff_deg,
-                    opts.alternating_sign,
-                    opts.denom_var_deg,
-                    opts.denom_idx_deg,
-                    fit_len,
-                    m - fit_len,
-                    equations - unknowns,
-                );
-            }
-
-            let fit_derivs = &derivs[..fit_len];
-            let mut exact_row_indices = None;
-            let mut modular_candidate = None;
-            let cached_solve_opts = if let Some(cache) = &modular_cache {
-                let timer = Instant::now();
-                let prefilter = modular_prefilter_with_cache(polys, fit_len, opts, cache);
-                diagnostics.modular_prefilter_ms += elapsed_ms(timer);
-                if prefilter.rejected {
-                    diagnostics.modular_prefilter_rejections += 1;
-                    continue;
-                }
-                exact_row_indices = prefilter.full_rank_pivot_rows;
-                modular_candidate = prefilter.modular_solution;
-                let mut solve_opts = opts.clone();
-                solve_opts.modular_prefilter = false;
-                Some(solve_opts)
-            } else {
-                None
-            };
-            let solve_opts = cached_solve_opts.as_ref().unwrap_or(opts);
-
-            if let Some(candidate) = modular_candidate.as_ref() {
-                diagnostics.modular_lift_attempts += 1;
-                let timer = Instant::now();
-                let lifted =
-                    verified_recurrence_from_modular_lift(fit_polys, fit_derivs, opts, candidate);
-                diagnostics.modular_lift_ms += elapsed_ms(timer);
-                if let Some(rec) = lifted {
-                    let timer = Instant::now();
-                    let verified = verify_heldout_tail(polys, &derivs, &rec, opts, fit_len, search);
-                    diagnostics.heldout_verify_ms += elapsed_ms(timer);
-                    if verified {
-                        diagnostics.modular_lift_successes += 1;
-                        if search.verbose {
-                            eprintln!("  -> found by modular lift (rational)!");
-                        }
-                        return Some(AdaptiveSearchResult {
-                            recurrence: rec,
-                            opts: opts.clone(),
-                            num_unknowns: unknowns,
-                            weighted_unknowns,
-                            num_equations: equations,
-                            fit_polynomials: fit_len,
-                            verification_polynomials: m - fit_len,
-                            candidates_tried: tried,
-                            diagnostics,
-                        });
-                    }
-                    diagnostics.heldout_verification_failures += 1;
-                    if search.verbose {
-                        eprintln!("  -> modular lift fit prefix but failed held-out verification");
-                    }
-                    diagnostics.modular_lift_failures += 1;
-                    if candidate.full_rank {
-                        continue;
-                    }
-                } else {
-                    diagnostics.modular_lift_failures += 1;
-                }
-            }
-
-            diagnostics.exact_solve_attempts += 1;
-            let timer = Instant::now();
-            let rec = find_polynomial_recurrence_rational_with_derivs_and_rows(
-                fit_polys,
-                fit_derivs,
-                solve_opts,
-                exact_row_indices.as_deref(),
-            );
-            diagnostics.exact_solve_ms += elapsed_ms(timer);
-            if let Some(rec) = rec {
-                let timer = Instant::now();
-                let verified = verify_heldout_tail(polys, &derivs, &rec, opts, fit_len, search);
-                diagnostics.heldout_verify_ms += elapsed_ms(timer);
-                if !verified {
-                    diagnostics.heldout_verification_failures += 1;
-                    if search.verbose {
-                        eprintln!("  -> fitted prefix but failed held-out verification");
-                    }
-                    continue;
-                }
-                if search.verbose {
-                    eprintln!("  -> found (rational)!");
-                }
-                return Some(AdaptiveSearchResult {
-                    recurrence: rec,
-                    opts: opts.clone(),
-                    num_unknowns: unknowns,
-                    weighted_unknowns,
-                    num_equations: equations,
-                    fit_polynomials: fit_len,
-                    verification_polynomials: m - fit_len,
-                    candidates_tried: tried,
-                    diagnostics,
-                });
-            } else {
-                diagnostics.failed_exact_solves += 1;
+            if let Some(found) =
+                evaluate_adaptive_candidate(&rational_context, opts, &mut diagnostics, &mut tried)
+            {
+                return Some(found.into_result(diagnostics));
             }
         }
     }
