@@ -16,6 +16,7 @@ use num_rational::Ratio;
 use num_traits::{One, ToPrimitive, Zero};
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::time::Instant;
 
 pub type BigRational = Ratio<BigInt>;
 
@@ -3088,6 +3089,28 @@ pub struct AdaptiveSearchDiagnostics {
     pub heldout_verification_failures: usize,
     /// Whether the automatic denominator escalation pass was entered.
     pub denominator_escalation_entered: bool,
+    /// Time spent precomputing derivatives.
+    pub derivative_precompute_ms: f64,
+    /// Time spent building modular-prefilter cache data.
+    pub modular_cache_build_ms: f64,
+    /// Time spent generating and sorting candidate parameter sets.
+    pub candidate_generation_ms: f64,
+    /// Time spent selecting fit prefixes.
+    pub fit_selection_ms: f64,
+    /// Time spent counting equations.
+    pub equation_count_ms: f64,
+    /// Time spent in degree-bound prechecks.
+    pub degree_bound_ms: f64,
+    /// Time spent in modular-prefilter checks.
+    pub modular_prefilter_ms: f64,
+    /// Time spent in exact rational recurrence solving.
+    pub exact_solve_ms: f64,
+    /// Time spent verifying held-out rows.
+    pub heldout_verify_ms: f64,
+}
+
+fn elapsed_ms(start: Instant) -> f64 {
+    start.elapsed().as_secs_f64() * 1000.0
 }
 
 /// Generate candidate parameter sets.
@@ -3288,37 +3311,55 @@ pub fn find_recurrence_adaptive_rational(
     if m < 2 {
         return None;
     }
+    let mut diagnostics = AdaptiveSearchDiagnostics::default();
+    let timer = Instant::now();
     let derivs = rational_derivatives_up_to(polys, search.max_diff_deg);
-    let modular_cache = search
-        .modular_prefilter
-        .then(|| ModularPrefilterCache::new(polys, &derivs, search.max_diff_deg));
+    diagnostics.derivative_precompute_ms += elapsed_ms(timer);
+    let timer = Instant::now();
+    let modular_cache = if search.modular_prefilter {
+        Some(ModularPrefilterCache::new(
+            polys,
+            &derivs,
+            search.max_diff_deg,
+        ))
+    } else {
+        None
+    };
+    diagnostics.modular_cache_build_ms += elapsed_ms(timer);
 
     // First pass: use the options as given.
+    let timer = Instant::now();
     let candidates = generate_candidates(m, search);
+    diagnostics.candidate_generation_ms += elapsed_ms(timer);
     let mut tried = 0;
-    let mut diagnostics = AdaptiveSearchDiagnostics {
-        generated_candidates: candidates.len(),
-        ..Default::default()
-    };
+    diagnostics.generated_candidates = candidates.len();
 
     for opts in &candidates {
         diagnostics.considered_candidates += 1;
         let complexity = candidate_complexity(opts);
         let unknowns = complexity.raw_unknowns;
         let weighted_unknowns = complexity.weighted_unknowns;
-        let Some(fit_len) = fitting_polynomial_count(polys, opts, search) else {
+        let timer = Instant::now();
+        let fit_len = fitting_polynomial_count(polys, opts, search);
+        diagnostics.fit_selection_ms += elapsed_ms(timer);
+        let Some(fit_len) = fit_len else {
             diagnostics.insufficient_fit_rows += 1;
             continue;
         };
         let fit_polys = &polys[..fit_len];
+        let timer = Instant::now();
         let equations = count_equations_rational(fit_polys, opts);
+        diagnostics.equation_count_ms += elapsed_ms(timer);
 
         if equations < unknowns + search.min_margin {
             diagnostics.equation_bound_rejections += 1;
             continue;
         }
 
-        if homogeneous_degree_bound_rejects(polys, &derivs, opts, fit_len) {
+        let timer = Instant::now();
+        let degree_bound_rejects = homogeneous_degree_bound_rejects(polys, &derivs, opts, fit_len);
+        diagnostics.degree_bound_ms += elapsed_ms(timer);
+        if degree_bound_rejects {
             diagnostics.degree_bound_rejections += 1;
             continue;
         }
@@ -3351,7 +3392,9 @@ pub fn find_recurrence_adaptive_rational(
         let fit_derivs = &derivs[..fit_len];
         let mut exact_row_indices = None;
         let cached_solve_opts = if let Some(cache) = &modular_cache {
+            let timer = Instant::now();
             let prefilter = modular_prefilter_with_cache(polys, fit_len, opts, cache);
+            diagnostics.modular_prefilter_ms += elapsed_ms(timer);
             if prefilter.rejected {
                 diagnostics.modular_prefilter_rejections += 1;
                 continue;
@@ -3365,13 +3408,19 @@ pub fn find_recurrence_adaptive_rational(
         };
         let solve_opts = cached_solve_opts.as_ref().unwrap_or(opts);
         diagnostics.exact_solve_attempts += 1;
-        if let Some(rec) = find_polynomial_recurrence_rational_with_derivs_and_rows(
+        let timer = Instant::now();
+        let rec = find_polynomial_recurrence_rational_with_derivs_and_rows(
             fit_polys,
             fit_derivs,
             solve_opts,
             exact_row_indices.as_deref(),
-        ) {
-            if !verify_heldout_tail(polys, &derivs, &rec, opts, fit_len, search) {
+        );
+        diagnostics.exact_solve_ms += elapsed_ms(timer);
+        if let Some(rec) = rec {
+            let timer = Instant::now();
+            let verified = verify_heldout_tail(polys, &derivs, &rec, opts, fit_len, search);
+            diagnostics.heldout_verify_ms += elapsed_ms(timer);
+            if !verified {
                 diagnostics.heldout_verification_failures += 1;
                 if search.verbose {
                     eprintln!("  -> fitted prefix but failed held-out verification");
@@ -3408,7 +3457,9 @@ pub fn find_recurrence_adaptive_rational(
             rational_search.max_denom_idx_deg = 1;
         }
 
+        let timer = Instant::now();
         let rational_candidates = generate_candidates(m, &rational_search);
+        diagnostics.candidate_generation_ms += elapsed_ms(timer);
         diagnostics.denominator_escalation_entered = true;
         diagnostics.generated_candidates += rational_candidates
             .iter()
@@ -3424,19 +3475,28 @@ pub fn find_recurrence_adaptive_rational(
             let complexity = candidate_complexity(opts);
             let unknowns = complexity.raw_unknowns;
             let weighted_unknowns = complexity.weighted_unknowns;
-            let Some(fit_len) = fitting_polynomial_count(polys, opts, &rational_search) else {
+            let timer = Instant::now();
+            let fit_len = fitting_polynomial_count(polys, opts, &rational_search);
+            diagnostics.fit_selection_ms += elapsed_ms(timer);
+            let Some(fit_len) = fit_len else {
                 diagnostics.insufficient_fit_rows += 1;
                 continue;
             };
             let fit_polys = &polys[..fit_len];
+            let timer = Instant::now();
             let equations = count_equations_rational(fit_polys, opts);
+            diagnostics.equation_count_ms += elapsed_ms(timer);
 
             if equations < unknowns + search.min_margin {
                 diagnostics.equation_bound_rejections += 1;
                 continue;
             }
 
-            if homogeneous_degree_bound_rejects(polys, &derivs, opts, fit_len) {
+            let timer = Instant::now();
+            let degree_bound_rejects =
+                homogeneous_degree_bound_rejects(polys, &derivs, opts, fit_len);
+            diagnostics.degree_bound_ms += elapsed_ms(timer);
+            if degree_bound_rejects {
                 diagnostics.degree_bound_rejections += 1;
                 continue;
             }
@@ -3466,7 +3526,9 @@ pub fn find_recurrence_adaptive_rational(
             let fit_derivs = &derivs[..fit_len];
             let mut exact_row_indices = None;
             let cached_solve_opts = if let Some(cache) = &modular_cache {
+                let timer = Instant::now();
                 let prefilter = modular_prefilter_with_cache(polys, fit_len, opts, cache);
+                diagnostics.modular_prefilter_ms += elapsed_ms(timer);
                 if prefilter.rejected {
                     diagnostics.modular_prefilter_rejections += 1;
                     continue;
@@ -3480,13 +3542,19 @@ pub fn find_recurrence_adaptive_rational(
             };
             let solve_opts = cached_solve_opts.as_ref().unwrap_or(opts);
             diagnostics.exact_solve_attempts += 1;
-            if let Some(rec) = find_polynomial_recurrence_rational_with_derivs_and_rows(
+            let timer = Instant::now();
+            let rec = find_polynomial_recurrence_rational_with_derivs_and_rows(
                 fit_polys,
                 fit_derivs,
                 solve_opts,
                 exact_row_indices.as_deref(),
-            ) {
-                if !verify_heldout_tail(polys, &derivs, &rec, opts, fit_len, search) {
+            );
+            diagnostics.exact_solve_ms += elapsed_ms(timer);
+            if let Some(rec) = rec {
+                let timer = Instant::now();
+                let verified = verify_heldout_tail(polys, &derivs, &rec, opts, fit_len, search);
+                diagnostics.heldout_verify_ms += elapsed_ms(timer);
+                if !verified {
                     diagnostics.heldout_verification_failures += 1;
                     if search.verbose {
                         eprintln!("  -> fitted prefix but failed held-out verification");
