@@ -228,6 +228,10 @@ fn poly_coeff_rational(coeffs: &[BigRational], k: usize) -> BigRational {
     }
 }
 
+fn poly_coeff_nonzero_rational(coeffs: &[BigRational], k: usize) -> bool {
+    coeffs.get(k).is_some_and(|coeff| !coeff.is_zero())
+}
+
 /// Degree of a polynomial (returns 0 for the zero polynomial).
 fn poly_degree_rational(coeffs: &[BigRational]) -> usize {
     coeffs.iter().rposition(|c| !c.is_zero()).unwrap_or(0)
@@ -1080,8 +1084,8 @@ fn recurrence_system_consistent_mod_images(
         });
     let max_t_deg = max_j + max_poly_deg;
     let eqs_per_nn = max_t_deg + 1;
-    let mut rows = Vec::with_capacity((m - opts.rec_len) * eqs_per_nn);
-    let mut row_indices = Vec::with_capacity((m - opts.rec_len) * eqs_per_nn);
+    let num_nn = m - opts.rec_len;
+    let num_rows = num_nn * eqs_per_nn;
     let max_n_pow = opts
         .idx_deg
         .max(opts.denom_idx_deg)
@@ -1090,90 +1094,134 @@ fn recurrence_system_consistent_mod_images(
         } else {
             opts.inhomo_idx_deg
         });
+    let n_power_table = (opts.rec_len + 1..=m)
+        .map(|nn| mod_index_powers(nn, max_n_pow, modulus))
+        .collect::<Vec<_>>();
 
-    for (eq_idx, nn) in (opts.rec_len + 1..=m).enumerate() {
+    let mut raw_rows = Vec::with_capacity(num_rows);
+    for nn in opts.rec_len + 1..=m {
         let current_idx = nn - 1;
-        let n_powers = mod_index_powers(nn, max_n_pow, modulus);
-
         for l in 0..=max_t_deg {
-            let equation_row = eq_idx * eqs_per_nn + l;
             let cur_l = poly_coeff_mod(polys_mod, current_idx, l);
-            let mut row = linalg::SparseModRow::new(mod_neg(cur_l, modulus) as u64, prime);
+            raw_rows.push(linalg::SparseModRow::new(
+                mod_neg(cur_l, modulus) as u64,
+                prime,
+            ));
+        }
+    }
+    let row_index = |eq_idx: usize, l: usize| -> usize { eq_idx * eqs_per_nn + l };
+    let power_indices = n_power_table.first().map(Vec::as_slice).unwrap_or(&[]);
 
-            if num_denom_vars > 0 {
-                for (i, &n_power) in n_powers.iter().enumerate().take(opts.denom_idx_deg + 1) {
-                    for j in 0..=opts.denom_var_deg {
-                        if i == 0 && j == 0 {
-                            continue;
-                        }
-                        if l < j {
-                            continue;
-                        }
-                        let pc = poly_coeff_mod(polys_mod, current_idx, l - j);
+    if num_denom_vars > 0 {
+        for (i, _) in power_indices
+            .iter()
+            .enumerate()
+            .take(opts.denom_idx_deg + 1)
+        {
+            for j in 0..=opts.denom_var_deg {
+                if i == 0 && j == 0 {
+                    continue;
+                }
+                let col = denom_col(i, j);
+                for (eq_idx, nn) in (opts.rec_len + 1..=m).enumerate() {
+                    let n_power = n_power_table[eq_idx][i];
+                    if n_power == 0 {
+                        continue;
+                    }
+                    for (k, &pc) in polys_mod[nn - 1].iter().enumerate() {
                         if pc == 0 {
                             continue;
                         }
-                        let col = denom_col(i, j);
-                        row.add_reduced_entry_sorted(
-                            col,
-                            mod_mul(pc, n_power, modulus) as u64,
-                            prime,
-                        );
+                        let l = k + j;
+                        if l <= max_t_deg {
+                            raw_rows[row_index(eq_idx, l)].add_reduced_entry_sorted(
+                                col,
+                                mod_mul(pc, n_power, modulus) as u64,
+                                prime,
+                            );
+                        }
                     }
                 }
             }
+        }
+    }
 
-            for r in 1..=opts.rec_len {
-                for (d, ref_poly) in derivs_mod[nn - 1 - r]
-                    .iter()
-                    .enumerate()
-                    .take(opts.diff_deg + 1)
-                {
-                    for sign_idx in 0..sign_family_count {
-                        for (i, &n_power) in n_powers.iter().enumerate().take(opts.idx_deg + 1) {
+    let derivative_order_indices = derivs_mod.first().map(Vec::as_slice).unwrap_or(&[]);
+    for r in 1..=opts.rec_len {
+        for (d, _) in derivative_order_indices
+            .iter()
+            .enumerate()
+            .take(opts.diff_deg + 1)
+        {
+            for sign_idx in 0..sign_family_count {
+                for (i, _) in power_indices.iter().enumerate().take(opts.idx_deg + 1) {
+                    for j in 0..=opts.var_deg {
+                        let col = coeff_col(r, d, sign_idx, i, j);
+                        for (eq_idx, nn) in (opts.rec_len + 1..=m).enumerate() {
+                            let n_power = n_power_table[eq_idx][i];
                             let n_factor = if sign_idx == 1 && nn % 2 == 1 {
                                 mod_neg(n_power, modulus)
                             } else {
                                 n_power
                             };
-                            for j in 0..=opts.var_deg {
-                                if l < j {
-                                    continue;
-                                }
-                                let rc = poly_coeff_mod_slice(ref_poly, l - j);
+                            if n_factor == 0 {
+                                continue;
+                            }
+                            let ref_poly = &derivs_mod[nn - 1 - r][d];
+                            for (k, &rc) in ref_poly.iter().enumerate() {
                                 if rc == 0 {
                                     continue;
                                 }
-                                let col = coeff_col(r, d, sign_idx, i, j);
-                                row.add_reduced_entry_sorted(
-                                    col,
-                                    mod_neg(mod_mul(rc, n_factor, modulus), modulus) as u64,
-                                    prime,
-                                );
+                                let l = k + j;
+                                if l <= max_t_deg {
+                                    raw_rows[row_index(eq_idx, l)].add_reduced_entry_sorted(
+                                        col,
+                                        mod_neg(mod_mul(rc, n_factor, modulus), modulus) as u64,
+                                        prime,
+                                    );
+                                }
                             }
                         }
                     }
                 }
             }
+        }
+    }
 
-            if !opts.homogeneous && l <= opts.inhomo_var_deg {
-                for (i, &n_power) in n_powers.iter().enumerate().take(opts.inhomo_idx_deg + 1) {
-                    let col = inhomo_col(i, l);
-                    row.add_reduced_entry_sorted(col, mod_neg(n_power, modulus) as u64, prime);
+    if !opts.homogeneous {
+        for i in 0..=opts.inhomo_idx_deg {
+            for j in 0..=opts.inhomo_var_deg {
+                if j > max_t_deg {
+                    continue;
+                }
+                let col = inhomo_col(i, j);
+                for (eq_idx, n_powers) in n_power_table.iter().enumerate() {
+                    let n_power = n_powers[i];
+                    if n_power != 0 {
+                        raw_rows[row_index(eq_idx, j)].add_reduced_entry_sorted(
+                            col,
+                            mod_neg(n_power, modulus) as u64,
+                            prime,
+                        );
+                    }
                 }
             }
+        }
+    }
 
-            if row.is_contradiction() {
-                return ModularSystemResult {
-                    consistent: false,
-                    full_rank_pivot_rows: None,
-                    modular_solution: None,
-                };
-            }
-            if !row.is_tautology() {
-                row_indices.push(equation_row);
-                rows.push(row);
-            }
+    let mut rows = Vec::with_capacity(num_rows);
+    let mut row_indices = Vec::with_capacity(num_rows);
+    for (equation_row, row) in raw_rows.into_iter().enumerate() {
+        if row.is_contradiction() {
+            return ModularSystemResult {
+                consistent: false,
+                full_rank_pivot_rows: None,
+                modular_solution: None,
+            };
+        }
+        if !row.is_tautology() {
+            row_indices.push(equation_row);
+            rows.push(row);
         }
     }
 
@@ -3598,11 +3646,37 @@ pub fn count_equations_rational(polys: &[Vec<BigRational>], opts: &RecurrenceOpt
     if m <= opts.rec_len {
         return 0;
     }
-    let max_poly_deg = polys
+    let max_poly_deg = max_poly_degree_rational(polys);
+    count_equations_from_max_degree(m, max_poly_deg, opts)
+}
+
+fn max_poly_degree_rational(polys: &[Vec<BigRational>]) -> usize {
+    polys
         .iter()
         .map(|p| poly_degree_rational(p))
         .max()
-        .unwrap_or(0);
+        .unwrap_or(0)
+}
+
+fn prefix_max_degrees_rational(polys: &[Vec<BigRational>]) -> Vec<usize> {
+    let mut result = Vec::with_capacity(polys.len() + 1);
+    result.push(0);
+    let mut max_degree = 0;
+    for poly in polys {
+        max_degree = max_degree.max(poly_degree_rational(poly));
+        result.push(max_degree);
+    }
+    result
+}
+
+fn count_equations_from_max_degree(
+    poly_count: usize,
+    max_poly_deg: usize,
+    opts: &RecurrenceOptions,
+) -> usize {
+    if poly_count <= opts.rec_len {
+        return 0;
+    }
     let max_j = opts
         .var_deg
         .max(opts.denom_var_deg)
@@ -3612,7 +3686,16 @@ pub fn count_equations_rational(polys: &[Vec<BigRational>], opts: &RecurrenceOpt
             opts.inhomo_var_deg
         });
     let eqs_per_nn = max_j + max_poly_deg + 1;
-    (m - opts.rec_len) * eqs_per_nn
+    (poly_count - opts.rec_len) * eqs_per_nn
+}
+
+fn count_equations_from_prefix_degrees(
+    fit_len: usize,
+    opts: &RecurrenceOptions,
+    prefix_max_degrees: &[usize],
+) -> usize {
+    let max_poly_deg = prefix_max_degrees.get(fit_len).copied().unwrap_or(0);
+    count_equations_from_max_degree(fit_len, max_poly_deg, opts)
 }
 
 /// Count the total number of equations for integer input polynomials.
@@ -3752,6 +3835,8 @@ pub struct AdaptiveSearchDiagnostics {
     pub equation_bound_rejections: usize,
     /// Homogeneous candidates rejected by the degree-bound precheck.
     pub degree_bound_rejections: usize,
+    /// Candidates rejected by a structural zero-row precheck.
+    pub structural_zero_rejections: usize,
     /// Candidates rejected by the modular prefilter before exact rational solving.
     pub modular_prefilter_rejections: usize,
     /// Candidates sent to exact rational recurrence solving.
@@ -3780,6 +3865,8 @@ pub struct AdaptiveSearchDiagnostics {
     pub equation_count_ms: f64,
     /// Time spent in degree-bound prechecks.
     pub degree_bound_ms: f64,
+    /// Time spent in structural zero-row prechecks.
+    pub structural_zero_ms: f64,
     /// Time spent in modular-prefilter checks.
     pub modular_prefilter_ms: f64,
     /// Time spent lifting and exactly checking modular candidate solutions.
@@ -3905,10 +3992,11 @@ fn generate_candidates(m: usize, search: &AdaptiveSearchOptions) -> Vec<Recurren
     candidates
 }
 
-fn fitting_polynomial_count(
+fn fitting_polynomial_count_with_prefix_degrees(
     polys: &[Vec<BigRational>],
     opts: &RecurrenceOptions,
     search: &AdaptiveSearchOptions,
+    prefix_max_degrees: &[usize],
 ) -> Option<usize> {
     let m = polys.len();
     if m <= opts.rec_len {
@@ -3926,7 +4014,7 @@ fn fitting_polynomial_count(
 
     let unknowns = count_unknowns(opts);
     for fit_len in opts.rec_len + 1..=max_fit {
-        let equations = count_equations_rational(&polys[..fit_len], opts);
+        let equations = count_equations_from_prefix_degrees(fit_len, opts, prefix_max_degrees);
         if equations >= unknowns + search.min_margin {
             return Some((fit_len + search.fit_extra_rows).min(max_fit));
         }
@@ -3981,6 +4069,75 @@ fn homogeneous_degree_bound_rejects(
     false
 }
 
+fn recurrence_row_has_possible_source(
+    polys: &[Vec<BigRational>],
+    derivs: &[Vec<Vec<BigRational>>],
+    opts: &RecurrenceOptions,
+    nn: usize,
+    l: usize,
+) -> bool {
+    let current = &polys[nn - 1];
+
+    if opts.denom_var_deg > 0 || opts.denom_idx_deg > 0 {
+        for j in 0..=opts.denom_var_deg {
+            if j == 0 && opts.denom_idx_deg == 0 {
+                continue;
+            }
+            if l >= j && poly_coeff_nonzero_rational(current, l - j) {
+                return true;
+            }
+        }
+    }
+
+    for r in 1..=opts.rec_len {
+        for ref_poly in derivs[nn - 1 - r].iter().take(opts.diff_deg + 1) {
+            for j in 0..=opts.var_deg {
+                if l >= j && poly_coeff_nonzero_rational(ref_poly, l - j) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    !opts.homogeneous && l <= opts.inhomo_var_deg
+}
+
+fn structural_zero_row_rejects(
+    polys: &[Vec<BigRational>],
+    derivs: &[Vec<Vec<BigRational>>],
+    opts: &RecurrenceOptions,
+    fit_len: usize,
+    prefix_max_degrees: &[usize],
+) -> bool {
+    if fit_len <= opts.rec_len {
+        return false;
+    }
+
+    let max_poly_deg = prefix_max_degrees.get(fit_len).copied().unwrap_or(0);
+    let max_j = opts
+        .var_deg
+        .max(opts.denom_var_deg)
+        .max(if opts.homogeneous {
+            0
+        } else {
+            opts.inhomo_var_deg
+        });
+    let max_t_deg = max_j + max_poly_deg;
+
+    for nn in opts.rec_len + 1..=fit_len {
+        let current = &polys[nn - 1];
+        for l in 0..=max_t_deg {
+            if poly_coeff_nonzero_rational(current, l)
+                && !recurrence_row_has_possible_source(polys, derivs, opts, nn, l)
+            {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
 /// Search for the simplest polynomial recurrence by trying parameter
 /// combinations in order of ascending complexity.
 pub fn find_recurrence_adaptive_rational(
@@ -3993,6 +4150,7 @@ pub fn find_recurrence_adaptive_rational(
         return None;
     }
     let mut diagnostics = AdaptiveSearchDiagnostics::default();
+    let prefix_max_degrees = prefix_max_degrees_rational(polys);
     let timer = Instant::now();
     let derivs = rational_derivatives_up_to(polys, search.max_diff_deg);
     diagnostics.derivative_precompute_ms += elapsed_ms(timer);
@@ -4017,7 +4175,8 @@ pub fn find_recurrence_adaptive_rational(
         let unknowns = complexity.raw_unknowns;
         let weighted_unknowns = complexity.weighted_unknowns;
         let timer = Instant::now();
-        let fit_len = fitting_polynomial_count(polys, opts, search);
+        let fit_len =
+            fitting_polynomial_count_with_prefix_degrees(polys, opts, search, &prefix_max_degrees);
         diagnostics.fit_selection_ms += elapsed_ms(timer);
         let Some(fit_len) = fit_len else {
             diagnostics.insufficient_fit_rows += 1;
@@ -4025,7 +4184,7 @@ pub fn find_recurrence_adaptive_rational(
         };
         let fit_polys = &polys[..fit_len];
         let timer = Instant::now();
-        let equations = count_equations_rational(fit_polys, opts);
+        let equations = count_equations_from_prefix_degrees(fit_len, opts, &prefix_max_degrees);
         diagnostics.equation_count_ms += elapsed_ms(timer);
 
         if equations < unknowns + search.min_margin {
@@ -4038,6 +4197,15 @@ pub fn find_recurrence_adaptive_rational(
         diagnostics.degree_bound_ms += elapsed_ms(timer);
         if degree_bound_rejects {
             diagnostics.degree_bound_rejections += 1;
+            continue;
+        }
+
+        let timer = Instant::now();
+        let structural_zero_rejects =
+            structural_zero_row_rejects(polys, &derivs, opts, fit_len, &prefix_max_degrees);
+        diagnostics.structural_zero_ms += elapsed_ms(timer);
+        if structural_zero_rejects {
+            diagnostics.structural_zero_rejections += 1;
             continue;
         }
 
@@ -4196,7 +4364,12 @@ pub fn find_recurrence_adaptive_rational(
             let unknowns = complexity.raw_unknowns;
             let weighted_unknowns = complexity.weighted_unknowns;
             let timer = Instant::now();
-            let fit_len = fitting_polynomial_count(polys, opts, &rational_search);
+            let fit_len = fitting_polynomial_count_with_prefix_degrees(
+                polys,
+                opts,
+                &rational_search,
+                &prefix_max_degrees,
+            );
             diagnostics.fit_selection_ms += elapsed_ms(timer);
             let Some(fit_len) = fit_len else {
                 diagnostics.insufficient_fit_rows += 1;
@@ -4204,7 +4377,7 @@ pub fn find_recurrence_adaptive_rational(
             };
             let fit_polys = &polys[..fit_len];
             let timer = Instant::now();
-            let equations = count_equations_rational(fit_polys, opts);
+            let equations = count_equations_from_prefix_degrees(fit_len, opts, &prefix_max_degrees);
             diagnostics.equation_count_ms += elapsed_ms(timer);
 
             if equations < unknowns + search.min_margin {
@@ -4218,6 +4391,15 @@ pub fn find_recurrence_adaptive_rational(
             diagnostics.degree_bound_ms += elapsed_ms(timer);
             if degree_bound_rejects {
                 diagnostics.degree_bound_rejections += 1;
+                continue;
+            }
+
+            let timer = Instant::now();
+            let structural_zero_rejects =
+                structural_zero_row_rejects(polys, &derivs, opts, fit_len, &prefix_max_degrees);
+            diagnostics.structural_zero_ms += elapsed_ms(timer);
+            if structural_zero_rejects {
+                diagnostics.structural_zero_rejections += 1;
                 continue;
             }
 
@@ -4917,6 +5099,46 @@ mod tests {
             &derivs,
             &enough_t_degree,
             3
+        ));
+    }
+
+    #[test]
+    fn structural_zero_row_rejects_impossible_support_gap() {
+        let polys = i64_polys_to_rational(&[vec![1, 0, 1], vec![0, 1]]);
+        let derivs = rational_derivatives_up_to(&polys, 0);
+        let prefix_max_degrees = prefix_max_degrees_rational(&polys);
+        let no_t_shift = RecurrenceOptions {
+            rec_len: 1,
+            var_deg: 0,
+            idx_deg: 0,
+            diff_deg: 0,
+            homogeneous: true,
+            ..Default::default()
+        };
+        let with_t_shift = RecurrenceOptions {
+            var_deg: 1,
+            ..no_t_shift.clone()
+        };
+
+        assert!(!homogeneous_degree_bound_rejects(
+            &polys,
+            &derivs,
+            &no_t_shift,
+            2
+        ));
+        assert!(structural_zero_row_rejects(
+            &polys,
+            &derivs,
+            &no_t_shift,
+            2,
+            &prefix_max_degrees
+        ));
+        assert!(!structural_zero_row_rejects(
+            &polys,
+            &derivs,
+            &with_t_shift,
+            2,
+            &prefix_max_degrees
         ));
     }
 
