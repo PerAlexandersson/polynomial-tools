@@ -234,11 +234,6 @@ fn poly_is_zero_rational(coeffs: &[BigRational]) -> bool {
     coeffs.iter().all(|c| c.is_zero())
 }
 
-fn poly_equal_rational(lhs: &[BigRational], rhs: &[BigRational]) -> bool {
-    let max_len = lhs.len().max(rhs.len());
-    (0..max_len).all(|idx| poly_coeff_rational(lhs, idx) == poly_coeff_rational(rhs, idx))
-}
-
 fn poly_add_scaled_assign(
     target: &mut Vec<BigRational>,
     source: &[BigRational],
@@ -253,6 +248,108 @@ fn poly_add_scaled_assign(
     for (idx, coeff) in source.iter().enumerate() {
         if !coeff.is_zero() {
             target[idx] += coeff.clone() * scale.clone();
+        }
+    }
+}
+
+fn poly_add_signed_assign(target: &mut Vec<BigRational>, source: &[BigRational], subtract: bool) {
+    if poly_is_zero_rational(source) {
+        return;
+    }
+    if target.len() < source.len() {
+        target.resize(source.len(), BigRational::zero());
+    }
+    for (idx, coeff) in source.iter().enumerate() {
+        if coeff.is_zero() {
+            continue;
+        }
+        if subtract {
+            target[idx] -= coeff.clone();
+        } else {
+            target[idx] += coeff.clone();
+        }
+    }
+}
+
+fn poly_add_bivar_eval_signed_assign(
+    target: &mut Vec<BigRational>,
+    poly: &BivarPoly,
+    n_powers: &[BigRational],
+    subtract: bool,
+) {
+    let width = poly.coeffs.iter().map(Vec::len).max().unwrap_or(0);
+    if width == 0 {
+        return;
+    }
+    if target.len() < width {
+        target.resize(width, BigRational::zero());
+    }
+    for (i, row) in poly.coeffs.iter().enumerate() {
+        let n_power = n_powers
+            .get(i)
+            .expect("bivariate evaluation requires enough powers of n");
+        if n_power.is_zero() {
+            continue;
+        }
+        for (j, coeff) in row.iter().enumerate() {
+            if coeff.is_zero() {
+                continue;
+            }
+            let value = coeff.clone() * n_power.clone();
+            if subtract {
+                target[j] -= value;
+            } else {
+                target[j] += value;
+            }
+        }
+    }
+}
+
+fn poly_add_bivar_eval_times_poly_signed_assign(
+    target: &mut Vec<BigRational>,
+    coeff_poly: &BivarPoly,
+    n_powers: &[BigRational],
+    source: &[BigRational],
+    subtract: bool,
+) {
+    if poly_is_zero_rational(source) {
+        return;
+    }
+    let width = coeff_poly.coeffs.iter().map(Vec::len).max().unwrap_or(0);
+    if width == 0 {
+        return;
+    }
+    let needed_len = width + source.len() - 1;
+    if target.len() < needed_len {
+        target.resize(needed_len, BigRational::zero());
+    }
+
+    for (i, row) in coeff_poly.coeffs.iter().enumerate() {
+        let n_power = n_powers
+            .get(i)
+            .expect("bivariate evaluation requires enough powers of n");
+        if n_power.is_zero() {
+            continue;
+        }
+        for (j, coeff) in row.iter().enumerate() {
+            if coeff.is_zero() {
+                continue;
+            }
+            let scale = coeff.clone() * n_power.clone();
+            if scale.is_zero() {
+                continue;
+            }
+            for (k, source_coeff) in source.iter().enumerate() {
+                if source_coeff.is_zero() {
+                    continue;
+                }
+                let value = scale.clone() * source_coeff.clone();
+                if subtract {
+                    target[j + k] -= value;
+                } else {
+                    target[j + k] += value;
+                }
+            }
         }
     }
 }
@@ -2820,37 +2917,44 @@ fn recurrence_holds_at_rational_with_degree(
 
     let n_powers = rational_index_powers(nn, rec_n_degree);
     let current = &polys[nn - 1];
-    let lhs = if let Some(denom) = &rec.denominator {
-        poly_mul_rational(&bivar_eval_n_with_powers(denom, &n_powers), current)
+    let mut residual = rational_zero_poly();
+    if let Some(denom) = &rec.denominator {
+        poly_add_bivar_eval_times_poly_signed_assign(
+            &mut residual,
+            denom,
+            &n_powers,
+            current,
+            false,
+        );
     } else {
-        trim_poly_rational(current.clone())
-    };
+        poly_add_signed_assign(&mut residual, current, false);
+    }
 
-    let mut rhs = rational_zero_poly();
     for term in &rec.terms {
         if term.offset == 0 || term.offset >= nn {
             return false;
         }
         let ref_poly = &polys[nn - 1 - term.offset];
         let deriv = poly_nth_derivative_rational(ref_poly, term.deriv_order);
-        let coeff = bivar_eval_n_with_powers(&term.coeff, &n_powers);
-        let product = poly_mul_rational(&coeff, &deriv);
-        let sign = match term.sign {
-            RecurrenceSign::None => BigRational::one(),
-            RecurrenceSign::AlternatingN if nn % 2 == 1 => {
-                BigRational::from_integer(BigInt::from(-1))
-            }
-            RecurrenceSign::AlternatingN => BigRational::one(),
+        let subtract = match term.sign {
+            RecurrenceSign::None => true,
+            RecurrenceSign::AlternatingN if nn % 2 == 1 => false,
+            RecurrenceSign::AlternatingN => true,
         };
-        poly_add_scaled_assign(&mut rhs, &product, &sign);
+        poly_add_bivar_eval_times_poly_signed_assign(
+            &mut residual,
+            &term.coeff,
+            &n_powers,
+            &deriv,
+            subtract,
+        );
     }
 
     if let Some(inhomogeneous) = &rec.inhomogeneous {
-        let inh = bivar_eval_n_with_powers(inhomogeneous, &n_powers);
-        poly_add_scaled_assign(&mut rhs, &inh, &BigRational::one());
+        poly_add_bivar_eval_signed_assign(&mut residual, inhomogeneous, &n_powers, true);
     }
 
-    poly_equal_rational(&lhs, &rhs)
+    poly_is_zero_rational(&residual)
 }
 
 fn recurrence_holds_at_rational_with_derivs_and_degree(
@@ -2866,13 +2970,19 @@ fn recurrence_holds_at_rational_with_derivs_and_degree(
 
     let n_powers = rational_index_powers(nn, rec_n_degree);
     let current = &polys[nn - 1];
-    let lhs = if let Some(denom) = &rec.denominator {
-        poly_mul_rational(&bivar_eval_n_with_powers(denom, &n_powers), current)
+    let mut residual = rational_zero_poly();
+    if let Some(denom) = &rec.denominator {
+        poly_add_bivar_eval_times_poly_signed_assign(
+            &mut residual,
+            denom,
+            &n_powers,
+            current,
+            false,
+        );
     } else {
-        trim_poly_rational(current.clone())
-    };
+        poly_add_signed_assign(&mut residual, current, false);
+    }
 
-    let mut rhs = rational_zero_poly();
     for term in &rec.terms {
         if term.offset == 0 || term.offset >= nn {
             return false;
@@ -2883,24 +2993,25 @@ fn recurrence_holds_at_rational_with_derivs_and_degree(
         let Some(deriv) = poly_derivs.get(term.deriv_order) else {
             return false;
         };
-        let coeff = bivar_eval_n_with_powers(&term.coeff, &n_powers);
-        let product = poly_mul_rational(&coeff, deriv);
-        let sign = match term.sign {
-            RecurrenceSign::None => BigRational::one(),
-            RecurrenceSign::AlternatingN if nn % 2 == 1 => {
-                BigRational::from_integer(BigInt::from(-1))
-            }
-            RecurrenceSign::AlternatingN => BigRational::one(),
+        let subtract = match term.sign {
+            RecurrenceSign::None => true,
+            RecurrenceSign::AlternatingN if nn % 2 == 1 => false,
+            RecurrenceSign::AlternatingN => true,
         };
-        poly_add_scaled_assign(&mut rhs, &product, &sign);
+        poly_add_bivar_eval_times_poly_signed_assign(
+            &mut residual,
+            &term.coeff,
+            &n_powers,
+            deriv,
+            subtract,
+        );
     }
 
     if let Some(inhomogeneous) = &rec.inhomogeneous {
-        let inh = bivar_eval_n_with_powers(inhomogeneous, &n_powers);
-        poly_add_scaled_assign(&mut rhs, &inh, &BigRational::one());
+        poly_add_bivar_eval_signed_assign(&mut residual, inhomogeneous, &n_powers, true);
     }
 
-    poly_equal_rational(&lhs, &rhs)
+    poly_is_zero_rational(&residual)
 }
 
 /// Check whether a recurrence holds for all admissible rows from `start_nn`.
