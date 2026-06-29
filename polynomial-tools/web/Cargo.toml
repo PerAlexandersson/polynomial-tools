@@ -1,6 +1,6 @@
 [package]
 name = "polynomial-tools-web"
-version = "0.1.0"
+version = "0.2.1-rc.4"
 edition = "2021"
 description = "WebAssembly interface for polynomial-tools"
 
