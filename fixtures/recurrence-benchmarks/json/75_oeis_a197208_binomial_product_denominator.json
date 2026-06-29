@@ -1,0 +1,129 @@
+{
+  "schema": "polynomial-tools.recurrence.v1",
+  "first_index": 1,
+  "initial_polynomials": [
+    [
+      "30",
+      "120",
+      "30"
+    ],
+    [
+      "60",
+      "600",
+      "600",
+      "60"
+    ]
+  ],
+  "recurrence": {
+    "terms": [
+      {
+        "offset": 1,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "4",
+              "4",
+              "0"
+            ],
+            [
+              "7/5",
+              "28/5",
+              "0"
+            ],
+            [
+              "-1/5",
+              "8/5",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 1,
+        "deriv_order": 1,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "21/5",
+              "-21/5"
+            ],
+            [
+              "0",
+              "9/5",
+              "-9/5"
+            ],
+            [
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 2,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "6/5",
+              "12/5",
+              "6/5"
+            ],
+            [
+              "8/5",
+              "16/5",
+              "8/5"
+            ],
+            [
+              "2/5",
+              "4/5",
+              "2/5"
+            ]
+          ]
+        }
+      }
+    ],
+    "denominator": {
+      "coeffs": [
+        [
+          "1"
+        ],
+        [
+          "6/5"
+        ],
+        [
+          "1/5"
+        ]
+      ]
+    }
+  },
+  "search": {
+    "recurrence_text": "(1 + 6/5n + 1/5n^2) P(n) = (4 + 7/5n - 1/5n^2 + 4t + 28/5nt + 8/5n^2t) P(n-1) + (21/5t + 9/5nt - 21/5t^2 - 9/5nt^2) P'(n-1) + (6/5 + 8/5n + 2/5n^2 + 12/5t + 16/5nt + 4/5n^2t + 6/5t^2 + 8/5nt^2 + 2/5n^2t^2) P(n-2)",
+    "source_rows": 60,
+    "skip_prefix": 0,
+    "unknowns": 38,
+    "weighted_unknowns": 58,
+    "equations": 952,
+    "fit_polynomials": 30,
+    "verification_polynomials": 30,
+    "candidates_tried": 48,
+    "options": {
+      "var_deg": 2,
+      "idx_deg": 2,
+      "diff_deg": 1,
+      "rec_len": 2,
+      "homogeneous": true,
+      "inhomo_var_deg": 0,
+      "inhomo_idx_deg": 0,
+      "denom_var_deg": 0,
+      "denom_idx_deg": 2,
+      "alternating_sign": false
+    }
+  }
+}

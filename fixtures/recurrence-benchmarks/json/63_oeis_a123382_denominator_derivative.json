@@ -1,0 +1,129 @@
+{
+  "schema": "polynomial-tools.recurrence.v1",
+  "first_index": 1,
+  "initial_polynomials": [
+    [
+      "1",
+      "15",
+      "20"
+    ],
+    [
+      "1",
+      "35",
+      "168",
+      "112"
+    ]
+  ],
+  "recurrence": {
+    "terms": [
+      {
+        "offset": 1,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "1",
+              "4",
+              "0"
+            ],
+            [
+              "7/10",
+              "8",
+              "0"
+            ],
+            [
+              "1/15",
+              "10/3",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 1,
+        "deriv_order": 1,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "1",
+              "-4"
+            ],
+            [
+              "0",
+              "3/5",
+              "-12/5"
+            ],
+            [
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 2,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "0",
+              "0"
+            ],
+            [
+              "1/30",
+              "-4/15",
+              "8/15"
+            ],
+            [
+              "1/15",
+              "-8/15",
+              "16/15"
+            ]
+          ]
+        }
+      }
+    ],
+    "denominator": {
+      "coeffs": [
+        [
+          "1"
+        ],
+        [
+          "11/15"
+        ],
+        [
+          "2/15"
+        ]
+      ]
+    }
+  },
+  "search": {
+    "recurrence_text": "(1 + 11/15n + 2/15n^2) P(n) = (1 + 7/10n + 1/15n^2 + 4t + 8nt + 10/3n^2t) P(n-1) + (t + 3/5nt - 4t^2 - 12/5nt^2) P'(n-1) + (1/30n + 1/15n^2 - 4/15nt - 8/15n^2t + 8/15nt^2 + 16/15n^2t^2) P(n-2)",
+    "source_rows": 60,
+    "skip_prefix": 0,
+    "unknowns": 38,
+    "weighted_unknowns": 58,
+    "equations": 952,
+    "fit_polynomials": 30,
+    "verification_polynomials": 30,
+    "candidates_tried": 48,
+    "options": {
+      "var_deg": 2,
+      "idx_deg": 2,
+      "diff_deg": 1,
+      "rec_len": 2,
+      "homogeneous": true,
+      "inhomo_var_deg": 0,
+      "inhomo_idx_deg": 0,
+      "denom_var_deg": 0,
+      "denom_idx_deg": 2,
+      "alternating_sign": false
+    }
+  }
+}

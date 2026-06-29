@@ -1,0 +1,136 @@
+{
+  "schema": "polynomial-tools.recurrence.v1",
+  "first_index": 1,
+  "initial_polynomials": [
+    [
+      "1",
+      "4",
+      "1"
+    ],
+    [
+      "1",
+      "12",
+      "12",
+      "1"
+    ]
+  ],
+  "recurrence": {
+    "terms": [
+      {
+        "offset": 1,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "1",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "2",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 1,
+        "deriv_order": 1,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "2",
+              "-2",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 2,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "0",
+              "2",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "-2",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 2,
+        "deriv_order": 1,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "0",
+              "-2",
+              "2"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      }
+    ],
+    "inhomogeneous": {
+      "coeffs": [
+        [
+          "1",
+          "-1"
+        ]
+      ]
+    }
+  },
+  "search": {
+    "recurrence_text": "P(n) = (t + 2nt) P(n-1) + (2t - 2t^2) P'(n-1) + (2t^2 - 2nt^2) P(n-2) + (-2t^2 + 2t^3) P'(n-2) + 1 - t",
+    "source_rows": 60,
+    "skip_prefix": 0,
+    "unknowns": 34,
+    "weighted_unknowns": 56,
+    "equations": 980,
+    "fit_polynomials": 30,
+    "verification_polynomials": 30,
+    "candidates_tried": 36,
+    "options": {
+      "var_deg": 3,
+      "idx_deg": 1,
+      "diff_deg": 1,
+      "rec_len": 2,
+      "homogeneous": false,
+      "inhomo_var_deg": 1,
+      "inhomo_idx_deg": 0,
+      "denom_var_deg": 0,
+      "denom_idx_deg": 0,
+      "alternating_sign": false
+    }
+  }
+}
