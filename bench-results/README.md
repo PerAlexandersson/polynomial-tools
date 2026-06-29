@@ -38,4 +38,5 @@ summaries, which is usually enough for code review and handoff notes.
 The JSON output additionally stores adaptive search diagnostics, so it is the
 preferred format before and after search or solver changes. Those diagnostics
 include both search rejection counters and cumulative timing buckets for the
-main recurrence-finder stages.
+main recurrence-finder stages, including modular lifting when a prime-field
+candidate is exact-verified before the rational solver fallback.

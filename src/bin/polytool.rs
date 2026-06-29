@@ -2231,6 +2231,9 @@ fn recurrence_diagnostics_json(diagnostics: &AdaptiveSearchDiagnostics) -> Value
         "degree_bound_rejections": diagnostics.degree_bound_rejections,
         "modular_prefilter_rejections": diagnostics.modular_prefilter_rejections,
         "exact_solve_attempts": diagnostics.exact_solve_attempts,
+        "modular_lift_attempts": diagnostics.modular_lift_attempts,
+        "modular_lift_successes": diagnostics.modular_lift_successes,
+        "modular_lift_failures": diagnostics.modular_lift_failures,
         "failed_exact_solves": diagnostics.failed_exact_solves,
         "heldout_verification_failures": diagnostics.heldout_verification_failures,
         "denominator_escalation_entered": diagnostics.denominator_escalation_entered,
@@ -2241,6 +2244,7 @@ fn recurrence_diagnostics_json(diagnostics: &AdaptiveSearchDiagnostics) -> Value
         "equation_count_ms": diagnostics.equation_count_ms,
         "degree_bound_ms": diagnostics.degree_bound_ms,
         "modular_prefilter_ms": diagnostics.modular_prefilter_ms,
+        "modular_lift_ms": diagnostics.modular_lift_ms,
         "exact_solve_ms": diagnostics.exact_solve_ms,
         "heldout_verify_ms": diagnostics.heldout_verify_ms,
     })

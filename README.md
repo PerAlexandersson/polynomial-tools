@@ -411,13 +411,13 @@ redirected to a log or pasted into project notes. The recurrence fixture
 benchmark can also append fixture/category summaries with `--summary` and write
 a Markdown report with `--report <path.md>`. Use `--format json` for
 machine-readable per-run records, fixture/category summaries, and adaptive
-search diagnostics. The diagnostic records include rejection counters and
-cumulative timing buckets such as derivative precomputation, modular
-prefiltering, exact solving, and held-out verification. `polytool bench compare`
-compares two such JSON runs and highlights fixture/category speedups or
-regressions. The recurrence fixture suite contains synthetic stress tests and
-natural OEIS-derived recurrences from the curated `real-rooted-oeis` sequence
-queue.
+search diagnostics. The diagnostic records include rejection counters, modular
+lift counters, and cumulative timing buckets such as derivative precomputation,
+modular prefiltering, modular lifting, exact solving, and held-out
+verification. `polytool bench compare` compares two such JSON runs and
+highlights fixture/category speedups or regressions. The recurrence fixture
+suite contains synthetic stress tests and natural OEIS-derived recurrences from
+the curated `real-rooted-oeis` sequence queue.
 
 ## Library usage
 

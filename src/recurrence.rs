@@ -359,6 +359,7 @@ const MODULAR_PREFILTER_INCONSISTENT_PRIMES_TO_REJECT: usize = 2;
 // many false prefix fits.  A full held-out sweep is reserved for larger spaces.
 const MODULAR_PREFILTER_FIRST_TAIL_VERIFY_MIN_UNKNOWNS: usize = 1;
 const MODULAR_PREFILTER_TAIL_VERIFY_MIN_UNKNOWNS: usize = 128;
+const MODULAR_LIFT_RANK_DEFICIENT_MIN_UNKNOWNS: usize = 64;
 
 fn mod_norm(value: i64, modulus: i64) -> i64 {
     value.rem_euclid(modulus)
@@ -499,7 +500,14 @@ fn rational_derivs_mod_prime(
 struct ModularSystemResult {
     consistent: bool,
     full_rank_pivot_rows: Option<Vec<usize>>,
-    full_rank_solution: Option<Vec<u64>>,
+    modular_solution: Option<Vec<u64>>,
+}
+
+#[derive(Clone, Debug)]
+struct ModularCandidateSolution {
+    modulus: i64,
+    solution: Vec<u64>,
+    full_rank: bool,
 }
 
 fn recurrence_system_consistent_mod_images(
@@ -508,13 +516,14 @@ fn recurrence_system_consistent_mod_images(
     derivs_mod: &[Vec<Vec<i64>>],
     opts: &RecurrenceOptions,
     modulus: i64,
+    allow_rank_deficient_solution: bool,
 ) -> ModularSystemResult {
     let m = polys.len();
     if m <= opts.rec_len {
         return ModularSystemResult {
             consistent: true,
             full_rank_pivot_rows: None,
-            full_rank_solution: None,
+            modular_solution: None,
         };
     }
 
@@ -551,7 +560,7 @@ fn recurrence_system_consistent_mod_images(
         return ModularSystemResult {
             consistent: true,
             full_rank_pivot_rows: None,
-            full_rank_solution: None,
+            modular_solution: None,
         };
     }
     let prime = modulus as u64;
@@ -658,7 +667,7 @@ fn recurrence_system_consistent_mod_images(
                 return ModularSystemResult {
                     consistent: false,
                     full_rank_pivot_rows: None,
-                    full_rank_solution: None,
+                    modular_solution: None,
                 };
             }
             if !row.is_tautology() {
@@ -675,7 +684,11 @@ fn recurrence_system_consistent_mod_images(
             num_vars,
             prime,
             row_order,
-            linalg::SparseModSolutionMode::FullRank,
+            if allow_rank_deficient_solution {
+                linalg::SparseModSolutionMode::AnyConsistent
+            } else {
+                linalg::SparseModSolutionMode::FullRank
+            },
         )
         .expect("recurrence modular prefilter builds a well-formed prime-field system");
     let full_rank = result.consistent && result.rank == num_vars;
@@ -686,11 +699,10 @@ fn recurrence_system_consistent_mod_images(
             .map(|&row| row_indices[row])
             .collect()
     });
-    let full_rank_solution = full_rank.then_some(result.solution).flatten();
     ModularSystemResult {
         consistent: result.consistent,
         full_rank_pivot_rows,
-        full_rank_solution,
+        modular_solution: result.solution,
     }
 }
 
@@ -862,8 +874,15 @@ fn recurrence_system_consistent_mod_prime(
     let polys_mod = rational_polys_mod_prime(polys, modulus)?;
     let derivs_mod = rational_derivs_mod_prime(derivs, modulus, opts.diff_deg)?;
     Some(
-        recurrence_system_consistent_mod_images(polys, &polys_mod, &derivs_mod, opts, modulus)
-            .consistent,
+        recurrence_system_consistent_mod_images(
+            polys,
+            &polys_mod,
+            &derivs_mod,
+            opts,
+            modulus,
+            false,
+        )
+        .consistent,
     )
 }
 
@@ -928,6 +947,7 @@ fn modular_prefilter_rejects(
 struct ModularPrefilterResult {
     rejected: bool,
     full_rank_pivot_rows: Option<Vec<usize>>,
+    modular_solution: Option<ModularCandidateSolution>,
 }
 
 fn modular_prefilter_with_cache(
@@ -950,6 +970,7 @@ fn modular_prefilter_with_cache(
         } else {
             Some(fit_len + 1)
         };
+    let mut rank_deficient_candidate = None;
     for prime_images in &cache.primes {
         if fit_len > polys.len()
             || polys.len() > prime_images.polys.len()
@@ -971,9 +992,14 @@ fn modular_prefilter_with_cache(
             &prime_images.derivs[..fit_len],
             opts,
             prime_images.modulus,
+            unknowns >= MODULAR_LIFT_RANK_DEFICIENT_MIN_UNKNOWNS,
         );
-        let tail_consistent = match (tail_verify_end, result.full_rank_solution.as_ref()) {
-            (Some(verify_len), Some(solution)) => recurrence_solution_holds_from_mod_images(
+        let tail_consistent = match (
+            tail_verify_end,
+            result.full_rank_pivot_rows.is_some(),
+            result.modular_solution.as_ref(),
+        ) {
+            (Some(verify_len), true, Some(solution)) => recurrence_solution_holds_from_mod_images(
                 &polys[..verify_len],
                 &prime_images.polys[..verify_len],
                 &prime_images.derivs[..verify_len],
@@ -991,6 +1017,7 @@ fn modular_prefilter_with_cache(
             return ModularPrefilterResult {
                 rejected: true,
                 full_rank_pivot_rows: None,
+                modular_solution: None,
             };
         }
         if !result.consistent {
@@ -999,9 +1026,21 @@ fn modular_prefilter_with_cache(
                 return ModularPrefilterResult {
                     rejected: true,
                     full_rank_pivot_rows: None,
+                    modular_solution: None,
                 };
             }
         } else if result.full_rank_pivot_rows.is_none() {
+            if unknowns >= MODULAR_LIFT_RANK_DEFICIENT_MIN_UNKNOWNS
+                && rank_deficient_candidate.is_none()
+            {
+                if let Some(solution) = result.modular_solution.clone() {
+                    rank_deficient_candidate = Some(ModularCandidateSolution {
+                        modulus: prime_images.modulus,
+                        solution,
+                        full_rank: false,
+                    });
+                }
+            }
             if let Some(verify_len) = tail_verify_end {
                 if verify_len > fit_len {
                     // Rank-deficient prefix fits are the expensive false
@@ -1015,6 +1054,7 @@ fn modular_prefilter_with_cache(
                         &prime_images.derivs[..verify_len],
                         opts,
                         prime_images.modulus,
+                        false,
                     );
                     if !extended.consistent {
                         inconsistent_primes += 1;
@@ -1022,15 +1062,25 @@ fn modular_prefilter_with_cache(
                             return ModularPrefilterResult {
                                 rejected: true,
                                 full_rank_pivot_rows: None,
+                                modular_solution: None,
                             };
                         }
                     }
                 }
             }
         } else if let Some(pivot_rows) = result.full_rank_pivot_rows {
+            let modular_solution =
+                result
+                    .modular_solution
+                    .map(|solution| ModularCandidateSolution {
+                        modulus: prime_images.modulus,
+                        solution,
+                        full_rank: true,
+                    });
             return ModularPrefilterResult {
                 rejected: false,
                 full_rank_pivot_rows: Some(pivot_rows),
+                modular_solution,
             };
         }
     }
@@ -1038,7 +1088,150 @@ fn modular_prefilter_with_cache(
     ModularPrefilterResult {
         rejected: false,
         full_rank_pivot_rows: None,
+        modular_solution: rank_deficient_candidate,
     }
+}
+
+fn centered_modular_rational(residue: u64, modulus: i64) -> BigRational {
+    let modulus_u = modulus as u64;
+    let centered = if residue > modulus_u / 2 {
+        BigInt::from(residue as i128 - modulus as i128)
+    } else {
+        BigInt::from(residue)
+    };
+    BigRational::from_integer(centered)
+}
+
+fn recurrence_from_solution_vector(
+    solution: &[BigRational],
+    opts: &RecurrenceOptions,
+) -> Option<Recurrence> {
+    let denom_start: usize = 0;
+    let denom_w = opts.denom_var_deg + 1;
+    let num_denom_vars = (opts.denom_idx_deg + 1) * denom_w - 1;
+    let denom_col = |i: usize, j: usize| -> usize {
+        let flat = i * denom_w + j;
+        denom_start + flat - 1
+    };
+
+    let coeff_start = denom_start + num_denom_vars;
+    let vars_per_coeff = (opts.idx_deg + 1) * (opts.var_deg + 1);
+    let sign_family_count = if opts.alternating_sign { 2 } else { 1 };
+    let num_coeff_vars = opts.rec_len * (opts.diff_deg + 1) * sign_family_count * vars_per_coeff;
+    let coeff_col = |r: usize, d: usize, sign_idx: usize, i: usize, j: usize| -> usize {
+        coeff_start
+            + (((r - 1) * (opts.diff_deg + 1) + d) * sign_family_count + sign_idx) * vars_per_coeff
+            + i * (opts.var_deg + 1)
+            + j
+    };
+
+    let inhomo_start = coeff_start + num_coeff_vars;
+    let inhomo_w = opts.inhomo_var_deg + 1;
+    let num_inhomo_vars = if opts.homogeneous {
+        0
+    } else {
+        (opts.inhomo_idx_deg + 1) * inhomo_w
+    };
+    let inhomo_col = |i: usize, j: usize| -> usize { inhomo_start + i * inhomo_w + j };
+
+    let num_vars = inhomo_start + num_inhomo_vars;
+    if solution.len() != num_vars {
+        return None;
+    }
+
+    let all_zero = (coeff_start..coeff_start + num_coeff_vars).all(|c| solution[c].is_zero());
+    if all_zero {
+        return None;
+    }
+
+    let mut terms = Vec::new();
+    for r in 1..=opts.rec_len {
+        for d in 0..=opts.diff_deg {
+            for sign_idx in 0..sign_family_count {
+                let bv = extract_bivar(
+                    solution,
+                    |i, j| coeff_col(r, d, sign_idx, i, j),
+                    opts.idx_deg,
+                    opts.var_deg,
+                );
+                if !bv.is_zero() {
+                    terms.push(RecurrenceTerm {
+                        offset: r,
+                        deriv_order: d,
+                        sign: RecurrenceSign::from_family_index(sign_idx),
+                        coeff: bv,
+                    });
+                }
+            }
+        }
+    }
+
+    let denominator = if num_denom_vars > 0 {
+        let mut bv = extract_bivar(
+            solution,
+            |i, j| {
+                if i == 0 && j == 0 {
+                    0
+                } else {
+                    denom_col(i, j)
+                }
+            },
+            opts.denom_idx_deg,
+            opts.denom_var_deg,
+        );
+        bv.coeffs[0][0] = BigRational::one();
+        if bv.is_one() {
+            None
+        } else {
+            Some(bv)
+        }
+    } else {
+        None
+    };
+
+    let inhomogeneous = if !opts.homogeneous {
+        let bv = extract_bivar(
+            solution,
+            inhomo_col,
+            opts.inhomo_idx_deg,
+            opts.inhomo_var_deg,
+        );
+        if bv.is_zero() {
+            None
+        } else {
+            Some(bv)
+        }
+    } else {
+        None
+    };
+
+    Some(Recurrence {
+        terms,
+        denominator,
+        inhomogeneous,
+    })
+}
+
+fn recurrence_from_centered_modular_solution(
+    candidate: &ModularCandidateSolution,
+    opts: &RecurrenceOptions,
+) -> Option<Recurrence> {
+    let solution = candidate
+        .solution
+        .iter()
+        .map(|&residue| centered_modular_rational(residue, candidate.modulus))
+        .collect::<Vec<_>>();
+    recurrence_from_solution_vector(&solution, opts)
+}
+
+fn verified_recurrence_from_modular_lift(
+    polys: &[Vec<BigRational>],
+    derivs: &[Vec<Vec<BigRational>>],
+    opts: &RecurrenceOptions,
+    candidate: &ModularCandidateSolution,
+) -> Option<Recurrence> {
+    let rec = recurrence_from_centered_modular_solution(candidate, opts)?;
+    recurrence_holds_rational_with_derivs(polys, derivs, &rec, opts.rec_len).then_some(rec)
 }
 
 // ---------------------------------------------------------------------------
@@ -1263,87 +1456,12 @@ fn find_polynomial_recurrence_rational_with_derivs_and_rows(
         linalg::solve_linear_system(&matrix, &rhs)?
     };
 
-    // Check: are all recurrence coefficients zero?  (Trivial / degenerate.)
-    let all_zero = (coeff_start..coeff_start + num_coeff_vars).all(|c| solution[c].is_zero());
-    if all_zero {
-        return None;
-    }
-
     // NOTE: No normalization here. The system is non-homogeneous (the fixed
     // constant 1 in f(n,t) pins the scale), so the solution is uniquely
     // determined — not up to scaling.  Dividing by GCD would lose actual
     // coefficient values (e.g. turning P(n) = 2 P(n-1) into P(n) = P(n-1)).
 
-    // --- Build result ---
-    let mut terms = Vec::new();
-    for r in 1..=opts.rec_len {
-        for d in 0..=opts.diff_deg {
-            for sign_idx in 0..sign_family_count {
-                let bv = extract_bivar(
-                    &solution,
-                    |i, j| coeff_col(r, d, sign_idx, i, j),
-                    opts.idx_deg,
-                    opts.var_deg,
-                );
-                if !bv.is_zero() {
-                    terms.push(RecurrenceTerm {
-                        offset: r,
-                        deriv_order: d,
-                        sign: RecurrenceSign::from_family_index(sign_idx),
-                        coeff: bv,
-                    });
-                }
-            }
-        }
-    }
-
-    let denominator = if num_denom_vars > 0 {
-        // Build denominator BivarPoly manually since (0,0) is not a variable
-        // (it's the fixed constant 1).
-        let mut bv = extract_bivar(
-            &solution,
-            |i, j| {
-                if i == 0 && j == 0 {
-                    // Dummy index — will be overwritten below.
-                    0
-                } else {
-                    denom_col(i, j)
-                }
-            },
-            opts.denom_idx_deg,
-            opts.denom_var_deg,
-        );
-        bv.coeffs[0][0] = BigRational::one();
-        if bv.is_one() {
-            None
-        } else {
-            Some(bv)
-        }
-    } else {
-        None
-    };
-
-    let inhomogeneous = if !opts.homogeneous {
-        let bv = extract_bivar(
-            &solution,
-            inhomo_col,
-            opts.inhomo_idx_deg,
-            opts.inhomo_var_deg,
-        );
-        if bv.is_zero() {
-            None
-        } else {
-            Some(bv)
-        }
-    } else {
-        None
-    };
-
-    let recurrence = Recurrence {
-        terms,
-        denominator,
-        inhomogeneous,
-    };
+    let recurrence = recurrence_from_solution_vector(&solution, opts)?;
 
     if exact_row_indices.is_some()
         && !recurrence_holds_rational_with_derivs(polys, derivs, &recurrence, opts.rec_len)
@@ -3083,6 +3201,12 @@ pub struct AdaptiveSearchDiagnostics {
     pub modular_prefilter_rejections: usize,
     /// Candidates sent to exact rational recurrence solving.
     pub exact_solve_attempts: usize,
+    /// Modular solutions lifted as centered integer candidates.
+    pub modular_lift_attempts: usize,
+    /// Lifted modular candidates accepted after exact verification.
+    pub modular_lift_successes: usize,
+    /// Lifted modular candidates rejected by exact verification.
+    pub modular_lift_failures: usize,
     /// Exact rational solves that did not produce a recurrence.
     pub failed_exact_solves: usize,
     /// Prefix fits that failed held-out verification.
@@ -3103,6 +3227,8 @@ pub struct AdaptiveSearchDiagnostics {
     pub degree_bound_ms: f64,
     /// Time spent in modular-prefilter checks.
     pub modular_prefilter_ms: f64,
+    /// Time spent lifting and exactly checking modular candidate solutions.
+    pub modular_lift_ms: f64,
     /// Time spent in exact rational recurrence solving.
     pub exact_solve_ms: f64,
     /// Time spent verifying held-out rows.
@@ -3391,6 +3517,7 @@ pub fn find_recurrence_adaptive_rational(
 
         let fit_derivs = &derivs[..fit_len];
         let mut exact_row_indices = None;
+        let mut modular_candidate = None;
         let cached_solve_opts = if let Some(cache) = &modular_cache {
             let timer = Instant::now();
             let prefilter = modular_prefilter_with_cache(polys, fit_len, opts, cache);
@@ -3400,6 +3527,7 @@ pub fn find_recurrence_adaptive_rational(
                 continue;
             }
             exact_row_indices = prefilter.full_rank_pivot_rows;
+            modular_candidate = prefilter.modular_solution;
             let mut solve_opts = opts.clone();
             solve_opts.modular_prefilter = false;
             Some(solve_opts)
@@ -3407,6 +3535,47 @@ pub fn find_recurrence_adaptive_rational(
             None
         };
         let solve_opts = cached_solve_opts.as_ref().unwrap_or(opts);
+
+        if let Some(candidate) = modular_candidate.as_ref() {
+            diagnostics.modular_lift_attempts += 1;
+            let timer = Instant::now();
+            let lifted =
+                verified_recurrence_from_modular_lift(fit_polys, fit_derivs, opts, candidate);
+            diagnostics.modular_lift_ms += elapsed_ms(timer);
+            if let Some(rec) = lifted {
+                let timer = Instant::now();
+                let verified = verify_heldout_tail(polys, &derivs, &rec, opts, fit_len, search);
+                diagnostics.heldout_verify_ms += elapsed_ms(timer);
+                if verified {
+                    diagnostics.modular_lift_successes += 1;
+                    if search.verbose {
+                        eprintln!("  -> found by modular lift!");
+                    }
+                    return Some(AdaptiveSearchResult {
+                        recurrence: rec,
+                        opts: opts.clone(),
+                        num_unknowns: unknowns,
+                        weighted_unknowns,
+                        num_equations: equations,
+                        fit_polynomials: fit_len,
+                        verification_polynomials: m - fit_len,
+                        candidates_tried: tried,
+                        diagnostics,
+                    });
+                }
+                diagnostics.heldout_verification_failures += 1;
+                if search.verbose {
+                    eprintln!("  -> modular lift fit prefix but failed held-out verification");
+                }
+                diagnostics.modular_lift_failures += 1;
+                if candidate.full_rank {
+                    continue;
+                }
+            } else {
+                diagnostics.modular_lift_failures += 1;
+            }
+        }
+
         diagnostics.exact_solve_attempts += 1;
         let timer = Instant::now();
         let rec = find_polynomial_recurrence_rational_with_derivs_and_rows(
@@ -3525,6 +3694,7 @@ pub fn find_recurrence_adaptive_rational(
 
             let fit_derivs = &derivs[..fit_len];
             let mut exact_row_indices = None;
+            let mut modular_candidate = None;
             let cached_solve_opts = if let Some(cache) = &modular_cache {
                 let timer = Instant::now();
                 let prefilter = modular_prefilter_with_cache(polys, fit_len, opts, cache);
@@ -3534,6 +3704,7 @@ pub fn find_recurrence_adaptive_rational(
                     continue;
                 }
                 exact_row_indices = prefilter.full_rank_pivot_rows;
+                modular_candidate = prefilter.modular_solution;
                 let mut solve_opts = opts.clone();
                 solve_opts.modular_prefilter = false;
                 Some(solve_opts)
@@ -3541,6 +3712,47 @@ pub fn find_recurrence_adaptive_rational(
                 None
             };
             let solve_opts = cached_solve_opts.as_ref().unwrap_or(opts);
+
+            if let Some(candidate) = modular_candidate.as_ref() {
+                diagnostics.modular_lift_attempts += 1;
+                let timer = Instant::now();
+                let lifted =
+                    verified_recurrence_from_modular_lift(fit_polys, fit_derivs, opts, candidate);
+                diagnostics.modular_lift_ms += elapsed_ms(timer);
+                if let Some(rec) = lifted {
+                    let timer = Instant::now();
+                    let verified = verify_heldout_tail(polys, &derivs, &rec, opts, fit_len, search);
+                    diagnostics.heldout_verify_ms += elapsed_ms(timer);
+                    if verified {
+                        diagnostics.modular_lift_successes += 1;
+                        if search.verbose {
+                            eprintln!("  -> found by modular lift (rational)!");
+                        }
+                        return Some(AdaptiveSearchResult {
+                            recurrence: rec,
+                            opts: opts.clone(),
+                            num_unknowns: unknowns,
+                            weighted_unknowns,
+                            num_equations: equations,
+                            fit_polynomials: fit_len,
+                            verification_polynomials: m - fit_len,
+                            candidates_tried: tried,
+                            diagnostics,
+                        });
+                    }
+                    diagnostics.heldout_verification_failures += 1;
+                    if search.verbose {
+                        eprintln!("  -> modular lift fit prefix but failed held-out verification");
+                    }
+                    diagnostics.modular_lift_failures += 1;
+                    if candidate.full_rank {
+                        continue;
+                    }
+                } else {
+                    diagnostics.modular_lift_failures += 1;
+                }
+            }
+
             diagnostics.exact_solve_attempts += 1;
             let timer = Instant::now();
             let rec = find_polynomial_recurrence_rational_with_derivs_and_rows(
@@ -4305,6 +4517,59 @@ mod tests {
         let result = find_recurrence_adaptive(&polys, &search).unwrap();
         assert_eq!(format!("{}", result.recurrence), "P(n) = P(n-1) + P(n-2)");
         assert!(result.opts.modular_prefilter);
+    }
+
+    #[test]
+    fn adaptive_modular_lift_skips_exact_solve_for_integer_solution() {
+        let polys: Vec<Vec<i64>> = vec![vec![1], vec![2], vec![4], vec![8], vec![16], vec![32]];
+        let search = AdaptiveSearchOptions {
+            min_rec_len: 1,
+            max_rec_len: 1,
+            min_var_deg: 0,
+            max_var_deg: 0,
+            min_idx_deg: 0,
+            max_idx_deg: 0,
+            min_diff_deg: 0,
+            max_diff_deg: 0,
+            modular_prefilter: true,
+            ..Default::default()
+        };
+        let result = find_recurrence_adaptive(&polys, &search).unwrap();
+        assert_eq!(format!("{}", result.recurrence), "P(n) = 2 P(n-1)");
+        assert_eq!(result.diagnostics.modular_lift_attempts, 1);
+        assert_eq!(result.diagnostics.modular_lift_successes, 1);
+        assert_eq!(result.diagnostics.exact_solve_attempts, 0);
+    }
+
+    #[test]
+    fn adaptive_rank_deficient_modular_lift_can_skip_exact_solve() {
+        let mut polys = Vec::new();
+        let mut value = 1_i64;
+        for _ in 0..32 {
+            polys.push(vec![value]);
+            value *= 2;
+        }
+        let search = AdaptiveSearchOptions {
+            min_rec_len: 5,
+            max_rec_len: 5,
+            min_var_deg: 3,
+            max_var_deg: 3,
+            min_idx_deg: 3,
+            max_idx_deg: 3,
+            min_diff_deg: 0,
+            max_diff_deg: 0,
+            modular_prefilter: true,
+            ..Default::default()
+        };
+        let result = find_recurrence_adaptive(&polys, &search).unwrap();
+        assert!(recurrence_holds_rational(
+            &i64_polys_to_rational(&polys),
+            &result.recurrence,
+            result.opts.rec_len
+        ));
+        assert_eq!(result.diagnostics.modular_lift_attempts, 1);
+        assert_eq!(result.diagnostics.modular_lift_successes, 1);
+        assert_eq!(result.diagnostics.exact_solve_attempts, 0);
     }
 
     #[test]
