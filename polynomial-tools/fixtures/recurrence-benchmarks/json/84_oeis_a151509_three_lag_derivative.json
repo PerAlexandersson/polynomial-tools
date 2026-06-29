@@ -1,0 +1,150 @@
+{
+  "schema": "polynomial-tools.recurrence.v1",
+  "first_index": 1,
+  "initial_polynomials": [
+    [
+      "1"
+    ],
+    [
+      "0",
+      "1"
+    ],
+    [
+      "0",
+      "1",
+      "1"
+    ]
+  ],
+  "recurrence": {
+    "terms": [
+      {
+        "offset": 1,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "-1",
+              "1"
+            ],
+            [
+              "1/2",
+              "0"
+            ],
+            [
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 1,
+        "deriv_order": 1,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "-5"
+            ],
+            [
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 2,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "-3",
+              "-11"
+            ],
+            [
+              "5/2",
+              "11/2"
+            ],
+            [
+              "-1/2",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 2,
+        "deriv_order": 1,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "-5"
+            ],
+            [
+              "0",
+              "5/2"
+            ],
+            [
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 3,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "3"
+            ],
+            [
+              "0",
+              "-5/2"
+            ],
+            [
+              "0",
+              "1/2"
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  "search": {
+    "recurrence_text": "P(n) = (-1 + 1/2n + t) P(n-1) - 5t P'(n-1) + (-3 + 5/2n - 1/2n^2 - 11t + 11/2nt) P(n-2) + (-5t + 5/2nt) P'(n-2) + (3t - 5/2nt + 1/2n^2t) P(n-3)",
+    "source_rows": 50,
+    "skip_prefix": 0,
+    "unknowns": 36,
+    "weighted_unknowns": 54,
+    "equations": 60,
+    "fit_polynomials": 9,
+    "verification_polynomials": 41,
+    "candidates_tried": 6,
+    "options": {
+      "var_deg": 1,
+      "idx_deg": 2,
+      "diff_deg": 1,
+      "rec_len": 3,
+      "homogeneous": true,
+      "inhomo_var_deg": 0,
+      "inhomo_idx_deg": 0,
+      "denom_var_deg": 0,
+      "denom_idx_deg": 0,
+      "alternating_sign": false
+    }
+  }
+}

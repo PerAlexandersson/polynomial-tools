@@ -1,0 +1,90 @@
+{
+  "schema": "polynomial-tools.recurrence.v1",
+  "first_index": 1,
+  "initial_polynomials": [
+    [
+      "1"
+    ],
+    [
+      "0",
+      "1"
+    ],
+    [
+      "0",
+      "0",
+      "1"
+    ]
+  ],
+  "recurrence": {
+    "terms": [
+      {
+        "offset": 1,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "3",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 2,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "0",
+              "-3",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 3,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "0",
+              "1",
+              "1"
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  "search": {
+    "recurrence_text": "P(n) = 3t P(n-1) - 3t^2 P(n-2) + (t^2 + t^3) P(n-3)",
+    "source_rows": 50,
+    "skip_prefix": 0,
+    "unknowns": 12,
+    "weighted_unknowns": 12,
+    "equations": 27,
+    "fit_polynomials": 6,
+    "verification_polynomials": 44,
+    "candidates_tried": 3,
+    "options": {
+      "var_deg": 3,
+      "idx_deg": 0,
+      "diff_deg": 0,
+      "rec_len": 3,
+      "homogeneous": true,
+      "inhomo_var_deg": 0,
+      "inhomo_idx_deg": 0,
+      "denom_var_deg": 0,
+      "denom_idx_deg": 0,
+      "alternating_sign": false
+    }
+  }
+}

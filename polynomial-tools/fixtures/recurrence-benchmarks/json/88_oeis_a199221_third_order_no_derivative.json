@@ -1,0 +1,126 @@
+{
+  "schema": "polynomial-tools.recurrence.v1",
+  "first_index": 1,
+  "initial_polynomials": [
+    [
+      "-1"
+    ],
+    [
+      "0",
+      "1"
+    ],
+    [
+      "1",
+      "4",
+      "2"
+    ]
+  ],
+  "recurrence": {
+    "terms": [
+      {
+        "offset": 1,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "2",
+              "-5",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "2",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 2,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "-1",
+              "8",
+              "-16",
+              "0"
+            ],
+            [
+              "0",
+              "-2",
+              "8",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "-1",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 3,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "-2",
+              "14",
+              "-24"
+            ],
+            [
+              "0",
+              "0",
+              "-4",
+              "14"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "-2"
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  "search": {
+    "recurrence_text": "P(n) = (2 - 5t + 2nt) P(n-1) + (-1 + 8t - 2nt - 16t^2 + 8nt^2 - n^2t^2) P(n-2) + (-2t + 14t^2 - 4nt^2 - 24t^3 + 14nt^3 - 2n^2t^3) P(n-3)",
+    "source_rows": 50,
+    "skip_prefix": 0,
+    "unknowns": 36,
+    "weighted_unknowns": 36,
+    "equations": 55,
+    "fit_polynomials": 8,
+    "verification_polynomials": 42,
+    "candidates_tried": 9,
+    "options": {
+      "var_deg": 3,
+      "idx_deg": 2,
+      "diff_deg": 0,
+      "rec_len": 3,
+      "homogeneous": true,
+      "inhomo_var_deg": 0,
+      "inhomo_idx_deg": 0,
+      "denom_var_deg": 0,
+      "denom_idx_deg": 0,
+      "alternating_sign": false
+    }
+  }
+}

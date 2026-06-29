@@ -1,0 +1,90 @@
+{
+  "schema": "polynomial-tools.recurrence.v1",
+  "first_index": 1,
+  "initial_polynomials": [
+    [
+      "1"
+    ]
+  ],
+  "recurrence": {
+    "terms": [
+      {
+        "offset": 1,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "1",
+              "-4",
+              "2",
+              "0"
+            ],
+            [
+              "0",
+              "4",
+              "-3",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "1",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 1,
+        "deriv_order": 1,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "0",
+              "-1",
+              "1"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "-1"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  "search": {
+    "recurrence_text": "P(n) = (1 - 4t + 4nt + 2t^2 - 3nt^2 + n^2t^2) P(n-1) + (-t^2 + t^3 - nt^3) P'(n-1)",
+    "source_rows": 50,
+    "skip_prefix": 0,
+    "unknowns": 24,
+    "weighted_unknowns": 36,
+    "equations": 45,
+    "fit_polynomials": 6,
+    "verification_polynomials": 44,
+    "candidates_tried": 18,
+    "options": {
+      "var_deg": 3,
+      "idx_deg": 2,
+      "diff_deg": 1,
+      "rec_len": 1,
+      "homogeneous": true,
+      "inhomo_var_deg": 0,
+      "inhomo_idx_deg": 0,
+      "denom_var_deg": 0,
+      "denom_idx_deg": 0,
+      "alternating_sign": false
+    }
+  }
+}
