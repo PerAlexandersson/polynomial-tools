@@ -1014,13 +1014,34 @@ struct ModularCandidateSolution {
     full_rank: bool,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ModularSolveRequest {
+    ConsistencyOnly,
+    FullRankSolution,
+    RankDeficientCandidateAllowed,
+}
+
+impl ModularSolveRequest {
+    fn solution_mode(self) -> linalg::SparseModSolutionMode {
+        match self {
+            Self::ConsistencyOnly => linalg::SparseModSolutionMode::None,
+            Self::FullRankSolution => linalg::SparseModSolutionMode::FullRank,
+            Self::RankDeficientCandidateAllowed => linalg::SparseModSolutionMode::AnyConsistent,
+        }
+    }
+
+    fn needs_solution_data(self) -> bool {
+        self != Self::ConsistencyOnly
+    }
+}
+
 fn recurrence_system_consistent_mod_images(
     polys: &[Vec<BigRational>],
     polys_mod: &[Vec<i64>],
     derivs_mod: &[Vec<Vec<i64>>],
     opts: &RecurrenceOptions,
     modulus: i64,
-    allow_rank_deficient_solution: bool,
+    solve_request: ModularSolveRequest,
 ) -> ModularSystemResult {
     let m = polys.len();
     if m <= opts.rec_len {
@@ -1099,13 +1120,15 @@ fn recurrence_system_consistent_mod_images(
         .collect::<Vec<_>>();
 
     let mut raw_rows = Vec::with_capacity(num_rows);
+    let row_capacity_hint = num_vars.min(8);
     for nn in opts.rec_len + 1..=m {
         let current_idx = nn - 1;
         for l in 0..=max_t_deg {
             let cur_l = poly_coeff_mod(polys_mod, current_idx, l);
-            raw_rows.push(linalg::SparseModRow::new(
+            raw_rows.push(linalg::SparseModRow::with_capacity(
                 mod_neg(cur_l, modulus) as u64,
                 prime,
+                row_capacity_hint,
             ));
         }
     }
@@ -1232,15 +1255,11 @@ fn recurrence_system_consistent_mod_images(
             num_vars,
             prime,
             row_order,
-            if allow_rank_deficient_solution {
-                linalg::SparseModSolutionMode::AnyConsistent
-            } else {
-                linalg::SparseModSolutionMode::FullRank
-            },
+            solve_request.solution_mode(),
         )
         .expect("recurrence modular prefilter builds a well-formed prime-field system");
     let full_rank = result.consistent && result.rank == num_vars;
-    let full_rank_pivot_rows = full_rank.then(|| {
+    let full_rank_pivot_rows = (solve_request.needs_solution_data() && full_rank).then(|| {
         result
             .pivot_rows
             .iter()
@@ -1428,7 +1447,7 @@ fn recurrence_system_consistent_mod_prime(
             &derivs_mod,
             opts,
             modulus,
-            false,
+            ModularSolveRequest::ConsistencyOnly,
         )
         .consistent,
     )
@@ -1505,7 +1524,6 @@ fn modular_prefilter_with_cache(
         return ModularPrefilterResult::default();
     }
 
-    let mut inconsistent_primes = 0;
     let unknowns = count_unknowns(opts);
     let tail_verify_end =
         if fit_len >= polys.len() || unknowns < MODULAR_PREFILTER_FIRST_TAIL_VERIFY_MIN_UNKNOWNS {
@@ -1515,7 +1533,9 @@ fn modular_prefilter_with_cache(
         } else {
             Some(fit_len + 1)
         };
+
     let mut rank_deficient_candidate = None;
+    let mut inconsistent_primes = 0;
     for prime_images in &cache.primes {
         if fit_len > polys.len()
             || polys.len() > prime_images.polys.len()
@@ -1537,7 +1557,11 @@ fn modular_prefilter_with_cache(
             &prime_images.derivs[..fit_len],
             opts,
             prime_images.modulus,
-            unknowns >= MODULAR_LIFT_RANK_DEFICIENT_MIN_UNKNOWNS,
+            if unknowns >= MODULAR_LIFT_RANK_DEFICIENT_MIN_UNKNOWNS {
+                ModularSolveRequest::RankDeficientCandidateAllowed
+            } else {
+                ModularSolveRequest::FullRankSolution
+            },
         );
         let tail_consistent = match (
             tail_verify_end,
@@ -1599,7 +1623,7 @@ fn modular_prefilter_with_cache(
                         &prime_images.derivs[..verify_len],
                         opts,
                         prime_images.modulus,
-                        false,
+                        ModularSolveRequest::ConsistencyOnly,
                     );
                     if !extended.consistent {
                         inconsistent_primes += 1;
