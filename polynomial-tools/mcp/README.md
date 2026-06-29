@@ -420,9 +420,8 @@ Important option fields:
 
 `verbose` is intentionally not exposed through MCP, so the server never writes
 search traces into the stdio protocol stream.
-`modular_prefilter` is opt-in because it rejects candidates before exact
-rational solving only when every usable fixed large-prime reduction is
-inconsistent; this is fast but still probabilistic.
+`modular_prefilter` defaults to `true`; set it to `false` only when comparing
+against the slower exact-only search path.
 
 When a recurrence is found, the response includes:
 

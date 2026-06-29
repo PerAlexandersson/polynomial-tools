@@ -80,7 +80,7 @@ fn print_help_and_exit() -> ! {
     println!();
     println!("Options:");
     println!("  --repeat <n>              Repeat each fixture n times");
-    println!("  --no-modular-prefilter    Disable modular recurrence prefilter");
+    println!("  --no-modular-prefilter    Disable default modular recurrence prefilter");
     println!("  --only <substring>        Run only fixture slugs containing substring");
     println!("  -h, --help                Print this help");
     std::process::exit(0);

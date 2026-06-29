@@ -201,7 +201,7 @@ fn print_recurrence_help() {
     println!("  --min-margin <n>           Require equations >= unknowns + n");
     println!("  --fit-extra-rows <n>       Extra rows beyond the first solvable prefix");
     println!("  --no-verify                Use all input rows for fitting");
-    println!("  --modular-prefilter        Probabilistically reject candidates modulo primes");
+    println!("  --no-modular-prefilter     Disable default modular candidate rejection");
     println!("  --json                     Emit recurrence JSON with initial conditions");
     println!("  --format json              Alias for --json");
     println!("  --python                   Emit exact Python code for the recurrence");
@@ -1458,6 +1458,9 @@ fn cmd_recurrence(args: &[String]) {
             "--no-verify" => {
                 search.no_verify = true;
             }
+            "--no-modular-prefilter" => {
+                search.modular_prefilter = false;
+            }
             "--modular-prefilter" => {
                 search.modular_prefilter = true;
             }
@@ -1485,7 +1488,9 @@ fn cmd_recurrence(args: &[String]) {
     match find_recurrence_adaptive_rational(&polys, &search) {
         Some(res) => {
             let searched_polys = polys.get(search.skip_prefix..).unwrap_or(&[]);
-            let initial_count = res.recurrence.max_offset().min(searched_polys.len());
+            let initial_count = res
+                .recurrence
+                .generation_initial_count(1, searched_polys.len());
             let initial_polys = &searched_polys[..initial_count];
             match format {
                 RecurrenceOutputFormat::Json => {
@@ -1675,7 +1680,7 @@ fn print_bench_help() {
     println!("  --base <dir>              Fixture directory containing manifest.tsv");
     println!("  --only <substring>        Run only fixture slugs containing substring");
     println!("  --repeat <n>              Repeat each fixture n times (default: 1)");
-    println!("  --no-modular-prefilter    Disable modular recurrence prefilter");
+    println!("  --no-modular-prefilter    Disable default modular recurrence prefilter");
     println!("  --summary                 Append fixture and category summaries to stdout");
     println!("  --report <path.md>        Write a Markdown benchmark report");
     println!("  --format <tsv|json>       Output format (default: tsv)");

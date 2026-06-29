@@ -1,0 +1,199 @@
+{
+  "schema": "polynomial-tools.recurrence.v1",
+  "first_index": 1,
+  "initial_polynomials": [
+    [
+      "1",
+      "12",
+      "1"
+    ],
+    [
+      "1",
+      "45",
+      "45",
+      "1"
+    ],
+    [
+      "1",
+      "112",
+      "420",
+      "112",
+      "1"
+    ]
+  ],
+  "recurrence": {
+    "terms": [
+      {
+        "offset": 1,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "1",
+              "1",
+              "0",
+              "0"
+            ],
+            [
+              "-11",
+              "37",
+              "0",
+              "0"
+            ],
+            [
+              "30",
+              "-24",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 1,
+        "deriv_order": 1,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "48",
+              "-48",
+              "0"
+            ],
+            [
+              "0",
+              "-54",
+              "54",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 2,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "-12",
+              "24",
+              "36",
+              "0"
+            ],
+            [
+              "34",
+              "-124",
+              "-14",
+              "0"
+            ],
+            [
+              "-36",
+              "144",
+              "-36",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 2,
+        "deriv_order": 1,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "0",
+              "-48",
+              "0",
+              "48"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      },
+      {
+        "offset": 3,
+        "deriv_order": 0,
+        "sign": "none",
+        "coeff": {
+          "coeffs": [
+            [
+              "12",
+              "36",
+              "36",
+              "12"
+            ],
+            [
+              "-20",
+              "-60",
+              "-60",
+              "-20"
+            ],
+            [
+              "8",
+              "24",
+              "24",
+              "8"
+            ]
+          ]
+        }
+      }
+    ],
+    "denominator": {
+      "coeffs": [
+        [
+          "1"
+        ],
+        [
+          "3"
+        ],
+        [
+          "2"
+        ]
+      ]
+    }
+  },
+  "search": {
+    "recurrence_text": "(1 + 3n + 2n^2) P(n) = (1 - 11n + 30n^2 + t + 37nt - 24n^2t) P(n-1) + (48t - 54nt - 48t^2 + 54nt^2) P'(n-1) + (-12 + 34n - 36n^2 + 24t - 124nt + 144n^2t + 36t^2 - 14nt^2 - 36n^2t^2) P(n-2) + (-48t + 48t^3) P'(n-2) + (12 - 20n + 8n^2 + 36t - 60nt + 24n^2t + 36t^2 - 60nt^2 + 24n^2t^2 + 12t^3 - 20nt^3 + 8n^2t^3) P(n-3)",
+    "source_rows": 80,
+    "skip_prefix": 0,
+    "unknowns": 74,
+    "weighted_unknowns": 112,
+    "equations": 884,
+    "fit_polynomials": 29,
+    "verification_polynomials": 51,
+    "candidates_tried": 5831,
+    "options": {
+      "var_deg": 3,
+      "idx_deg": 2,
+      "diff_deg": 1,
+      "rec_len": 3,
+      "homogeneous": true,
+      "inhomo_var_deg": 0,
+      "inhomo_idx_deg": 0,
+      "denom_var_deg": 0,
+      "denom_idx_deg": 2,
+      "alternating_sign": false
+    }
+  }
+}

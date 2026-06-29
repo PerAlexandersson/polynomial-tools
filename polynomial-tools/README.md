@@ -254,8 +254,9 @@ The adaptive search orders candidates by a weighted parameter count. Ordinary
 coefficient unknowns are cheapest; derivative, denominator, alternating-sign,
 and inhomogeneous unknowns are delayed. A candidate is only solved when the
 available fitting prefix has at least `unknowns + min_margin` scalar equations.
-By default the last input row is reserved for exact verification, and the fit
-uses the first solvable prefix plus one extra row. Use `--no-verify` to fit
+By default the last input row is reserved for exact verification, the fit uses
+the first solvable prefix plus one extra row, and modular prefiltering rejects
+impossible candidates before exact rational solving. Use `--no-verify` to fit
 against all input rows.
 
 Options:
@@ -282,7 +283,8 @@ Options:
 --min-margin <k>     Require equations >= unknowns + k (default: 1)
 --fit-extra-rows <k> Extra rows after the first solvable prefix (default: 1)
 --no-verify          Fit all rows instead of reserving held-out verification rows
---modular-prefilter  Probabilistically reject candidates modulo large primes
+--no-modular-prefilter
+                      Disable default modular candidate rejection
 --json               Emit recurrence JSON with initial conditions
 --python             Emit exact standalone Python code using Fraction arithmetic
 --format json        Alias for --json
@@ -290,10 +292,10 @@ Options:
 --verbose            Print each candidate tried
 ```
 
-The modular prefilter is disabled by default. It can be much faster on false
-candidates, but it is probabilistic: it rejects only when every usable fixed
-large-prime reduction is inconsistent, so a false rejection would require all
-tested primes to be bad for a rational solution.
+The modular prefilter is enabled by default. It is often much faster on false
+candidates because it rejects a candidate when every usable fixed large-prime
+reduction is inconsistent. Use `--no-modular-prefilter` only when comparing
+against the exact-only search path.
 
 To save a recurrence with enough initial conditions to regenerate the sequence,
 use JSON output:

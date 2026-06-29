@@ -12,7 +12,8 @@ while IFS=$'\t' read -r slug _title _features args _recurrence rows_file json_fi
     continue
   fi
 
-  # The manifest stores CLI arguments exactly as they should be passed.
+  # The manifest stores the structural search bounds.  Modular prefiltering is
+  # enabled by default by the recurrence finder.
   # shellcheck disable=SC2086
   cargo run -q --manifest-path "$package_dir/Cargo.toml" --bin polytool -- \
     recurrence --json $args \
