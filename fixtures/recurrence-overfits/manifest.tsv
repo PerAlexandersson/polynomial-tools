@@ -1,0 +1,3 @@
+id	rows_file	recurrence_file	rows	reason
+A177970	rows/A177970.txt	recurrences/A177970.txt	98	high-rational-coefficient derivative recurrence; keep as negative overfit corpus
+A181000	rows/A181000.txt	recurrences/A181000.txt	19	extreme no-verification finite-prefix recurrence with 144 unknowns
