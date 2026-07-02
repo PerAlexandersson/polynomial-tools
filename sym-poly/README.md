@@ -12,6 +12,8 @@ examples on `symmetricfunctions.com`.
   fillings, key fillings, permuted basements, and Mason's SSYT-to-SSAF map.
 - `qsym/src/schur_qsym.rs` contains composition-tableau and immaculate-tableau
   generators for quasisymmetric Schur and dual immaculate functions.
+- `qsym/README.md` tracks which Mason/Assaf/Searles-style QSym Schur variants
+  are implemented, missing, or need definition-level verification.
 - `multipoly/src/key_polynomial.rs` computes key polynomials and tests them
   against the SSAF weight enumerator.
 
