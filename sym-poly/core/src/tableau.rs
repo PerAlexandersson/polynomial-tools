@@ -73,6 +73,60 @@ impl Tableau {
         Composition::new(counts)
     }
 
+    /// Construct the unique key tableau of the given weight.
+    ///
+    /// The entry `i + 1` appears in the first `weight[i]` columns.  Equivalently,
+    /// column `c` contains precisely the entries `i + 1` such that
+    /// `weight[i] > c`, listed increasingly from top to bottom.
+    pub fn key_tableau_from_weight(weight: &[u32]) -> Self {
+        let max_width = weight.iter().copied().max().unwrap_or(0);
+        if max_width == 0 {
+            return Tableau::empty();
+        }
+
+        let mut rows: Vec<Vec<u32>> = Vec::new();
+        for col in 0..max_width {
+            for (row, entry) in weight
+                .iter()
+                .enumerate()
+                .filter_map(|(idx, &count)| (count > col).then_some(idx as u32 + 1))
+                .enumerate()
+            {
+                if rows.len() <= row {
+                    rows.push(Vec::new());
+                }
+                rows[row].push(entry);
+            }
+        }
+
+        Tableau::new(rows)
+    }
+
+    /// Whether this semistandard tableau is a key tableau.
+    ///
+    /// A key tableau has the property that every entry appearing in column
+    /// `j + 1` also appears in column `j`.
+    pub fn is_key_tableau(&self) -> bool {
+        if !self.is_semistandard() {
+            return false;
+        }
+
+        let max_width = self.rows.first().map_or(0, Vec::len);
+        for col in 1..max_width {
+            let left: BTreeSet<u32> = self
+                .rows
+                .iter()
+                .filter_map(|row| row.get(col - 1).copied())
+                .collect();
+            for entry in self.rows.iter().filter_map(|row| row.get(col).copied()) {
+                if !left.contains(&entry) {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
     /// Row reading word, read left-to-right in each row from top to bottom.
     pub fn row_reading_word(&self) -> Vec<u32> {
         self.rows
@@ -1219,6 +1273,28 @@ mod tests {
         assert_eq!(tab.reverse_row_reading_word(), vec![2, 4, 1, 1, 3]);
         assert_eq!(tab.reading_word(), vec![2, 4, 1, 1, 3]);
         assert_eq!(tab.reverse_reading_word(), vec![1, 1, 3, 2, 4]);
+    }
+
+    #[test]
+    fn test_key_tableau_from_weight() {
+        let key = Tableau::key_tableau_from_weight(&[1, 0, 2]);
+        assert_eq!(key.rows(), &[vec![1, 3], vec![3]]);
+        assert_eq!(key.weight(), Composition::new(vec![1, 0, 2]));
+        assert!(key.is_key_tableau());
+
+        let site_key = Tableau::key_tableau_from_weight(&[1, 3, 0, 1, 2, 4]);
+        assert_eq!(
+            site_key.rows(),
+            &[
+                vec![1, 2, 2, 6],
+                vec![2, 5, 6],
+                vec![4, 6],
+                vec![5],
+                vec![6],
+            ]
+        );
+        assert_eq!(site_key.weight(), Composition::new(vec![1, 3, 0, 1, 2, 4]));
+        assert!(site_key.is_key_tableau());
     }
 
     #[test]
