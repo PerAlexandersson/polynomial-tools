@@ -7,6 +7,8 @@
 //!   (Haglund–Luoto–Mason–van Willigenburg).
 //! - **Dual immaculate functions** S\*_α = Σ F_{Des(T)} over standard
 //!   immaculate tableaux T (Berg–Bergeron–Saliola–Serrano–Zabrocki).
+//! - **Row-strict dual immaculate functions** RS\*_α, with strictly
+//!   increasing rows and weakly increasing first column.
 //! - **Fundamental slide polynomials** 𝔉_α (Assaf–Searles).
 
 use std::collections::BTreeMap;
@@ -228,6 +230,35 @@ impl ImmaculateTableau {
         results
     }
 
+    /// Enumerate row-strict semistandard immaculate tableaux of shape α.
+    ///
+    /// Rows are strictly increasing; first column is weakly increasing.
+    /// No other column constraint.
+    pub fn enumerate_row_strict_semistandard(
+        alpha: &[u32],
+        max_entry: u32,
+    ) -> Vec<ImmaculateTableau> {
+        let k = alpha.len();
+        if max_entry == 0 {
+            return if alpha.iter().all(|&a| a == 0) {
+                vec![ImmaculateTableau {
+                    rows: vec![Vec::new(); k],
+                }]
+            } else {
+                Vec::new()
+            };
+        }
+
+        let mut grid: Vec<Vec<u32>> = alpha.iter().map(|&a| vec![0; a as usize]).collect();
+        let cells: Vec<(usize, usize)> = (0..k)
+            .flat_map(|r| (0..alpha[r] as usize).map(move |c| (r, c)))
+            .collect();
+        let mut results = Vec::new();
+
+        enumerate_row_strict_ss_immaculate(&mut grid, &cells, 0, max_entry, &mut results);
+        results
+    }
+
     /// Descent set of a standard immaculate tableau.
     /// Position i is a descent if i+1 appears in a strictly lower row.
     pub fn descent_set(&self) -> Vec<u32> {
@@ -327,6 +358,37 @@ fn enumerate_ss_immaculate(
     grid[r][c] = 0;
 }
 
+fn enumerate_row_strict_ss_immaculate(
+    grid: &mut [Vec<u32>],
+    cells: &[(usize, usize)],
+    idx: usize,
+    max_entry: u32,
+    results: &mut Vec<ImmaculateTableau>,
+) {
+    if idx == cells.len() {
+        results.push(ImmaculateTableau {
+            rows: grid.to_vec(),
+        });
+        return;
+    }
+
+    let (r, c) = cells[idx];
+
+    let min_val = if c > 0 {
+        grid[r][c - 1] + 1 // strictly increasing rows
+    } else if r > 0 {
+        grid[r - 1][0] // weakly increasing first column
+    } else {
+        1
+    };
+
+    for v in min_val..=max_entry {
+        grid[r][c] = v;
+        enumerate_row_strict_ss_immaculate(grid, cells, idx + 1, max_entry, results);
+    }
+    grid[r][c] = 0;
+}
+
 /// Dual immaculate quasisymmetric function S\*_α in the fundamental basis.
 ///
 /// S\*_α = Σ_{T ∈ SIT(α)} F_{Des(T)}
@@ -347,38 +409,34 @@ pub fn dual_immaculate<C: Ring>(alpha: &[u32]) -> QSymFunction<C> {
     QSymFunction::from_terms(QSymBasis::Fundamental, terms)
 }
 
-/// Row-strict dual immaculate quasisymmetric function in the fundamental basis.
+/// Row-strict dual immaculate quasisymmetric function in the monomial basis.
 ///
-/// Uses semistandard immaculate tableaux: rows weakly increasing,
-/// first column strictly increasing.  The function is:
+/// Uses row-strict semistandard immaculate tableaux: rows strictly increasing,
+/// first column weakly increasing. The function is:
 ///
 /// ℜS\*_α = Σ_{T ∈ SSIT(α,n)} x^{weight(T)}
 ///
-/// expressed in the monomial QSym basis by weight.
+/// expressed in the monomial QSym basis by packed content. The `max_entry`
+/// parameter bounds the packed alphabet length; use `|alpha|` for the full
+/// basis element.
 pub fn row_strict_dual_immaculate<C: Ring>(alpha: &[u32], max_entry: u32) -> QSymFunction<C> {
-    let tableaux = ImmaculateTableau::enumerate_semistandard(alpha, max_entry);
+    let tableaux = ImmaculateTableau::enumerate_row_strict_semistandard(alpha, max_entry);
     let mut terms: BTreeMap<Composition, C> = BTreeMap::new();
     for t in &tableaux {
-        // Weight = content as a composition (in slot order)
-        let mut w = vec![0u32; max_entry as usize];
-        for row in &t.rows {
-            for &v in row {
-                if v > 0 && (v as usize) <= w.len() {
-                    w[v as usize - 1] += 1;
-                }
-            }
-        }
-        // Express as monomial QSym: M_{sort(w)} with appropriate multiplicity
-        // Actually, the correct expansion is: each tableau contributes x^w = M_{flat(w)}
-        // as a monomial, which we collect into the monomial basis.
-        let flat_w: Vec<u32> = w.into_iter().filter(|&x| x > 0).collect();
-        if !flat_w.is_empty() {
-            let comp = Composition::new(flat_w);
+        if let Some(comp) = packed_content_composition(&t.rows, max_entry) {
             let entry = terms.entry(comp).or_insert_with(C::zero);
             *entry = entry.clone() + C::one();
         }
     }
     QSymFunction::from_terms(QSymBasis::Monomial, terms)
+}
+
+/// Row-strict dual immaculate quasisymmetric function in the fundamental basis.
+///
+/// This uses the identity `RS*_alpha = psi(S*_alpha)`, avoiding any finite
+/// alphabet bound.
+pub fn row_strict_dual_immaculate_fundamental<C: Ring>(alpha: &[u32]) -> QSymFunction<C> {
+    dual_immaculate::<C>(alpha).psi_involution()
 }
 
 // ── Fundamental slide polynomials ───────────────────────────────────
@@ -507,6 +565,32 @@ pub fn composition_to_descent_set(comp: &Composition) -> Vec<u32> {
         des.push(pos);
     }
     des
+}
+
+fn packed_content_composition(rows: &[Vec<u32>], max_entry: u32) -> Option<Composition> {
+    let mut content = vec![0u32; max_entry as usize];
+    let mut max_used = 0u32;
+
+    for row in rows {
+        for &value in row {
+            if value == 0 || value > max_entry {
+                return None;
+            }
+            content[value as usize - 1] += 1;
+            max_used = max_used.max(value);
+        }
+    }
+
+    if max_used == 0 {
+        return Some(Composition::empty());
+    }
+
+    let packed = &content[..max_used as usize];
+    if packed.iter().any(|&count| count == 0) {
+        return None;
+    }
+
+    Some(Composition::new(packed.to_vec()))
 }
 
 #[cfg(test)]
@@ -643,6 +727,52 @@ mod tests {
         // Entries in {1,2,3}: (1,2), (1,3), (2,3) → 3 tableaux
         let tabs = ImmaculateTableau::enumerate_semistandard(&[1, 1], 3);
         assert_eq!(tabs.len(), 3);
+    }
+
+    #[test]
+    fn test_row_strict_semistandard_immaculate_count() {
+        // Row-strict SS immaculate tableaux of shape (1,1) with max_entry 3:
+        // Rows strict are trivial, and first column is weakly increasing.
+        let tabs = ImmaculateTableau::enumerate_row_strict_semistandard(&[1, 1], 3);
+        assert_eq!(tabs.len(), 6);
+    }
+
+    #[test]
+    fn test_row_strict_dual_immaculate_paper_example_310() {
+        // Niese--Sundaram--van Willigenburg--Vega--Wang, Example 3.10:
+        // RS*_(1,2) = M_(2,1) + M_(1,1,1).
+        let rsdi: QSymFunction<i64> = row_strict_dual_immaculate(&[1, 2], 3);
+        assert_eq!(rsdi.basis(), QSymBasis::Monomial);
+        assert_eq!(rsdi.coefficient(&Composition::new(vec![2, 1])), 1);
+        assert_eq!(rsdi.coefficient(&Composition::new(vec![1, 1, 1])), 1);
+        assert_eq!(rsdi.coefficient(&Composition::new(vec![1, 2])), 0);
+        assert_eq!(rsdi.terms().len(), 2);
+
+        let larger_alphabet: QSymFunction<i64> = row_strict_dual_immaculate(&[1, 2], 4);
+        assert_eq!(larger_alphabet, rsdi);
+    }
+
+    #[test]
+    fn test_row_strict_dual_immaculate_matches_psi() {
+        let from_tableaux: QSymFunction<i64> =
+            row_strict_dual_immaculate(&[1, 2], 3).to_fundamental_basis();
+        let from_psi = row_strict_dual_immaculate_fundamental::<i64>(&[1, 2]);
+
+        assert_eq!(from_tableaux, from_psi);
+        assert_eq!(from_psi.coefficient(&Composition::new(vec![2, 1])), 1);
+        assert_eq!(from_psi.terms().len(), 1);
+    }
+
+    #[test]
+    fn test_row_strict_dual_immaculate_matches_psi_small_degrees() {
+        for degree in 1..=4 {
+            for alpha in Composition::integer_compositions(degree) {
+                let from_tableaux: QSymFunction<i64> =
+                    row_strict_dual_immaculate(alpha.parts(), degree).to_fundamental_basis();
+                let from_psi = row_strict_dual_immaculate_fundamental::<i64>(alpha.parts());
+                assert_eq!(from_tableaux, from_psi, "failed for alpha = {}", alpha);
+            }
+        }
     }
 
     #[test]

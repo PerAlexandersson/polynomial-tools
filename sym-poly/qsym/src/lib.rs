@@ -12,7 +12,8 @@
 //! <https://doi.org/10.1016/j.jcta.2020.105273>.
 //!
 //! All pairwise basis conversions are supported, along with the omega
-//! involution (ω² = id, ω(Ψ_α) = (-1)^{n-ℓ(α)} Ψ_{α^r}).
+//! involution (ω² = id, ω(Ψ_α) = (-1)^{n-ℓ(α)} Ψ_{α^r}) and the `psi`
+//! involution on the fundamental basis.
 //!
 //! Additional features:
 //! - [`p_partition`]: Stanley's (P,w)-partition generating functions (Ψ̃-positive for naturally labeled posets)
@@ -43,6 +44,7 @@ pub use p_partition::{
 pub use qsym_function::QSymFunction;
 pub use schur_qsym::{
     composition_to_descent_set, descent_set_to_composition, dual_immaculate, fundamental_slide,
-    qsym_schur, row_strict_dual_immaculate, CompositionTableau, ImmaculateTableau,
+    qsym_schur, row_strict_dual_immaculate, row_strict_dual_immaculate_fundamental,
+    CompositionTableau, ImmaculateTableau,
 };
 pub use sym_qsym::{qsym_to_sym, sym_to_qsym, symmetric_qsym_to_sym};

@@ -13,11 +13,15 @@ This crate contains checked quasisymmetric-function code used by
   variants.
 - `power_sum.rs`: `Psi` and `Phi` quasisymmetric power-sum bases.
 - `schur_qsym.rs`: composition-tableau helpers for quasisymmetric Schur
-  functions and standard immaculate tableaux for dual immaculate functions.
+  functions, standard immaculate tableaux for dual immaculate functions,
+  and row-strict dual immaculate functions in monomial and fundamental bases.
 - `examples/p_partition_site_example.rs`: checked example for
   `tex-source/pPartitions.tex`.
 - `examples/dual_immaculate_site_example.rs`: checked example for
   `tex-source/qsymSchur.tex`.
+- Row-strict dual immaculate tests include the paper example
+  `RS*_(1,2) = M_(2,1) + M_(1,1,1)` and the identity
+  `RS*_alpha = psi(S*_alpha)`.
 
 ## Website Families Still Missing or Needing Verification
 
@@ -32,12 +36,6 @@ added.
 - Peak Young quasisymmetric Schur functions (`peakYqSchur`).
 - Extended Schur functions (`extSchur`) and their lock-polynomial stable-limit
   interpretation.
-- Row-strict dual immaculate functions (`rsdiSchur`): the current exported Rust
-  function `row_strict_dual_immaculate` needs definition-level verification
-  before it is used for site claims. Its implementation currently uses weakly
-  increasing rows and a strictly increasing first column, while the website
-  definition describes strictly increasing rows and a weakly increasing first
-  column.
 
 For each new family, prefer:
 

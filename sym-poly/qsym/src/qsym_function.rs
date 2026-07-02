@@ -1,10 +1,8 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::ops::{Add, Neg, Sub};
 
 use sym_poly_core::{Composition, Ring};
-
-use std::collections::BTreeSet;
 
 use crate::basis::QSymBasis;
 
@@ -179,6 +177,31 @@ impl<C: Ring> QSymFunction<C> {
         }
     }
 
+    /// The `psi` involution on QSym.
+    ///
+    /// On the fundamental basis, `psi` sends `F_alpha` to `F_beta`, where
+    /// `Des(beta) = [n - 1] \ Des(alpha)`.
+    ///
+    /// This is unrelated to the type-1 quasisymmetric power-sum basis
+    /// represented by [`QSymBasis::PowerSumPsi`].
+    pub fn psi_involution(&self) -> Self {
+        let in_f = self.to_fundamental_basis();
+        let mut result_terms: BTreeMap<Composition, C> = BTreeMap::new();
+
+        for (alpha, coeff) in &in_f.terms {
+            let beta = psi_on_composition(alpha);
+            let entry = result_terms.entry(beta).or_insert_with(C::zero);
+            *entry = entry.clone() + coeff.clone();
+        }
+
+        let result = Self::from_terms(QSymBasis::Fundamental, result_terms);
+        if self.basis == QSymBasis::Fundamental {
+            result
+        } else {
+            result.to_basis(self.basis)
+        }
+    }
+
     // -----------------------------------------------------------------------
     // Multiplication (shuffle product in monomial basis)
     // -----------------------------------------------------------------------
@@ -231,6 +254,19 @@ fn omega_on_composition(alpha: &Composition) -> Composition {
     let flipped: BTreeSet<u32> = des.iter().map(|&s| n - s).collect();
     // [n-1] \ flipped
     let complemented: BTreeSet<u32> = (1..n).filter(|s| !flipped.contains(s)).collect();
+    Composition::from_descent_set(&complemented, n)
+}
+
+/// Apply the psi involution to a composition (via descent sets).
+///
+/// `psi(F_alpha) = F_beta` where `Des(beta) = [n - 1] \ Des(alpha)`.
+fn psi_on_composition(alpha: &Composition) -> Composition {
+    let n = alpha.size();
+    if n <= 1 {
+        return alpha.clone();
+    }
+    let des = alpha.composition_to_descent_set();
+    let complemented: BTreeSet<u32> = (1..n).filter(|s| !des.contains(s)).collect();
     Composition::from_descent_set(&complemented, n)
 }
 
@@ -389,5 +425,30 @@ mod tests {
         let prod = m1.multiply(&m1.clone());
         assert_eq!(prod.coefficient(&Composition::new(vec![1, 1])), 2);
         assert_eq!(prod.coefficient(&Composition::new(vec![2])), 1);
+    }
+
+    #[test]
+    fn test_psi_involution_on_fundamental() {
+        let f21: QSymFunction<i64> = QSymFunction::fundamental_qsym(Composition::new(vec![2, 1]));
+        let psi_f21 = f21.psi_involution();
+        assert_eq!(psi_f21.basis(), QSymBasis::Fundamental);
+        assert_eq!(psi_f21.coefficient(&Composition::new(vec![1, 2])), 1);
+        assert_eq!(psi_f21.terms().len(), 1);
+
+        let f3: QSymFunction<i64> = QSymFunction::fundamental_qsym(Composition::new(vec![3]));
+        let psi_f3 = f3.psi_involution();
+        assert_eq!(psi_f3.coefficient(&Composition::new(vec![1, 1, 1])), 1);
+        assert_eq!(psi_f3.terms().len(), 1);
+    }
+
+    #[test]
+    fn test_psi_involution_roundtrip() {
+        let f = QSymFunction::scaled_basis_element(
+            QSymBasis::Fundamental,
+            Composition::new(vec![1, 2]),
+            2i64,
+        ) + QSymFunction::fundamental_qsym(Composition::new(vec![3]));
+
+        assert_eq!(f.clone().psi_involution().psi_involution(), f);
     }
 }
