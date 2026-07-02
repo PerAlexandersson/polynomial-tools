@@ -35,7 +35,11 @@ pub use chromatic_qsym::{
     chromatic_qsym, chromatic_qsym_asc, circular_coloring_qsym_asc, coloring_qsym_asc,
     coloring_qsym_asc_with_ascent_edges,
 };
-pub use p_partition::p_partition_generating_function;
+pub use p_partition::{
+    p_partition_generating_function, p_partition_generating_function_with_labels,
+    p_partition_linear_extensions, p_partition_linear_extensions_with_labels,
+    strict_p_partition_generating_function, PPartitionLinearExtension,
+};
 pub use qsym_function::QSymFunction;
 pub use schur_qsym::{
     composition_to_descent_set, descent_set_to_composition, dual_immaculate, fundamental_slide,

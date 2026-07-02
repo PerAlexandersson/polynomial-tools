@@ -21,6 +21,18 @@ use sym_poly_core::{Composition, Ring};
 use crate::basis::QSymBasis;
 use crate::qsym_function::QSymFunction;
 
+/// Linear-extension data used in the fundamental expansion of a
+/// `(P,w)`-partition generating function.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PPartitionLinearExtension {
+    /// The linear extension as a sequence of vertices in the poset.
+    pub extension: Vec<usize>,
+    /// The descent set `{i : w(extension[i-1]) > w(extension[i])}`.
+    pub descent_set: BTreeSet<u32>,
+    /// The composition corresponding to `descent_set`.
+    pub descent_composition: Composition,
+}
+
 /// Compute the (P,w)-partition generating function in the fundamental basis.
 ///
 /// # Arguments
@@ -57,6 +69,41 @@ pub fn p_partition_generating_function_with_labels<C: Ring>(
     // Enumerate linear extensions via backtracking
     let extensions = enumerate_linear_extensions(n, &children, &parents);
     p_partition_from_extensions(n, &extensions, labels)
+}
+
+/// Return the linear extensions and descent compositions used in
+/// [`p_partition_generating_function`].
+pub fn p_partition_linear_extensions(
+    n: usize,
+    covers: &[(usize, usize)],
+) -> Vec<PPartitionLinearExtension> {
+    let labels = (0..n).collect::<Vec<_>>();
+    p_partition_linear_extensions_with_labels(n, covers, &labels)
+}
+
+/// Return the linear extensions and descent compositions used in
+/// [`p_partition_generating_function_with_labels`].
+pub fn p_partition_linear_extensions_with_labels(
+    n: usize,
+    covers: &[(usize, usize)],
+    labels: &[usize],
+) -> Vec<PPartitionLinearExtension> {
+    assert_eq!(labels.len(), n, "labels must have length n");
+    assert_distinct_labels(labels);
+
+    let (children, parents) = adjacency_from_covers(n, covers);
+    enumerate_linear_extensions(n, &children, &parents)
+        .into_iter()
+        .map(|extension| {
+            let descent_set = descent_set_with_labels(&extension, labels);
+            let descent_composition = Composition::from_descent_set(&descent_set, n as u32);
+            PPartitionLinearExtension {
+                extension,
+                descent_set,
+                descent_composition,
+            }
+        })
+        .collect()
 }
 
 /// Compute the strict order-preserving enumerator of a poset.
@@ -202,8 +249,14 @@ fn backtrack_extensions(
 ///
 /// The descent set is {i : labels[σ[i]] > labels[σ[i+1]]}.
 fn descent_composition_with_labels(sigma: &[usize], n: usize, labels: &[usize]) -> Composition {
+    let des_set = descent_set_with_labels(sigma, labels);
+    Composition::from_descent_set(&des_set, n as u32)
+}
+
+fn descent_set_with_labels(sigma: &[usize], labels: &[usize]) -> BTreeSet<u32> {
+    let n = sigma.len();
     if n <= 1 {
-        return Composition::new(vec![n as u32]);
+        return BTreeSet::new();
     }
     let mut des_set = BTreeSet::new();
     for i in 0..n - 1 {
@@ -211,7 +264,7 @@ fn descent_composition_with_labels(sigma: &[usize], n: usize, labels: &[usize]) 
             des_set.insert((i + 1) as u32);
         }
     }
-    Composition::from_descent_set(&des_set, n as u32)
+    des_set
 }
 
 #[cfg(test)]
@@ -265,6 +318,15 @@ mod tests {
         assert_eq!(f.coefficient(&Composition::new(vec![3])), 1);
         assert_eq!(f.coefficient(&Composition::new(vec![1, 2])), 1);
         assert_eq!(f.terms().len(), 2);
+
+        let data = p_partition_linear_extensions(3, &[(0, 2), (1, 2)]);
+        assert_eq!(data.len(), 2);
+        assert_eq!(data[0].extension, vec![0, 1, 2]);
+        assert_eq!(data[0].descent_set, BTreeSet::new());
+        assert_eq!(data[0].descent_composition, Composition::new(vec![3]));
+        assert_eq!(data[1].extension, vec![1, 0, 2]);
+        assert_eq!(data[1].descent_set, BTreeSet::from([1]));
+        assert_eq!(data[1].descent_composition, Composition::new(vec![1, 2]));
     }
 
     #[test]
