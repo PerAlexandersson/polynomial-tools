@@ -40,6 +40,8 @@ This crate contains checked quasisymmetric-function code used by
   `tex-source/pPartitions.tex`.
 - `examples/peak_quasisymmetric_degree4.rs`: degree-four peak
   quasisymmetric fundamental table for `tex-source/peakQuasisymmetric.tex`.
+- `examples/peak_tableau_site_examples.rs`: checked `(4,3,1)` SPCT/SPYCT
+  `ytableau` example for `tex-source/qsymSchur.tex`.
 - `examples/qsym_schur_q_degree4.rs`: degree-four quasisymmetric Schur
   Q-function peak-basis table for `tex-source/qsymSchur.tex`.
 - `examples/peak_young_qsym_schur_degree4.rs`: degree-four peak Young

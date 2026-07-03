@@ -395,6 +395,10 @@ fn satisfies_spyct_triple_rule(grid: &[Vec<u32>]) -> bool {
 mod tests {
     use super::*;
 
+    fn set(values: &[u32]) -> BTreeSet<u32> {
+        values.iter().copied().collect()
+    }
+
     #[test]
     fn test_peak_set_validation() {
         assert!(is_peak_set(&[], 4));
@@ -491,5 +495,35 @@ mod tests {
         assert_eq!(expansion.get(&Composition::new(vec![2, 2, 2])), Some(&1));
         assert_eq!(expansion.get(&Composition::new(vec![2, 3, 1])), Some(&1));
         assert_eq!(expansion.len(), 3);
+    }
+
+    #[test]
+    fn test_site_example_peak_shape_431_spct() {
+        // Site example: rows are bottom-to-top.
+        let tableau = StandardPeakCompositionTableau {
+            rows: vec![vec![1, 2, 3, 4], vec![5, 6, 7], vec![8]],
+        };
+
+        assert!(StandardPeakCompositionTableau::enumerate(&[4, 3, 1]).contains(&tableau));
+        assert_eq!(tableau.upward_descent_set(), set(&[4, 7]));
+        assert_eq!(
+            tableau.upward_peak_composition(),
+            Composition::new(vec![4, 3, 1])
+        );
+    }
+
+    #[test]
+    fn test_site_example_peak_shape_431_spyct() {
+        // The same filling also satisfies the peak Young triple rule.
+        let tableau = StandardPeakYoungCompositionTableau {
+            rows: vec![vec![1, 2, 3, 4], vec![5, 6, 7], vec![8]],
+        };
+
+        assert!(StandardPeakYoungCompositionTableau::enumerate(&[4, 3, 1]).contains(&tableau));
+        assert_eq!(tableau.left_descent_set(), set(&[4, 7]));
+        assert_eq!(
+            tableau.left_peak_composition(),
+            Composition::new(vec![4, 3, 1])
+        );
     }
 }
