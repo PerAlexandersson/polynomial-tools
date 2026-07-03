@@ -11,7 +11,6 @@ use sym_poly_core::{Composition, Ring};
 
 use crate::basis::QSymBasis;
 use crate::qsym_function::QSymFunction;
-use crate::schur_qsym::CompositionTableau;
 
 /// Convert a QSym function to a different basis.
 pub fn convert<C: Ring>(f: &QSymFunction<C>, target: QSymBasis) -> QSymFunction<C> {
@@ -163,37 +162,7 @@ fn quasisymmetric_schur_basis_element<C: Ring>(alpha: &Composition) -> QSymFunct
         return QSymFunction::basis_element(QSymBasis::Fundamental, Composition::empty());
     }
 
-    let tableaux = CompositionTableau::enumerate(alpha.parts(), n);
-    let mut terms: BTreeMap<Composition, C> = BTreeMap::new();
-
-    for tableau in &tableaux {
-        let entries: Vec<u32> = tableau
-            .rows
-            .iter()
-            .flat_map(|row| row.iter().copied())
-            .collect();
-        if entries.len() != n as usize {
-            continue;
-        }
-        let mut seen = vec![false; n as usize + 1];
-        let mut is_standard = true;
-        for value in entries {
-            if value == 0 || value > n || seen[value as usize] {
-                is_standard = false;
-                break;
-            }
-            seen[value as usize] = true;
-        }
-        if !is_standard {
-            continue;
-        }
-
-        let descent = tableau.descent_composition();
-        let entry = terms.entry(descent).or_insert_with(C::zero);
-        *entry = entry.clone() + C::one();
-    }
-
-    QSymFunction::from_terms(QSymBasis::Fundamental, terms)
+    crate::schur_qsym::qsym_schur::<C>(alpha.parts(), n)
 }
 
 fn fundamental_to_tableau_basis<C: Ring>(

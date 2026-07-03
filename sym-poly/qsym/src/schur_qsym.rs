@@ -5,6 +5,8 @@
 //! - **Composition tableaux** and their enumeration.
 //! - **QSym Schur functions** S_α = Σ F_{Des(T)} over composition tableaux T
 //!   (Haglund–Luoto–Mason–van Willigenburg).
+//! - **Standard reverse composition tableaux** for the fundamental expansion
+//!   of quasisymmetric Schur functions.
 //! - **Dual immaculate functions** S\*_α = Σ F_{Des(T)} over standard
 //!   immaculate tableaux T (Berg–Bergeron–Saliola–Serrano–Zabrocki).
 //! - **Row-strict dual immaculate functions** RS\*_α, with strictly
@@ -151,16 +153,155 @@ fn enumerate_ct(
     grid[r][c] = 0;
 }
 
+/// A standard reverse composition tableau of shape α.
+///
+/// Rows are weakly decreasing left-to-right, the first column is strictly
+/// increasing top-to-bottom, and the reverse-composition triple rule holds.
+/// The entries are `1, …, |alpha|`, each exactly once.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReverseCompositionTableau {
+    pub rows: Vec<Vec<u32>>,
+}
+
+impl ReverseCompositionTableau {
+    /// Enumerate all standard reverse composition tableaux of shape α.
+    pub fn enumerate_standard(alpha: &[u32]) -> Vec<ReverseCompositionTableau> {
+        let k = alpha.len();
+        let n: u32 = alpha.iter().sum();
+        if n == 0 {
+            return vec![ReverseCompositionTableau {
+                rows: vec![Vec::new(); k],
+            }];
+        }
+
+        let mut grid: Vec<Vec<u32>> = alpha.iter().map(|&a| vec![0; a as usize]).collect();
+        let cells: Vec<(usize, usize)> = (0..k)
+            .flat_map(|r| (0..alpha[r] as usize).map(move |c| (r, c)))
+            .collect();
+        let mut used = vec![false; n as usize + 1];
+        let mut results = Vec::new();
+
+        enumerate_srct(&mut grid, &cells, 0, n, &mut used, alpha, &mut results);
+        results
+    }
+
+    /// Descent set: `i` is a descent when `i + 1` appears weakly to the
+    /// right of `i`.
+    pub fn descent_set(&self) -> Vec<u32> {
+        let n: u32 = self.rows.iter().map(|r| r.len() as u32).sum();
+        if n <= 1 {
+            return Vec::new();
+        }
+
+        let mut entry_col = vec![0usize; n as usize + 1];
+        for row in &self.rows {
+            for (c, &v) in row.iter().enumerate() {
+                entry_col[v as usize] = c;
+            }
+        }
+
+        let mut descents = Vec::new();
+        for i in 1..n {
+            if entry_col[(i + 1) as usize] >= entry_col[i as usize] {
+                descents.push(i);
+            }
+        }
+        descents
+    }
+
+    /// Convert descent set to composition.
+    pub fn descent_composition(&self) -> Composition {
+        let n: u32 = self.rows.iter().map(|r| r.len() as u32).sum();
+        descent_set_to_composition(&self.descent_set(), n)
+    }
+}
+
+fn enumerate_srct(
+    grid: &mut [Vec<u32>],
+    cells: &[(usize, usize)],
+    idx: usize,
+    n: u32,
+    used: &mut [bool],
+    alpha: &[u32],
+    results: &mut Vec<ReverseCompositionTableau>,
+) {
+    if idx == cells.len() {
+        results.push(ReverseCompositionTableau {
+            rows: grid.to_vec(),
+        });
+        return;
+    }
+
+    let (r, c) = cells[idx];
+
+    for v in 1..=n {
+        if used[v as usize] {
+            continue;
+        }
+        // Rows are weakly decreasing.
+        if c > 0 && v > grid[r][c - 1] {
+            continue;
+        }
+        // First column is strictly increasing top-to-bottom.
+        if c == 0 && r > 0 && v <= grid[r - 1][0] {
+            continue;
+        }
+        if !valid_srct_triples_for_cell(grid, alpha, r, c, v) {
+            continue;
+        }
+
+        used[v as usize] = true;
+        grid[r][c] = v;
+        enumerate_srct(grid, cells, idx + 1, n, used, alpha, results);
+        grid[r][c] = 0;
+        used[v as usize] = false;
+    }
+}
+
+fn valid_srct_triples_for_cell(
+    grid: &[Vec<u32>],
+    alpha: &[u32],
+    r: usize,
+    c: usize,
+    v: u32,
+) -> bool {
+    if c == 0 {
+        return true;
+    }
+
+    // For each upper row with a box b immediately left of this column, the
+    // reverse-composition triple rule says: if a <= b, then c must exist and
+    // a < c.
+    for upper in 0..r {
+        if alpha[upper] as usize <= c - 1 {
+            continue;
+        }
+        let b = grid[upper][c - 1];
+        if b == 0 || v > b {
+            continue;
+        }
+        if alpha[upper] as usize <= c {
+            return false;
+        }
+        let upper_right = grid[upper][c];
+        if upper_right == 0 || v >= upper_right {
+            return false;
+        }
+    }
+
+    true
+}
+
 // ── QSym Schur function ─────────────────────────────────────────────
 
 /// Quasi-symmetric Schur function S_α in the fundamental basis.
 ///
-/// S_α = Σ_{T ∈ CT(α, n)} F_{Des(T)}
+/// S_α = Σ_{T ∈ SRCT(α)} F_{Des(T)}
 ///
-/// where CT(α, n) is the set of composition tableaux of shape α with
-/// entries in {1, …, n}, and Des(T) is the descent composition.
-pub fn qsym_schur<C: Ring>(alpha: &[u32], max_entry: u32) -> QSymFunction<C> {
-    let tableaux = CompositionTableau::enumerate(alpha, max_entry);
+/// where SRCT(α) is the set of standard reverse composition tableaux of
+/// shape α. The `_max_entry` argument is retained for backward compatibility.
+pub fn qsym_schur<C: Ring>(alpha: &[u32], _max_entry: u32) -> QSymFunction<C> {
+    let tableaux = ReverseCompositionTableau::enumerate_standard(alpha);
     let mut terms: BTreeMap<Composition, C> = BTreeMap::new();
     for t in &tableaux {
         let comp = t.descent_composition();
@@ -637,6 +778,30 @@ mod tests {
         let s: QSymFunction<i64> = qsym_schur(&[1], 2);
         assert_eq!(s.basis(), QSymBasis::Fundamental);
         assert!(!s.is_zero());
+    }
+
+    #[test]
+    fn test_reverse_composition_tableaux_source_example() {
+        // Tewari--van Willigenburg, Example 2.7: SRCT(2,1,3) has
+        // descent compositions (2,1,3), (2,2,2), and (1,2,1,2).
+        let tabs = ReverseCompositionTableau::enumerate_standard(&[2, 1, 3]);
+        let descents: Vec<Composition> = tabs.iter().map(|t| t.descent_composition()).collect();
+
+        assert_eq!(tabs.len(), 3);
+        assert!(descents.contains(&Composition::new(vec![2, 1, 3])));
+        assert!(descents.contains(&Composition::new(vec![2, 2, 2])));
+        assert!(descents.contains(&Composition::new(vec![1, 2, 1, 2])));
+    }
+
+    #[test]
+    fn test_qsym_schur_source_example() {
+        // qSchur_(2,1,3) = F_(2,1,3) + F_(2,2,2) + F_(1,2,1,2).
+        let s: QSymFunction<i64> = qsym_schur(&[2, 1, 3], 6);
+
+        assert_eq!(s.coefficient(&Composition::new(vec![2, 1, 3])), 1);
+        assert_eq!(s.coefficient(&Composition::new(vec![2, 2, 2])), 1);
+        assert_eq!(s.coefficient(&Composition::new(vec![1, 2, 1, 2])), 1);
+        assert_eq!(s.terms().len(), 3);
     }
 
     #[test]
