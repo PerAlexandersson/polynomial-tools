@@ -147,7 +147,7 @@ impl<C: Ring> QSymFunction<C> {
     }
 
     // -----------------------------------------------------------------------
-    // Omega involution
+    // Involutions
     // -----------------------------------------------------------------------
 
     /// The omega involution on QSym.
@@ -165,6 +165,27 @@ impl<C: Ring> QSymFunction<C> {
 
         for (alpha, coeff) in &in_f.terms {
             let beta = omega_on_composition(alpha);
+            let entry = result_terms.entry(beta).or_insert_with(C::zero);
+            *entry = entry.clone() + coeff.clone();
+        }
+
+        let result = Self::from_terms(QSymBasis::Fundamental, result_terms);
+        if self.basis == QSymBasis::Fundamental {
+            result
+        } else {
+            result.to_basis(self.basis)
+        }
+    }
+
+    /// The `rho` involution on QSym.
+    ///
+    /// On the fundamental basis, `rho` sends `F_alpha` to `F_{rev(alpha)}`.
+    pub fn rho_involution(&self) -> Self {
+        let in_f = self.to_fundamental_basis();
+        let mut result_terms: BTreeMap<Composition, C> = BTreeMap::new();
+
+        for (alpha, coeff) in &in_f.terms {
+            let beta = reverse_on_composition(alpha);
             let entry = result_terms.entry(beta).or_insert_with(C::zero);
             *entry = entry.clone() + coeff.clone();
         }
@@ -239,6 +260,12 @@ impl<C: Ring> QSymFunction<C> {
             result.to_basis(self.basis)
         }
     }
+}
+
+/// Reverse a composition, corresponding to the rho involution on fundamental
+/// quasisymmetric functions.
+fn reverse_on_composition(alpha: &Composition) -> Composition {
+    Composition::new(alpha.parts().iter().rev().copied().collect())
 }
 
 /// Apply the omega involution to a composition (via descent sets).
@@ -450,5 +477,48 @@ mod tests {
         ) + QSymFunction::fundamental_qsym(Composition::new(vec![3]));
 
         assert_eq!(f.clone().psi_involution().psi_involution(), f);
+    }
+
+    #[test]
+    fn test_rho_involution_on_fundamental() {
+        let f21: QSymFunction<i64> = QSymFunction::fundamental_qsym(Composition::new(vec![2, 1]));
+        let rho_f21 = f21.rho_involution();
+        assert_eq!(rho_f21.basis(), QSymBasis::Fundamental);
+        assert_eq!(rho_f21.coefficient(&Composition::new(vec![1, 2])), 1);
+        assert_eq!(rho_f21.terms().len(), 1);
+
+        let f111: QSymFunction<i64> =
+            QSymFunction::fundamental_qsym(Composition::new(vec![1, 1, 1]));
+        let rho_f111 = f111.rho_involution();
+        assert_eq!(rho_f111.coefficient(&Composition::new(vec![1, 1, 1])), 1);
+        assert_eq!(rho_f111.terms().len(), 1);
+    }
+
+    #[test]
+    fn test_rho_involution_roundtrip() {
+        let f = QSymFunction::scaled_basis_element(
+            QSymBasis::Fundamental,
+            Composition::new(vec![1, 2]),
+            2i64,
+        ) + QSymFunction::fundamental_qsym(Composition::new(vec![3]));
+
+        assert_eq!(f.clone().rho_involution().rho_involution(), f);
+    }
+
+    #[test]
+    fn test_involution_relations() {
+        for degree in 1..=5 {
+            for alpha in Composition::integer_compositions(degree) {
+                let f: QSymFunction<i64> = QSymFunction::fundamental_qsym(alpha);
+                assert_eq!(
+                    f.clone().psi_involution(),
+                    f.clone().omega_involution().rho_involution()
+                );
+                assert_eq!(
+                    f.clone().psi_involution(),
+                    f.clone().rho_involution().omega_involution()
+                );
+            }
+        }
     }
 }

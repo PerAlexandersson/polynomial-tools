@@ -14,12 +14,17 @@ This crate contains checked quasisymmetric-function code used by
 - `power_sum.rs`: `Psi` and `Phi` quasisymmetric power-sum bases.
 - `schur_qsym.rs`: composition-tableau helpers for quasisymmetric Schur
   functions, standard immaculate tableaux for dual immaculate functions,
+  Young quasisymmetric Schur functions via the rho/reverse-index relation,
   and row-strict dual immaculate functions in monomial and fundamental bases.
 - Quasisymmetric Schur tests include the Tewari--van Willigenburg
   `qSchur_(2,1,3)` fundamental expansion example from
   `tex-source/qsymSchur.tex`.
+- Young quasisymmetric Schur tests include the
+  `yqSchur_(3,1,2) = rho(qSchur_(2,1,3))` source-relation example.
 - `examples/qsym_schur_degree4.rs`: degree-four quasisymmetric Schur
   fundamental table for `tex-source/qsymSchur.tex`.
+- `examples/young_qsym_schur_degree4.rs`: degree-four Young
+  quasisymmetric Schur fundamental table for `tex-source/qsymSchur.tex`.
 - `examples/p_partition_site_example.rs`: checked example for
   `tex-source/pPartitions.tex`.
 - `examples/dual_immaculate_site_example.rs`: checked example for
@@ -40,7 +45,6 @@ The site page `tex-source/qsymSchur.tex` also discusses several Schur-like
 families that should get explicit Rust support before new computed examples are
 added.
 
-- Young quasisymmetric Schur functions (`yqSchur`).
 - Row-strict quasisymmetric Schur functions (`rsqSchur`).
 - Row-strict Young quasisymmetric Schur functions (`rsyqSchur`).
 - Quasisymmetric Schur Q-functions (`qSchurQ`).
