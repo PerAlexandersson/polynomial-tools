@@ -1,6 +1,6 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
-use sym_poly_multipoly::k_kohnert_weight_counts;
+use sym_poly_multipoly::{ghost_diagram_weight, k_kohnert_weight_counts, Cell, GhostDiagram};
 
 fn format_monomial(weight: &[u32]) -> String {
     let factors = weight
@@ -17,6 +17,14 @@ fn format_monomial(weight: &[u32]) -> String {
     } else {
         factors.join(" ")
     }
+}
+
+fn cells(cells: &[(usize, usize)]) -> BTreeSet<Cell> {
+    cells.iter().map(|&(col, row)| Cell { col, row }).collect()
+}
+
+fn diagram_pair_weight(real: &BTreeSet<Cell>, extra: &BTreeSet<Cell>) -> Vec<u32> {
+    ghost_diagram_weight(&GhostDiagram::new(real.clone(), extra.clone()))
 }
 
 fn main() {
@@ -44,4 +52,24 @@ fn main() {
             format_monomial(&weight)
         );
     }
+
+    // Pan--Yu, Examples 3.2 and 3.5, for the same alpha.
+    let kohnert_cells = cells(&[(1, 1), (1, 2), (2, 1)]);
+    let ghost_cells = cells(&[(1, 3), (2, 2)]);
+    let top_k_kohnert = GhostDiagram::new(kohnert_cells, ghost_cells);
+    assert_eq!(top_k_kohnert.ghost_count(), 2);
+    assert_eq!(ghost_diagram_weight(&top_k_kohnert), vec![2, 2, 1]);
+
+    let leading_cells = cells(&[(1, 2), (1, 3), (2, 2)]);
+    let extra_cells = cells(&[(1, 1), (2, 1)]);
+    assert_eq!(extra_cells.len(), 2);
+    assert_eq!(
+        diagram_pair_weight(&leading_cells, &extra_cells),
+        vec![2, 2, 1]
+    );
+
+    println!(
+        "Pan--Yu bijection example: beta^2 * {} on both sides",
+        format_monomial(&[2, 2, 1])
+    );
 }
