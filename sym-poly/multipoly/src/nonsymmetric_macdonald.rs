@@ -37,9 +37,34 @@ pub fn nonsymmetric_macdonald_q0<C: Ring>(alpha: &[u32], t: &C) -> MultiPoly<C> 
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::*;
 
     use crate::atom_polynomial::{atom_polynomial, t_atom_polynomial};
+    use sym_poly_core::Ssaf;
+
+    fn pow_i64(base: i64, exp: u32) -> i64 {
+        (0..exp).fold(1, |acc, _| acc * base)
+    }
+
+    fn q0_filling_formula(alpha: &[u32], t: i64) -> MultiPoly<i64> {
+        let n = alpha.len();
+        let basement: Vec<u32> = (1..=n as u32).collect();
+        let mut terms = BTreeMap::new();
+
+        for filling in Ssaf::non_attacking_fillings(alpha, &basement) {
+            if filling.major_index() != 0 {
+                continue;
+            }
+
+            let coeff =
+                pow_i64(t, filling.coinversions()) * pow_i64(1 - t, filling.horizontal_descents());
+            *terms.entry(filling.weight_vector()).or_insert(0) += coeff;
+        }
+
+        MultiPoly::from_terms(n, terms)
+    }
 
     #[test]
     fn test_q0_macdonald_matches_t_atom() {
@@ -53,6 +78,23 @@ mod tests {
         let q0: MultiPoly<i64> = nonsymmetric_macdonald_q0(&[0, 2], &0);
         let atom: MultiPoly<i64> = atom_polynomial(&[0, 2]);
         assert_eq!(q0, atom);
+    }
+
+    #[test]
+    fn test_q0_macdonald_matches_filling_formula() {
+        let test_cases: Vec<Vec<u32>> = vec![vec![0, 2], vec![2, 1], vec![1, 0, 2], vec![0, 1, 2]];
+        let t_values = [0, 2, -1];
+
+        for alpha in &test_cases {
+            for &t in &t_values {
+                let operator_side: MultiPoly<i64> = nonsymmetric_macdonald_q0(alpha, &t);
+                let filling_side = q0_filling_formula(alpha, t);
+                assert_eq!(
+                    operator_side, filling_side,
+                    "operator/filling mismatch for alpha={alpha:?}, t={t}"
+                );
+            }
+        }
     }
 
     #[test]
