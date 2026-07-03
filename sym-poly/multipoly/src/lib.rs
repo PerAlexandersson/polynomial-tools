@@ -12,6 +12,7 @@
 //! - [`key_polynomial`] — Demazure characters via π operators
 //! - [`atom_polynomial`] — Demazure atoms via θ operators
 //! - [`kohnert`] — Kohnert diagrams and Assaf Yamanouchi tests
+//! - [`multiline_queue`] — multiline queues and Ferrari--Martin labelings
 //! - [`nonsymmetric_macdonald`] — operator-side `q = 0` Macdonald / Hall-Littlewood
 //! - [`schubert_polynomial`] — Schubert polynomials via divided differences
 //! - [`slide_polynomial`] — monomial and fundamental slide polynomials
@@ -27,6 +28,7 @@ pub mod kohnert;
 pub mod lorentzian;
 pub mod modular_groebner;
 pub mod monomial_order;
+pub mod multiline_queue;
 pub mod multipoly;
 pub mod multipoly_function;
 pub mod nonsymmetric_macdonald;
@@ -88,6 +90,10 @@ pub use modular_groebner::{
 pub use monomial_order::{
     leading_term, monomial_divides, monomial_quotient, LeadingTerm, MonomialOrder,
     ParseMonomialOrderError,
+};
+pub use multiline_queue::{
+    multiline_queue_weight_counts, multiline_queues_with_row_sizes, FerrariMartinLabeling,
+    MultilineQueue, MultilineQueuePairing,
 };
 pub use multipoly::MultiPoly;
 pub use multipoly_function::MultiPolyFunction;
