@@ -24,6 +24,15 @@ pub struct StandardPeakCompositionTableau {
     pub rows: Vec<Vec<u32>>,
 }
 
+/// A standard peak Young composition tableau.
+///
+/// Rows are stored bottom-to-top, matching the convention in the peak
+/// composition tableau literature.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StandardPeakYoungCompositionTableau {
+    pub rows: Vec<Vec<u32>>,
+}
+
 impl StandardPeakCompositionTableau {
     /// Enumerate standard peak composition tableaux of peak shape `alpha`.
     pub fn enumerate(alpha: &[u32]) -> Vec<StandardPeakCompositionTableau> {
@@ -73,6 +82,58 @@ impl StandardPeakCompositionTableau {
     pub fn upward_peak_composition(&self) -> Composition {
         let n: u32 = self.rows.iter().map(|r| r.len() as u32).sum();
         peak_composition_from_descent_set(&self.upward_descent_set(), n)
+    }
+}
+
+impl StandardPeakYoungCompositionTableau {
+    /// Enumerate standard peak Young composition tableaux of peak shape `alpha`.
+    pub fn enumerate(alpha: &[u32]) -> Vec<StandardPeakYoungCompositionTableau> {
+        assert!(
+            is_peak_composition(alpha),
+            "invalid peak composition {:?}",
+            alpha
+        );
+
+        let row_count = alpha.len();
+        let n: u32 = alpha.iter().sum();
+        if n == 0 {
+            return vec![StandardPeakYoungCompositionTableau { rows: Vec::new() }];
+        }
+
+        let mut grid: Vec<Vec<u32>> = alpha.iter().map(|&a| vec![0; a as usize]).collect();
+        let cells: Vec<(usize, usize)> = (0..row_count)
+            .flat_map(|r| (0..alpha[r] as usize).map(move |c| (r, c)))
+            .collect();
+        let mut used = vec![false; n as usize + 1];
+        let mut results = Vec::new();
+
+        enumerate_spyct(&mut grid, &cells, 0, n, &mut used, &mut results);
+        results
+    }
+
+    /// Descent set `Des_left(T) = {i : i + 1 is weakly left of i}`.
+    pub fn left_descent_set(&self) -> BTreeSet<u32> {
+        let n: u32 = self.rows.iter().map(|r| r.len() as u32).sum();
+        let mut entry_col = vec![0usize; n as usize + 1];
+        for row in &self.rows {
+            for (c, &value) in row.iter().enumerate() {
+                entry_col[value as usize] = c;
+            }
+        }
+
+        let mut descents = BTreeSet::new();
+        for i in 1..n {
+            if entry_col[(i + 1) as usize] <= entry_col[i as usize] {
+                descents.insert(i);
+            }
+        }
+        descents
+    }
+
+    /// The peak composition `comp_n(Peak(Des_left(T)))`.
+    pub fn left_peak_composition(&self) -> Composition {
+        let n: u32 = self.rows.iter().map(|r| r.len() as u32).sum();
+        peak_composition_from_descent_set(&self.left_descent_set(), n)
     }
 }
 
@@ -150,6 +211,35 @@ pub fn qsym_schur_q<C: Ring>(alpha: &[u32]) -> QSymFunction<C> {
     result
 }
 
+/// Peak Young quasisymmetric Schur function in the peak-function basis.
+///
+/// The keys are peak compositions indexing Stembridge peak functions.
+pub fn peak_young_qsym_schur_peak_expansion<C: Ring>(alpha: &[u32]) -> BTreeMap<Composition, C> {
+    let tableaux = StandardPeakYoungCompositionTableau::enumerate(alpha);
+    let mut terms: BTreeMap<Composition, C> = BTreeMap::new();
+
+    for tableau in tableaux {
+        let peak_comp = tableau.left_peak_composition();
+        let entry = terms.entry(peak_comp).or_insert_with(C::zero);
+        *entry = entry.clone() + C::one();
+    }
+
+    terms
+}
+
+/// Peak Young quasisymmetric Schur function in the fundamental basis.
+pub fn peak_young_qsym_schur<C: Ring>(alpha: &[u32]) -> QSymFunction<C> {
+    let degree: u32 = alpha.iter().sum();
+    let mut result = QSymFunction::zero(QSymBasis::Fundamental);
+
+    for (peak_comp, coeff) in peak_young_qsym_schur_peak_expansion::<C>(alpha) {
+        let peak_set: Vec<u32> = peak_comp.composition_to_descent_set().into_iter().collect();
+        result = result + peak_quasisymmetric::<C>(&peak_set, degree).scale(&coeff);
+    }
+
+    result
+}
+
 /// Convert a descent set to the corresponding peak set.
 pub fn peak_set_from_descent_set(descent_set: &BTreeSet<u32>) -> BTreeSet<u32> {
     descent_set
@@ -217,6 +307,44 @@ fn enumerate_spct(
     }
 }
 
+fn enumerate_spyct(
+    grid: &mut [Vec<u32>],
+    cells: &[(usize, usize)],
+    idx: usize,
+    n: u32,
+    used: &mut [bool],
+    results: &mut Vec<StandardPeakYoungCompositionTableau>,
+) {
+    if idx == cells.len() {
+        if satisfies_peak_subdiagram_condition(grid, n) && satisfies_spyct_triple_rule(grid) {
+            results.push(StandardPeakYoungCompositionTableau {
+                rows: grid.to_vec(),
+            });
+        }
+        return;
+    }
+
+    let (r, c) = cells[idx];
+
+    for value in 1..=n {
+        if used[value as usize] {
+            continue;
+        }
+        if c > 0 && value <= grid[r][c - 1] {
+            continue;
+        }
+        if c == 0 && r > 0 && value <= grid[r - 1][0] {
+            continue;
+        }
+
+        used[value as usize] = true;
+        grid[r][c] = value;
+        enumerate_spyct(grid, cells, idx + 1, n, used, results);
+        grid[r][c] = 0;
+        used[value as usize] = false;
+    }
+}
+
 fn satisfies_peak_subdiagram_condition(grid: &[Vec<u32>], n: u32) -> bool {
     (1..=n).all(|k| subdiagram_shape(grid, k).is_some_and(|shape| is_peak_composition(&shape)))
 }
@@ -240,6 +368,27 @@ fn subdiagram_shape(grid: &[Vec<u32>], max_value: u32) -> Option<Vec<u32>> {
     }
 
     Some(shape)
+}
+
+fn satisfies_spyct_triple_rule(grid: &[Vec<u32>]) -> bool {
+    for r in 0..grid.len() {
+        for c in 0..grid[r].len() {
+            for lower in 0..r {
+                if grid[lower].len() <= c + 1 {
+                    continue;
+                }
+                if grid[r][c] < grid[lower][c + 1] {
+                    if grid[r].len() <= c + 1 {
+                        return false;
+                    }
+                    if grid[r][c + 1] >= grid[lower][c + 1] {
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+    true
 }
 
 #[cfg(test)]
@@ -315,5 +464,32 @@ mod tests {
         assert_eq!(expansion.get(&Composition::new(vec![2, 3, 1])), Some(&1));
         assert_eq!(expansion.get(&Composition::new(vec![2, 4])), Some(&1));
         assert_eq!(expansion.len(), 4);
+    }
+
+    #[test]
+    fn test_standard_peak_young_composition_tableaux_source_example() {
+        // Searles--Slattery-Holmes, Example 4.4, lists three SPYCTs of
+        // shape (3,3) with peak compositions (3,3), (2,2,2), and (2,3,1).
+        let tableaux = StandardPeakYoungCompositionTableau::enumerate(&[3, 3]);
+        let peak_comps: Vec<Composition> = tableaux
+            .iter()
+            .map(StandardPeakYoungCompositionTableau::left_peak_composition)
+            .collect();
+
+        assert_eq!(tableaux.len(), 3);
+        assert!(peak_comps.contains(&Composition::new(vec![3, 3])));
+        assert!(peak_comps.contains(&Composition::new(vec![2, 2, 2])));
+        assert!(peak_comps.contains(&Composition::new(vec![2, 3, 1])));
+    }
+
+    #[test]
+    fn test_peak_young_qsym_schur_peak_expansion_source_example() {
+        // S~_(3,3) = K_(3,3) + K_(2,2,2) + K_(2,3,1).
+        let expansion = peak_young_qsym_schur_peak_expansion::<i64>(&[3, 3]);
+
+        assert_eq!(expansion.get(&Composition::new(vec![3, 3])), Some(&1));
+        assert_eq!(expansion.get(&Composition::new(vec![2, 2, 2])), Some(&1));
+        assert_eq!(expansion.get(&Composition::new(vec![2, 3, 1])), Some(&1));
+        assert_eq!(expansion.len(), 3);
     }
 }

@@ -44,8 +44,9 @@ pub use p_partition::{
 };
 pub use peak::{
     is_peak_composition, is_peak_set, peak_composition_from_descent_set, peak_quasisymmetric,
-    peak_set_from_descent_set, qsym_schur_q, qsym_schur_q_peak_expansion,
-    StandardPeakCompositionTableau,
+    peak_set_from_descent_set, peak_young_qsym_schur, peak_young_qsym_schur_peak_expansion,
+    qsym_schur_q, qsym_schur_q_peak_expansion, StandardPeakCompositionTableau,
+    StandardPeakYoungCompositionTableau,
 };
 pub use qsym_function::QSymFunction;
 pub use schur_qsym::{
