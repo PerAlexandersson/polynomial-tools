@@ -409,6 +409,23 @@ pub fn dual_immaculate<C: Ring>(alpha: &[u32]) -> QSymFunction<C> {
     QSymFunction::from_terms(QSymBasis::Fundamental, terms)
 }
 
+/// Dual immaculate quasisymmetric function S\*_α in the monomial basis.
+///
+/// Uses semistandard immaculate tableaux: rows weakly increasing and first
+/// column strictly increasing. The `max_entry` parameter bounds the packed
+/// alphabet length; use `|alpha|` for the full basis element.
+pub fn dual_immaculate_monomial<C: Ring>(alpha: &[u32], max_entry: u32) -> QSymFunction<C> {
+    let tableaux = ImmaculateTableau::enumerate_semistandard(alpha, max_entry);
+    let mut terms: BTreeMap<Composition, C> = BTreeMap::new();
+    for t in &tableaux {
+        if let Some(comp) = packed_content_composition(&t.rows, max_entry) {
+            let entry = terms.entry(comp).or_insert_with(C::zero);
+            *entry = entry.clone() + C::one();
+        }
+    }
+    QSymFunction::from_terms(QSymBasis::Monomial, terms)
+}
+
 /// Row-strict dual immaculate quasisymmetric function in the monomial basis.
 ///
 /// Uses row-strict semistandard immaculate tableaux: rows strictly increasing,
@@ -720,6 +737,21 @@ mod tests {
     }
 
     #[test]
+    fn test_dual_immaculate_monomial_small_example() {
+        // Since S*_(2,1) = F_(1,2) + F_(2,1), its monomial expansion is
+        // M_(1,2) + M_(2,1) + 2 M_(1,1,1).
+        let di: QSymFunction<i64> = dual_immaculate_monomial(&[2, 1], 3);
+        assert_eq!(di.basis(), QSymBasis::Monomial);
+        assert_eq!(di.coefficient(&Composition::new(vec![1, 2])), 1);
+        assert_eq!(di.coefficient(&Composition::new(vec![2, 1])), 1);
+        assert_eq!(di.coefficient(&Composition::new(vec![1, 1, 1])), 2);
+        assert_eq!(di.terms().len(), 3);
+
+        let larger_alphabet: QSymFunction<i64> = dual_immaculate_monomial(&[2, 1], 4);
+        assert_eq!(larger_alphabet, di);
+    }
+
+    #[test]
     fn test_semistandard_immaculate_count() {
         // SS immaculate tableaux of shape (1,1) with max_entry 3:
         // Rows weakly increasing (trivial: 1 entry each)
@@ -771,6 +803,22 @@ mod tests {
                     row_strict_dual_immaculate(alpha.parts(), degree).to_fundamental_basis();
                 let from_psi = row_strict_dual_immaculate_fundamental::<i64>(alpha.parts());
                 assert_eq!(from_tableaux, from_psi, "failed for alpha = {}", alpha);
+            }
+        }
+    }
+
+    #[test]
+    fn test_dual_immaculate_monomial_matches_fundamental_small_degrees() {
+        for degree in 1..=4 {
+            for alpha in Composition::integer_compositions(degree) {
+                let from_tableaux: QSymFunction<i64> =
+                    dual_immaculate_monomial(alpha.parts(), degree).to_fundamental_basis();
+                let from_standard_tableaux = dual_immaculate::<i64>(alpha.parts());
+                assert_eq!(
+                    from_tableaux, from_standard_tableaux,
+                    "failed for alpha = {}",
+                    alpha
+                );
             }
         }
     }
