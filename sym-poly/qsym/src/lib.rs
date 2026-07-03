@@ -42,7 +42,11 @@ pub use p_partition::{
     p_partition_linear_extensions, p_partition_linear_extensions_with_labels,
     strict_p_partition_generating_function, PPartitionLinearExtension,
 };
-pub use peak::{is_peak_set, peak_quasisymmetric};
+pub use peak::{
+    is_peak_composition, is_peak_set, peak_composition_from_descent_set, peak_quasisymmetric,
+    peak_set_from_descent_set, qsym_schur_q, qsym_schur_q_peak_expansion,
+    StandardPeakCompositionTableau,
+};
 pub use qsym_function::QSymFunction;
 pub use schur_qsym::{
     composition_to_descent_set, descent_set_to_composition, dual_immaculate,

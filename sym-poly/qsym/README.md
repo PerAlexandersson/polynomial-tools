@@ -12,7 +12,8 @@ This crate contains checked quasisymmetric-function code used by
 - `chromatic_qsym.rs`: chromatic quasisymmetric functions and asc-weighted
   variants.
 - `peak.rs`: Stembridge peak quasisymmetric functions in the fundamental
-  basis.
+  basis, plus quasisymmetric Schur Q-functions via standard peak composition
+  tableaux.
 - `power_sum.rs`: `Psi` and `Phi` quasisymmetric power-sum bases.
 - `schur_qsym.rs`: composition-tableau helpers for quasisymmetric Schur
   functions, standard immaculate tableaux for dual immaculate functions,
@@ -38,6 +39,8 @@ This crate contains checked quasisymmetric-function code used by
   `tex-source/pPartitions.tex`.
 - `examples/peak_quasisymmetric_degree4.rs`: degree-four peak
   quasisymmetric fundamental table for `tex-source/peakQuasisymmetric.tex`.
+- `examples/qsym_schur_q_degree4.rs`: degree-four quasisymmetric Schur
+  Q-function peak-basis table for `tex-source/qsymSchur.tex`.
 - `examples/dual_immaculate_site_example.rs`: checked example for
   `tex-source/qsymSchur.tex`.
 - `examples/dual_immaculate_degree4.rs`: degree-four dual immaculate `qmonom`
@@ -56,7 +59,6 @@ The site page `tex-source/qsymSchur.tex` also discusses several Schur-like
 families that should get explicit Rust support before new computed examples are
 added.
 
-- Quasisymmetric Schur Q-functions (`qSchurQ`).
 - Peak Young quasisymmetric Schur functions (`peakYqSchur`).
 - Extended Schur functions (`extSchur`) and their lock-polynomial stable-limit
   interpretation.
