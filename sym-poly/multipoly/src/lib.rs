@@ -64,9 +64,11 @@ pub use indexed_variables::{
 pub use key_polynomial::{key_polynomial, t_key_polynomial};
 pub use kohnert::{
     canonical_labeling, cells_in_col, column_pairing, diagram_from_labeling, diagram_weight,
-    format_diagram, is_yamanouchi, kohnert_diagrams, kohnert_moves, label_pairing, max_col,
-    rectify_labeled, rectify_labeled_column_star, rothe_diagram, sorted_rows_in_col,
-    yamanouchi_diagrams, Cell, Diagram, Labeling,
+    format_diagram, ghost_diagram_weight, is_yamanouchi, k_kohnert_diagrams,
+    k_kohnert_diagrams_for_composition, k_kohnert_moves, k_kohnert_weight_counts, key_diagram,
+    kohnert_diagrams, kohnert_moves, label_pairing, max_col, rectify_labeled,
+    rectify_labeled_column_star, rothe_diagram, sorted_rows_in_col, yamanouchi_diagrams, Cell,
+    Diagram, GhostDiagram, Labeling,
 };
 pub use lorentzian::{
     is_lorentzian, is_lorentzian_bool, is_m_convex, is_normalized_lorentzian,

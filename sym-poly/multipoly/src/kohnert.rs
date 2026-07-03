@@ -14,6 +14,61 @@ pub struct Cell {
 pub type Diagram = BTreeSet<Cell>;
 pub type Labeling = BTreeMap<Cell, usize>;
 
+/// A diagram whose cells are split into ordinary cells and fixed ghost cells.
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+pub struct GhostDiagram {
+    real: Diagram,
+    ghosts: Diagram,
+}
+
+impl GhostDiagram {
+    /// Create a ghost diagram from ordinary cells and ghost cells.
+    pub fn new(real: Diagram, ghosts: Diagram) -> Self {
+        assert!(
+            real.is_disjoint(&ghosts),
+            "ordinary cells and ghost cells must be disjoint"
+        );
+        Self { real, ghosts }
+    }
+
+    /// A ghost diagram with no ghost cells.
+    pub fn from_real(real: Diagram) -> Self {
+        Self::new(real, Diagram::new())
+    }
+
+    /// Ordinary cells.
+    pub fn real(&self) -> &Diagram {
+        &self.real
+    }
+
+    /// Ghost cells.
+    pub fn ghosts(&self) -> &Diagram {
+        &self.ghosts
+    }
+
+    /// All occupied positions, ordinary and ghost.
+    pub fn occupied(&self) -> Diagram {
+        self.real.union(&self.ghosts).copied().collect()
+    }
+
+    /// Number of ghost cells.
+    pub fn ghost_count(&self) -> usize {
+        self.ghosts.len()
+    }
+}
+
+/// Key diagram of a weak composition, with `alpha[i]` cells in row `i + 1`.
+pub fn key_diagram(alpha: &[u32]) -> Diagram {
+    let mut diagram = Diagram::new();
+    for (idx, &row_len) in alpha.iter().enumerate() {
+        let row = idx + 1;
+        for col in 1..=row_len as usize {
+            diagram.insert(Cell { col, row });
+        }
+    }
+    diagram
+}
+
 pub fn rothe_diagram(perm: &[usize]) -> Diagram {
     let mut diagram = Diagram::new();
     for i in 0..perm.len() {
@@ -37,6 +92,12 @@ pub fn diagram_weight(diagram: &Diagram) -> Vec<u32> {
     }
     trim_trailing_zeroes(&mut weight);
     weight
+}
+
+/// Weight of a ghost diagram, counting both ordinary and ghost cells by row.
+pub fn ghost_diagram_weight(diagram: &GhostDiagram) -> Vec<u32> {
+    let occupied = diagram.occupied();
+    diagram_weight(&occupied)
 }
 
 pub fn max_col(diagram: &Diagram) -> usize {
@@ -119,6 +180,119 @@ pub fn kohnert_diagrams(initial: &Diagram, max_diagrams: usize) -> Result<Vec<Di
     }
 
     Ok(seen.into_iter().collect())
+}
+
+/// All one-step K-Kohnert moves.
+///
+/// Rows are indexed from bottom to top, so a move lowers a selected rightmost
+/// ordinary cell to the nearest empty position below it in the same column.  A
+/// ghost cell is fixed and blocks jumps past it.  Each legal move has two
+/// variants: one leaves the source position empty, and one leaves a ghost cell
+/// at the source.
+pub fn k_kohnert_moves(diagram: &GhostDiagram) -> Vec<GhostDiagram> {
+    let occupied = diagram.occupied();
+    let rows = diagram
+        .real
+        .iter()
+        .map(|cell| cell.row)
+        .collect::<BTreeSet<_>>();
+    let mut moves = Vec::new();
+
+    for row in rows {
+        let Some(rightmost_occupied) = occupied
+            .iter()
+            .filter(|cell| cell.row == row)
+            .max_by_key(|cell| cell.col)
+            .copied()
+        else {
+            continue;
+        };
+        if !diagram.real.contains(&rightmost_occupied) || row == 1 {
+            continue;
+        }
+
+        let mut target = None;
+        for target_row in (1..row).rev() {
+            let candidate = Cell {
+                col: rightmost_occupied.col,
+                row: target_row,
+            };
+            if diagram.ghosts.contains(&candidate) {
+                break;
+            }
+            if !occupied.contains(&candidate) {
+                target = Some(candidate);
+                break;
+            }
+        }
+
+        let Some(target) = target else {
+            continue;
+        };
+
+        let mut moved_real = diagram.real.clone();
+        moved_real.remove(&rightmost_occupied);
+        moved_real.insert(target);
+        moves.push(GhostDiagram::new(
+            moved_real.clone(),
+            diagram.ghosts.clone(),
+        ));
+
+        let mut ghosts = diagram.ghosts.clone();
+        ghosts.insert(rightmost_occupied);
+        moves.push(GhostDiagram::new(moved_real, ghosts));
+    }
+
+    moves
+}
+
+/// Closure of a ghost diagram under K-Kohnert moves.
+pub fn k_kohnert_diagrams(
+    initial: &GhostDiagram,
+    max_diagrams: usize,
+) -> Result<Vec<GhostDiagram>, String> {
+    let mut seen = BTreeSet::new();
+    let mut queue = VecDeque::new();
+    seen.insert(initial.clone());
+    queue.push_back(initial.clone());
+
+    while let Some(diagram) = queue.pop_front() {
+        for next in k_kohnert_moves(&diagram) {
+            if seen.insert(next.clone()) {
+                if seen.len() > max_diagrams {
+                    return Err(format!(
+                        "K-Kohnert diagram cap exceeded: more than {max_diagrams} diagrams"
+                    ));
+                }
+                queue.push_back(next);
+            }
+        }
+    }
+
+    Ok(seen.into_iter().collect())
+}
+
+/// K-Kohnert diagrams generated from the key diagram of a weak composition.
+pub fn k_kohnert_diagrams_for_composition(
+    alpha: &[u32],
+    max_diagrams: usize,
+) -> Result<Vec<GhostDiagram>, String> {
+    let initial = GhostDiagram::from_real(key_diagram(alpha));
+    k_kohnert_diagrams(&initial, max_diagrams)
+}
+
+/// Count K-Kohnert diagrams by `(number of ghosts, row weight)`.
+pub fn k_kohnert_weight_counts(
+    alpha: &[u32],
+    max_diagrams: usize,
+) -> Result<BTreeMap<(usize, Vec<u32>), usize>, String> {
+    let mut counts = BTreeMap::new();
+    for diagram in k_kohnert_diagrams_for_composition(alpha, max_diagrams)? {
+        *counts
+            .entry((diagram.ghost_count(), ghost_diagram_weight(&diagram)))
+            .or_insert(0) += 1;
+    }
+    Ok(counts)
 }
 
 /// Assaf's column pairing for ordinary, unlabeled rectification.
@@ -363,6 +537,37 @@ mod tests {
             *result.entry(diagram_weight(diagram)).or_insert(0) += 1;
         }
         result
+    }
+
+    #[test]
+    fn test_key_diagram_for_composition() {
+        let diagram = key_diagram(&[0, 2, 1]);
+        assert_eq!(
+            diagram,
+            BTreeSet::from([
+                Cell { col: 1, row: 2 },
+                Cell { col: 2, row: 2 },
+                Cell { col: 1, row: 3 },
+            ])
+        );
+    }
+
+    #[test]
+    fn test_k_kohnert_lascoux_site_example() {
+        let counts = k_kohnert_weight_counts(&[0, 2, 1], 100).unwrap();
+        let expected = BTreeMap::from([
+            ((0, vec![0, 2, 1]), 1),
+            ((0, vec![1, 1, 1]), 1),
+            ((0, vec![1, 2]), 1),
+            ((0, vec![2, 0, 1]), 1),
+            ((0, vec![2, 1]), 1),
+            ((1, vec![1, 2, 1]), 2),
+            ((1, vec![2, 1, 1]), 2),
+            ((1, vec![2, 2]), 1),
+            ((2, vec![2, 2, 1]), 1),
+        ]);
+        assert_eq!(counts, expected);
+        assert_eq!(counts.values().sum::<usize>(), 11);
     }
 
     #[test]
