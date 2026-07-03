@@ -399,6 +399,35 @@ impl<C: Ring> SymmetricFunction<C> {
     // Plethysm
     // -----------------------------------------------------------------------
 
+    /// Compute the plethysm `self[inner]`.
+    ///
+    /// The implementation uses the defining power-sum rules
+    /// `p_k[p_mu] = p_{k mu}` and multiplicativity in the outer
+    /// power-sum parts. Coefficients are treated as scalars; plethysms with
+    /// parameter substitution such as `p_k[q X] = q^k p_k[X]` need a separate
+    /// parameter-aware coefficient layer.
+    ///
+    /// The result is returned in the power-sum basis.
+    pub fn plethysm(&self, inner: &Self) -> Self {
+        let outer_p = self.to_power_sum_basis();
+        let inner_p = inner.to_power_sum_basis();
+        let mut result = Self::zero(Basis::PowerSum);
+
+        for (partition, coeff) in &outer_p.terms {
+            let mut term =
+                Self::scaled_basis_element(Basis::PowerSum, Partition::empty(), coeff.clone());
+            for &part in partition.parts() {
+                term = term.multiply(&inner_p.plethysm_power_sum(part));
+            }
+            result = result + term;
+        }
+
+        result
+    }
+
+    /// Compute `self[p_k]`, the Adams-operator special case of plethysm.
+    ///
+    /// The result is returned in the power-sum basis.
     pub fn plethysm_power_sum(&self, k: u32) -> Self {
         assert!(k >= 1, "plethysm_power_sum requires k >= 1");
         let f_p = self.to_power_sum_basis();
@@ -868,5 +897,78 @@ mod tests {
         let half = Q::new(1, 2);
         assert_eq!(result.coefficient(&Partition::new(vec![2, 2])), half);
         assert_eq!(result.coefficient(&Partition::new(vec![4])), half);
+    }
+
+    #[test]
+    fn test_plethysm_power_sum_defining_rule() {
+        let p22: SymmetricFunction<i64> =
+            SymmetricFunction::power_sum_symmetric(Partition::new(vec![2, 2]));
+        let p43: SymmetricFunction<i64> =
+            SymmetricFunction::power_sum_symmetric(Partition::new(vec![4, 3]));
+
+        let result = p22.plethysm(&p43);
+        assert_eq!(result.basis(), Basis::PowerSum);
+        assert_eq!(result.coefficient(&Partition::new(vec![8, 8, 6, 6])), 1);
+        assert_eq!(result.terms().len(), 1);
+    }
+
+    #[test]
+    fn test_plethysm_generalizes_power_sum_special_case() {
+        use num_rational::Ratio;
+        type Q = Ratio<i64>;
+
+        let s21: SymmetricFunction<Q> =
+            SymmetricFunction::schur_symmetric(Partition::new(vec![2, 1]));
+        let p3: SymmetricFunction<Q> =
+            SymmetricFunction::power_sum_symmetric(Partition::new(vec![3]));
+
+        assert_eq!(s21.plethysm(&p3), s21.plethysm_power_sum(3));
+    }
+
+    #[test]
+    fn test_plethysm_complete_h_orbit_harmonics_small_cases() {
+        use num_rational::Ratio;
+        type Q = Ratio<i64>;
+
+        let h2: SymmetricFunction<Q> =
+            SymmetricFunction::complete_h_symmetric(Partition::new(vec![2]));
+        let h3: SymmetricFunction<Q> =
+            SymmetricFunction::complete_h_symmetric(Partition::new(vec![3]));
+
+        let h2_h2 = h2.plethysm(&h2).to_schur_basis();
+        assert_eq!(h2_h2.coefficient(&Partition::new(vec![4])), Q::from_i64(1));
+        assert_eq!(
+            h2_h2.coefficient(&Partition::new(vec![2, 2])),
+            Q::from_i64(1)
+        );
+        assert_eq!(h2_h2.terms().len(), 2);
+
+        let h3_h2 = h3.plethysm(&h2).to_schur_basis();
+        assert_eq!(h3_h2.coefficient(&Partition::new(vec![6])), Q::from_i64(1));
+        assert_eq!(
+            h3_h2.coefficient(&Partition::new(vec![4, 2])),
+            Q::from_i64(1)
+        );
+        assert_eq!(
+            h3_h2.coefficient(&Partition::new(vec![2, 2, 2])),
+            Q::from_i64(1)
+        );
+        assert_eq!(h3_h2.terms().len(), 3);
+
+        let h2_h3 = h2.plethysm(&h3).to_schur_basis();
+        assert_eq!(h2_h3.coefficient(&Partition::new(vec![6])), Q::from_i64(1));
+        assert_eq!(
+            h2_h3.coefficient(&Partition::new(vec![4, 2])),
+            Q::from_i64(1)
+        );
+        assert_eq!(h2_h3.terms().len(), 2);
+
+        let foulkes_difference = h3.plethysm(&h2) - h2.plethysm(&h3);
+        let schur_difference = foulkes_difference.to_schur_basis();
+        assert_eq!(
+            schur_difference.coefficient(&Partition::new(vec![2, 2, 2])),
+            Q::from_i64(1)
+        );
+        assert_eq!(schur_difference.terms().len(), 1);
     }
 }
