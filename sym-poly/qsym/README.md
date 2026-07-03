@@ -19,6 +19,8 @@ This crate contains checked quasisymmetric-function code used by
   `tex-source/pPartitions.tex`.
 - `examples/dual_immaculate_site_example.rs`: checked example for
   `tex-source/qsymSchur.tex`.
+- `examples/row_strict_dual_immaculate_degree4.rs`: degree-four
+  row-strict dual immaculate `qmonom` table for `tex-source/qsymSchur.tex`.
 - Row-strict dual immaculate tests include the paper example
   `RS*_(1,2) = M_(2,1) + M_(1,1,1)` and the identity
   `RS*_alpha = psi(S*_alpha)`.
