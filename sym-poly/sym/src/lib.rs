@@ -40,7 +40,10 @@ pub use hessenberg_gkm::{
     hessenberg_gkm_dot_frobenius_packed, naive_circular_gkm_dot_character_values_by_degree,
     naive_circular_gkm_dot_frobenius,
 };
-pub use lah::{lah_symmetric_elementary, lah_symmetric_monomial};
+pub use lah::{
+    lah_forest_basis_elementary, lah_symmetric_elementary, lah_symmetric_forest_basis_expansion,
+    lah_symmetric_monomial,
+};
 pub use llt::{
     circular_unicellular_llt, circular_unicellular_llt_character_values_by_degree,
     circular_unicellular_llt_frobenius_target, circular_unicellular_llt_q_plus_one,
