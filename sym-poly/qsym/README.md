@@ -11,6 +11,8 @@ This crate contains checked quasisymmetric-function code used by
   labeled linear-extension data.
 - `chromatic_qsym.rs`: chromatic quasisymmetric functions and asc-weighted
   variants.
+- `peak.rs`: Stembridge peak quasisymmetric functions in the fundamental
+  basis.
 - `power_sum.rs`: `Psi` and `Phi` quasisymmetric power-sum bases.
 - `schur_qsym.rs`: composition-tableau helpers for quasisymmetric Schur
   functions, standard immaculate tableaux for dual immaculate functions,
@@ -34,6 +36,8 @@ This crate contains checked quasisymmetric-function code used by
   `tex-source/qsymSchur.tex`.
 - `examples/p_partition_site_example.rs`: checked example for
   `tex-source/pPartitions.tex`.
+- `examples/peak_quasisymmetric_degree4.rs`: degree-four peak
+  quasisymmetric fundamental table for `tex-source/peakQuasisymmetric.tex`.
 - `examples/dual_immaculate_site_example.rs`: checked example for
   `tex-source/qsymSchur.tex`.
 - `examples/dual_immaculate_degree4.rs`: degree-four dual immaculate `qmonom`

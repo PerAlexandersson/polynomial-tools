@@ -25,6 +25,7 @@
 pub mod basis;
 pub mod chromatic_qsym;
 pub mod p_partition;
+pub mod peak;
 pub mod power_sum;
 pub mod qsym_function;
 pub mod schur_qsym;
@@ -41,6 +42,7 @@ pub use p_partition::{
     p_partition_linear_extensions, p_partition_linear_extensions_with_labels,
     strict_p_partition_generating_function, PPartitionLinearExtension,
 };
+pub use peak::{is_peak_set, peak_quasisymmetric};
 pub use qsym_function::QSymFunction;
 pub use schur_qsym::{
     composition_to_descent_set, descent_set_to_composition, dual_immaculate,
