@@ -9,6 +9,7 @@
 //!   of quasisymmetric Schur functions.
 //! - **Young quasisymmetric Schur functions** via the rho involution and
 //!   reverse-index relation of Luoto--Mykytiuk--van Willigenburg.
+//! - **Row-strict quasisymmetric Schur functions** via the omega involution.
 //! - **Dual immaculate functions** S\*_α = Σ F_{Des(T)} over standard
 //!   immaculate tableaux T (Berg–Bergeron–Saliola–Serrano–Zabrocki).
 //! - **Row-strict dual immaculate functions** RS\*_α, with strictly
@@ -324,6 +325,14 @@ pub fn qsym_schur<C: Ring>(alpha: &[u32], _max_entry: u32) -> QSymFunction<C> {
 pub fn young_qsym_schur<C: Ring>(alpha: &[u32]) -> QSymFunction<C> {
     let rev_alpha: Vec<u32> = alpha.iter().rev().copied().collect();
     qsym_schur::<C>(&rev_alpha, alpha.iter().sum()).rho_involution()
+}
+
+/// Row-strict quasisymmetric Schur function in the fundamental basis.
+///
+/// Uses the identity `RS_alpha = omega(S_alpha)`, where `S_alpha` is the
+/// quasisymmetric Schur function.
+pub fn row_strict_qsym_schur<C: Ring>(alpha: &[u32]) -> QSymFunction<C> {
+    qsym_schur::<C>(alpha, alpha.iter().sum()).omega_involution()
 }
 
 // ── Dual immaculate quasisymmetric functions ────────────────────────
@@ -832,6 +841,21 @@ mod tests {
         assert_eq!(yqs.coefficient(&Composition::new(vec![2, 2, 2])), 1);
         assert_eq!(yqs.coefficient(&Composition::new(vec![2, 1, 2, 1])), 1);
         assert_eq!(yqs.terms().len(), 3);
+    }
+
+    #[test]
+    fn test_row_strict_qsym_schur_omega_relation() {
+        // Mason--Remmel give qSchur_alpha = omega(rsqSchur_alpha).
+        // Since omega is an involution, rsqSchur_alpha = omega(qSchur_alpha).
+        let alpha = [2, 1, 3];
+        let from_relation = qsym_schur::<i64>(&alpha, 6).omega_involution();
+        let rsqs = row_strict_qsym_schur::<i64>(&alpha);
+
+        assert_eq!(rsqs, from_relation);
+        assert_eq!(rsqs.coefficient(&Composition::new(vec![1, 1, 3, 1])), 1);
+        assert_eq!(rsqs.coefficient(&Composition::new(vec![1, 2, 2, 1])), 1);
+        assert_eq!(rsqs.coefficient(&Composition::new(vec![1, 3, 2])), 1);
+        assert_eq!(rsqs.terms().len(), 3);
     }
 
     #[test]

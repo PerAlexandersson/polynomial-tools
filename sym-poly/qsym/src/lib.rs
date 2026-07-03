@@ -45,7 +45,7 @@ pub use qsym_function::QSymFunction;
 pub use schur_qsym::{
     composition_to_descent_set, descent_set_to_composition, dual_immaculate,
     dual_immaculate_monomial, fundamental_slide, qsym_schur, row_strict_dual_immaculate,
-    row_strict_dual_immaculate_fundamental, young_qsym_schur, CompositionTableau,
-    ImmaculateTableau, ReverseCompositionTableau,
+    row_strict_dual_immaculate_fundamental, row_strict_qsym_schur, young_qsym_schur,
+    CompositionTableau, ImmaculateTableau, ReverseCompositionTableau,
 };
 pub use sym_qsym::{qsym_to_sym, sym_to_qsym, symmetric_qsym_to_sym};
