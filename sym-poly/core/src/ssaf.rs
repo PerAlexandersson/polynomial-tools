@@ -22,6 +22,20 @@ pub struct Ssaf {
     rows: Vec<Vec<u32>>,
 }
 
+/// Data for one ordinary cell contributing a Macdonald filling factor.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MacdonaldFactorCell {
+    /// Zero-indexed row.
+    pub row: usize,
+    /// Column in the augmented diagram.  Column 0 is the basement, so this is
+    /// always positive.
+    pub col: usize,
+    pub value: u32,
+    pub left_value: u32,
+    pub arm: u32,
+    pub leg: u32,
+}
+
 impl Ssaf {
     /// Create an SSAF from pre-built rows (each row includes the basement in position 0).
     pub fn new(rows: Vec<Vec<u32>>) -> Self {
@@ -126,8 +140,8 @@ impl Ssaf {
         count
     }
 
-    /// Horizontal descents: count of cells `(r, c)` with `c >= 1` where
-    /// `ssaf[r][c] != ssaf[r][c-1]`.
+    /// Horizontal unequal adjacencies: count of cells `(r, c)` with `c >= 1`
+    /// where `ssaf[r][c] != ssaf[r][c-1]`.
     pub fn horizontal_descents(&self) -> u32 {
         let mut count = 0u32;
         for row in &self.rows {
@@ -141,7 +155,7 @@ impl Ssaf {
     }
 
     /// Major index: sum of `(1 + leg)` over cells `(r, c)` where
-    /// `ssaf[r][c] > ssaf[r][c-1]` (an ascent), where `leg = row_len - 1 - c`.
+    /// `ssaf[r][c] > ssaf[r][c-1]`.
     pub fn major_index(&self) -> u32 {
         let mut maj = 0u32;
         for row in &self.rows {
@@ -630,32 +644,60 @@ impl Ssaf {
 
     // ── Macdonald statistics ───────────────────────────────────────
 
-    /// Arm-leg data for Macdonald factor computation.
-    ///
-    /// For each descent cell `(r, c)` (where `ssaf[r][c] != ssaf[r][c-1]`),
-    /// returns `(arm, leg)` where:
-    /// - `leg = row_len(r) - 1 - c`
-    /// - `arm = #{rows below: c ≤ len ≤ len(r)} + #{rows above: c-1 ≤ len < len(r)}`
-    pub fn arm_leg_data(&self) -> Vec<(u32, u32)> {
-        let n = self.num_rows();
-        let shape: Vec<usize> = self.rows.iter().map(|r| r.len()).collect();
-        let mut data = Vec::new();
+    /// Arm and leg for an ordinary cell `(r, c)`, where column 0 is the
+    /// basement and `c > 0`.
+    pub fn arm_leg_at(&self, r: usize, c: usize) -> Option<(u32, u32)> {
+        let alpha: Vec<usize> = self.rows.iter().map(|row| row.len() - 1).collect();
+        if r >= alpha.len() || c == 0 || c > alpha[r] {
+            return None;
+        }
 
-        for r in 0..n {
-            for c in 1..shape[r] {
+        let leg = (alpha[r] - c) as u32;
+        let arm_below = (r + 1..alpha.len())
+            .filter(|&rp| c <= alpha[rp] && alpha[rp] <= alpha[r])
+            .count() as u32;
+        let arm_above = (0..r)
+            .filter(|&rp| alpha[rp] + 1 >= c && alpha[rp] < alpha[r])
+            .count() as u32;
+
+        Some((arm_below + arm_above, leg))
+    }
+
+    /// Ordinary cells contributing the product
+    /// `(1-t)/(1-q^(leg+1)t^(arm+1))` in the HHL/Ferreira filling formula.
+    ///
+    /// The basement cells are intentionally excluded.  A cell contributes
+    /// exactly when its entry is different from the entry immediately to its
+    /// left, which may be a basement entry.
+    pub fn macdonald_factor_cells(&self) -> Vec<MacdonaldFactorCell> {
+        let mut cells = Vec::new();
+
+        for r in 0..self.num_rows() {
+            for c in 1..self.rows[r].len() {
                 if self.rows[r][c] != self.rows[r][c - 1] {
-                    let leg = (shape[r] - 1 - c) as u32;
-                    let arm_below: u32 = (r + 1..n)
-                        .filter(|&i| c <= shape[i] && shape[i] <= shape[r])
-                        .count() as u32;
-                    let arm_above: u32 = (0..r)
-                        .filter(|&i| c >= 1 && c - 1 < shape[i] && shape[i] < shape[r])
-                        .count() as u32;
-                    data.push((arm_below + arm_above, leg));
+                    if let Some((arm, leg)) = self.arm_leg_at(r, c) {
+                        cells.push(MacdonaldFactorCell {
+                            row: r,
+                            col: c,
+                            value: self.rows[r][c],
+                            left_value: self.rows[r][c - 1],
+                            arm,
+                            leg,
+                        });
+                    }
                 }
             }
         }
-        data
+
+        cells
+    }
+
+    /// Arm-leg data for Macdonald factor computation.
+    pub fn arm_leg_data(&self) -> Vec<(u32, u32)> {
+        self.macdonald_factor_cells()
+            .into_iter()
+            .map(|cell| (cell.arm, cell.leg))
+            .collect()
     }
 
     // ── Lascoux-Schützenberger involution ──────────────────────────
@@ -1061,6 +1103,45 @@ mod tests {
             for &(arm, leg) in &data {
                 assert!(arm < 100 && leg < 100);
             }
+        }
+    }
+
+    #[test]
+    fn test_moura_mandelshtam_permuted_basement_example() {
+        let shape = [1, 1, 0, 1];
+        let basement = [2, 4, 1, 3];
+        let mut fillings = Ssaf::non_attacking_fillings(&shape, &basement);
+        fillings.sort_by_key(|f| {
+            f.rows()
+                .iter()
+                .flat_map(|row| row.iter().skip(1).copied())
+                .collect::<Vec<_>>()
+        });
+
+        let expected = [
+            (vec![1, 4, 3], vec![1, 0, 1, 1], 0, 0, vec![(2, 0)]),
+            (vec![2, 1, 3], vec![1, 1, 1, 0], 0, 1, vec![(1, 0)]),
+            (vec![2, 4, 3], vec![0, 1, 1, 1], 0, 0, vec![]),
+            (vec![4, 1, 3], vec![1, 0, 1, 1], 1, 2, vec![(2, 0), (1, 0)]),
+        ];
+
+        assert_eq!(fillings.len(), expected.len());
+
+        for (filling, (entries, weight, maj, coinv, factor_data)) in fillings.iter().zip(expected) {
+            let actual_entries: Vec<u32> = filling
+                .rows()
+                .iter()
+                .flat_map(|row| row.iter().skip(1).copied())
+                .collect();
+            assert_eq!(actual_entries, entries);
+            assert_eq!(filling.weight_vector(), weight);
+            assert_eq!(filling.major_index(), maj);
+            assert_eq!(filling.coinversions(), coinv);
+            assert_eq!(filling.arm_leg_data(), factor_data);
+            assert!(filling
+                .macdonald_factor_cells()
+                .iter()
+                .all(|cell| cell.col > 0));
         }
     }
 
