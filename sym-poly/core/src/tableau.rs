@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
-use crate::{Composition, Partition};
+use crate::{Composition, Partition, Ssaf, WeakComposition};
 
 /// A left-justified Young tableau with positive integer entries.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -125,6 +125,40 @@ impl Tableau {
             }
         }
         true
+    }
+
+    /// Right-key weight computed through Mason's SSYT-to-SSAF bijection.
+    ///
+    /// The tableau is treated as an SSYT with entries in `{1, ..., num_vars}`.
+    /// Mason's bijection sends it to an atom filling whose composition shape is
+    /// the weight of the right key in this convention.
+    pub fn right_key_weight_via_ssaf(&self, num_vars: usize) -> WeakComposition {
+        assert!(
+            self.is_semistandard(),
+            "right_key_weight_via_ssaf requires a semistandard tableau"
+        );
+        let max_entry = self
+            .rows
+            .iter()
+            .flat_map(|row| row.iter())
+            .copied()
+            .max()
+            .unwrap_or(0) as usize;
+        assert!(
+            max_entry <= num_vars,
+            "num_vars ({num_vars}) must be at least the maximum tableau entry ({max_entry})"
+        );
+
+        let atom = Ssaf::from_ssyt(&self.rows);
+        let mut shape = atom.shape();
+        shape.resize(num_vars, 0);
+        WeakComposition::new(shape)
+    }
+
+    /// Right key computed through Mason's SSYT-to-SSAF bijection.
+    pub fn right_key_via_ssaf(&self, num_vars: usize) -> Self {
+        let weight = self.right_key_weight_via_ssaf(num_vars);
+        Self::key_tableau_from_weight(weight.parts())
     }
 
     /// Row reading word, read left-to-right in each row from top to bottom.
@@ -1295,6 +1329,26 @@ mod tests {
         );
         assert_eq!(site_key.weight(), Composition::new(vec![1, 3, 0, 1, 2, 4]));
         assert!(site_key.is_key_tableau());
+    }
+
+    #[test]
+    fn test_right_key_weight_via_ssaf() {
+        let t = Tableau::new(vec![vec![1, 3], vec![3]]);
+        assert_eq!(
+            t.right_key_weight_via_ssaf(3),
+            WeakComposition::new(vec![1, 0, 2])
+        );
+        assert_eq!(t.right_key_via_ssaf(3).rows(), &[vec![1, 3], vec![3]]);
+
+        let excluded = Tableau::new(vec![vec![1, 2], vec![3]]);
+        assert_eq!(
+            excluded.right_key_weight_via_ssaf(3),
+            WeakComposition::new(vec![0, 2, 1])
+        );
+        assert_eq!(
+            excluded.right_key_via_ssaf(3).rows(),
+            &[vec![2, 2], vec![3]]
+        );
     }
 
     #[test]

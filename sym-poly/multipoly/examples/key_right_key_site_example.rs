@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use sym_poly_core::{Partition, Ssaf, Tableau};
+use sym_poly_core::{Partition, Tableau};
 use sym_poly_multipoly::key_polynomial;
 
 fn format_weight(weight: &[u32]) -> String {
@@ -59,10 +59,8 @@ fn main() {
     println!("SSYT of shape (2,1), entries at most 3:");
 
     for tableau in tableaux {
-        let atom = Ssaf::from_ssyt(tableau.rows());
-        let mut right_key_weight = atom.shape();
-        right_key_weight.resize(alpha.len(), 0);
-        let right_key = Tableau::key_tableau_from_weight(&right_key_weight);
+        let right_key_weight = tableau.right_key_weight_via_ssaf(alpha.len());
+        let right_key = tableau.right_key_via_ssaf(alpha.len());
         let accepted = tableau_entrywise_leq(&right_key, &key_bound);
         if accepted {
             *accepted_weight_counts
@@ -72,7 +70,7 @@ fn main() {
         println!(
             "  {} has K_+ weight {} ({})",
             format_tableau(&tableau),
-            format_weight(&right_key_weight),
+            format_weight(right_key_weight.parts()),
             if accepted { "included" } else { "excluded" }
         );
     }
