@@ -182,6 +182,26 @@ pub fn kohnert_diagrams(initial: &Diagram, max_diagrams: usize) -> Result<Vec<Di
     Ok(seen.into_iter().collect())
 }
 
+/// Kohnert diagrams generated from the key diagram of a weak composition.
+pub fn kohnert_diagrams_for_composition(
+    alpha: &[u32],
+    max_diagrams: usize,
+) -> Result<Vec<Diagram>, String> {
+    kohnert_diagrams(&key_diagram(alpha), max_diagrams)
+}
+
+/// Count ordinary Kohnert diagrams by row weight.
+pub fn kohnert_weight_counts(
+    alpha: &[u32],
+    max_diagrams: usize,
+) -> Result<BTreeMap<Vec<u32>, usize>, String> {
+    let mut counts = BTreeMap::new();
+    for diagram in kohnert_diagrams_for_composition(alpha, max_diagrams)? {
+        *counts.entry(diagram_weight(&diagram)).or_insert(0) += 1;
+    }
+    Ok(counts)
+}
+
 /// All one-step K-Kohnert moves.
 ///
 /// Rows are indexed from bottom to top, so a move lowers a selected rightmost
@@ -549,6 +569,20 @@ mod tests {
                 Cell { col: 2, row: 2 },
                 Cell { col: 1, row: 3 },
             ])
+        );
+    }
+
+    #[test]
+    fn test_kohnert_key_site_example() {
+        let diagrams = kohnert_diagrams_for_composition(&[0, 2], 10).unwrap();
+        assert_eq!(diagrams.len(), 3);
+        assert_eq!(
+            kohnert_weight_counts(&[0, 2], 10).unwrap(),
+            BTreeMap::from([(vec![0, 2], 1), (vec![1, 1], 1), (vec![2], 1)])
+        );
+        assert_eq!(
+            weights(&diagrams),
+            BTreeMap::from([(vec![0, 2], 1), (vec![1, 1], 1), (vec![2], 1)])
         );
     }
 
