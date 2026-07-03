@@ -334,6 +334,31 @@ mod tests {
         Partition::new(parts.to_vec())
     }
 
+    fn assert_coeff(
+        distribution: &BTreeMap<(Vec<u32>, Vec<u32>), usize>,
+        weight: &[u32],
+        diagonal_weight: &[u32],
+        expected: usize,
+    ) {
+        assert_eq!(
+            distribution[&(weight.to_vec(), diagonal_weight.to_vec())],
+            expected,
+            "coefficient for weight {weight:?} and diagonal weight {diagonal_weight:?}"
+        );
+    }
+
+    #[test]
+    fn test_hawkes_degree_three_base_term() {
+        let shape = partition(&[2, 1]);
+        let tableaux = ShiftedMultisetTableau::enumerate_smt0(&shape, 2, 3);
+        let distribution = shifted_multiset_tableau_distribution(&shape, 2, 3);
+
+        assert_eq!(tableaux.len(), 2);
+        assert_coeff(&distribution, &[2, 1], &[0, 0], 1);
+        assert_coeff(&distribution, &[1, 2], &[0, 0], 1);
+        assert_eq!(distribution.len(), 2);
+    }
+
     #[test]
     fn test_hawkes_degree_four_example_count() {
         let shape = partition(&[2, 1]);
@@ -346,20 +371,34 @@ mod tests {
         let shape = partition(&[2, 1]);
         let distribution = shifted_multiset_tableau_distribution(&shape, 2, 4);
 
-        assert_eq!(distribution[&(vec![3, 1], vec![1, 0])], 1, "x_1^3 x_2 t_1");
-        assert_eq!(distribution[&(vec![3, 1], vec![0, 1])], 1, "x_1^3 x_2 t_2");
-        assert_eq!(
-            distribution[&(vec![2, 2], vec![1, 0])],
-            2,
-            "x_1^2 x_2^2 t_1"
-        );
-        assert_eq!(
-            distribution[&(vec![2, 2], vec![0, 1])],
-            2,
-            "x_1^2 x_2^2 t_2"
-        );
-        assert_eq!(distribution[&(vec![1, 3], vec![1, 0])], 1, "x_1 x_2^3 t_1");
-        assert_eq!(distribution[&(vec![1, 3], vec![0, 1])], 1, "x_1 x_2^3 t_2");
+        assert_coeff(&distribution, &[3, 1], &[1, 0], 1);
+        assert_coeff(&distribution, &[3, 1], &[0, 1], 1);
+        assert_coeff(&distribution, &[2, 2], &[1, 0], 2);
+        assert_coeff(&distribution, &[2, 2], &[0, 1], 2);
+        assert_coeff(&distribution, &[1, 3], &[1, 0], 1);
+        assert_coeff(&distribution, &[1, 3], &[0, 1], 1);
         assert_eq!(distribution.len(), 6);
+    }
+
+    #[test]
+    fn test_hawkes_degree_five_distribution() {
+        let shape = partition(&[2, 1]);
+        let tableaux = ShiftedMultisetTableau::enumerate_smt0(&shape, 2, 5);
+        let distribution = shifted_multiset_tableau_distribution(&shape, 2, 5);
+
+        assert_eq!(tableaux.len(), 20);
+        assert_coeff(&distribution, &[4, 1], &[2, 0], 1);
+        assert_coeff(&distribution, &[4, 1], &[1, 1], 1);
+        assert_coeff(&distribution, &[4, 1], &[0, 2], 1);
+        assert_coeff(&distribution, &[3, 2], &[2, 0], 2);
+        assert_coeff(&distribution, &[3, 2], &[1, 1], 3);
+        assert_coeff(&distribution, &[3, 2], &[0, 2], 2);
+        assert_coeff(&distribution, &[2, 3], &[2, 0], 2);
+        assert_coeff(&distribution, &[2, 3], &[1, 1], 3);
+        assert_coeff(&distribution, &[2, 3], &[0, 2], 2);
+        assert_coeff(&distribution, &[1, 4], &[2, 0], 1);
+        assert_coeff(&distribution, &[1, 4], &[1, 1], 1);
+        assert_coeff(&distribution, &[1, 4], &[0, 2], 1);
+        assert_eq!(distribution.len(), 12);
     }
 }
