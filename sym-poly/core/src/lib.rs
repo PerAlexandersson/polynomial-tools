@@ -11,6 +11,7 @@
 //! - [`PrimeField`] for modular computations over finite prime fields
 //! - [`FormalSum`] for generic linear combinations of basis elements
 //! - [`matrix`] utilities for transition matrix computation
+//! - [`hamel_goulden`] utilities for cutting-strip determinant examples
 //! - [`linear_algebra`] utilities for exact row reduction and quotient spaces
 //! - [`sparse_linear_algebra`] utilities for sparse modular row reduction
 //! - [`packed_sparse_linear_algebra`] experiments for byte-sized small-prime rows
@@ -26,6 +27,7 @@ pub mod field;
 pub mod finite_field;
 pub mod finite_sn_module;
 pub mod formal_sum;
+pub mod hamel_goulden;
 pub mod index;
 pub mod linear_algebra;
 pub mod matrix;
@@ -56,6 +58,7 @@ pub use finite_sn_module::{
     PermutationBasis,
 };
 pub use formal_sum::FormalSum;
+pub use hamel_goulden::{ContentInterval, CuttingStripSegment, OutsideDecomposition};
 pub use index::BasisIndex;
 pub use polynomial::UnivariatePolynomial;
 pub use rational_function::{
