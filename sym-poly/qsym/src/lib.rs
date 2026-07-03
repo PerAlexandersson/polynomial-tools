@@ -24,6 +24,7 @@
 
 pub mod basis;
 pub mod chromatic_qsym;
+pub mod hivert;
 pub mod p_partition;
 pub mod peak;
 pub mod power_sum;
@@ -36,6 +37,10 @@ pub use basis::QSymBasis;
 pub use chromatic_qsym::{
     chromatic_qsym, chromatic_qsym_asc, circular_coloring_qsym_asc, coloring_qsym_asc,
     coloring_qsym_asc_with_ascent_edges,
+};
+pub use hivert::{
+    fundamental_in_hivert_expansion, hivert_fundamental_expansion, hivert_monomial_expansion,
+    TPolynomial,
 };
 pub use p_partition::{
     p_partition_generating_function, p_partition_generating_function_with_labels,
