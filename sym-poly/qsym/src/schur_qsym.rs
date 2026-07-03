@@ -10,6 +10,8 @@
 //! - **Young quasisymmetric Schur functions** via the rho involution and
 //!   reverse-index relation of Luoto--Mykytiuk--van Willigenburg.
 //! - **Row-strict quasisymmetric Schur functions** via the omega involution.
+//! - **Row-strict Young quasisymmetric Schur functions** via the omega
+//!   involution.
 //! - **Dual immaculate functions** S\*_α = Σ F_{Des(T)} over standard
 //!   immaculate tableaux T (Berg–Bergeron–Saliola–Serrano–Zabrocki).
 //! - **Row-strict dual immaculate functions** RS\*_α, with strictly
@@ -333,6 +335,14 @@ pub fn young_qsym_schur<C: Ring>(alpha: &[u32]) -> QSymFunction<C> {
 /// quasisymmetric Schur function.
 pub fn row_strict_qsym_schur<C: Ring>(alpha: &[u32]) -> QSymFunction<C> {
     qsym_schur::<C>(alpha, alpha.iter().sum()).omega_involution()
+}
+
+/// Row-strict Young quasisymmetric Schur function in the fundamental basis.
+///
+/// Uses the identity `RSY_alpha = omega(YQS_alpha)`, where `YQS_alpha` is the
+/// Young quasisymmetric Schur function.
+pub fn row_strict_young_qsym_schur<C: Ring>(alpha: &[u32]) -> QSymFunction<C> {
+    young_qsym_schur::<C>(alpha).omega_involution()
 }
 
 // ── Dual immaculate quasisymmetric functions ────────────────────────
@@ -856,6 +866,20 @@ mod tests {
         assert_eq!(rsqs.coefficient(&Composition::new(vec![1, 2, 2, 1])), 1);
         assert_eq!(rsqs.coefficient(&Composition::new(vec![1, 3, 2])), 1);
         assert_eq!(rsqs.terms().len(), 3);
+    }
+
+    #[test]
+    fn test_row_strict_young_qsym_schur_omega_relation() {
+        // Mason--Niese give rsyqSchur_alpha = omega(yqSchur_alpha).
+        let alpha = [3, 1, 2];
+        let from_relation = young_qsym_schur::<i64>(&alpha).omega_involution();
+        let rsyqs = row_strict_young_qsym_schur::<i64>(&alpha);
+
+        assert_eq!(rsyqs, from_relation);
+        assert_eq!(rsyqs.coefficient(&Composition::new(vec![1, 3, 1, 1])), 1);
+        assert_eq!(rsyqs.coefficient(&Composition::new(vec![1, 2, 2, 1])), 1);
+        assert_eq!(rsyqs.coefficient(&Composition::new(vec![2, 3, 1])), 1);
+        assert_eq!(rsyqs.terms().len(), 3);
     }
 
     #[test]
