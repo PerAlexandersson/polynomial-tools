@@ -16,6 +16,7 @@ pub mod kostka;
 pub mod lah;
 pub mod llt;
 pub mod macdonald;
+pub mod p_grothendieck;
 pub mod shifted_lr;
 pub mod symmetric_function;
 pub mod transition;
@@ -57,6 +58,9 @@ pub use macdonald::{
     delta_prime_modified_macdonald, macdonald_b_alphabet, macdonald_b_eigenvalue, nabla_eigenvalue,
     nabla_modified_macdonald, qt_coefficient, qt_constant, qt_monomial, ModifiedMacdonaldExpansion,
     QtPolynomial,
+};
+pub use p_grothendieck::{
+    shifted_multiset_tableau_distribution, ShiftedMultisetEntry, ShiftedMultisetTableau,
 };
 pub use shifted_lr::{
     shifted_littlewood_richardson_coefficient, shifted_littlewood_richardson_stats,
