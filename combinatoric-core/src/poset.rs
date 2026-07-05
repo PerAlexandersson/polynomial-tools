@@ -128,6 +128,81 @@ impl Poset {
         Poset::new(n, &covers)
     }
 
+    /// Fence/zig-zag poset from a binary comparison word.
+    ///
+    /// The word has length `n` and the resulting poset has elements
+    /// `0, 1, ..., n`.  At position `i`, the letters `R`, `1`, and `<`
+    /// mean `i < i+1`, while `L`, `0`, and `>` mean `i+1 < i`.
+    ///
+    /// Thus `zig_zag_from_word("RLR")` is the same as [`Poset::fence(4)`].
+    pub fn zig_zag_from_word(word: &str) -> Result<Self, String> {
+        let mut covers = Vec::with_capacity(word.chars().count());
+        for (i, ch) in word.chars().enumerate() {
+            match ch {
+                'R' | 'r' | '1' | '<' => covers.push((i, i + 1)),
+                'L' | 'l' | '0' | '>' => covers.push((i + 1, i)),
+                _ => {
+                    return Err(format!(
+                        "invalid zig-zag word letter '{ch}' at position {i}; expected L/R"
+                    ));
+                }
+            }
+        }
+        Ok(Poset::new(word.chars().count() + 1, &covers))
+    }
+
+    /// Alias for [`Poset::zig_zag_from_word`].
+    pub fn fence_from_word(word: &str) -> Result<Self, String> {
+        Self::zig_zag_from_word(word)
+    }
+
+    /// Generalized snake poset from a word in `L` and `R`.
+    ///
+    /// This follows the convention of Braun--Jal: a word
+    /// `epsilon w_1 ... w_n` defines a naturally labeled width-two poset on
+    /// `2(n+1)` elements.  The two chains are
+    /// `0 < 2 < ... < 2n` and `1 < 3 < ... < 2n+1`.  In addition, for
+    /// `i = 1, ..., n`, the letter `R` adds the cover
+    /// `2(n+1-i)-1 < 2(n+1-i)`, while the letter `L` adds the cover
+    /// `2(n-i) < 2(n-i+2)-1` in zero-based labels.
+    ///
+    /// The resulting labeling is natural, so its `P`-Eulerian polynomial is
+    /// also the `h*`-polynomial of the corresponding order polytope.
+    pub fn generalized_snake_from_word(word: &str) -> Result<Self, String> {
+        let n = word.chars().count();
+        let num_elements = 2 * (n + 1);
+        let mut covers = Vec::with_capacity(3 * n);
+
+        for j in 0..n {
+            covers.push((2 * j, 2 * j + 2));
+            covers.push((2 * j + 1, 2 * j + 3));
+        }
+
+        for (idx, ch) in word.chars().enumerate() {
+            let i = idx + 1;
+            let (lower_one_based, upper_one_based) = match ch {
+                'R' | 'r' | '1' | '<' => {
+                    let lower = 2 * (n + 1 - i);
+                    (lower, lower + 1)
+                }
+                'L' | 'l' | '0' | '>' => (2 * (n - i) + 1, 2 * (n - i + 2)),
+                _ => {
+                    return Err(format!(
+                        "invalid generalized snake word letter '{ch}' at position {idx}; expected L/R"
+                    ));
+                }
+            };
+            covers.push((lower_one_based - 1, upper_one_based - 1));
+        }
+
+        Ok(Poset::new(num_elements, &covers))
+    }
+
+    /// Alias for [`Poset::generalized_snake_from_word`].
+    pub fn snake_from_word(word: &str) -> Result<Self, String> {
+        Self::generalized_snake_from_word(word)
+    }
+
     /// Poset from a (skew) Young diagram λ/μ.
     ///
     /// Boxes are labeled 0..k in reading order (left to right, top to bottom).
@@ -1412,6 +1487,53 @@ mod tests {
         assert_eq!(f.num_elements(), 4);
         assert_eq!(f.covers().len(), 3);
         assert_eq!(f.num_linear_extensions(), 5);
+    }
+
+    #[test]
+    fn test_zig_zag_from_word() {
+        let f = Poset::zig_zag_from_word("RLR").unwrap();
+        assert_eq!(f, Poset::fence(4));
+        assert_eq!(f.p_eulerian_polynomial(), vec![0, 4, 1]);
+
+        let g = Poset::zig_zag_from_word("LRL").unwrap();
+        assert_eq!(g.covers(), &[(1, 0), (1, 2), (3, 2)]);
+        assert_eq!(g.p_eulerian_polynomial(), vec![0, 1, 4]);
+
+        assert!(Poset::zig_zag_from_word("RX").is_err());
+    }
+
+    #[test]
+    fn test_generalized_snake_from_word() {
+        let s = Poset::generalized_snake_from_word("LR").unwrap();
+        assert_eq!(s.num_elements(), 6);
+        assert!(s.is_naturally_labeled());
+        assert_eq!(
+            s.covers(),
+            &[(0, 2), (1, 3), (2, 4), (3, 5), (2, 5), (1, 2),]
+        );
+    }
+
+    #[test]
+    fn test_generalized_snake_regular_words_are_delannoy_rows() {
+        assert_eq!(
+            Poset::generalized_snake_from_word("L")
+                .unwrap()
+                .p_eulerian_polynomial(),
+            vec![1, 3, 1]
+        );
+        assert_eq!(
+            Poset::generalized_snake_from_word("LR")
+                .unwrap()
+                .p_eulerian_polynomial(),
+            vec![1, 5, 5, 1]
+        );
+        assert_eq!(
+            Poset::generalized_snake_from_word("LRL")
+                .unwrap()
+                .p_eulerian_polynomial(),
+            vec![1, 7, 13, 7, 1]
+        );
+        assert!(Poset::generalized_snake_from_word("LX").is_err());
     }
 
     #[test]
