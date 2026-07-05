@@ -12,6 +12,7 @@
 //! - [`key_polynomial`] — Demazure characters via π operators
 //! - [`atom_polynomial`] — Demazure atoms via θ operators
 //! - [`borodin_wheeler`] — local weights for the Borodin--Wheeler vertex model
+//! - [`flagged_schur`] — flagged Schur and flagged skew Schur polynomials
 //! - [`kohnert`] — Kohnert diagrams and Assaf Yamanouchi tests
 //! - [`multiline_queue`] — multiline queues and Ferrari--Martin labelings
 //! - [`nonsymmetric_macdonald`] — operator-side `q = 0` Macdonald / Hall-Littlewood
@@ -22,6 +23,7 @@ pub mod atom_polynomial;
 pub mod basis;
 pub mod borodin_wheeler;
 pub mod division;
+pub mod flagged_schur;
 pub mod graded_quotient;
 pub mod groebner;
 pub mod indexed_variables;
@@ -48,6 +50,11 @@ pub use borodin_wheeler::{borodin_wheeler_l_weight, BorodinWheelerFaceWeight};
 pub use division::{
     divide_by_polynomials, matrix_normal_forms_with_leading_terms, multiply_by_monomial,
     normal_form, normal_form_with_leading_terms, DivisionResult,
+};
+pub use flagged_schur::{
+    flagged_schur, flagged_skew_schur, flagged_skew_tableaux, flagged_tableaux,
+    row_interval_flagged_schur, row_interval_flagged_skew_schur,
+    row_interval_flagged_skew_tableaux, row_interval_flagged_tableaux,
 };
 pub use graded_quotient::{
     graded_quotient_component, monomials_with_multidegree, polynomial_multidegree,
