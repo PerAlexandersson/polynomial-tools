@@ -21,8 +21,12 @@ pub use meander::{
 };
 pub use partition::Partition;
 pub use permutation::{
-    all_permutations_zero_indexed, compose_permutations, inverse_permutation, longest_permutation,
-    next_permutation, permutation_from_simple_transpositions, reduced_word,
+    all_permutations_one_indexed, all_permutations_zero_indexed, assert_one_indexed_permutation,
+    compose_permutations, inverse_permutation, is_one_indexed_permutation, longest_permutation,
+    next_permutation, optimist_sort_derangement_step_distribution, optimist_sort_step,
+    optimist_sort_step_distribution, optimist_sort_step_distribution_via_derangements,
+    optimist_sort_steps, optimist_sort_steps_word, permutation_from_simple_transpositions,
+    reduced_word, stable_standardization, unfixed_standardization,
 };
 pub use ring::Ring;
 pub use set_partition::{
