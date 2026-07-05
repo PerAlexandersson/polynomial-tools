@@ -10,8 +10,13 @@ examples on `symmetricfunctions.com`.
   evacuation, crystals, charge, and key-tableau helpers.
 - `core/src/ssaf.rs` contains semi-standard augmented fillings, including atom
   fillings, key fillings, permuted basements, and Mason's SSYT-to-SSAF map.
+- `multipoly/src/flagged_schur.rs` contains flagged Schur and flagged skew
+  Schur tableau generators, row-interval flags, and polynomial weight
+  enumerators.
 - `qsym/src/schur_qsym.rs` contains composition-tableau and immaculate-tableau
   generators for quasisymmetric Schur and dual immaculate functions.
+- `sym/src/hook_schur.rs` contains hook-tableau generators for ordinary
+  supersymmetric, or hook, Schur functions.
 - `qsym/README.md` tracks which Mason/Assaf/Searles-style QSym Schur variants
   are implemented, missing, or need definition-level verification.
 - `multipoly/src/key_polynomial.rs` computes key polynomials and tests them
