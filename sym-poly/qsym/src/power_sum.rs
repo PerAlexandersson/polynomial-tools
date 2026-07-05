@@ -1,6 +1,7 @@
-//! QSym power sum bases Ψ (type 1) and Φ (type 2).
+//! QSym power sum bases.
 //!
-//! Two quasisymmetric power sum bases indexed by compositions, as defined in:
+//! This module implements the type 1 and type 2 quasisymmetric power sums
+//! indexed by compositions, as defined in:
 //!
 //! > Ballantine, Daugherty, Hicks, Mason, Niese.
 //! > *Quasisymmetric Power Sums.* J. Combin. Theory Ser. A (2020).
@@ -21,6 +22,17 @@
 //! - z_α = Π i^{m_i} · m_i! — standard z-coefficient
 //!
 //! Both Ψ ↔ M and Φ ↔ M conversions involve rational coefficients.
+//!
+//! It also implements the combinatorial power sums `p_alpha` and reverse
+//! combinatorial power sums `p^r_alpha` of:
+//!
+//! > Aliniaeifard, Wang, van Willigenburg.
+//! > *P-partition power sums.* European J. Combin. (2023).
+//! > <https://doi.org/10.1016/j.ejc.2023.103688>
+//!
+//! Their monomial expansions are integral and nonnegative.  We use
+//! Theorem 5.12 and Remark 5.18 of that paper, counting the stated matrices
+//! directly.
 
 use std::collections::BTreeMap;
 
@@ -86,6 +98,49 @@ pub fn monomial_to_psi<C: Ring>(f: &QSymFunction<C>) -> QSymFunction<C> {
 /// Requires rational coefficients (Ratio<BigInt>, Ratio<i64>).
 pub fn monomial_to_phi<C: Ring>(f: &QSymFunction<C>) -> QSymFunction<C> {
     monomial_to_power_sum(f, QSymBasis::PowerSumPhi, sp_value)
+}
+
+/// Compute the combinatorial power sum `p_alpha` expanded in the monomial basis.
+pub fn combinatorial_power_sum_in_monomial_basis<C: Ring>(alpha: &Composition) -> QSymFunction<C> {
+    combinatorial_power_sum_in_monomial_basis_with_reverse::<C>(alpha, false)
+}
+
+/// Compute the reverse combinatorial power sum `p^r_alpha` expanded in the
+/// monomial basis.
+pub fn reverse_combinatorial_power_sum_in_monomial_basis<C: Ring>(
+    alpha: &Composition,
+) -> QSymFunction<C> {
+    combinatorial_power_sum_in_monomial_basis_with_reverse::<C>(alpha, true)
+}
+
+/// Convert a QSymFunction from the combinatorial power-sum basis to M.
+pub fn combinatorial_power_sum_to_monomial<C: Ring>(f: &QSymFunction<C>) -> QSymFunction<C> {
+    expand_combinatorial_power_sum_to_monomial(f, false)
+}
+
+/// Convert a QSymFunction from the reverse combinatorial power-sum basis to M.
+pub fn reverse_combinatorial_power_sum_to_monomial<C: Ring>(
+    f: &QSymFunction<C>,
+) -> QSymFunction<C> {
+    expand_combinatorial_power_sum_to_monomial(f, true)
+}
+
+/// Convert from M to the combinatorial power-sum basis.
+///
+/// The inverse transition matrix may have rational entries; use a rational
+/// coefficient ring such as `Ratio<i64>` unless exact divisibility is known.
+pub fn monomial_to_combinatorial_power_sum<C: Ring>(f: &QSymFunction<C>) -> QSymFunction<C> {
+    monomial_to_combinatorial_power_sum_basis(f, QSymBasis::CombinatorialPowerSum, false)
+}
+
+/// Convert from M to the reverse combinatorial power-sum basis.
+///
+/// The inverse transition matrix may have rational entries; use a rational
+/// coefficient ring such as `Ratio<i64>` unless exact divisibility is known.
+pub fn monomial_to_reverse_combinatorial_power_sum<C: Ring>(
+    f: &QSymFunction<C>,
+) -> QSymFunction<C> {
+    monomial_to_combinatorial_power_sum_basis(f, QSymBasis::ReverseCombinatorialPowerSum, true)
 }
 
 // =========================================================================
@@ -278,6 +333,101 @@ fn monomial_to_power_sum<C: Ring>(
     QSymFunction::from_terms(target_basis, result_terms)
 }
 
+fn combinatorial_power_sum_in_monomial_basis_with_reverse<C: Ring>(
+    alpha: &Composition,
+    reverse: bool,
+) -> QSymFunction<C> {
+    if alpha.is_empty() {
+        return QSymFunction::basis_element(QSymBasis::Monomial, Composition::empty());
+    }
+
+    let mut terms = BTreeMap::new();
+    for beta in Composition::integer_compositions(alpha.size()) {
+        let coeff = combinatorial_power_sum_monomial_coefficient(alpha, &beta, reverse);
+        if coeff != 0 {
+            terms.insert(beta, C::from_i64(coeff));
+        }
+    }
+
+    QSymFunction::from_terms(QSymBasis::Monomial, terms)
+}
+
+fn expand_combinatorial_power_sum_to_monomial<C: Ring>(
+    f: &QSymFunction<C>,
+    reverse: bool,
+) -> QSymFunction<C> {
+    let mut result_terms: BTreeMap<Composition, C> = BTreeMap::new();
+
+    for (alpha, coeff) in f.terms() {
+        let expansion = combinatorial_power_sum_in_monomial_basis_with_reverse::<C>(alpha, reverse);
+        for (beta, c) in expansion.terms() {
+            let entry = result_terms.entry(beta.clone()).or_insert_with(C::zero);
+            *entry = entry.clone() + coeff.clone() * c.clone();
+        }
+    }
+
+    QSymFunction::from_terms(QSymBasis::Monomial, result_terms)
+}
+
+fn monomial_to_combinatorial_power_sum_basis<C: Ring>(
+    f: &QSymFunction<C>,
+    target_basis: QSymBasis,
+    reverse: bool,
+) -> QSymFunction<C> {
+    if f.is_zero() {
+        return QSymFunction::zero(target_basis);
+    }
+
+    let mut by_degree: BTreeMap<u32, Vec<(Composition, C)>> = BTreeMap::new();
+    for (comp, coeff) in f.terms() {
+        by_degree
+            .entry(comp.size())
+            .or_default()
+            .push((comp.clone(), coeff.clone()));
+    }
+
+    let mut result_terms: BTreeMap<Composition, C> = BTreeMap::new();
+
+    for (deg, terms) in by_degree {
+        let compositions = Composition::integer_compositions(deg);
+        let k = compositions.len();
+        let comp_index: BTreeMap<&Composition, usize> = compositions
+            .iter()
+            .enumerate()
+            .map(|(i, c)| (c, i))
+            .collect();
+
+        let ps_to_m =
+            build_combinatorial_power_sum_transition_matrix(&compositions, &comp_index, reverse);
+        let m_to_ps = invert_rational_matrix(&ps_to_m);
+
+        let mut input = vec![C::zero(); k];
+        for (comp, coeff) in &terms {
+            if let Some(&idx) = comp_index.get(comp) {
+                input[idx] = coeff.clone();
+            }
+        }
+
+        for i in 0..k {
+            let mut sum = C::zero();
+            for j in 0..k {
+                if !input[j].is_zero() {
+                    let (num, den) = m_to_ps[j][i];
+                    if num != 0 {
+                        let term = input[j].clone() * C::from_i64(num);
+                        sum = sum + term.exact_div_i64(den);
+                    }
+                }
+            }
+            if !sum.is_zero() {
+                result_terms.insert(compositions[i].clone(), sum);
+            }
+        }
+    }
+
+    QSymFunction::from_terms(target_basis, result_terms)
+}
+
 // =========================================================================
 // Combinatorial helpers
 // =========================================================================
@@ -344,6 +494,96 @@ fn composition_coarsenings(parts: &[u32]) -> Vec<Vec<Vec<u32>>> {
     result
 }
 
+fn combinatorial_power_sum_monomial_coefficient(
+    alpha: &Composition,
+    beta: &Composition,
+    reverse: bool,
+) -> i64 {
+    if alpha.size() != beta.size() {
+        return 0;
+    }
+    if alpha.is_empty() {
+        return if beta.is_empty() { 1 } else { 0 };
+    }
+
+    if reverse {
+        let alpha_rev = reverse_composition(alpha);
+        let beta_rev = reverse_composition(beta);
+        return combinatorial_power_sum_monomial_coefficient(&alpha_rev, &beta_rev, false);
+    }
+
+    let mut columns = alpha.parts().to_vec();
+    columns.sort_by(|left, right| right.cmp(left));
+
+    let mut remaining = beta.parts().to_vec();
+    let mut assignment = vec![0usize; columns.len()];
+    let mut count = 0i64;
+    count_combinatorial_power_sum_matrices(
+        alpha.parts(),
+        &columns,
+        &mut remaining,
+        &mut assignment,
+        0,
+        &mut count,
+    );
+    count
+}
+
+fn count_combinatorial_power_sum_matrices(
+    target_word: &[u32],
+    columns: &[u32],
+    remaining_row_sums: &mut [u32],
+    assignment: &mut [usize],
+    col: usize,
+    count: &mut i64,
+) {
+    if col == columns.len() {
+        if remaining_row_sums.iter().any(|&sum| sum != 0) {
+            return;
+        }
+        if matrix_reading_word(columns, assignment, remaining_row_sums.len()) == target_word {
+            *count = count
+                .checked_add(1)
+                .expect("combinatorial power-sum coefficient overflow");
+        }
+        return;
+    }
+
+    let part = columns[col];
+    for row in 0..remaining_row_sums.len() {
+        if remaining_row_sums[row] < part {
+            continue;
+        }
+        remaining_row_sums[row] -= part;
+        assignment[col] = row;
+        count_combinatorial_power_sum_matrices(
+            target_word,
+            columns,
+            remaining_row_sums,
+            assignment,
+            col + 1,
+            count,
+        );
+        remaining_row_sums[row] += part;
+    }
+}
+
+fn matrix_reading_word(columns: &[u32], assignment: &[usize], rows: usize) -> Vec<u32> {
+    let mut word = Vec::with_capacity(columns.len());
+    for row in 0..rows {
+        for (col, &part) in columns.iter().enumerate() {
+            if assignment[col] == row {
+                word.push(part);
+            }
+        }
+    }
+    word
+}
+
+fn reverse_composition(alpha: &Composition) -> Composition {
+    Composition::new(alpha.parts().iter().rev().copied().collect())
+}
+
 // =========================================================================
 // Rational matrix utilities
 // =========================================================================
@@ -397,6 +637,29 @@ fn build_transition_matrix(
                     *num = -(*num);
                     *den = -(*den);
                 }
+            }
+        }
+    }
+
+    matrix
+}
+
+fn build_combinatorial_power_sum_transition_matrix(
+    compositions: &[Composition],
+    comp_index: &BTreeMap<&Composition, usize>,
+    reverse: bool,
+) -> Vec<Vec<(i64, i64)>> {
+    let k = compositions.len();
+    let mut matrix = vec![vec![(0i64, 1i64); k]; k];
+
+    for (j, alpha) in compositions.iter().enumerate() {
+        for beta in Composition::integer_compositions(alpha.size()) {
+            let coeff = combinatorial_power_sum_monomial_coefficient(alpha, &beta, reverse);
+            if coeff == 0 {
+                continue;
+            }
+            if let Some(&i) = comp_index.get(&beta) {
+                matrix[j][i] = (coeff, 1);
             }
         }
     }
@@ -543,6 +806,133 @@ mod tests {
         let parts = vec![1; usize::BITS as usize + 1];
 
         let _ = composition_coarsenings(&parts);
+    }
+
+    fn comp(parts: &[u32]) -> Composition {
+        Composition::new(parts.to_vec())
+    }
+
+    fn monomial_from_i64_terms(terms: &[(&[u32], i64)]) -> QSymFunction<i64> {
+        let mut map = BTreeMap::new();
+        for &(parts, coeff) in terms {
+            map.insert(comp(parts), coeff);
+        }
+        QSymFunction::from_terms(QSymBasis::Monomial, map)
+    }
+
+    // -- P-partition combinatorial power-sum tests --
+
+    #[test]
+    fn test_combinatorial_power_sum_paper_degree_four_table() {
+        // Aliniaeifard--Wang--van Willigenburg, Example 5.2.
+        let examples: Vec<(&[u32], Vec<(&[u32], i64)>)> = vec![
+            (&[4], vec![(&[4], 1)]),
+            (&[3, 1], vec![(&[4], 1), (&[3, 1], 1)]),
+            (&[1, 3], vec![(&[1, 3], 1)]),
+            (
+                &[2, 1, 1],
+                vec![(&[4], 1), (&[3, 1], 2), (&[2, 2], 1), (&[2, 1, 1], 2)],
+            ),
+            (&[2, 2], vec![(&[4], 1), (&[2, 2], 2)]),
+            (&[1, 2, 1], vec![(&[1, 3], 2), (&[1, 2, 1], 2)]),
+            (&[1, 1, 2], vec![(&[2, 2], 1), (&[1, 1, 2], 2)]),
+            (
+                &[1, 1, 1, 1],
+                vec![
+                    (&[4], 1),
+                    (&[3, 1], 4),
+                    (&[1, 3], 4),
+                    (&[2, 2], 6),
+                    (&[2, 1, 1], 12),
+                    (&[1, 2, 1], 12),
+                    (&[1, 1, 2], 12),
+                    (&[1, 1, 1, 1], 24),
+                ],
+            ),
+        ];
+
+        for (alpha, terms) in examples {
+            let actual = combinatorial_power_sum_in_monomial_basis::<i64>(&comp(alpha));
+            let expected = monomial_from_i64_terms(&terms);
+            assert_eq!(actual, expected, "p_{alpha:?} monomial expansion");
+        }
+    }
+
+    #[test]
+    fn test_reverse_combinatorial_power_sum_monomial_formula() {
+        // Remark 5.18 gives [M_beta] p^r_alpha = R_{alpha^r,beta^r}.
+        let actual = reverse_combinatorial_power_sum_in_monomial_basis::<i64>(&comp(&[1, 1, 2]));
+        let expected =
+            monomial_from_i64_terms(&[(&[4], 1), (&[1, 3], 2), (&[2, 2], 1), (&[1, 1, 2], 2)]);
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_combinatorial_power_sum_partition_refinement_example() {
+        // AWW Example 5.5: the symmetric p_(2,1,1) refines as the sum over
+        // all rearrangements of (2,1,1).
+        let sum = combinatorial_power_sum_in_monomial_basis::<i64>(&comp(&[2, 1, 1]))
+            + combinatorial_power_sum_in_monomial_basis::<i64>(&comp(&[1, 2, 1]))
+            + combinatorial_power_sum_in_monomial_basis::<i64>(&comp(&[1, 1, 2]));
+        let expected = monomial_from_i64_terms(&[
+            (&[4], 1),
+            (&[3, 1], 2),
+            (&[1, 3], 2),
+            (&[2, 2], 2),
+            (&[2, 1, 1], 2),
+            (&[1, 2, 1], 2),
+            (&[1, 1, 2], 2),
+        ]);
+        assert_eq!(sum, expected);
+    }
+
+    #[test]
+    fn test_combinatorial_power_sum_product_example_57() {
+        // AWW Example 5.7:
+        // p_(1,2) p_(1) = (1/2) p_(1,2,1) + p_(1,1,2).
+        let lhs = QSymFunction::<Q>::combinatorial_power_sum(comp(&[1, 2]))
+            .multiply(&QSymFunction::<Q>::combinatorial_power_sum(comp(&[1])));
+        let rhs = QSymFunction::scaled_basis_element(
+            QSymBasis::CombinatorialPowerSum,
+            comp(&[1, 2, 1]),
+            Q::new(1, 2),
+        ) + QSymFunction::combinatorial_power_sum(comp(&[1, 1, 2]));
+        assert_eq!(lhs, rhs);
+    }
+
+    #[test]
+    fn test_combinatorial_power_sum_involution_examples_511() {
+        // AWW Example 5.11:
+        // psi(p_112) = -p^r_112, rho(p_112) = p^r_211,
+        // omega(p_112) = -p_211.
+        let p112 = combinatorial_power_sum_in_monomial_basis::<i64>(&comp(&[1, 1, 2]));
+        let pr112 = reverse_combinatorial_power_sum_in_monomial_basis::<i64>(&comp(&[1, 1, 2]));
+        let pr211 = reverse_combinatorial_power_sum_in_monomial_basis::<i64>(&comp(&[2, 1, 1]));
+        let p211 = combinatorial_power_sum_in_monomial_basis::<i64>(&comp(&[2, 1, 1]));
+
+        assert_eq!(
+            p112.clone().psi_involution().to_monomial_basis(),
+            pr112.scale(&-1)
+        );
+        assert_eq!(p112.clone().rho_involution().to_monomial_basis(), pr211);
+        assert_eq!(p112.omega_involution().to_monomial_basis(), p211.scale(&-1));
+    }
+
+    #[test]
+    fn test_combinatorial_power_sum_basis_roundtrips_degree_four() {
+        for alpha in Composition::integer_compositions(4) {
+            let p: QSymFunction<Q> =
+                QSymFunction::basis_element(QSymBasis::CombinatorialPowerSum, alpha.clone());
+            let back = p.to_monomial_basis().to_combinatorial_power_sum_basis();
+            assert_eq!(back, p, "roundtrip failed for p_{}", alpha);
+
+            let pr: QSymFunction<Q> =
+                QSymFunction::basis_element(QSymBasis::ReverseCombinatorialPowerSum, alpha.clone());
+            let back = pr
+                .to_monomial_basis()
+                .to_reverse_combinatorial_power_sum_basis();
+            assert_eq!(back, pr, "roundtrip failed for pr_{}", alpha);
+        }
     }
 
     // -- Ψ tests --

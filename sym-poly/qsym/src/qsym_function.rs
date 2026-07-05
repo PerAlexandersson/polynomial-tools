@@ -66,6 +66,30 @@ impl<C: Ring> QSymFunction<C> {
         Self::basis_element(QSymBasis::DualImmaculate, comp)
     }
 
+    pub fn extended_schur(comp: Composition) -> Self {
+        Self::basis_element(QSymBasis::ExtendedSchur, comp)
+    }
+
+    pub fn row_strict_extended_schur(comp: Composition) -> Self {
+        Self::basis_element(QSymBasis::RowStrictExtendedSchur, comp)
+    }
+
+    pub fn flipped_extended_schur(comp: Composition) -> Self {
+        Self::basis_element(QSymBasis::FlippedExtendedSchur, comp)
+    }
+
+    pub fn backward_extended_schur(comp: Composition) -> Self {
+        Self::basis_element(QSymBasis::BackwardExtendedSchur, comp)
+    }
+
+    pub fn combinatorial_power_sum(comp: Composition) -> Self {
+        Self::basis_element(QSymBasis::CombinatorialPowerSum, comp)
+    }
+
+    pub fn reverse_combinatorial_power_sum(comp: Composition) -> Self {
+        Self::basis_element(QSymBasis::ReverseCombinatorialPowerSum, comp)
+    }
+
     // -----------------------------------------------------------------------
     // Accessors
     // -----------------------------------------------------------------------
@@ -139,11 +163,29 @@ impl<C: Ring> QSymFunction<C> {
     pub fn to_dual_immaculate_basis(&self) -> Self {
         self.to_basis(QSymBasis::DualImmaculate)
     }
+    pub fn to_extended_schur_basis(&self) -> Self {
+        self.to_basis(QSymBasis::ExtendedSchur)
+    }
+    pub fn to_row_strict_extended_schur_basis(&self) -> Self {
+        self.to_basis(QSymBasis::RowStrictExtendedSchur)
+    }
+    pub fn to_flipped_extended_schur_basis(&self) -> Self {
+        self.to_basis(QSymBasis::FlippedExtendedSchur)
+    }
+    pub fn to_backward_extended_schur_basis(&self) -> Self {
+        self.to_basis(QSymBasis::BackwardExtendedSchur)
+    }
     pub fn to_psi_basis(&self) -> Self {
         self.to_basis(QSymBasis::PowerSumPsi)
     }
     pub fn to_phi_basis(&self) -> Self {
         self.to_basis(QSymBasis::PowerSumPhi)
+    }
+    pub fn to_combinatorial_power_sum_basis(&self) -> Self {
+        self.to_basis(QSymBasis::CombinatorialPowerSum)
+    }
+    pub fn to_reverse_combinatorial_power_sum_basis(&self) -> Self {
+        self.to_basis(QSymBasis::ReverseCombinatorialPowerSum)
     }
 
     // -----------------------------------------------------------------------

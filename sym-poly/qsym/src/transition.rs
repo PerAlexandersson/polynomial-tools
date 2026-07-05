@@ -29,11 +29,33 @@ pub fn convert<C: Ring>(f: &QSymFunction<C>, target: QSymBasis) -> QSymFunction<
             quasisymmetric_schur_to_fundamental(f)
         }
         (QSymBasis::DualImmaculate, QSymBasis::Fundamental) => dual_immaculate_to_fundamental(f),
+        (QSymBasis::ExtendedSchur, QSymBasis::Fundamental) => extended_schur_to_fundamental(f),
+        (QSymBasis::RowStrictExtendedSchur, QSymBasis::Fundamental) => {
+            row_strict_extended_schur_to_fundamental(f)
+        }
+        (QSymBasis::FlippedExtendedSchur, QSymBasis::Fundamental) => {
+            flipped_extended_schur_to_fundamental(f)
+        }
+        (QSymBasis::BackwardExtendedSchur, QSymBasis::Fundamental) => {
+            backward_extended_schur_to_fundamental(f)
+        }
         (QSymBasis::Fundamental, QSymBasis::QuasisymmetricSchur) => {
             fundamental_to_tableau_basis(f, QSymBasis::QuasisymmetricSchur)
         }
         (QSymBasis::Fundamental, QSymBasis::DualImmaculate) => {
             fundamental_to_tableau_basis(f, QSymBasis::DualImmaculate)
+        }
+        (QSymBasis::Fundamental, QSymBasis::ExtendedSchur) => {
+            fundamental_to_tableau_basis(f, QSymBasis::ExtendedSchur)
+        }
+        (QSymBasis::Fundamental, QSymBasis::RowStrictExtendedSchur) => {
+            fundamental_to_tableau_basis(f, QSymBasis::RowStrictExtendedSchur)
+        }
+        (QSymBasis::Fundamental, QSymBasis::FlippedExtendedSchur) => {
+            fundamental_to_tableau_basis(f, QSymBasis::FlippedExtendedSchur)
+        }
+        (QSymBasis::Fundamental, QSymBasis::BackwardExtendedSchur) => {
+            fundamental_to_tableau_basis(f, QSymBasis::BackwardExtendedSchur)
         }
 
         // PowerSumPsi conversions (via monomial as bridge)
@@ -70,12 +92,60 @@ pub fn convert<C: Ring>(f: &QSymFunction<C>, target: QSymBasis) -> QSymFunction<
             crate::power_sum::monomial_to_psi(&in_m)
         }
 
+        // P-partition combinatorial power sums (via monomial as bridge)
+        (QSymBasis::CombinatorialPowerSum, QSymBasis::Monomial) => {
+            crate::power_sum::combinatorial_power_sum_to_monomial(f)
+        }
+        (QSymBasis::Monomial, QSymBasis::CombinatorialPowerSum) => {
+            crate::power_sum::monomial_to_combinatorial_power_sum(f)
+        }
+        (QSymBasis::ReverseCombinatorialPowerSum, QSymBasis::Monomial) => {
+            crate::power_sum::reverse_combinatorial_power_sum_to_monomial(f)
+        }
+        (QSymBasis::Monomial, QSymBasis::ReverseCombinatorialPowerSum) => {
+            crate::power_sum::monomial_to_reverse_combinatorial_power_sum(f)
+        }
+        (QSymBasis::CombinatorialPowerSum | QSymBasis::ReverseCombinatorialPowerSum, _) => {
+            let in_m = match f.basis() {
+                QSymBasis::CombinatorialPowerSum => {
+                    crate::power_sum::combinatorial_power_sum_to_monomial(f)
+                }
+                QSymBasis::ReverseCombinatorialPowerSum => {
+                    crate::power_sum::reverse_combinatorial_power_sum_to_monomial(f)
+                }
+                _ => unreachable!("expected a combinatorial power-sum basis"),
+            };
+            convert(&in_m, target)
+        }
+        (_, QSymBasis::CombinatorialPowerSum | QSymBasis::ReverseCombinatorialPowerSum) => {
+            let in_m = convert(f, QSymBasis::Monomial);
+            match target {
+                QSymBasis::CombinatorialPowerSum => {
+                    crate::power_sum::monomial_to_combinatorial_power_sum(&in_m)
+                }
+                QSymBasis::ReverseCombinatorialPowerSum => {
+                    crate::power_sum::monomial_to_reverse_combinatorial_power_sum(&in_m)
+                }
+                _ => unreachable!("expected a combinatorial power-sum target"),
+            }
+        }
+
         (QSymBasis::QuasisymmetricSchur, _) => {
             let in_f = quasisymmetric_schur_to_fundamental(f);
             convert(&in_f, target)
         }
         (QSymBasis::DualImmaculate, _) => {
             let in_f = dual_immaculate_to_fundamental(f);
+            convert(&in_f, target)
+        }
+        (
+            QSymBasis::ExtendedSchur
+            | QSymBasis::RowStrictExtendedSchur
+            | QSymBasis::FlippedExtendedSchur
+            | QSymBasis::BackwardExtendedSchur,
+            _,
+        ) => {
+            let in_f = extended_family_to_fundamental(f);
             convert(&in_f, target)
         }
         (_, QSymBasis::QuasisymmetricSchur) => {
@@ -85,6 +155,16 @@ pub fn convert<C: Ring>(f: &QSymFunction<C>, target: QSymBasis) -> QSymFunction<
         (_, QSymBasis::DualImmaculate) => {
             let in_f = convert(f, QSymBasis::Fundamental);
             fundamental_to_tableau_basis(&in_f, QSymBasis::DualImmaculate)
+        }
+        (
+            _,
+            QSymBasis::ExtendedSchur
+            | QSymBasis::RowStrictExtendedSchur
+            | QSymBasis::FlippedExtendedSchur
+            | QSymBasis::BackwardExtendedSchur,
+        ) => {
+            let in_f = convert(f, QSymBasis::Fundamental);
+            fundamental_to_tableau_basis(&in_f, target)
         }
 
         _ => unreachable!("same-basis QSym conversion should have returned early"),
@@ -156,6 +236,72 @@ fn dual_immaculate_to_fundamental<C: Ring>(f: &QSymFunction<C>) -> QSymFunction<
     QSymFunction::from_terms(QSymBasis::Fundamental, result_terms)
 }
 
+fn extended_schur_to_fundamental<C: Ring>(f: &QSymFunction<C>) -> QSymFunction<C> {
+    let mut result_terms: BTreeMap<Composition, C> = BTreeMap::new();
+
+    for (alpha, coeff) in f.terms() {
+        let expansion = crate::kohnert_qsym::extended_schur::<C>(alpha.parts());
+        for (beta, beta_coeff) in expansion.terms() {
+            let entry = result_terms.entry(beta.clone()).or_insert_with(C::zero);
+            *entry = entry.clone() + coeff.clone() * beta_coeff.clone();
+        }
+    }
+
+    QSymFunction::from_terms(QSymBasis::Fundamental, result_terms)
+}
+
+fn row_strict_extended_schur_to_fundamental<C: Ring>(f: &QSymFunction<C>) -> QSymFunction<C> {
+    let mut result_terms: BTreeMap<Composition, C> = BTreeMap::new();
+
+    for (alpha, coeff) in f.terms() {
+        let expansion = crate::kohnert_qsym::row_strict_extended_schur::<C>(alpha.parts());
+        for (beta, beta_coeff) in expansion.terms() {
+            let entry = result_terms.entry(beta.clone()).or_insert_with(C::zero);
+            *entry = entry.clone() + coeff.clone() * beta_coeff.clone();
+        }
+    }
+
+    QSymFunction::from_terms(QSymBasis::Fundamental, result_terms)
+}
+
+fn flipped_extended_schur_to_fundamental<C: Ring>(f: &QSymFunction<C>) -> QSymFunction<C> {
+    let mut result_terms: BTreeMap<Composition, C> = BTreeMap::new();
+
+    for (alpha, coeff) in f.terms() {
+        let expansion = crate::kohnert_qsym::flipped_extended_schur::<C>(alpha.parts());
+        for (beta, beta_coeff) in expansion.terms() {
+            let entry = result_terms.entry(beta.clone()).or_insert_with(C::zero);
+            *entry = entry.clone() + coeff.clone() * beta_coeff.clone();
+        }
+    }
+
+    QSymFunction::from_terms(QSymBasis::Fundamental, result_terms)
+}
+
+fn backward_extended_schur_to_fundamental<C: Ring>(f: &QSymFunction<C>) -> QSymFunction<C> {
+    let mut result_terms: BTreeMap<Composition, C> = BTreeMap::new();
+
+    for (alpha, coeff) in f.terms() {
+        let expansion = crate::kohnert_qsym::backward_extended_schur::<C>(alpha.parts());
+        for (beta, beta_coeff) in expansion.terms() {
+            let entry = result_terms.entry(beta.clone()).or_insert_with(C::zero);
+            *entry = entry.clone() + coeff.clone() * beta_coeff.clone();
+        }
+    }
+
+    QSymFunction::from_terms(QSymBasis::Fundamental, result_terms)
+}
+
+fn extended_family_to_fundamental<C: Ring>(f: &QSymFunction<C>) -> QSymFunction<C> {
+    match f.basis() {
+        QSymBasis::ExtendedSchur => extended_schur_to_fundamental(f),
+        QSymBasis::RowStrictExtendedSchur => row_strict_extended_schur_to_fundamental(f),
+        QSymBasis::FlippedExtendedSchur => flipped_extended_schur_to_fundamental(f),
+        QSymBasis::BackwardExtendedSchur => backward_extended_schur_to_fundamental(f),
+        _ => unreachable!("expected an extended-Schur-family basis"),
+    }
+}
+
 fn quasisymmetric_schur_basis_element<C: Ring>(alpha: &Composition) -> QSymFunction<C> {
     let n = alpha.size();
     if n == 0 {
@@ -177,7 +323,12 @@ fn fundamental_to_tableau_basis<C: Ring>(
     assert!(
         matches!(
             target,
-            QSymBasis::QuasisymmetricSchur | QSymBasis::DualImmaculate
+            QSymBasis::QuasisymmetricSchur
+                | QSymBasis::DualImmaculate
+                | QSymBasis::ExtendedSchur
+                | QSymBasis::RowStrictExtendedSchur
+                | QSymBasis::FlippedExtendedSchur
+                | QSymBasis::BackwardExtendedSchur
         ),
         "unsupported tableau basis target"
     );
@@ -216,6 +367,16 @@ fn expand_fundamental_homogeneous<C: Ring>(
         let expansion = match target {
             QSymBasis::QuasisymmetricSchur => quasisymmetric_schur_basis_element::<i64>(&alpha),
             QSymBasis::DualImmaculate => crate::schur_qsym::dual_immaculate::<i64>(alpha.parts()),
+            QSymBasis::ExtendedSchur => crate::kohnert_qsym::extended_schur::<i64>(alpha.parts()),
+            QSymBasis::RowStrictExtendedSchur => {
+                crate::kohnert_qsym::row_strict_extended_schur::<i64>(alpha.parts())
+            }
+            QSymBasis::FlippedExtendedSchur => {
+                crate::kohnert_qsym::flipped_extended_schur::<i64>(alpha.parts())
+            }
+            QSymBasis::BackwardExtendedSchur => {
+                crate::kohnert_qsym::backward_extended_schur::<i64>(alpha.parts())
+            }
             _ => unreachable!("unsupported tableau basis target"),
         };
         basis_in_f.insert(alpha, expansion);
@@ -455,6 +616,44 @@ mod tests {
     }
 
     #[test]
+    fn test_extended_schur_family_roundtrip_degree_4() {
+        let bases = [
+            QSymBasis::ExtendedSchur,
+            QSymBasis::RowStrictExtendedSchur,
+            QSymBasis::FlippedExtendedSchur,
+            QSymBasis::BackwardExtendedSchur,
+        ];
+        for basis in bases {
+            for alpha in Composition::integer_compositions(4) {
+                let element: QSymFunction<i64> = QSymFunction::basis_element(basis, alpha.clone());
+                let back = element.to_fundamental_basis().to_basis(basis);
+                assert_eq!(back, element, "roundtrip failed for {basis} {}", alpha);
+            }
+        }
+    }
+
+    #[test]
+    fn test_extended_schur_family_roundtrip_through_monomial_degree_4() {
+        let bases = [
+            QSymBasis::ExtendedSchur,
+            QSymBasis::RowStrictExtendedSchur,
+            QSymBasis::FlippedExtendedSchur,
+            QSymBasis::BackwardExtendedSchur,
+        ];
+        for basis in bases {
+            for alpha in Composition::integer_compositions(4) {
+                let element: QSymFunction<i64> = QSymFunction::basis_element(basis, alpha.clone());
+                let back = element.to_monomial_basis().to_basis(basis);
+                assert_eq!(
+                    back, element,
+                    "monomial roundtrip failed for {basis} {}",
+                    alpha
+                );
+            }
+        }
+    }
+
+    #[test]
     fn test_polynomial_coefficients_expand_to_new_bases() {
         use sym_poly_core::UnivariatePolynomial;
 
@@ -466,5 +665,6 @@ mod tests {
         let f = QSymFunction::from_terms(QSymBasis::Fundamental, terms);
         let _qs = f.to_quasisymmetric_schur_basis();
         let _di = f.to_dual_immaculate_basis();
+        let _ext = f.to_extended_schur_basis();
     }
 }
