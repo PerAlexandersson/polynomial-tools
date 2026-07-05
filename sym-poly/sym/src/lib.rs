@@ -12,6 +12,7 @@ pub mod basis;
 pub mod chromatic;
 pub mod frobenius;
 pub mod hessenberg_gkm;
+pub mod hook_schur;
 pub mod kostka;
 pub mod lah;
 pub mod llt;
@@ -40,6 +41,10 @@ pub use hessenberg_gkm::{
     hessenberg_gkm_dot_character_values_packed_mod_prime, hessenberg_gkm_dot_frobenius,
     hessenberg_gkm_dot_frobenius_packed, naive_circular_gkm_dot_character_values_by_degree,
     naive_circular_gkm_dot_frobenius,
+};
+pub use hook_schur::{
+    enumerate_hook_tableaux, hook_alphabet, hook_schur_expansion, HookEntry, HookSchurExpansion,
+    HookTableau, HookWeight,
 };
 pub use lah::{
     lah_forest_basis_elementary, lah_symmetric_elementary, lah_symmetric_forest_basis_expansion,
