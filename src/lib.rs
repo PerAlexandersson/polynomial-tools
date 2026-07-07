@@ -99,7 +99,10 @@
 pub mod basis;
 pub mod bkw;
 pub mod brenti_sequence;
+pub mod coefficient_tests;
+pub mod cyclic_sieving;
 pub mod decomposition;
+pub mod hstar_inequalities;
 pub mod interlacing_matrix;
 pub mod linalg;
 pub mod polynomial;
@@ -141,10 +144,22 @@ pub use brenti_sequence::{
     build_brenti_sequence_certificate, BrentiEdge, BrentiError, BrentiSequenceCertificate,
     BrentiStripDigraph,
 };
+pub use coefficient_tests::{
+    coefficient_test_report_bigint, kurtz_condition_report_bigint, newton_inequality_report_bigint,
+    CoefficientCriterionReport, CoefficientInequalityCheck, CoefficientTestReport,
+};
+pub use cyclic_sieving::{
+    cyclic_sieving_report_bigint, cyclic_sieving_sequence_reports_bigint,
+    cyclotomic_polynomial_bigint, root_of_unity_evaluation_bigint, CyclicSievingPowerCheck,
+    CyclicSievingReport, CyclicSievingSequenceItem, RootOfUnityEvaluation,
+};
 pub use decomposition::{
     analyze_symmetric_decomposition_i64, f_polynomial, f_polynomial_i64,
     is_alternatingly_increasing, r_decomposition, r_decomposition_i64, r_transform,
     r_transform_i64, SymmetricDecompositionAnalysis,
+};
+pub use hstar_inequalities::{
+    hstar_inequality_report_bigint, HStarInequalityCheck, HStarInequalityReport,
 };
 pub use interlacing_matrix::{
     check_lace_sequence_total_nonnegative_i64, check_lace_tnn_neville_bigint,

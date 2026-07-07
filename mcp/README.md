@@ -275,6 +275,19 @@ Example arguments:
 }
 ```
 
+### `coefficient_tests`
+
+Check Newton inequalities and Kurtz's sufficient condition for each polynomial.
+When Kurtz holds, the response marks that the criterion implies real-rootedness.
+
+Example arguments:
+
+```json
+{
+  "text": "1000,1110,111,1\n1,4,6,4,1"
+}
+```
+
 ### `check_interlacing_pair`
 
 Check strict and weak interlacing for two polynomials.
@@ -538,6 +551,49 @@ Example arguments:
   "polynomials": [
     { "coefficients": [1, 3, 1] }
   ]
+}
+```
+
+### `hstar_inequalities`
+
+Check named Ehrhart h*-vector inequalities.  The report includes basic
+conditions, Stanley and Hibi inequalities, the Balletti-Higashitani universal
+Scott inequality when applicable, and Stapledon-derived nonnegativity checks.
+Failures include the named inequality and reference text.
+
+Example arguments:
+
+```json
+{
+  "text": "1,20,1,0",
+  "dimension": 3
+}
+```
+
+### `cyclic_sieving`
+
+Profile or check one polynomial against one cyclic group order.  If
+`fixed_counts` is omitted, the tool returns exact root-of-unity evaluations.  If
+`fixed_counts` is supplied, it checks the CSP equalities.
+
+```json
+{
+  "polynomial": { "coefficients": [1, 1] },
+  "order": 2,
+  "fixed_counts": [2, 0]
+}
+```
+
+### `cyclic_sieving_sequence`
+
+For a sequence `P_n(q)`, profile candidate orders
+`n-2,n-1,n,n+1,n+2,n+3` by default.  Use `first_index` when the first input row
+is not indexed by zero.  Optional fixed counts are keyed by `index` and `order`.
+
+```json
+{
+  "text": "1,1\n1,1,1",
+  "first_index": 2
 }
 ```
 

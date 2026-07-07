@@ -20,6 +20,7 @@ use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
 pub struct PolynomialToolsServer {
@@ -284,6 +285,40 @@ pub struct EhrhartHstarRequest {
     pub denominator: Option<BigIntCoefficientInput>,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct HStarInequalitiesRequest {
+    pub polynomials: Option<Vec<BigIntPolynomialInput>>,
+    pub text: Option<String>,
+    pub dimension: Option<usize>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CyclicSievingRequest {
+    pub polynomial: BigIntPolynomialInput,
+    pub order: usize,
+    pub fixed_counts: Option<Vec<BigIntCoefficientInput>>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CyclicSievingFixedCountsInput {
+    pub index: isize,
+    pub order: usize,
+    pub counts: Vec<BigIntCoefficientInput>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CyclicSievingSequenceRequest {
+    pub polynomials: Option<Vec<BigIntPolynomialInput>>,
+    pub text: Option<String>,
+    pub first_index: Option<isize>,
+    pub offsets: Option<Vec<isize>>,
+    pub fixed_counts: Option<Vec<CyclicSievingFixedCountsInput>>,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum EhrhartHstarMode {
@@ -537,6 +572,145 @@ pub struct EhrhartHstarResponse {
     pub hstar: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ehrhart_coefficients: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
+pub struct HStarInequalityCheckItem {
+    pub family: String,
+    pub name: String,
+    pub formula: String,
+    pub reference: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub index: Option<usize>,
+    pub applicable: bool,
+    pub holds: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lhs: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rhs: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+    pub details: String,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
+pub struct HStarInequalitiesItem {
+    pub index: usize,
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hstar: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dimension: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub degree: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub codegree: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub all_applicable_hold: Option<bool>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub checks: Vec<HStarInequalityCheckItem>,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
+pub struct HStarInequalitiesResponse {
+    pub items: Vec<HStarInequalitiesItem>,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
+pub struct CoefficientInequalityCheckItem {
+    pub index: usize,
+    pub lhs: String,
+    pub rhs: String,
+    pub comparison: String,
+    pub holds: bool,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
+pub struct CoefficientCriterionItem {
+    pub name: String,
+    pub reference: String,
+    pub applicable: bool,
+    pub holds: bool,
+    pub implies_real_rooted: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    pub checks: Vec<CoefficientInequalityCheckItem>,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
+pub struct CoefficientTestsItem {
+    pub index: usize,
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub polynomial: Option<BigIntNormalizedPolynomial>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub newton: Option<CoefficientCriterionItem>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kurtz: Option<CoefficientCriterionItem>,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
+pub struct CoefficientTestsResponse {
+    pub items: Vec<CoefficientTestsItem>,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
+pub struct RootOfUnityEvaluationItem {
+    pub group_order: usize,
+    pub power: usize,
+    pub root_order: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub integer_value: Option<String>,
+    pub remainder: Vec<String>,
+    pub remainder_polynomial: String,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
+pub struct CyclicSievingPowerCheckItem {
+    pub power: usize,
+    pub root_order: usize,
+    pub expected_fixed_points: String,
+    pub evaluation: RootOfUnityEvaluationItem,
+    pub holds: bool,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
+pub struct CyclicSievingReportItem {
+    pub order: usize,
+    pub polynomial: BigIntNormalizedPolynomial,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fixed_counts: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub holds: Option<bool>,
+    pub evaluations: Vec<RootOfUnityEvaluationItem>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub checks: Vec<CyclicSievingPowerCheckItem>,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
+pub struct CyclicSievingResponse {
+    pub report: CyclicSievingReportItem,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
+pub struct CyclicSievingSequenceItemResponse {
+    pub row: usize,
+    pub index: isize,
+    pub polynomial: BigIntNormalizedPolynomial,
+    pub candidate_orders: Vec<CyclicSievingReportItem>,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
+pub struct CyclicSievingSequenceResponse {
+    pub first_index: isize,
+    pub offsets: Vec<isize>,
+    pub items: Vec<CyclicSievingSequenceItemResponse>,
 }
 
 #[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
@@ -958,6 +1132,160 @@ fn parse_bigint_items(batch: &BigIntParsedBatch) -> Vec<BigIntParsePolynomialIte
             },
         })
         .collect()
+}
+
+fn hstar_check_item(check: &HStarInequalityCheck) -> HStarInequalityCheckItem {
+    HStarInequalityCheckItem {
+        family: check.family.clone(),
+        name: check.name.clone(),
+        formula: check.formula.clone(),
+        reference: check.reference.clone(),
+        url: check.url.clone(),
+        index: check.index,
+        applicable: check.applicable,
+        holds: check.holds,
+        lhs: check.lhs.as_ref().map(ToString::to_string),
+        rhs: check.rhs.as_ref().map(ToString::to_string),
+        value: check.value.clone(),
+        details: check.details.clone(),
+    }
+}
+
+fn hstar_inequalities_item(
+    index: usize,
+    item: Result<NormalizedBigIntPolynomial, String>,
+    dimension: Option<usize>,
+) -> HStarInequalitiesItem {
+    match item {
+        Ok(polynomial) => {
+            let report = hstar_inequality_report_bigint(&polynomial.coefficients, dimension);
+            HStarInequalitiesItem {
+                index,
+                ok: true,
+                error: None,
+                hstar: Some(bigint_strings(&report.hstar)),
+                dimension: Some(report.dimension),
+                degree: Some(report.degree),
+                codegree: report.codegree,
+                all_applicable_hold: Some(report.all_applicable_hold),
+                checks: report.checks.iter().map(hstar_check_item).collect(),
+            }
+        }
+        Err(error) => HStarInequalitiesItem {
+            index,
+            ok: false,
+            error: Some(error),
+            hstar: None,
+            dimension: None,
+            degree: None,
+            codegree: None,
+            all_applicable_hold: None,
+            checks: Vec::new(),
+        },
+    }
+}
+
+fn coefficient_check_item(check: &CoefficientInequalityCheck) -> CoefficientInequalityCheckItem {
+    CoefficientInequalityCheckItem {
+        index: check.index,
+        lhs: check.lhs.to_string(),
+        rhs: check.rhs.to_string(),
+        comparison: check.comparison.to_string(),
+        holds: check.holds,
+    }
+}
+
+fn coefficient_criterion_item(report: &CoefficientCriterionReport) -> CoefficientCriterionItem {
+    CoefficientCriterionItem {
+        name: report.name.to_string(),
+        reference: report.reference.to_string(),
+        applicable: report.applicable,
+        holds: report.holds,
+        implies_real_rooted: report.implies_real_rooted,
+        reason: report.reason.clone(),
+        checks: report.checks.iter().map(coefficient_check_item).collect(),
+    }
+}
+
+fn coefficient_tests_item(
+    index: usize,
+    item: Result<NormalizedBigIntPolynomial, String>,
+) -> CoefficientTestsItem {
+    match item {
+        Ok(polynomial) => {
+            let report = coefficient_test_report_bigint(&polynomial.coefficients);
+            CoefficientTestsItem {
+                index,
+                ok: true,
+                error: None,
+                polynomial: Some(polynomial.display),
+                newton: Some(coefficient_criterion_item(&report.newton)),
+                kurtz: Some(coefficient_criterion_item(&report.kurtz)),
+            }
+        }
+        Err(error) => CoefficientTestsItem {
+            index,
+            ok: false,
+            error: Some(error),
+            polynomial: None,
+            newton: None,
+            kurtz: None,
+        },
+    }
+}
+
+fn root_evaluation_item(evaluation: &RootOfUnityEvaluation) -> RootOfUnityEvaluationItem {
+    RootOfUnityEvaluationItem {
+        group_order: evaluation.group_order,
+        power: evaluation.power,
+        root_order: evaluation.root_order,
+        integer_value: evaluation.integer_value.as_ref().map(ToString::to_string),
+        remainder: bigint_strings(&evaluation.remainder),
+        remainder_polynomial: format_poly_bigint_coeffs(&evaluation.remainder),
+    }
+}
+
+fn cyclic_power_check_item(check: &CyclicSievingPowerCheck) -> CyclicSievingPowerCheckItem {
+    CyclicSievingPowerCheckItem {
+        power: check.power,
+        root_order: check.root_order,
+        expected_fixed_points: check.expected_fixed_points.to_string(),
+        evaluation: root_evaluation_item(&check.evaluation),
+        holds: check.holds,
+    }
+}
+
+fn cyclic_sieving_report_item(report: &CyclicSievingReport) -> CyclicSievingReportItem {
+    CyclicSievingReportItem {
+        order: report.order,
+        polynomial: normalize_bigint_polynomial(report.coefficients.clone()).display,
+        fixed_counts: report
+            .fixed_counts
+            .as_ref()
+            .map(|counts| bigint_strings(counts)),
+        holds: report.holds,
+        evaluations: report
+            .evaluations
+            .iter()
+            .map(root_evaluation_item)
+            .collect(),
+        checks: report.checks.iter().map(cyclic_power_check_item).collect(),
+    }
+}
+
+fn cyclic_sequence_item_response(
+    item: &CyclicSievingSequenceItem,
+) -> CyclicSievingSequenceItemResponse {
+    CyclicSievingSequenceItemResponse {
+        row: item.row,
+        index: item.index,
+        polynomial: normalize_bigint_polynomial(item.coefficients.clone()).display,
+        candidate_orders: item
+            .candidate_orders
+            .iter()
+            .map(cyclic_sieving_report_item)
+            .collect(),
+    }
 }
 
 fn collect_polynomials_or_errors(
@@ -1859,6 +2187,41 @@ impl PolynomialToolsServer {
     }
 
     #[tool(
+        description = "Check Newton inequalities and Kurtz's sufficient real-rootedness criterion for each polynomial."
+    )]
+    pub fn coefficient_tests(
+        &self,
+        Parameters(input): Parameters<BigIntPolynomialBatchInput>,
+    ) -> Result<Json<CoefficientTestsResponse>, McpError> {
+        let batch = parse_bigint_batch(&input)?;
+        let items = batch
+            .into_iter()
+            .enumerate()
+            .map(|(index, item)| coefficient_tests_item(index, item))
+            .collect();
+        Ok(Json(CoefficientTestsResponse { items }))
+    }
+
+    #[tool(
+        description = "Check named Ehrhart h*-vector inequalities, including Stanley, Hibi, Balletti-Higashitani, and Stapledon-derived checks."
+    )]
+    pub fn hstar_inequalities(
+        &self,
+        Parameters(input): Parameters<HStarInequalitiesRequest>,
+    ) -> Result<Json<HStarInequalitiesResponse>, McpError> {
+        let batch = parse_bigint_batch(&BigIntPolynomialBatchInput {
+            polynomials: input.polynomials,
+            text: input.text,
+        })?;
+        let items = batch
+            .into_iter()
+            .enumerate()
+            .map(|(index, item)| hstar_inequalities_item(index, item, input.dimension))
+            .collect();
+        Ok(Json(HStarInequalitiesResponse { items }))
+    }
+
+    #[tool(
         description = "Check strict and weak interlacing for a pair of polynomials with arbitrary-size integer coefficients."
     )]
     pub fn check_interlacing_pair(
@@ -2257,6 +2620,91 @@ impl PolynomialToolsServer {
     }
 
     #[tool(
+        description = "Profile or check a cyclic sieving polynomial for one cyclic group order using exact cyclotomic arithmetic."
+    )]
+    pub fn cyclic_sieving(
+        &self,
+        Parameters(input): Parameters<CyclicSievingRequest>,
+    ) -> Result<Json<CyclicSievingResponse>, McpError> {
+        if input.order == 0 {
+            return Err(invalid_params("`order` must be positive"));
+        }
+        let polynomial = normalize_bigint_polynomial(parse_required_bigint_polynomial(
+            &input.polynomial,
+            "polynomial",
+        )?);
+        let fixed_counts = input
+            .fixed_counts
+            .as_ref()
+            .map(|counts| parse_bigint_coefficients(counts))
+            .transpose()?;
+        let report = cyclic_sieving_report_bigint(
+            &polynomial.coefficients,
+            input.order,
+            fixed_counts.as_deref(),
+        )
+        .map_err(invalid_params)?;
+        Ok(Json(CyclicSievingResponse {
+            report: cyclic_sieving_report_item(&report),
+        }))
+    }
+
+    #[tool(
+        description = "For a polynomial sequence P_n(q), profile candidate cyclic sieving group orders n-2,n-1,n,n+1,n+2,n+3 by default."
+    )]
+    pub fn cyclic_sieving_sequence(
+        &self,
+        Parameters(input): Parameters<CyclicSievingSequenceRequest>,
+    ) -> Result<Json<CyclicSievingSequenceResponse>, McpError> {
+        let first_index = input.first_index.unwrap_or(0);
+        let offsets = input.offsets.unwrap_or_else(|| vec![-2, -1, 0, 1, 2, 3]);
+        if offsets.is_empty() {
+            return Err(invalid_params("`offsets` may not be empty"));
+        }
+        let batch = parse_bigint_batch(&BigIntPolynomialBatchInput {
+            polynomials: input.polynomials,
+            text: input.text,
+        })?;
+        let mut polynomials = Vec::new();
+        for (index, item) in batch.into_iter().enumerate() {
+            match item {
+                Ok(polynomial) => polynomials.push(polynomial.coefficients),
+                Err(error) => {
+                    return Err(invalid_params(format!("polynomial {index}: {error}")));
+                }
+            }
+        }
+        let mut fixed_counts = BTreeMap::new();
+        for item in input.fixed_counts.unwrap_or_default() {
+            if item.order == 0 {
+                return Err(invalid_params("fixed-count order must be positive"));
+            }
+            let counts = parse_bigint_coefficients(&item.counts)?;
+            if counts.len() != item.order {
+                return Err(invalid_params(format!(
+                    "fixed counts for index {} order {}: expected {} counts, got {}",
+                    item.index,
+                    item.order,
+                    item.order,
+                    counts.len()
+                )));
+            }
+            fixed_counts.insert((item.index, item.order), counts);
+        }
+        let reports = cyclic_sieving_sequence_reports_bigint(
+            &polynomials,
+            first_index,
+            &offsets,
+            &fixed_counts,
+        );
+        Ok(Json(CyclicSievingSequenceResponse {
+            first_index,
+            offsets,
+            items: reports.iter().map(cyclic_sequence_item_response).collect(),
+        }))
+    }
+
+    #[tool(
         description = "Analyze symmetric decomposition, R-transform, interlacing checks, and magic-basis coordinates."
     )]
     pub fn analyze_decomposition(
@@ -2489,6 +2937,87 @@ mod tests {
         );
         let value = serde_json::to_value(response).unwrap();
         assert_eq!(value["items"][0]["polynomial"]["coefficients"][0], large);
+    }
+
+    #[test]
+    fn coefficient_tests_report_kurtz() {
+        let server = PolynomialToolsServer::new();
+        let Json(response) = server
+            .coefficient_tests(Parameters(BigIntPolynomialBatchInput {
+                polynomials: Some(vec![bigint_coeffs(&["1000", "1110", "111", "1"])]),
+                text: None,
+            }))
+            .unwrap();
+        let item = &response.items[0];
+        assert!(item.ok);
+        assert_eq!(item.kurtz.as_ref().unwrap().holds, true);
+        assert_eq!(item.kurtz.as_ref().unwrap().implies_real_rooted, true);
+    }
+
+    #[test]
+    fn hstar_inequalities_report_named_failures() {
+        let server = PolynomialToolsServer::new();
+        let Json(response) = server
+            .hstar_inequalities(Parameters(HStarInequalitiesRequest {
+                polynomials: Some(vec![bigint_coeffs(&["1", "20", "1", "0"])]),
+                text: None,
+                dimension: Some(3),
+            }))
+            .unwrap();
+        let item = &response.items[0];
+        assert!(item.ok);
+        assert_eq!(item.all_applicable_hold, Some(false));
+        assert!(item.checks.iter().any(|check| {
+            check.family == "Balletti-Higashitani" && check.applicable && !check.holds
+        }));
+    }
+
+    #[test]
+    fn cyclic_sieving_checks_order_two() {
+        let server = PolynomialToolsServer::new();
+        let Json(response) = server
+            .cyclic_sieving(Parameters(CyclicSievingRequest {
+                polynomial: bigint_coeffs(&["1", "1"]),
+                order: 2,
+                fixed_counts: Some(vec![1.into(), 0.into()]),
+            }))
+            .unwrap();
+        assert_eq!(response.report.holds, Some(false));
+
+        let Json(response) = server
+            .cyclic_sieving(Parameters(CyclicSievingRequest {
+                polynomial: bigint_coeffs(&["1", "1"]),
+                order: 2,
+                fixed_counts: Some(vec![2.into(), 0.into()]),
+            }))
+            .unwrap();
+        assert_eq!(response.report.holds, Some(true));
+    }
+
+    #[test]
+    fn cyclic_sieving_sequence_profiles_default_offsets() {
+        let server = PolynomialToolsServer::new();
+        let Json(response) = server
+            .cyclic_sieving_sequence(Parameters(CyclicSievingSequenceRequest {
+                polynomials: Some(vec![
+                    bigint_coeffs(&["1", "1"]),
+                    bigint_coeffs(&["1", "1", "1"]),
+                ]),
+                text: None,
+                first_index: Some(2),
+                offsets: None,
+                fixed_counts: None,
+            }))
+            .unwrap();
+        assert_eq!(response.items[0].index, 2);
+        assert!(response.items[0]
+            .candidate_orders
+            .iter()
+            .any(|report| report.order == 2));
+        assert!(response.items[0]
+            .candidate_orders
+            .iter()
+            .any(|report| report.order == 5));
     }
 
     #[test]

@@ -125,8 +125,10 @@ A text file `polys.txt` might look like:
 ```
 
 The commands `interlacing`, `interlacing-profile`, `properties`,
-`gamma-expansion`, `family-check`, `sequence`, `hstar-to-ehrhart`, and
-`ehrhart-to-hstar` also accept `--json` for machine-readable output.
+`gamma-expansion`, `family-check`, `sequence`, `coefficient-tests`,
+`hstar-to-ehrhart`, `ehrhart-to-hstar`, `hstar-inequalities`,
+`cyclic-sieving`, and `cyclic-sieving-sequence` also accept `--json` for
+machine-readable output.
 Large integer coefficients in JSON output are serialized as strings.
 
 The exact property commands `real-rooted`, `interlacing`,
@@ -211,6 +213,16 @@ Example output:
 1 + 11t + 11t^2 + t^3: gamma [1, 8]; expansion: (1+t)^3 + 8 t (1+t)
 ```
 
+### Coefficient-only real-rootedness tests
+
+```sh
+polytool coefficient-tests < polys.txt
+polytool coefficient-tests --json < polys.txt
+```
+
+This reports Newton inequalities and Kurtz's sufficient condition.  When the
+Kurtz condition holds, the polynomial has distinct real roots.
+
 ### Generate standard sequences
 
 ```sh
@@ -221,6 +233,42 @@ polytool sequence narayana 5 --json
 Supported sequence names are `eulerian`, `narayana`, `type-b-eulerian`,
 `chebyshev-t`, `chebyshev-u`, and `hermite`.
 Generated coefficients use arbitrary-size integers.
+
+### Check Family H PF/Jensen pencils
+
+```sh
+polytool pf-pencil --case A036969 --degree 5
+polytool pf-pencil --case A036969 --min-degree 1 --max-degree 10 --json
+polytool pf-pencil --all-family-h --max-degree 8 --json
+```
+
+`pf-pencil` builds the fixed Family H coefficient actions used in the
+`real-rooted-oeis` proof work.  For an old-row degree `d`, it forms the
+integer-cleared Jensen endpoint kernels
+
+```text
+J_alpha,d(t) = sum_k binomial(d,k) alpha(k,d) t^k
+t J_beta,d(t) = t sum_k binomial(d,k) beta(k,d) t^k
+```
+
+and checks exact real-rootedness of both endpoints and of the finite positive
+pencil specializations `J_alpha,d + lambda * t J_beta,d`.  The default
+lambda list is `0,1,10,100`; override it with `--lambdas 0,2,50`.
+
+Supported built-in cases are:
+
+```text
+A036969 A071951 A080248 A156289 A160562 A269945
+A166960 A166961 A166962 A166972 A191935
+A371081 A371259 A390433 A198204
+```
+
+JSON output uses schema `polynomial-tools.pf-pencil.v1`.  Coefficients and
+lambda values are serialized as strings.  Each item reports the case id,
+degree, alpha/beta labels, common denominator, endpoint coefficient vectors,
+endpoint real-rootedness booleans, lambda checks, and `finite_evidence_ok`.
+Common-factor/residual extraction is not yet implemented; the full endpoint
+polynomials are reported instead.
 
 ### Check a family in one pass
 
@@ -379,6 +427,40 @@ echo "1, 2, 2" | polytool ehrhart-to-hstar
 For `hstar-to-ehrhart`, h\*-vector entries may be arbitrary-size integers.
 For `ehrhart-to-hstar`, input coefficients may be exact rationals and the
 resulting h\*-vector entries are arbitrary-size integers.
+
+Check named h\*-vector inequalities:
+
+```sh
+echo "1, 4, 1, 0" | polytool hstar-inequalities --dimension 3
+echo "1, 20, 1, 0" | polytool hstar-inequalities --dimension 3 --json
+```
+
+The report includes basic Ehrhart h\*-conditions, Stanley and Hibi inequalities,
+the Balletti--Higashitani universal Scott inequality when applicable, and
+Stapledon-derived nonnegativity checks.  Failures include the named inequality
+and a reference.
+
+### Cyclic sieving checks
+
+For one polynomial and one cyclic group order:
+
+```sh
+echo "1, 1" | polytool cyclic-sieving --order 2 --fixed-counts "2,0"
+```
+
+Without fixed counts, the command profiles exact root-of-unity evaluations.  For
+a sequence, the default candidate orders for row index `n` are
+`n-2,n-1,n,n+1,n+2,n+3`:
+
+```sh
+polytool cyclic-sieving-sequence --first-index 2 < polys.txt
+```
+
+Optional fixed-count files use lines of the form:
+
+```text
+5 7: 10, 0, 2, 0, 2, 0, 0
+```
 
 ### Stapledon decomposition
 
