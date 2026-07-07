@@ -9,7 +9,8 @@ examples on `symmetricfunctions.com`.
   standard and semistandard generators, reading words, descents, RSK, promotion,
   evacuation, crystals, charge, and key-tableau helpers.
 - `core/src/ssaf.rs` contains semi-standard augmented fillings, including atom
-  fillings, key fillings, permuted basements, and Mason's SSYT-to-SSAF map.
+  fillings, key fillings, lock fillings, permuted basements, Macdonald filling
+  statistics, and Mason's SSYT-to-SSAF map.
 - `multipoly/src/flagged_schur.rs` contains flagged Schur and flagged skew
   Schur tableau generators, row-interval flags, and polynomial weight
   enumerators.
@@ -21,6 +22,12 @@ examples on `symmetricfunctions.com`.
   are implemented, missing, or need definition-level verification.
 - `multipoly/src/key_polynomial.rs` computes key polynomials and tests them
   against the SSAF weight enumerator.
+- `multipoly/src/nonsymmetric_macdonald.rs` contains the full `q,t`
+  permuted-basement filling formula, plus the `q = 0` operator-side
+  Hall-Littlewood specialization.
+- `multipoly/src/slide_polynomial.rs`, `multipoly/src/lock_polynomial.rs`, and
+  `multipoly/src/kohnert.rs` contain slide/glide polynomials, finite lock
+  polynomials, and Kohnert/Lascoux weight enumerators.
 
 When adding website examples, prefer a small checked Rust example under the
 relevant crate's `examples/` directory and cite it from TeX with a short

@@ -5,6 +5,10 @@
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
+use sym_poly_core::Ring;
+
+use crate::multipoly::MultiPoly;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Cell {
     pub col: usize,
@@ -202,6 +206,25 @@ pub fn kohnert_weight_counts(
     Ok(counts)
 }
 
+/// Weight enumerator of the Kohnert diagrams generated from an initial diagram.
+pub fn kohnert_polynomial<C: Ring>(
+    initial: &Diagram,
+    max_diagrams: usize,
+) -> Result<MultiPoly<C>, String> {
+    let num_vars = initial.iter().map(|cell| cell.row).max().unwrap_or(0);
+    kohnert_polynomial_with_num_vars(initial, max_diagrams, num_vars)
+}
+
+/// Weight enumerator of the Kohnert diagrams generated from the key diagram
+/// of a weak composition.
+pub fn kohnert_polynomial_for_composition<C: Ring>(
+    alpha: &[u32],
+    max_diagrams: usize,
+) -> Result<MultiPoly<C>, String> {
+    let initial = key_diagram(alpha);
+    kohnert_polynomial_with_num_vars(&initial, max_diagrams, alpha.len())
+}
+
 /// All one-step K-Kohnert moves.
 ///
 /// Rows are indexed from bottom to top, so a move lowers a selected rightmost
@@ -313,6 +336,66 @@ pub fn k_kohnert_weight_counts(
             .or_insert(0) += 1;
     }
     Ok(counts)
+}
+
+/// Lascoux polynomial from K-Kohnert diagrams, with `beta` marking ghost cells.
+pub fn lascoux_polynomial<C: Ring>(
+    alpha: &[u32],
+    beta: &C,
+    max_diagrams: usize,
+) -> Result<MultiPoly<C>, String> {
+    let num_vars = alpha.len();
+    let mut terms: BTreeMap<Vec<u32>, C> = BTreeMap::new();
+
+    for diagram in k_kohnert_diagrams_for_composition(alpha, max_diagrams)? {
+        let coeff = ring_power(beta, diagram.ghost_count());
+        if coeff.is_zero() {
+            continue;
+        }
+        let weight = ghost_diagram_weight_with_num_vars(&diagram, num_vars);
+        let entry = terms.entry(weight).or_insert_with(C::zero);
+        *entry = entry.clone() + coeff;
+    }
+
+    Ok(MultiPoly::from_terms(num_vars, terms))
+}
+
+fn kohnert_polynomial_with_num_vars<C: Ring>(
+    initial: &Diagram,
+    max_diagrams: usize,
+    num_vars: usize,
+) -> Result<MultiPoly<C>, String> {
+    let mut terms: BTreeMap<Vec<u32>, C> = BTreeMap::new();
+    for diagram in kohnert_diagrams(initial, max_diagrams)? {
+        let weight = diagram_weight_with_num_vars(&diagram, num_vars);
+        let entry = terms.entry(weight).or_insert_with(C::zero);
+        *entry = entry.clone() + C::one();
+    }
+    Ok(MultiPoly::from_terms(num_vars, terms))
+}
+
+fn diagram_weight_with_num_vars(diagram: &Diagram, num_vars: usize) -> Vec<u32> {
+    let mut weight = vec![0; num_vars];
+    for cell in diagram {
+        assert!(
+            cell.row <= num_vars,
+            "diagram row exceeds requested number of variables"
+        );
+        weight[cell.row - 1] += 1;
+    }
+    weight
+}
+
+fn ghost_diagram_weight_with_num_vars(diagram: &GhostDiagram, num_vars: usize) -> Vec<u32> {
+    diagram_weight_with_num_vars(&diagram.occupied(), num_vars)
+}
+
+fn ring_power<C: Ring>(base: &C, exponent: usize) -> C {
+    let mut result = C::one();
+    for _ in 0..exponent {
+        result = result * base.clone();
+    }
+    result
 }
 
 /// Assaf's column pairing for ordinary, unlabeled rectification.
@@ -550,6 +633,7 @@ fn trim_trailing_zeroes(values: &mut Vec<u32>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::key_polynomial::key_polynomial;
 
     fn weights(diagrams: &[Diagram]) -> BTreeMap<Vec<u32>, usize> {
         let mut result = BTreeMap::new();
@@ -587,6 +671,26 @@ mod tests {
     }
 
     #[test]
+    fn test_kohnert_polynomial_matches_key_polynomial() {
+        for alpha in &[vec![0, 2], vec![1, 0, 2], vec![2, 1, 0]] {
+            let kohnert: MultiPoly<i64> = kohnert_polynomial_for_composition(alpha, 1_000).unwrap();
+            let key: MultiPoly<i64> = key_polynomial(alpha);
+            assert_eq!(kohnert, key, "Kohnert rule mismatch for {alpha:?}");
+        }
+    }
+
+    #[test]
+    fn test_kohnert_polynomial_from_diagram_uses_fixed_row_count() {
+        let initial = key_diagram(&[0, 2]);
+        let poly: MultiPoly<i64> = kohnert_polynomial(&initial, 10).unwrap();
+
+        assert_eq!(poly.num_vars(), 2);
+        assert_eq!(poly.coefficient(&[0, 2]), 1);
+        assert_eq!(poly.coefficient(&[1, 1]), 1);
+        assert_eq!(poly.coefficient(&[2, 0]), 1);
+    }
+
+    #[test]
     fn test_k_kohnert_lascoux_site_example() {
         let counts = k_kohnert_weight_counts(&[0, 2, 1], 100).unwrap();
         let expected = BTreeMap::from([
@@ -602,6 +706,26 @@ mod tests {
         ]);
         assert_eq!(counts, expected);
         assert_eq!(counts.values().sum::<usize>(), 11);
+    }
+
+    #[test]
+    fn test_lascoux_beta_zero_is_kohnert_polynomial() {
+        let alpha = [0, 2, 1];
+        let lascoux: MultiPoly<i64> = lascoux_polynomial(&alpha, &0, 100).unwrap();
+        let kohnert: MultiPoly<i64> = kohnert_polynomial_for_composition(&alpha, 100).unwrap();
+
+        assert_eq!(lascoux, kohnert);
+    }
+
+    #[test]
+    fn test_lascoux_site_example_coefficients() {
+        let lascoux: MultiPoly<i64> = lascoux_polynomial(&[0, 2, 1], &2, 100).unwrap();
+
+        assert_eq!(lascoux.coefficient(&[0, 2, 1]), 1);
+        assert_eq!(lascoux.coefficient(&[1, 2, 1]), 4);
+        assert_eq!(lascoux.coefficient(&[2, 1, 1]), 4);
+        assert_eq!(lascoux.coefficient(&[2, 2, 0]), 2);
+        assert_eq!(lascoux.coefficient(&[2, 2, 1]), 4);
     }
 
     #[test]

@@ -1,6 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use sym_poly_multipoly::{ghost_diagram_weight, k_kohnert_weight_counts, Cell, GhostDiagram};
+use sym_poly_multipoly::{
+    ghost_diagram_weight, k_kohnert_weight_counts, lascoux_polynomial, Cell, GhostDiagram,
+    MultiPoly,
+};
 
 fn format_monomial(weight: &[u32]) -> String {
     let factors = weight
@@ -43,6 +46,14 @@ fn main() {
     ]);
     assert_eq!(counts, expected);
 
+    let lascoux_at_two: MultiPoly<i64> =
+        lascoux_polynomial(&alpha, &2, 100).expect("small example should fit cap");
+    assert_eq!(lascoux_at_two.coefficient(&[0, 2, 1]), 1);
+    assert_eq!(lascoux_at_two.coefficient(&[1, 2, 1]), 4);
+    assert_eq!(lascoux_at_two.coefficient(&[2, 1, 1]), 4);
+    assert_eq!(lascoux_at_two.coefficient(&[2, 2, 0]), 2);
+    assert_eq!(lascoux_at_two.coefficient(&[2, 2, 1]), 4);
+
     println!("K-Kohnert weights for alpha=(0,2,1):");
     for ((ghosts, weight), count) in counts {
         println!(
@@ -72,4 +83,5 @@ fn main() {
         "Pan--Yu bijection example: beta^2 * {} on both sides",
         format_monomial(&[2, 2, 1])
     );
+    println!("Lascoux polynomial at beta=2: {lascoux_at_two}");
 }

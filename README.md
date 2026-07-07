@@ -12,7 +12,8 @@ experiments, checked examples, and `symmetricfunctions.com` support.
   exact arithmetic helpers.
 - `sym-poly/sym`, `sym-poly/qsym`, and `sym-poly/multipoly`: symmetric,
   quasisymmetric, and multivariate polynomial code, including Schur,
-  quasisymmetric Schur, key, atom, slide, and Schubert polynomial routines.
+  quasisymmetric Schur, key, atom, slide/glide, lock, Kohnert/Lascoux,
+  Schubert, and nonsymmetric Macdonald filling-formula routines.
 - `polynomial-tools`: exact univariate polynomial tools for real-rootedness,
   interlacing, gamma-positivity, recurrence searches, and Ehrhart/h*-vectors.
 - `combpoly`: command-line exploration of combinatorial polynomials from

@@ -1,4 +1,4 @@
-//! Fundamental slide polynomials.
+//! Slide and glide polynomials.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -68,6 +68,31 @@ pub fn fundamental_slide_polynomial<C: Ring>(alpha: &[u32]) -> MultiPoly<C> {
     }
 
     result
+}
+
+/// Compute the glide polynomial indexed by `alpha`.
+///
+/// The coefficient of a monomial is a polynomial in `beta`: each red entry in
+/// a weak komposition contributes one factor of `beta`.  Setting `beta = 0`
+/// recovers the fundamental slide polynomial.
+pub fn glide_polynomial<C: Ring>(alpha: &[u32], beta: &C) -> MultiPoly<C> {
+    let n = alpha.len();
+    if n == 0 {
+        return MultiPoly::constant(0, C::one());
+    }
+
+    let colored_glides = colored_glides(alpha);
+    let mut terms: BTreeMap<Vec<u32>, C> = BTreeMap::new();
+    for glide in colored_glides {
+        let coeff = ring_power(beta, glide.excess());
+        if coeff.is_zero() {
+            continue;
+        }
+        let entry = terms.entry(glide.entries).or_insert_with(C::zero);
+        *entry = entry.clone() + coeff;
+    }
+
+    MultiPoly::from_terms(n, terms)
 }
 
 /// Expand a sparse polynomial in the fundamental slide basis.
@@ -183,6 +208,164 @@ fn is_refinement(flat_beta: &[u32], flat_alpha: &[u32]) -> bool {
     i == flat_beta.len() && j == flat_alpha.len() && running == 0
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+struct ColoredGlide {
+    entries: Vec<u32>,
+    red: Vec<bool>,
+}
+
+impl ColoredGlide {
+    fn excess(&self) -> usize {
+        self.red.iter().filter(|&&is_red| is_red).count()
+    }
+}
+
+fn colored_glides(alpha: &[u32]) -> BTreeSet<ColoredGlide> {
+    let n = alpha.len();
+    let nonzero_positions = alpha
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, &part)| (part > 0).then_some(idx))
+        .collect::<Vec<_>>();
+
+    if nonzero_positions.is_empty() {
+        return BTreeSet::from([ColoredGlide {
+            entries: vec![0; n],
+            red: vec![false; n],
+        }]);
+    }
+
+    let mut entries = vec![0u32; n];
+    let mut red = vec![false; n];
+    let mut result = BTreeSet::new();
+    collect_colored_glides(
+        alpha,
+        &nonzero_positions,
+        0,
+        0,
+        &mut entries,
+        &mut red,
+        &mut result,
+    );
+    result
+}
+
+fn collect_colored_glides(
+    alpha: &[u32],
+    nonzero_positions: &[usize],
+    block_idx: usize,
+    start: usize,
+    entries: &mut [u32],
+    red: &mut [bool],
+    result: &mut BTreeSet<ColoredGlide>,
+) {
+    if block_idx == nonzero_positions.len() {
+        result.insert(ColoredGlide {
+            entries: entries.to_vec(),
+            red: red.to_vec(),
+        });
+        return;
+    }
+
+    let target_pos = nonzero_positions[block_idx];
+    let target_part = alpha[target_pos];
+    for end_exclusive in start + 1..=target_pos + 1 {
+        let len = end_exclusive - start;
+        for (segment_entries, segment_red) in colored_glide_segments(len, target_part) {
+            entries[start..end_exclusive].copy_from_slice(&segment_entries);
+            red[start..end_exclusive].copy_from_slice(&segment_red);
+
+            collect_colored_glides(
+                alpha,
+                nonzero_positions,
+                block_idx + 1,
+                end_exclusive,
+                entries,
+                red,
+                result,
+            );
+
+            for idx in start..end_exclusive {
+                entries[idx] = 0;
+                red[idx] = false;
+            }
+        }
+    }
+}
+
+fn colored_glide_segments(len: usize, target_part: u32) -> Vec<(Vec<u32>, Vec<bool>)> {
+    let mut segments = Vec::new();
+    for excess in 0..=len {
+        let Some(total) = target_part.checked_add(excess as u32) else {
+            continue;
+        };
+        for weak in Composition::weak_integer_compositions(total, len) {
+            let entries = weak.parts().to_vec();
+            let positive_positions = entries
+                .iter()
+                .enumerate()
+                .filter_map(|(idx, &entry)| (entry > 0).then_some(idx))
+                .collect::<Vec<_>>();
+            if positive_positions.is_empty() || excess > positive_positions.len().saturating_sub(1)
+            {
+                continue;
+            }
+
+            let first_positive = positive_positions[0];
+            for red_positions in combinations(&positive_positions[1..], excess) {
+                let mut red = vec![false; len];
+                for pos in red_positions {
+                    red[pos] = true;
+                }
+                red[first_positive] = false;
+                segments.push((entries.clone(), red));
+            }
+        }
+    }
+    segments
+}
+
+fn combinations(items: &[usize], size: usize) -> Vec<Vec<usize>> {
+    if size == 0 {
+        return vec![Vec::new()];
+    }
+    if size > items.len() {
+        return Vec::new();
+    }
+
+    let mut result = Vec::new();
+    let mut current = Vec::new();
+    collect_combinations(items, size, 0, &mut current, &mut result);
+    result
+}
+
+fn collect_combinations(
+    items: &[usize],
+    size: usize,
+    start: usize,
+    current: &mut Vec<usize>,
+    result: &mut Vec<Vec<usize>>,
+) {
+    if current.len() == size {
+        result.push(current.clone());
+        return;
+    }
+    let remaining = size - current.len();
+    for idx in start..=items.len() - remaining {
+        current.push(items[idx]);
+        collect_combinations(items, size, idx + 1, current, result);
+        current.pop();
+    }
+}
+
+fn ring_power<C: Ring>(base: &C, exponent: usize) -> C {
+    let mut result = C::one();
+    for _ in 0..exponent {
+        result = result * base.clone();
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -271,5 +454,49 @@ mod tests {
     #[should_panic(expected = "total degree overflow")]
     fn test_slide_rejects_weight_overflow() {
         let _: MultiPoly<i64> = monomial_slide_polynomial(&[u32::MAX, 1]);
+    }
+
+    #[test]
+    fn test_glide_beta_zero_is_fundamental_slide() {
+        for alpha in &[
+            vec![0, 0, 0],
+            vec![1, 0, 2],
+            vec![0, 2, 0, 3],
+            vec![2, 1, 0],
+        ] {
+            let glide: MultiPoly<i64> = glide_polynomial(alpha, &0);
+            let slide: MultiPoly<i64> = fundamental_slide_polynomial(alpha);
+            assert_eq!(glide, slide, "glide beta=0 mismatch for {alpha:?}");
+        }
+    }
+
+    #[test]
+    fn test_glide_small_beta_terms() {
+        let glide: MultiPoly<i64> = glide_polynomial(&[1, 0, 2], &2);
+
+        assert_eq!(glide.coefficient(&[1, 0, 2]), 1);
+        assert_eq!(glide.coefficient(&[1, 1, 1]), 1);
+        assert_eq!(glide.coefficient(&[1, 2, 0]), 1);
+        assert_eq!(glide.coefficient(&[1, 1, 2]), 2);
+        assert_eq!(glide.coefficient(&[1, 2, 1]), 2);
+        assert_eq!(glide.terms().len(), 5);
+    }
+
+    #[test]
+    fn test_colored_glides_are_deduplicated() {
+        let glides = colored_glides(&[1, 0, 2]);
+        let underlying = glides
+            .iter()
+            .map(|glide| glide.entries.clone())
+            .collect::<BTreeSet<_>>();
+
+        assert!(underlying.contains(&vec![1, 2, 0]));
+        assert_eq!(
+            glides
+                .iter()
+                .filter(|glide| glide.entries == vec![1, 2, 0])
+                .count(),
+            1
+        );
     }
 }

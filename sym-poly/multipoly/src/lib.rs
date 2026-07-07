@@ -14,10 +14,12 @@
 //! - [`borodin_wheeler`] — local weights for the Borodin--Wheeler vertex model
 //! - [`flagged_schur`] — flagged Schur and flagged skew Schur polynomials
 //! - [`kohnert`] — Kohnert diagrams and Assaf Yamanouchi tests
+//! - [`lock_polynomial`] — finite lock polynomials from lock fillings
 //! - [`multiline_queue`] — multiline queues and Ferrari--Martin labelings
-//! - [`nonsymmetric_macdonald`] — operator-side `q = 0` Macdonald / Hall-Littlewood
+//! - [`nonsymmetric_macdonald`] — nonsymmetric Macdonald filling formulas
+//!   and the operator-side `q = 0` Hall-Littlewood specialization
 //! - [`schubert_polynomial`] — Schubert polynomials via divided differences
-//! - [`slide_polynomial`] — monomial and fundamental slide polynomials
+//! - [`slide_polynomial`] — monomial slide, fundamental slide, and glide polynomials
 
 pub mod atom_polynomial;
 pub mod basis;
@@ -29,6 +31,7 @@ pub mod groebner;
 pub mod indexed_variables;
 pub mod key_polynomial;
 pub mod kohnert;
+pub mod lock_polynomial;
 pub mod lorentzian;
 pub mod modular_groebner;
 pub mod monomial_order;
@@ -78,10 +81,12 @@ pub use kohnert::{
     canonical_labeling, cells_in_col, column_pairing, diagram_from_labeling, diagram_weight,
     format_diagram, ghost_diagram_weight, is_yamanouchi, k_kohnert_diagrams,
     k_kohnert_diagrams_for_composition, k_kohnert_moves, k_kohnert_weight_counts, key_diagram,
-    kohnert_diagrams, kohnert_diagrams_for_composition, kohnert_moves, kohnert_weight_counts,
-    label_pairing, max_col, rectify_labeled, rectify_labeled_column_star, rothe_diagram,
-    sorted_rows_in_col, yamanouchi_diagrams, Cell, Diagram, GhostDiagram, Labeling,
+    kohnert_diagrams, kohnert_diagrams_for_composition, kohnert_moves, kohnert_polynomial,
+    kohnert_polynomial_for_composition, kohnert_weight_counts, label_pairing, lascoux_polynomial,
+    max_col, rectify_labeled, rectify_labeled_column_star, rothe_diagram, sorted_rows_in_col,
+    yamanouchi_diagrams, Cell, Diagram, GhostDiagram, Labeling,
 };
+pub use lock_polynomial::lock_polynomial;
 pub use lorentzian::{
     is_lorentzian, is_lorentzian_bool, is_m_convex, is_normalized_lorentzian,
     is_normalized_lorentzian_bool, is_strictly_lorentzian, is_strictly_normalized_lorentzian,
@@ -107,7 +112,10 @@ pub use multiline_queue::{
 };
 pub use multipoly::MultiPoly;
 pub use multipoly_function::MultiPolyFunction;
-pub use nonsymmetric_macdonald::{nonsymmetric_hall_littlewood, nonsymmetric_macdonald_q0};
+pub use nonsymmetric_macdonald::{
+    nonsymmetric_hall_littlewood, nonsymmetric_macdonald_filling_formula,
+    nonsymmetric_macdonald_q0, permuted_basement_macdonald_filling_formula,
+};
 pub use operators::{
     partial_i, partial_word, pi_i, pi_word, theta_i, theta_word, tpi_i, tpi_word, ttheta_i,
     ttheta_word,
@@ -125,6 +133,7 @@ pub use schubert_polynomial::{
     schubert_to_monomial,
 };
 pub use slide_polynomial::{
-    fundamental_slide_expansion, fundamental_slide_polynomial, monomial_slide_polynomial,
+    fundamental_slide_expansion, fundamental_slide_polynomial, glide_polynomial,
+    monomial_slide_polynomial,
 };
 pub use symmetric_polynomials::{elementary_symmetric_generators, elementary_symmetric_polynomial};

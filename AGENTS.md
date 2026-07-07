@@ -53,7 +53,11 @@ over `Ring` coefficients (i64, BigInt, Ratio<BigInt>, Ratio<i64>).
 **sym-poly/multipoly/** — Multivariate polynomials:
 - `MultiPoly<C>` sparse multivariate polynomial type
 - Divided difference operators ∂_i and π_i (Demazure)
-- Key polynomials κ_α via operator recursion
+- Key, atom, slide/glide, finite lock, Kohnert, Lascoux, and Schubert
+  polynomial routines
+- Nonsymmetric Hall-Littlewood `E_alpha(x; 0,t)` by operators, and full `q,t`
+  permuted-basement nonsymmetric Macdonald polynomials by the SSAF filling
+  formula
 
 ### polynomial-tools/
 Univariate polynomial toolkit for combinatorial research. Uses primitive
@@ -196,9 +200,12 @@ Overleaf companion: `Rook-Eulerian-Polynomials-and-permutation-ideals/`
 - [ ] NCSym and Hopf algebra duality with QSym
 
 ### sym-poly/multipoly
-- [ ] Macdonald E-polynomials (needs Ring impl for Polynomial<Ratio<BigInt>>)
-- [ ] Permuted basement Macdonalds
-- [ ] Schubert polynomials via divided differences
+- [ ] Operator recursion for full `q,t` nonsymmetric Macdonald polynomials
+      (the filling formula is implemented)
+- [ ] Transition-basis support for glide/lock/Kohnert/Lascoux families where
+      the combinatorial transition matrices are tractable
+- [ ] Larger checked examples for permuted-basement Macdonalds, glide
+      polynomials, and Lascoux polynomials
 
 ## References
 - Stanley, EC2 for symmetric function foundations
