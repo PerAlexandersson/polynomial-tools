@@ -789,6 +789,7 @@ footer {
   1, 11, 11, 1            (comma-separated coefficients, ascending degree)
   1 11 11 1               (space-separated)
   [1, 11, 11, 1]          (bracketed)
+  {{1, 1}, {1, 4, 1}}     (Mathematica/JSON-style rows)
   1 + 11t + 11t^2 + t^3   (expanded, any single variable)
 
 Lines starting with # are ignored."></textarea>
@@ -1089,8 +1090,103 @@ function setResult(html) {
   document.getElementById('results-' + activeTab).innerHTML = html;
 }
 
+function stripCommentOnlyLines(raw) {
+  return String(raw || '')
+    .split(/\r?\n/)
+    .map(line => /^\s*#/.test(line) ? '' : line)
+    .join('\n');
+}
+
+function parseCoefficientListLiteral(raw) {
+  let s = stripCommentOnlyLines(raw).trim();
+  const assignment = s.match(/^[A-Za-z$][A-Za-z0-9$]*\s*:?=\s*([\s\S]*)$/);
+  if (assignment) s = assignment[1].trim();
+  s = s.replace(/;\s*$/, '').trim();
+  if (!s) return null;
+
+  let pos = 0;
+  const skipWs = () => {
+    while (pos < s.length && /\s/.test(s[pos])) pos++;
+  };
+
+  const parseInteger = () => {
+    skipWs();
+    const start = pos;
+    if (s[pos] === '+' || s[pos] === '-') pos++;
+    const digitsStart = pos;
+    while (pos < s.length && /\d/.test(s[pos])) pos++;
+    if (pos === digitsStart) {
+      pos = start;
+      return null;
+    }
+    return s.slice(start, pos);
+  };
+
+  const parseList = () => {
+    skipWs();
+    const open = s[pos];
+    if (open !== '{' && open !== '[') return null;
+    const close = open === '{' ? '}' : ']';
+    pos++;
+    const items = [];
+
+    while (true) {
+      skipWs();
+      if (s[pos] === close) {
+        pos++;
+        return items;
+      }
+
+      const item = (s[pos] === '{' || s[pos] === '[') ? parseList() : parseInteger();
+      if (item === null) return null;
+      items.push(item);
+
+      skipWs();
+      if (s[pos] === ',') {
+        pos++;
+        continue;
+      }
+      if (s[pos] === close) {
+        pos++;
+        return items;
+      }
+      return null;
+    }
+  };
+
+  const parsed = parseList();
+  if (parsed === null) return null;
+  skipWs();
+  if (pos !== s.length) return null;
+
+  const isInteger = item => typeof item === 'string';
+  const isIntegerRow = item => Array.isArray(item) && item.length > 0 && item.every(isInteger);
+  if (parsed.length > 0 && parsed.every(isInteger)) return [parsed];
+  if (parsed.length > 0 && parsed.every(isIntegerRow)) return parsed;
+  return null;
+}
+
+function parseLinewiseCoefficientLists(raw) {
+  const rows = [];
+  for (const line of String(raw || '').split(/\r?\n/)) {
+    let trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    trimmed = trimmed.replace(/[,;]\s*$/, '');
+    const parsed = parseCoefficientListLiteral(trimmed);
+    if (!parsed || parsed.length !== 1) return null;
+    rows.push(parsed[0]);
+  }
+  return rows.length ? rows : null;
+}
+
+function normalizePolynomialInput(raw) {
+  const rows = parseCoefficientListLiteral(raw) || parseLinewiseCoefficientLists(raw);
+  if (!rows) return raw;
+  return rows.map(row => row.join(', ')).join('\n');
+}
+
 function getInput() {
-  return document.getElementById('input').value;
+  return normalizePolynomialInput(document.getElementById('input').value);
 }
 
 function copyRec(btn, kind) {
