@@ -76,6 +76,10 @@ fn lists_tools_and_calls_properties() {
         .filter_map(|tool| tool["name"].as_str())
         .collect();
     assert!(tool_names.contains(&"polynomial_properties"));
+    assert!(tool_names.contains(&"coefficient_tests"));
+    assert!(tool_names.contains(&"hstar_inequalities"));
+    assert!(tool_names.contains(&"cyclic_sieving"));
+    assert!(tool_names.contains(&"cyclic_sieving_sequence"));
     assert!(tool_names.contains(&"check_polynomial_family"));
     assert!(tool_names.contains(&"find_recurrence"));
     let recurrence_schema = &tools_array

@@ -71,6 +71,67 @@ fn resultant_and_discriminant_accept_bigint_coefficients() {
 }
 
 #[test]
+fn pf_pencil_a036969_degree_five_reports_real_rooted_checks() {
+    let output = run_polytool(&["pf-pencil", "--case", "A036969", "--degree", "5"], "");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).expect("stdout is utf8");
+    assert!(stdout.contains("A036969 d=5"));
+    assert!(stdout.contains("J_alpha,d(t) = "));
+    assert!(stdout.contains("t J_beta,d(t) = "));
+    assert!(stdout.contains("lambda=0: "));
+    assert!(stdout.contains("lambda=1: "));
+    assert!(stdout.contains("lambda=10: "));
+    assert!(stdout.contains("lambda=100: "));
+    assert!(stdout.contains("finite evidence ok: true"));
+    assert!(!stdout.contains("NOT real-rooted"));
+}
+
+#[test]
+fn pf_pencil_all_family_h_json_reports_all_cases() {
+    let output = run_polytool(
+        &["pf-pencil", "--all-family-h", "--max-degree", "3", "--json"],
+        "",
+    );
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).expect("stdout is utf8");
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("valid pf-pencil JSON");
+    assert_eq!(json["schema"], "polynomial-tools.pf-pencil.v1");
+    assert_eq!(json["overall_finite_evidence_ok"], true);
+    let items = json["items"].as_array().expect("items is an array");
+    assert_eq!(items.len(), 45);
+
+    let cases = items
+        .iter()
+        .map(|item| item["case"].as_str().expect("case string"))
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(cases.len(), 15);
+    assert!(cases.contains("A036969"));
+    assert!(cases.contains("A198204"));
+}
+
+#[test]
+fn pf_pencil_denominator_clearing_cases_do_not_panic() {
+    let a080248 = run_polytool(&["pf-pencil", "--case", "A080248", "--degree", "5"], "");
+    assert!(a080248.status.success());
+    let stdout = String::from_utf8(a080248.stdout).expect("stdout is utf8");
+    assert!(stdout.contains("common denominator cleared: 2"));
+    assert!(stdout.contains("finite evidence ok: true"));
+
+    let a198204 = run_polytool(&["pf-pencil", "--case", "A198204", "--degree", "2"], "");
+    assert!(a198204.status.success());
+    let stdout = String::from_utf8(a198204.stdout).expect("stdout is utf8");
+    assert!(stdout.contains("common denominator cleared: 2"));
+    assert!(stdout.contains("finite evidence ok: true"));
+
+    let a198204_d0 = run_polytool(&["pf-pencil", "--case", "A198204", "--degree", "0"], "");
+    assert!(a198204_d0.status.success());
+    let stdout = String::from_utf8(a198204_d0.stdout).expect("stdout is utf8");
+    assert!(stdout.contains("unsupported"));
+}
+
+#[test]
 fn bench_interlacing_reports_tsv() {
     let output = run_polytool(
         &[
@@ -189,4 +250,80 @@ fn bench_recurrence_fixture_reports_json_and_compare() {
 
     let _ = fs::remove_file(old_path);
     let _ = fs::remove_file(new_path);
+}
+
+#[test]
+fn hstar_inequalities_json_reports_named_failure() {
+    let output = run_polytool(
+        &["hstar-inequalities", "--dimension", "3", "--json"],
+        "1,20,1,0\n",
+    );
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).expect("stdout is utf8");
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("valid hstar JSON");
+    assert_eq!(json["items"][0]["all_applicable_hold"], false);
+    let checks = json["items"][0]["checks"].as_array().expect("checks array");
+    assert!(checks.iter().any(|check| {
+        check["family"] == "Balletti-Higashitani"
+            && check["applicable"] == true
+            && check["holds"] == false
+            && check["reference"].as_str().unwrap().contains("Theorem 1.4")
+    }));
+}
+
+#[test]
+fn coefficient_tests_json_reports_kurtz() {
+    let output = run_polytool(
+        &["coefficient-tests", "--json"],
+        "1000,1110,111,1\n1,4,6,4,1\n",
+    );
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).expect("stdout is utf8");
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("valid coefficient JSON");
+    assert_eq!(json["items"][0]["kurtz"]["holds"], true);
+    assert_eq!(json["items"][0]["kurtz"]["implies_real_rooted"], true);
+    assert_eq!(json["items"][1]["kurtz"]["holds"], false);
+}
+
+#[test]
+fn cyclic_sieving_json_checks_order_two() {
+    let output = run_polytool(
+        &[
+            "cyclic-sieving",
+            "--order",
+            "2",
+            "--fixed-counts",
+            "2,0",
+            "--json",
+        ],
+        "1,1\n",
+    );
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).expect("stdout is utf8");
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("valid csp JSON");
+    assert_eq!(json["items"][0]["report"]["holds"], true);
+    assert_eq!(
+        json["items"][0]["report"]["evaluations"][1]["integer_value"],
+        "0"
+    );
+}
+
+#[test]
+fn cyclic_sieving_sequence_uses_default_offsets() {
+    let output = run_polytool(
+        &["cyclic-sieving-sequence", "--first-index", "2", "--json"],
+        "1,1\n1,1,1\n",
+    );
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).expect("stdout is utf8");
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("valid csp sequence JSON");
+    let orders = json["items"][0]["candidate_orders"]
+        .as_array()
+        .expect("candidate orders");
+    assert!(orders.iter().any(|item| item["order"] == 2));
+    assert!(orders.iter().any(|item| item["order"] == 5));
 }

@@ -135,6 +135,7 @@ fn print_top_level_help() {
     println!("  gamma-expansion   Expand palindromic polynomials in the gamma basis");
     println!("  family-check      Check properties and consecutive interlacing together");
     println!("  sequence          Generate standard polynomial sequences");
+    println!("  pf-pencil         Check built-in PF/Jensen endpoint pencils");
     println!("  recurrence        Search for a polynomial recurrence");
     println!("  recurrence-generate");
     println!("                    Generate coefficient rows from recurrence JSON");
@@ -142,8 +143,14 @@ fn print_top_level_help() {
     println!("  bkw-scout         Scout BKW equal-modulus loci for a recurrence symbol");
     println!("  resultant         Compute the resultant of two polynomials");
     println!("  discriminant      Compute the discriminant of each polynomial");
+    println!("  coefficient-tests Check Newton and Kurtz coefficient criteria");
     println!("  hstar-to-ehrhart  Convert h*-vectors to Ehrhart polynomials");
     println!("  ehrhart-to-hstar  Convert Ehrhart polynomials to h*-vectors");
+    println!("  hstar-inequalities");
+    println!("                    Check named Ehrhart h*-vector inequalities");
+    println!("  cyclic-sieving    Check/profile one cyclic sieving order");
+    println!("  cyclic-sieving-sequence");
+    println!("                    Profile candidate cyclic sieving orders for a sequence");
     println!("  stapledon         Compute a Stapledon decomposition");
     println!();
     println!("Options:");
@@ -277,6 +284,550 @@ fn print_sequence_help() {
     println!("  polytool sequence eulerian 5");
 }
 
+fn print_pf_pencil_help() {
+    println!("Usage:");
+    println!("  polytool pf-pencil --case <OEIS-id> --degree <d> [options]");
+    println!("  polytool pf-pencil --case <OEIS-id> --min-degree <a> --max-degree <b> [options]");
+    println!("  polytool pf-pencil --all-family-h --max-degree <b> [options]");
+    println!("  polytool pf-pencil --help");
+    println!();
+    println!("Check built-in Family H PF-bidiagonal/Jensen endpoint pencils.");
+    println!();
+    println!("Options:");
+    println!("  --case <OEIS-id>       Built-in case such as A036969");
+    println!("  --degree <d>           Check one old-row degree");
+    println!("  --min-degree <d>       First degree for a range (default: 1)");
+    println!("  --max-degree <d>       Last degree for a range");
+    println!("  --all-family-h         Check all built-in Family H cases");
+    println!("  --lambdas <list>       Comma-separated nonnegative integer lambdas");
+    println!("                         (default: 0,1,10,100)");
+    println!("  --json                 Emit machine-readable JSON");
+    println!("  -h, --help             Print this help text");
+    println!();
+    println!("Supported cases:");
+    println!("  A036969 A071951 A080248 A156289 A160562 A269945");
+    println!("  A166960 A166961 A166962 A166972 A191935");
+    println!("  A371081 A371259 A390433 A198204");
+}
+
+#[derive(Clone, Copy, Debug)]
+struct PfPencilCase {
+    id: &'static str,
+    alpha_label: &'static str,
+    beta_label: &'static str,
+}
+
+const PF_PENCIL_CASES: &[PfPencilCase] = &[
+    PfPencilCase {
+        id: "A036969",
+        alpha_label: "(k+1)^2",
+        beta_label: "1",
+    },
+    PfPencilCase {
+        id: "A071951",
+        alpha_label: "(k+1)(k+2)",
+        beta_label: "1",
+    },
+    PfPencilCase {
+        id: "A080248",
+        alpha_label: "(k+1)(k+2)/2",
+        beta_label: "1",
+    },
+    PfPencilCase {
+        id: "A156289",
+        alpha_label: "(k+1)^2",
+        beta_label: "2k+3",
+    },
+    PfPencilCase {
+        id: "A160562",
+        alpha_label: "(2k+1)^2",
+        beta_label: "1",
+    },
+    PfPencilCase {
+        id: "A269945",
+        alpha_label: "k^2",
+        beta_label: "1",
+    },
+    PfPencilCase {
+        id: "A166960",
+        alpha_label: "(k+1)^2",
+        beta_label: "d+3-k",
+    },
+    PfPencilCase {
+        id: "A166961",
+        alpha_label: "(k+1)(2k+1)",
+        beta_label: "2d+5-2k",
+    },
+    PfPencilCase {
+        id: "A166962",
+        alpha_label: "(k+1)(3k+1)",
+        beta_label: "3d+1-3k",
+    },
+    PfPencilCase {
+        id: "A166972",
+        alpha_label: "(k+1)(3k+1)",
+        beta_label: "d+1-k",
+    },
+    PfPencilCase {
+        id: "A191935",
+        alpha_label: "1",
+        beta_label: "(d+2-k)(d+3-k)",
+    },
+    PfPencilCase {
+        id: "A371081",
+        alpha_label: "(d+k+2)^2",
+        beta_label: "1",
+    },
+    PfPencilCase {
+        id: "A371259",
+        alpha_label: "(d+k+4)^2",
+        beta_label: "1",
+    },
+    PfPencilCase {
+        id: "A390433",
+        alpha_label: "(d+k)^2",
+        beta_label: "1",
+    },
+    PfPencilCase {
+        id: "A198204",
+        alpha_label: "(k+1)(k+d)/d",
+        beta_label: "(k+d+1)(k+d)/d",
+    },
+];
+
+#[derive(Clone, Debug)]
+struct LambdaCheck {
+    lambda: BigInt,
+    coefficients: Vec<BigInt>,
+    real_rooted: bool,
+}
+
+#[derive(Clone, Debug)]
+struct PfPencilReport {
+    case: PfPencilCase,
+    degree: usize,
+    common_denominator: BigInt,
+    j_alpha: Vec<BigInt>,
+    t_j_beta: Vec<BigInt>,
+    j_alpha_real_rooted: bool,
+    t_j_beta_real_rooted: bool,
+    lambda_checks: Vec<LambdaCheck>,
+    supported: bool,
+    unsupported_reason: Option<String>,
+}
+
+impl PfPencilReport {
+    fn finite_evidence_ok(&self) -> bool {
+        self.supported
+            && self.j_alpha_real_rooted
+            && self.t_j_beta_real_rooted
+            && self.lambda_checks.iter().all(|check| check.real_rooted)
+    }
+}
+
+fn pf_pencil_case(id: &str) -> Option<PfPencilCase> {
+    PF_PENCIL_CASES
+        .iter()
+        .copied()
+        .find(|case| case.id.eq_ignore_ascii_case(id))
+}
+
+fn binomial_bigint(n: usize, k: usize) -> BigInt {
+    if k > n {
+        return BigInt::from(0);
+    }
+    let k = k.min(n - k);
+    let mut out = BigInt::from(1);
+    for i in 0..k {
+        out *= BigInt::from(n - i);
+        out /= BigInt::from(i + 1);
+    }
+    out
+}
+
+fn lcm_usize(a: usize, b: usize) -> usize {
+    use num_integer::Integer;
+    a.lcm(&b)
+}
+
+fn pf_value(case_id: &str, which: &str, k: usize, d: usize) -> (BigInt, usize) {
+    let k = k as i128;
+    let d_i = d as i128;
+    let value = match (case_id, which) {
+        ("A036969", "alpha") => ((k + 1) * (k + 1), 1),
+        ("A036969", "beta") => (1, 1),
+        ("A071951", "alpha") => ((k + 1) * (k + 2), 1),
+        ("A071951", "beta") => (1, 1),
+        ("A080248", "alpha") => ((k + 1) * (k + 2), 2),
+        ("A080248", "beta") => (1, 1),
+        ("A156289", "alpha") => ((k + 1) * (k + 1), 1),
+        ("A156289", "beta") => (2 * k + 3, 1),
+        ("A160562", "alpha") => ((2 * k + 1) * (2 * k + 1), 1),
+        ("A160562", "beta") => (1, 1),
+        ("A269945", "alpha") => (k * k, 1),
+        ("A269945", "beta") => (1, 1),
+        ("A166960", "alpha") => ((k + 1) * (k + 1), 1),
+        ("A166960", "beta") => (d_i + 3 - k, 1),
+        ("A166961", "alpha") => ((k + 1) * (2 * k + 1), 1),
+        ("A166961", "beta") => (2 * d_i + 5 - 2 * k, 1),
+        ("A166962", "alpha") => ((k + 1) * (3 * k + 1), 1),
+        ("A166962", "beta") => (3 * d_i + 1 - 3 * k, 1),
+        ("A166972", "alpha") => ((k + 1) * (3 * k + 1), 1),
+        ("A166972", "beta") => (d_i + 1 - k, 1),
+        ("A191935", "alpha") => (1, 1),
+        ("A191935", "beta") => ((d_i + 2 - k) * (d_i + 3 - k), 1),
+        ("A371081", "alpha") => ((d_i + k + 2) * (d_i + k + 2), 1),
+        ("A371081", "beta") => (1, 1),
+        ("A371259", "alpha") => ((d_i + k + 4) * (d_i + k + 4), 1),
+        ("A371259", "beta") => (1, 1),
+        ("A390433", "alpha") => ((d_i + k) * (d_i + k), 1),
+        ("A390433", "beta") => (1, 1),
+        ("A198204", "alpha") => ((k + 1) * (k + d_i), d),
+        ("A198204", "beta") => ((k + d_i + 1) * (k + d_i), d),
+        _ => unreachable!("unknown PF pencil case/action"),
+    };
+    (BigInt::from(value.0), value.1)
+}
+
+fn pf_common_denominator(case_id: &str, degree: usize) -> usize {
+    let mut denom = 1;
+    for k in 0..=degree {
+        denom = lcm_usize(denom, pf_value(case_id, "alpha", k, degree).1);
+        denom = lcm_usize(denom, pf_value(case_id, "beta", k, degree).1);
+    }
+    denom
+}
+
+fn pf_kernel(case: PfPencilCase, degree: usize, which: &str, common_den: usize) -> Vec<BigInt> {
+    (0..=degree)
+        .map(|k| {
+            let (num, denom) = pf_value(case.id, which, k, degree);
+            binomial_bigint(degree, k) * num * BigInt::from(common_den / denom)
+        })
+        .collect()
+}
+
+fn shift_by_t(coeffs: &[BigInt]) -> Vec<BigInt> {
+    let mut out = Vec::with_capacity(coeffs.len() + 1);
+    out.push(BigInt::from(0));
+    out.extend_from_slice(coeffs);
+    out
+}
+
+fn add_lambda_pencil(j_alpha: &[BigInt], t_j_beta: &[BigInt], lambda: &BigInt) -> Vec<BigInt> {
+    let len = j_alpha.len().max(t_j_beta.len());
+    (0..len)
+        .map(|i| {
+            let mut coeff = j_alpha.get(i).cloned().unwrap_or_else(|| BigInt::from(0));
+            if let Some(beta_coeff) = t_j_beta.get(i) {
+                coeff += lambda * beta_coeff;
+            }
+            coeff
+        })
+        .collect()
+}
+
+fn pf_pencil_report(case: PfPencilCase, degree: usize, lambdas: &[BigInt]) -> PfPencilReport {
+    if case.id == "A198204" && degree == 0 {
+        return PfPencilReport {
+            case,
+            degree,
+            common_denominator: BigInt::from(0),
+            j_alpha: Vec::new(),
+            t_j_beta: Vec::new(),
+            j_alpha_real_rooted: false,
+            t_j_beta_real_rooted: false,
+            lambda_checks: Vec::new(),
+            supported: false,
+            unsupported_reason: Some(
+                "A198204 has denominator d and is unsupported for d=0".to_string(),
+            ),
+        };
+    }
+    let common_den = pf_common_denominator(case.id, degree);
+    let j_alpha = pf_kernel(case, degree, "alpha", common_den);
+    let beta = pf_kernel(case, degree, "beta", common_den);
+    let t_j_beta = shift_by_t(&beta);
+    let lambda_checks = lambdas
+        .iter()
+        .map(|lambda| {
+            let coefficients = add_lambda_pencil(&j_alpha, &t_j_beta, lambda);
+            let real_rooted = is_real_rooted_bigint_coeffs(&coefficients);
+            LambdaCheck {
+                lambda: lambda.clone(),
+                coefficients,
+                real_rooted,
+            }
+        })
+        .collect();
+    PfPencilReport {
+        case,
+        degree,
+        common_denominator: BigInt::from(common_den),
+        j_alpha_real_rooted: is_real_rooted_bigint_coeffs(&j_alpha),
+        t_j_beta_real_rooted: is_real_rooted_bigint_coeffs(&t_j_beta),
+        j_alpha,
+        t_j_beta,
+        lambda_checks,
+        supported: true,
+        unsupported_reason: None,
+    }
+}
+
+fn pf_pencil_report_json(report: &PfPencilReport) -> String {
+    let lambda_checks = report
+        .lambda_checks
+        .iter()
+        .map(|check| {
+            format!(
+                "{{\"lambda\":{},\"coefficients\":{},\"polynomial\":{},\"real_rooted\":{}}}",
+                json_string(&check.lambda.to_string()),
+                json_bigint_vec(&check.coefficients),
+                json_string(&format_poly_bigint_coeffs(&check.coefficients)),
+                check.real_rooted
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "{{\"case\":{},\"degree\":{},\"alpha_label\":{},\"beta_label\":{},\
+         \"common_denominator\":{},\"supported\":{},\"unsupported_reason\":{},\
+         \"j_alpha_coefficients\":{},\"t_j_beta_coefficients\":{},\
+         \"j_alpha_polynomial\":{},\"t_j_beta_polynomial\":{},\
+         \"j_alpha_real_rooted\":{},\"t_j_beta_real_rooted\":{},\
+         \"lambda_checks\":[{}],\"finite_evidence_ok\":{}}}",
+        json_string(report.case.id),
+        report.degree,
+        json_string(report.case.alpha_label),
+        json_string(report.case.beta_label),
+        json_string(&report.common_denominator.to_string()),
+        report.supported,
+        report
+            .unsupported_reason
+            .as_ref()
+            .map(|reason| json_string(reason))
+            .unwrap_or_else(|| "null".to_string()),
+        json_bigint_vec(&report.j_alpha),
+        json_bigint_vec(&report.t_j_beta),
+        json_string(&format_poly_bigint_coeffs(&report.j_alpha)),
+        json_string(&format_poly_bigint_coeffs(&report.t_j_beta)),
+        report.j_alpha_real_rooted,
+        report.t_j_beta_real_rooted,
+        lambda_checks,
+        report.finite_evidence_ok()
+    )
+}
+
+fn print_pf_pencil_text(reports: &[PfPencilReport]) {
+    for report in reports {
+        println!("{} d={}", report.case.id, report.degree);
+        println!("  alpha(k,d) = {}", report.case.alpha_label);
+        println!("  beta(k,d)  = {}", report.case.beta_label);
+        if !report.supported {
+            println!(
+                "  unsupported: {}",
+                report
+                    .unsupported_reason
+                    .as_deref()
+                    .unwrap_or("unsupported case")
+            );
+            continue;
+        }
+        println!(
+            "  common denominator cleared: {}",
+            report.common_denominator
+        );
+        println!(
+            "  J_alpha,d(t) = {} [{}]",
+            format_poly_bigint_coeffs(&report.j_alpha),
+            if report.j_alpha_real_rooted {
+                "real-rooted"
+            } else {
+                "NOT real-rooted"
+            }
+        );
+        println!(
+            "  t J_beta,d(t) = {} [{}]",
+            format_poly_bigint_coeffs(&report.t_j_beta),
+            if report.t_j_beta_real_rooted {
+                "real-rooted"
+            } else {
+                "NOT real-rooted"
+            }
+        );
+        for check in &report.lambda_checks {
+            println!(
+                "  lambda={}: {} [{}]",
+                check.lambda,
+                format_poly_bigint_coeffs(&check.coefficients),
+                if check.real_rooted {
+                    "real-rooted"
+                } else {
+                    "NOT real-rooted"
+                }
+            );
+        }
+        println!("  finite evidence ok: {}", report.finite_evidence_ok());
+    }
+}
+
+fn parse_lambdas(input: &str) -> Result<Vec<BigInt>, String> {
+    let mut lambdas = Vec::new();
+    for raw in input.split(',') {
+        let value = raw.trim();
+        if value.is_empty() {
+            return Err("empty lambda in --lambdas list".to_string());
+        }
+        if value.starts_with('-') {
+            return Err(format!(
+                "--lambdas expects nonnegative integers, got '{value}'"
+            ));
+        }
+        let lambda = value
+            .parse::<BigInt>()
+            .map_err(|_| format!("--lambdas expects nonnegative integers, got '{value}'"))?;
+        lambdas.push(lambda);
+    }
+    if lambdas.is_empty() {
+        return Err("--lambdas expects at least one value".to_string());
+    }
+    Ok(lambdas)
+}
+
+fn cmd_pf_pencil(args: &[String]) {
+    let mut case_id: Option<String> = None;
+    let mut all_family_h = false;
+    let mut degree: Option<usize> = None;
+    let mut min_degree: Option<usize> = None;
+    let mut max_degree: Option<usize> = None;
+    let mut lambdas = parse_lambdas("0,1,10,100").expect("default lambdas parse");
+    let mut format = OutputFormat::Text;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--case" => {
+                case_id = match next_option_value(args, &mut i, "--case") {
+                    Ok(value) => Some(value.to_string()),
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return;
+                    }
+                };
+            }
+            "--all-family-h" => all_family_h = true,
+            "--degree" => {
+                degree = match parse_usize_option(args, &mut i, "--degree") {
+                    Ok(value) => Some(value),
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return;
+                    }
+                };
+            }
+            "--min-degree" => {
+                min_degree = match parse_usize_option(args, &mut i, "--min-degree") {
+                    Ok(value) => Some(value),
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return;
+                    }
+                };
+            }
+            "--max-degree" => {
+                max_degree = match parse_usize_option(args, &mut i, "--max-degree") {
+                    Ok(value) => Some(value),
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return;
+                    }
+                };
+            }
+            "--lambdas" => {
+                lambdas = match next_option_value(args, &mut i, "--lambdas").and_then(parse_lambdas)
+                {
+                    Ok(value) => value,
+                    Err(error) => {
+                        eprintln!("{error}");
+                        return;
+                    }
+                };
+            }
+            "--json" => format = OutputFormat::Json,
+            other => {
+                eprintln!("unknown option: {other}");
+                print_pf_pencil_help();
+                std::process::exit(1);
+            }
+        }
+        i += 1;
+    }
+
+    if all_family_h == case_id.is_some() {
+        eprintln!("choose exactly one of --case or --all-family-h");
+        print_pf_pencil_help();
+        std::process::exit(1);
+    }
+
+    let degrees = if let Some(d) = degree {
+        if min_degree.is_some() || max_degree.is_some() {
+            eprintln!("--degree cannot be combined with --min-degree or --max-degree");
+            std::process::exit(1);
+        }
+        vec![d]
+    } else {
+        let min = min_degree.unwrap_or(1);
+        let Some(max) = max_degree else {
+            eprintln!("expected --degree or --max-degree");
+            print_pf_pencil_help();
+            std::process::exit(1);
+        };
+        if min > max {
+            eprintln!("--min-degree must be <= --max-degree");
+            std::process::exit(1);
+        }
+        (min..=max).collect()
+    };
+
+    let cases = if all_family_h {
+        PF_PENCIL_CASES.to_vec()
+    } else {
+        let id = case_id.expect("case_id checked");
+        let Some(case) = pf_pencil_case(&id) else {
+            eprintln!("unknown PF pencil case: {id}");
+            print_pf_pencil_help();
+            std::process::exit(1);
+        };
+        vec![case]
+    };
+
+    let reports = cases
+        .into_iter()
+        .flat_map(|case| {
+            degrees.iter().copied().map({
+                let lambdas = lambdas.clone();
+                move |degree| pf_pencil_report(case, degree, &lambdas)
+            })
+        })
+        .collect::<Vec<_>>();
+
+    if format == OutputFormat::Json {
+        let items = reports
+            .iter()
+            .map(pf_pencil_report_json)
+            .collect::<Vec<_>>()
+            .join(",");
+        let overall = reports.iter().all(PfPencilReport::finite_evidence_ok);
+        println!(
+            "{{\"schema\":\"polynomial-tools.pf-pencil.v1\",\"items\":[{}],\
+             \"overall_finite_evidence_ok\":{}}}",
+            items, overall
+        );
+    } else {
+        print_pf_pencil_text(&reports);
+    }
+}
+
 fn print_family_check_help() {
     println!("Usage:");
     println!("  polytool family-check [options]");
@@ -313,6 +864,70 @@ fn print_stapledon_help() {
     print_coefficient_input_help();
     println!();
     println!("Note: accepts arbitrary-size integer coefficients.");
+}
+
+fn print_hstar_inequalities_help() {
+    println!("Usage:");
+    println!("  polytool hstar-inequalities [options]");
+    println!("  polytool hstar-inequalities --help");
+    println!();
+    println!("Check named Ehrhart h*-vector inequalities with exact integer arithmetic.");
+    println!();
+    print_coefficient_input_help();
+    println!();
+    println!("Options:");
+    println!("  --dimension <d>  Use dimension d instead of len(h*)-1");
+    println!("  --json           Emit machine-readable JSON");
+    println!();
+    println!("Example:");
+    println!("  echo '1, 4, 1, 0' | polytool hstar-inequalities --dimension 3");
+}
+
+fn print_coefficient_tests_help() {
+    println!("Usage:");
+    println!("  polytool coefficient-tests [options]");
+    println!("  polytool coefficient-tests --help");
+    println!();
+    println!("Check Newton inequalities and Kurtz's sufficient real-rootedness condition.");
+    println!();
+    print_coefficient_input_help();
+    println!();
+    println!("Options:");
+    println!("  --json    Emit machine-readable JSON");
+}
+
+fn print_cyclic_sieving_help() {
+    println!("Usage:");
+    println!("  polytool cyclic-sieving --order <n> [options]");
+    println!("  polytool cyclic-sieving --help");
+    println!();
+    println!("Profile or check P(q) at powers of a primitive n-th root of unity.");
+    println!();
+    print_coefficient_input_help();
+    println!();
+    println!("Options:");
+    println!("  --order <n>          Cyclic group order");
+    println!("  --fixed-counts <xs>  Fixed-point counts c_0,...,c_{{n-1}}");
+    println!("  --json               Emit machine-readable JSON");
+    println!();
+    println!("Without fixed counts, this profiles exact root-of-unity evaluations only.");
+}
+
+fn print_cyclic_sieving_sequence_help() {
+    println!("Usage:");
+    println!("  polytool cyclic-sieving-sequence [options]");
+    println!("  polytool cyclic-sieving-sequence --help");
+    println!();
+    println!("For a polynomial sequence P_n(q), profile candidate cyclic group orders");
+    println!("n-2, n-1, n, n+1, n+2, n+3 by default.");
+    println!();
+    print_coefficient_input_help();
+    println!();
+    println!("Options:");
+    println!("  --first-index <n>         Index of the first input row (default: 0)");
+    println!("  --offsets <list>          Candidate order offsets (default: -2,-1,0,1,2,3)");
+    println!("  --fixed-counts-file <f>   Lines: <index> <order>: c_0,...,c_{{order-1}}");
+    println!("  --json                    Emit machine-readable JSON");
 }
 
 fn print_command_help(command: &str) -> bool {
@@ -395,6 +1010,7 @@ fn print_command_help(command: &str) -> bool {
         ),
         "family-check" => print_family_check_help(),
         "sequence" => print_sequence_help(),
+        "pf-pencil" | "pf-bidiagonal-pencil" => print_pf_pencil_help(),
         "recurrence" => print_recurrence_help(),
         "recurrence-generate" => print_recurrence_generate_help(),
         "bench" => print_bench_help(),
@@ -421,6 +1037,7 @@ fn print_command_help(command: &str) -> bool {
                 "  echo '1, 0, 1' | polytool discriminant",
             ],
         ),
+        "coefficient-tests" => print_coefficient_tests_help(),
         "hstar-to-ehrhart" => print_stdin_command_help(
             "hstar-to-ehrhart",
             "Convert each h*-vector into Ehrhart polynomial coefficients.",
@@ -451,6 +1068,9 @@ fn print_command_help(command: &str) -> bool {
                 "  echo '1, 2, 2' | polytool ehrhart-to-hstar",
             ],
         ),
+        "hstar-inequalities" => print_hstar_inequalities_help(),
+        "cyclic-sieving" => print_cyclic_sieving_help(),
+        "cyclic-sieving-sequence" => print_cyclic_sieving_sequence_help(),
         "stapledon" => print_stapledon_help(),
         _ => return false,
     }
@@ -2996,6 +3616,644 @@ fn cmd_ehrhart_to_hstar(args: &[String]) {
 }
 
 #[derive(Clone, Debug)]
+struct HStarInequalityOptions {
+    format: OutputFormat,
+    dimension: Option<usize>,
+}
+
+fn parse_hstar_inequality_args(args: &[String]) -> Result<HStarInequalityOptions, String> {
+    let mut options = HStarInequalityOptions {
+        format: OutputFormat::Text,
+        dimension: None,
+    };
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--json" => options.format = OutputFormat::Json,
+            "--dimension" => {
+                i += 1;
+                let value = args
+                    .get(i)
+                    .ok_or_else(|| "--dimension expects a nonnegative integer".to_string())?;
+                options.dimension = Some(value.parse().map_err(|_| {
+                    format!("--dimension expects a nonnegative integer, got '{value}'")
+                })?);
+            }
+            other => return Err(format!("unknown hstar-inequalities option: {other}")),
+        }
+        i += 1;
+    }
+    Ok(options)
+}
+
+fn json_bigint_option(value: Option<&BigInt>) -> String {
+    value
+        .map(|value| json_string(&value.to_string()))
+        .unwrap_or_else(|| "null".to_string())
+}
+
+fn hstar_check_json(check: &HStarInequalityCheck) -> String {
+    format!(
+        "{{\"family\":{},\"name\":{},\"formula\":{},\"reference\":{},\"url\":{},\
+         \"index\":{},\"applicable\":{},\"holds\":{},\"lhs\":{},\"rhs\":{},\
+         \"value\":{},\"details\":{}}}",
+        json_string(&check.family),
+        json_string(&check.name),
+        json_string(&check.formula),
+        json_string(&check.reference),
+        check
+            .url
+            .as_ref()
+            .map(|url| json_string(url))
+            .unwrap_or_else(|| "null".to_string()),
+        check
+            .index
+            .map(|index| index.to_string())
+            .unwrap_or_else(|| "null".to_string()),
+        check.applicable,
+        check.holds,
+        json_bigint_option(check.lhs.as_ref()),
+        json_bigint_option(check.rhs.as_ref()),
+        check
+            .value
+            .as_ref()
+            .map(|value| json_string(value))
+            .unwrap_or_else(|| "null".to_string()),
+        json_string(&check.details)
+    )
+}
+
+fn hstar_report_json(index: usize, report: &HStarInequalityReport) -> String {
+    let checks = report
+        .checks
+        .iter()
+        .map(hstar_check_json)
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "{{\"index\":{},\"hstar\":{},\"dimension\":{},\"degree\":{},\"codegree\":{},\
+         \"all_applicable_hold\":{},\"checks\":[{}]}}",
+        index,
+        json_bigint_vec(&report.hstar),
+        report.dimension,
+        report.degree,
+        report
+            .codegree
+            .map(|codegree| codegree.to_string())
+            .unwrap_or_else(|| "null".to_string()),
+        report.all_applicable_hold,
+        checks
+    )
+}
+
+fn print_hstar_report_text(index: usize, report: &HStarInequalityReport) {
+    println!(
+        "row {index}: h*={}, d={}, s={}, codegree={}, {}",
+        format_poly_bigint_coeffs(&report.hstar),
+        report.dimension,
+        report.degree,
+        report
+            .codegree
+            .map(|c| c.to_string())
+            .unwrap_or_else(|| "n/a".to_string()),
+        if report.all_applicable_hold {
+            "all applicable checks passed"
+        } else {
+            "FAILED"
+        }
+    );
+    for check in report
+        .checks
+        .iter()
+        .filter(|check| check.applicable && !check.holds)
+    {
+        let index = check
+            .index
+            .map(|index| format!(", i={index}"))
+            .unwrap_or_default();
+        let lhs_rhs = match (&check.lhs, &check.rhs) {
+            (Some(lhs), Some(rhs)) => format!(" lhs={lhs}, rhs={rhs};"),
+            _ => check
+                .value
+                .as_ref()
+                .map(|value| format!(" value={value};"))
+                .unwrap_or_default(),
+        };
+        println!(
+            "  FAIL {} / {}{}: {} ;{} reference: {}",
+            check.family, check.name, index, check.formula, lhs_rhs, check.reference
+        );
+        if !check.details.is_empty() {
+            println!("    {}", check.details);
+        }
+    }
+}
+
+fn cmd_hstar_inequalities(args: &[String]) {
+    let options = match parse_hstar_inequality_args(args) {
+        Ok(options) => options,
+        Err(error) => {
+            eprintln!("{error}");
+            return;
+        }
+    };
+    let reports = read_polys_bigint()
+        .into_iter()
+        .map(|coeffs| {
+            let c = strip_trailing_zeros_bigint(&coeffs);
+            hstar_inequality_report_bigint(c, options.dimension)
+        })
+        .collect::<Vec<_>>();
+    if options.format == OutputFormat::Json {
+        let items = reports
+            .iter()
+            .enumerate()
+            .map(|(index, report)| hstar_report_json(index, report))
+            .collect::<Vec<_>>()
+            .join(",");
+        println!("{{\"items\":[{}]}}", items);
+        return;
+    }
+    for (index, report) in reports.iter().enumerate() {
+        print_hstar_report_text(index, report);
+    }
+}
+
+fn coefficient_check_json(check: &CoefficientInequalityCheck) -> String {
+    format!(
+        "{{\"index\":{},\"lhs\":{},\"rhs\":{},\"comparison\":{},\"holds\":{}}}",
+        check.index,
+        json_string(&check.lhs.to_string()),
+        json_string(&check.rhs.to_string()),
+        json_string(check.comparison),
+        check.holds
+    )
+}
+
+fn coefficient_criterion_json(report: &CoefficientCriterionReport) -> String {
+    let checks = report
+        .checks
+        .iter()
+        .map(coefficient_check_json)
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "{{\"name\":{},\"reference\":{},\"applicable\":{},\"holds\":{},\
+         \"implies_real_rooted\":{},\"reason\":{},\"checks\":[{}]}}",
+        json_string(report.name),
+        json_string(report.reference),
+        report.applicable,
+        report.holds,
+        report.implies_real_rooted,
+        report
+            .reason
+            .as_ref()
+            .map(|reason| json_string(reason))
+            .unwrap_or_else(|| "null".to_string()),
+        checks
+    )
+}
+
+fn coefficient_test_report_json(index: usize, report: &CoefficientTestReport) -> String {
+    format!(
+        "{{\"index\":{},\"coefficients\":{},\"polynomial\":{},\"degree\":{},\
+         \"newton\":{},\"kurtz\":{}}}",
+        index,
+        json_bigint_vec(&report.coefficients),
+        json_string(&format_poly_bigint_coeffs(&report.coefficients)),
+        report
+            .degree
+            .map(|degree| degree.to_string())
+            .unwrap_or_else(|| "null".to_string()),
+        coefficient_criterion_json(&report.newton),
+        coefficient_criterion_json(&report.kurtz)
+    )
+}
+
+fn print_coefficient_test_report_text(index: usize, report: &CoefficientTestReport) {
+    println!(
+        "row {index}: {}",
+        format_poly_bigint_coeffs(&report.coefficients)
+    );
+    for criterion in [&report.newton, &report.kurtz] {
+        println!(
+            "  {}: {}{}",
+            criterion.name,
+            if criterion.holds { "passed" } else { "failed" },
+            if criterion.implies_real_rooted {
+                " (implies real-rooted)"
+            } else {
+                ""
+            }
+        );
+        if let Some(reason) = &criterion.reason {
+            println!("    {reason}");
+        }
+        for check in criterion.checks.iter().filter(|check| !check.holds) {
+            println!(
+                "    fail i={}: {} {} {} is false",
+                check.index, check.lhs, check.comparison, check.rhs
+            );
+        }
+    }
+}
+
+fn cmd_coefficient_tests(args: &[String]) {
+    let format = match OutputFormat::from_args(args) {
+        Ok(format) => format,
+        Err(error) => {
+            eprintln!("{error}");
+            return;
+        }
+    };
+    let reports = read_polys_bigint()
+        .into_iter()
+        .map(|coeffs| coefficient_test_report_bigint(strip_trailing_zeros_bigint(&coeffs)))
+        .collect::<Vec<_>>();
+    if format == OutputFormat::Json {
+        let items = reports
+            .iter()
+            .enumerate()
+            .map(|(index, report)| coefficient_test_report_json(index, report))
+            .collect::<Vec<_>>()
+            .join(",");
+        println!("{{\"items\":[{}]}}", items);
+        return;
+    }
+    for (index, report) in reports.iter().enumerate() {
+        print_coefficient_test_report_text(index, report);
+    }
+}
+
+#[derive(Clone, Debug)]
+struct CyclicSievingOptions {
+    format: OutputFormat,
+    order: Option<usize>,
+    fixed_counts: Option<Vec<BigInt>>,
+}
+
+fn parse_bigint_values(input: &str) -> Result<Vec<BigInt>, String> {
+    parse_polynomial_bigint(input)
+}
+
+fn parse_cyclic_sieving_args(args: &[String]) -> Result<CyclicSievingOptions, String> {
+    let mut options = CyclicSievingOptions {
+        format: OutputFormat::Text,
+        order: None,
+        fixed_counts: None,
+    };
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--json" => options.format = OutputFormat::Json,
+            "--order" => {
+                i += 1;
+                let value = args
+                    .get(i)
+                    .ok_or_else(|| "--order expects a positive integer".to_string())?;
+                let order = value
+                    .parse()
+                    .map_err(|_| format!("--order expects a positive integer, got '{value}'"))?;
+                if order == 0 {
+                    return Err("--order must be positive".to_string());
+                }
+                options.order = Some(order);
+            }
+            "--fixed-counts" => {
+                i += 1;
+                let value = args
+                    .get(i)
+                    .ok_or_else(|| "--fixed-counts expects a coefficient list".to_string())?;
+                options.fixed_counts = Some(parse_bigint_values(value)?);
+            }
+            other => return Err(format!("unknown cyclic-sieving option: {other}")),
+        }
+        i += 1;
+    }
+    Ok(options)
+}
+
+fn root_evaluation_json(evaluation: &RootOfUnityEvaluation) -> String {
+    format!(
+        "{{\"group_order\":{},\"power\":{},\"root_order\":{},\"integer_value\":{},\
+         \"remainder\":{},\"remainder_polynomial\":{}}}",
+        evaluation.group_order,
+        evaluation.power,
+        evaluation.root_order,
+        evaluation
+            .integer_value
+            .as_ref()
+            .map(|value| json_string(&value.to_string()))
+            .unwrap_or_else(|| "null".to_string()),
+        json_bigint_vec(&evaluation.remainder),
+        json_string(&format_poly_bigint_coeffs(&evaluation.remainder))
+    )
+}
+
+fn cyclic_power_check_json(check: &CyclicSievingPowerCheck) -> String {
+    format!(
+        "{{\"power\":{},\"root_order\":{},\"expected_fixed_points\":{},\
+         \"evaluation\":{},\"holds\":{}}}",
+        check.power,
+        check.root_order,
+        json_string(&check.expected_fixed_points.to_string()),
+        root_evaluation_json(&check.evaluation),
+        check.holds
+    )
+}
+
+fn cyclic_sieving_report_json(report: &CyclicSievingReport) -> String {
+    let evaluations = report
+        .evaluations
+        .iter()
+        .map(root_evaluation_json)
+        .collect::<Vec<_>>()
+        .join(",");
+    let checks = report
+        .checks
+        .iter()
+        .map(cyclic_power_check_json)
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "{{\"order\":{},\"coefficients\":{},\"polynomial\":{},\"fixed_counts\":{},\
+         \"holds\":{},\"evaluations\":[{}],\"checks\":[{}]}}",
+        report.order,
+        json_bigint_vec(&report.coefficients),
+        json_string(&format_poly_bigint_coeffs(&report.coefficients)),
+        report
+            .fixed_counts
+            .as_ref()
+            .map(|counts| json_bigint_vec(counts))
+            .unwrap_or_else(|| "null".to_string()),
+        json_bool_option(report.holds),
+        evaluations,
+        checks
+    )
+}
+
+fn print_cyclic_sieving_report_text(row: usize, report: &CyclicSievingReport) {
+    println!(
+        "row {row}, order {}: {}",
+        report.order,
+        report
+            .holds
+            .map(|holds| if holds {
+                "CSP checks passed"
+            } else {
+                "CSP checks failed"
+            })
+            .unwrap_or("profile only")
+    );
+    for evaluation in &report.evaluations {
+        let value = evaluation
+            .integer_value
+            .as_ref()
+            .map(ToString::to_string)
+            .unwrap_or_else(|| format_poly_bigint_coeffs(&evaluation.remainder));
+        println!(
+            "  k={}: primitive order {}, value {}",
+            evaluation.power, evaluation.root_order, value
+        );
+    }
+    for check in report.checks.iter().filter(|check| !check.holds) {
+        println!(
+            "  FAIL k={}: expected {}, got {}",
+            check.power,
+            check.expected_fixed_points,
+            check
+                .evaluation
+                .integer_value
+                .as_ref()
+                .map(ToString::to_string)
+                .unwrap_or_else(|| format_poly_bigint_coeffs(&check.evaluation.remainder))
+        );
+    }
+}
+
+fn cmd_cyclic_sieving(args: &[String]) {
+    let options = match parse_cyclic_sieving_args(args) {
+        Ok(options) => options,
+        Err(error) => {
+            eprintln!("{error}");
+            return;
+        }
+    };
+    let Some(order) = options.order else {
+        eprintln!("cyclic-sieving requires --order <n>");
+        return;
+    };
+    let mut reports = Vec::new();
+    for coeffs in read_polys_bigint() {
+        match cyclic_sieving_report_bigint(
+            strip_trailing_zeros_bigint(&coeffs),
+            order,
+            options.fixed_counts.as_deref(),
+        ) {
+            Ok(report) => reports.push(report),
+            Err(error) => {
+                eprintln!("{error}");
+                return;
+            }
+        }
+    }
+    if options.format == OutputFormat::Json {
+        let items = reports
+            .iter()
+            .enumerate()
+            .map(|(index, report)| {
+                format!(
+                    "{{\"index\":{},\"report\":{}}}",
+                    index,
+                    cyclic_sieving_report_json(report)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        println!("{{\"items\":[{}]}}", items);
+        return;
+    }
+    for (row, report) in reports.iter().enumerate() {
+        print_cyclic_sieving_report_text(row, report);
+    }
+}
+
+#[derive(Clone, Debug)]
+struct CyclicSievingSequenceOptions {
+    format: OutputFormat,
+    first_index: isize,
+    offsets: Vec<isize>,
+    fixed_counts: BTreeMap<(isize, usize), Vec<BigInt>>,
+}
+
+fn parse_offsets(input: &str) -> Result<Vec<isize>, String> {
+    let mut offsets = Vec::new();
+    for raw in input.split(',') {
+        let part = raw.trim();
+        if part.is_empty() {
+            continue;
+        }
+        offsets.push(
+            part.parse()
+                .map_err(|_| format!("invalid offset '{part}'"))?,
+        );
+    }
+    if offsets.is_empty() {
+        return Err("offset list may not be empty".to_string());
+    }
+    Ok(offsets)
+}
+
+fn parse_fixed_counts_file(path: &str) -> Result<BTreeMap<(isize, usize), Vec<BigInt>>, String> {
+    let text = fs::read_to_string(path).map_err(|e| format!("cannot read {path}: {e}"))?;
+    let mut out = BTreeMap::new();
+    for (line_index, raw_line) in text.lines().enumerate() {
+        let line = raw_line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let normalized = line.replace(':', " ");
+        let mut parts = normalized.split_whitespace();
+        let index_text = parts
+            .next()
+            .ok_or_else(|| format!("line {}: expected index", line_index + 1))?;
+        let order_text = parts
+            .next()
+            .ok_or_else(|| format!("line {}: expected order", line_index + 1))?;
+        let index = index_text
+            .parse::<isize>()
+            .map_err(|_| format!("line {}: invalid index '{index_text}'", line_index + 1))?;
+        let order = order_text
+            .parse::<usize>()
+            .map_err(|_| format!("line {}: invalid order '{order_text}'", line_index + 1))?;
+        let counts_text = parts.collect::<Vec<_>>().join(" ");
+        let counts = parse_bigint_values(&counts_text)
+            .map_err(|e| format!("line {}: {e}", line_index + 1))?;
+        if counts.len() != order {
+            return Err(format!(
+                "line {}: order {order} expects {order} counts, got {}",
+                line_index + 1,
+                counts.len()
+            ));
+        }
+        out.insert((index, order), counts);
+    }
+    Ok(out)
+}
+
+fn parse_cyclic_sieving_sequence_args(
+    args: &[String],
+) -> Result<CyclicSievingSequenceOptions, String> {
+    let mut options = CyclicSievingSequenceOptions {
+        format: OutputFormat::Text,
+        first_index: 0,
+        offsets: vec![-2, -1, 0, 1, 2, 3],
+        fixed_counts: BTreeMap::new(),
+    };
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--json" => options.format = OutputFormat::Json,
+            "--first-index" => {
+                i += 1;
+                let value = args
+                    .get(i)
+                    .ok_or_else(|| "--first-index expects an integer".to_string())?;
+                options.first_index = value
+                    .parse()
+                    .map_err(|_| format!("--first-index expects an integer, got '{value}'"))?;
+            }
+            "--offsets" => {
+                i += 1;
+                let value = args
+                    .get(i)
+                    .ok_or_else(|| "--offsets expects a comma-separated list".to_string())?;
+                options.offsets = parse_offsets(value)?;
+            }
+            "--fixed-counts-file" => {
+                i += 1;
+                let value = args
+                    .get(i)
+                    .ok_or_else(|| "--fixed-counts-file expects a path".to_string())?;
+                options.fixed_counts = parse_fixed_counts_file(value)?;
+            }
+            other => return Err(format!("unknown cyclic-sieving-sequence option: {other}")),
+        }
+        i += 1;
+    }
+    Ok(options)
+}
+
+fn cyclic_sieving_sequence_item_json(item: &CyclicSievingSequenceItem) -> String {
+    let reports = item
+        .candidate_orders
+        .iter()
+        .map(cyclic_sieving_report_json)
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "{{\"row\":{},\"index\":{},\"coefficients\":{},\"polynomial\":{},\
+         \"candidate_orders\":[{}]}}",
+        item.row,
+        item.index,
+        json_bigint_vec(&item.coefficients),
+        json_string(&format_poly_bigint_coeffs(&item.coefficients)),
+        reports
+    )
+}
+
+fn cmd_cyclic_sieving_sequence(args: &[String]) {
+    let options = match parse_cyclic_sieving_sequence_args(args) {
+        Ok(options) => options,
+        Err(error) => {
+            eprintln!("{error}");
+            return;
+        }
+    };
+    let polynomials = read_polys_bigint()
+        .into_iter()
+        .map(|coeffs| strip_trailing_zeros_bigint(&coeffs).to_vec())
+        .collect::<Vec<_>>();
+    let reports = cyclic_sieving_sequence_reports_bigint(
+        &polynomials,
+        options.first_index,
+        &options.offsets,
+        &options.fixed_counts,
+    );
+    if options.format == OutputFormat::Json {
+        let items = reports
+            .iter()
+            .map(cyclic_sieving_sequence_item_json)
+            .collect::<Vec<_>>()
+            .join(",");
+        println!(
+            "{{\"first_index\":{},\"offsets\":{},\"items\":[{}]}}",
+            options.first_index,
+            json_string_vec(
+                &options
+                    .offsets
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+            ),
+            items
+        );
+        return;
+    }
+    for item in &reports {
+        println!(
+            "row {}, index {}: {}",
+            item.row,
+            item.index,
+            format_poly_bigint_coeffs(&item.coefficients)
+        );
+        for report in &item.candidate_orders {
+            print_cyclic_sieving_report_text(item.row, report);
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 struct FamilyCheckOptions {
     format: OutputFormat,
     recurrence: bool,
@@ -3791,14 +5049,19 @@ fn main() {
         "gamma-expansion" | "gamma" => cmd_gamma_expansion(rest),
         "family-check" => cmd_family_check(rest),
         "sequence" => cmd_sequence(rest),
+        "pf-pencil" | "pf-bidiagonal-pencil" => cmd_pf_pencil(rest),
         "recurrence" => cmd_recurrence(rest),
         "recurrence-generate" => cmd_recurrence_generate(rest),
         "bench" => cmd_bench(rest),
         "bkw-scout" => cmd_bkw_scout(rest),
         "resultant" => cmd_resultant(),
         "discriminant" => cmd_discriminant(),
+        "coefficient-tests" => cmd_coefficient_tests(rest),
         "hstar-to-ehrhart" => cmd_hstar_to_ehrhart(rest),
         "ehrhart-to-hstar" => cmd_ehrhart_to_hstar(rest),
+        "hstar-inequalities" => cmd_hstar_inequalities(rest),
+        "cyclic-sieving" => cmd_cyclic_sieving(rest),
+        "cyclic-sieving-sequence" => cmd_cyclic_sieving_sequence(rest),
         "stapledon" => cmd_stapledon(rest),
         _ => {
             eprintln!("Unknown command: {}", cmd);
