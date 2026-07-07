@@ -114,6 +114,11 @@ fn search_pattern(perm: &[u8], pattern: &[u8], start: usize, chosen: &mut Vec<u8
 pub struct PermConstraints {
     /// Patterns to avoid (classical pattern avoidance).
     pub avoiding: Vec<Vec<u8>>,
+    /// Arrow patterns to avoid.
+    ///
+    /// These are checked when a full permutation has been built, since the
+    /// arrow condition depends on the inverse Foata cycle-word map.
+    pub avoiding_arrow: Vec<ArrowPattern>,
     /// Only derangements (no fixed points).
     pub derangement: bool,
     /// Only involutions (σ² = id).
@@ -162,6 +167,212 @@ pub fn avoiding_permutations(n: u8, patterns: &[Vec<u8>]) -> Vec<Vec<u8>> {
         ..Default::default()
     };
     filtered_permutations(n, &constraints)
+}
+
+/// Generate all permutations of \[1..n\] avoiding the given arrow patterns.
+pub fn arrow_avoiding_permutations(n: u8, patterns: &[ArrowPattern]) -> Vec<Vec<u8>> {
+    let constraints = PermConstraints {
+        avoiding_arrow: patterns.to_vec(),
+        ..Default::default()
+    };
+    filtered_permutations(n, &constraints)
+}
+
+/// An arrow pattern `(nu; H)`.
+///
+/// The word `word` is the classical pattern part `nu`.  The arrows are pairs
+/// `(source_label, target_label)`.  Labels are ranks in a selected value set
+/// `x_1 < ... < x_size`.  A permutation `sigma` contains the pattern if
+/// `sigma` contains the word values as a subsequence and the inverse Foata
+/// cycle-word preimage `hat_sigma` satisfies
+/// `hat_sigma(x_source_label) = x_target_label` for every arrow.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArrowPattern {
+    pub size: u8,
+    pub word: Vec<u8>,
+    pub arrows: Vec<(u8, u8)>,
+}
+
+impl ArrowPattern {
+    /// Construct an arrow pattern, panicking if the labels do not form `[size]`.
+    pub fn new(size: u8, word: Vec<u8>, arrows: Vec<(u8, u8)>) -> Self {
+        let pattern = Self { size, word, arrows };
+        pattern.assert_valid();
+        pattern
+    }
+
+    fn assert_valid(&self) {
+        let mut seen = vec![false; self.size as usize + 1];
+        for &label in &self.word {
+            assert!(
+                (1..=self.size).contains(&label),
+                "arrow-pattern word label {} is outside 1..={}",
+                label,
+                self.size
+            );
+            seen[label as usize] = true;
+        }
+        for &(source, target) in &self.arrows {
+            assert!(
+                (1..=self.size).contains(&source),
+                "arrow-pattern source label {} is outside 1..={}",
+                source,
+                self.size
+            );
+            assert!(
+                (1..=self.size).contains(&target),
+                "arrow-pattern target label {} is outside 1..={}",
+                target,
+                self.size
+            );
+            seen[source as usize] = true;
+            seen[target as usize] = true;
+        }
+        assert!(
+            (1..=self.size).all(|label| seen[label as usize]),
+            "arrow-pattern labels must be exactly 1..={}",
+            self.size
+        );
+    }
+}
+
+/// Parse an arrow pattern such as `"12;1->3"` or `"231;1->4"`.
+///
+/// The semicolon and arrow list may be omitted, in which case this is just a
+/// classical pattern in arrow-pattern form.  For labels above 9, write the word
+/// with commas, for example `"10,2,1;1->10"`.
+pub fn parse_arrow_pattern(s: &str) -> ArrowPattern {
+    let trimmed = s
+        .trim()
+        .trim_start_matches('(')
+        .trim_end_matches(')')
+        .trim();
+    let (word_part, arrow_part) = trimmed.split_once(';').unwrap_or((trimmed, ""));
+    let word = parse_sequence(word_part.trim());
+    let arrows = parse_arrow_list(arrow_part);
+    let size = word
+        .iter()
+        .copied()
+        .chain(arrows.iter().flat_map(|&(source, target)| [source, target]))
+        .max()
+        .unwrap_or(0);
+    ArrowPattern::new(size, word, arrows)
+}
+
+fn parse_arrow_list(s: &str) -> Vec<(u8, u8)> {
+    let s = s.trim();
+    if s.is_empty() {
+        return Vec::new();
+    }
+    s.split(',')
+        .map(|arrow| {
+            let compact = arrow.trim().replace(' ', "").replace('→', "->");
+            let (source, target) = compact
+                .split_once("->")
+                .unwrap_or_else(|| panic!("invalid arrow pattern arrow: {}", arrow));
+            (
+                source.parse().expect("invalid arrow source label"),
+                target.parse().expect("invalid arrow target label"),
+            )
+        })
+        .collect()
+}
+
+/// Count occurrences of an arrow pattern in a permutation.
+///
+/// Occurrences are counted by selected value sets `x_1 < ... < x_k` satisfying
+/// both the classical word condition and all arrow conditions.
+pub fn count_arrow_pattern_occurrences(perm: &[u8], pattern: &ArrowPattern) -> usize {
+    pattern.assert_valid();
+    let n = perm.len();
+    let k = pattern.size as usize;
+    if k > n {
+        return 0;
+    }
+    if k == 0 {
+        return usize::from(pattern.word.is_empty() && pattern.arrows.is_empty());
+    }
+
+    let positions_by_value = inverse(perm);
+    let foata_preimage = inverse_foata_cycle_word_map(perm);
+    let mut selected_values = Vec::with_capacity(k);
+    count_arrow_pattern_occurrences_rec(
+        perm,
+        &foata_preimage,
+        &positions_by_value,
+        pattern,
+        1,
+        &mut selected_values,
+    )
+}
+
+fn count_arrow_pattern_occurrences_rec(
+    perm: &[u8],
+    foata_preimage: &[u8],
+    positions_by_value: &[u8],
+    pattern: &ArrowPattern,
+    next_value: u8,
+    selected_values: &mut Vec<u8>,
+) -> usize {
+    if selected_values.len() == pattern.size as usize {
+        return usize::from(selected_values_support_arrow_pattern(
+            foata_preimage,
+            positions_by_value,
+            pattern,
+            selected_values,
+        ));
+    }
+
+    let n = perm.len() as u8;
+    let remaining_after_this = pattern.size as usize - selected_values.len() - 1;
+    let max_value = n - remaining_after_this as u8;
+    let mut count = 0;
+    for value in next_value..=max_value {
+        selected_values.push(value);
+        count += count_arrow_pattern_occurrences_rec(
+            perm,
+            foata_preimage,
+            positions_by_value,
+            pattern,
+            value + 1,
+            selected_values,
+        );
+        selected_values.pop();
+    }
+    count
+}
+
+fn selected_values_support_arrow_pattern(
+    foata_preimage: &[u8],
+    positions_by_value: &[u8],
+    pattern: &ArrowPattern,
+    selected_values: &[u8],
+) -> bool {
+    let mut previous_position = 0u8;
+    for &label in &pattern.word {
+        let value = selected_values[(label - 1) as usize];
+        let position = positions_by_value[(value - 1) as usize];
+        if position <= previous_position {
+            return false;
+        }
+        previous_position = position;
+    }
+
+    pattern.arrows.iter().all(|&(source, target)| {
+        let source_value = selected_values[(source - 1) as usize];
+        let target_value = selected_values[(target - 1) as usize];
+        foata_preimage[(source_value - 1) as usize] == target_value
+    })
+}
+
+/// Check whether `perm` contains `pattern` as an arrow pattern.
+pub fn contains_arrow_pattern(perm: &[u8], pattern: &ArrowPattern) -> bool {
+    count_arrow_pattern_occurrences(perm, pattern) > 0
+}
+
+/// Check whether `perm` avoids `pattern` as an arrow pattern.
+pub fn avoids_arrow_pattern(perm: &[u8], pattern: &ArrowPattern) -> bool {
+    !contains_arrow_pattern(perm, pattern)
 }
 
 // ============================================================
@@ -295,7 +506,13 @@ fn build_filtered(
     let pos = current.len(); // 0-indexed position being filled
 
     if pos == n as usize {
-        result.push(current.clone());
+        if constraints
+            .avoiding_arrow
+            .iter()
+            .all(|pat| avoids_arrow_pattern(current, pat))
+        {
+            result.push(current.clone());
+        }
         return;
     }
 
@@ -568,6 +785,55 @@ pub fn inverse(perm: &[u8]) -> Vec<u8> {
 // ============================================================
 // Classical bijections
 // ============================================================
+
+/// Apply the cycle-word variant of Foata's first fundamental transformation.
+///
+/// Write each cycle of `perm` with its largest element first, order the cycles
+/// by increasing largest element, and erase the parentheses.
+pub fn foata_cycle_word_map(perm: &[u8]) -> Vec<u8> {
+    let mut cycles = cycle_decomposition(perm);
+    for cycle in &mut cycles {
+        let max_pos = cycle
+            .iter()
+            .enumerate()
+            .max_by_key(|&(_, value)| value)
+            .map(|(idx, _)| idx)
+            .unwrap();
+        cycle.rotate_left(max_pos);
+    }
+    cycles.sort_unstable_by_key(|cycle| cycle[0]);
+    cycles.into_iter().flatten().collect()
+}
+
+/// Invert [`foata_cycle_word_map`].
+///
+/// The cycle starts are exactly the left-to-right maxima of the word.
+pub fn inverse_foata_cycle_word_map(word: &[u8]) -> Vec<u8> {
+    let n = word.len();
+    if n == 0 {
+        return Vec::new();
+    }
+    let mut perm = vec![0u8; n];
+    let mut starts = Vec::new();
+    let mut max_so_far = 0u8;
+    for (idx, &value) in word.iter().enumerate() {
+        if value > max_so_far {
+            starts.push(idx);
+            max_so_far = value;
+        }
+    }
+    starts.push(n);
+
+    for window in starts.windows(2) {
+        let cycle = &word[window[0]..window[1]];
+        for idx in 0..cycle.len() {
+            let source = cycle[idx];
+            let target = cycle[(idx + 1) % cycle.len()];
+            perm[(source - 1) as usize] = target;
+        }
+    }
+    perm
+}
 
 /// Apply Foata's fundamental transformation (insertion-based).
 ///
@@ -1310,6 +1576,96 @@ mod tests {
             .filter(|p| pats.iter().all(|pat| !contains_pattern(p, pat)))
             .collect();
         assert_eq!(direct.len(), filtered.len());
+    }
+
+    #[test]
+    fn test_foata_cycle_word_map_paper_example() {
+        let preimage = parse_sequence("5637421");
+        let image = parse_sequence("3627154");
+        assert_eq!(foata_cycle_word_map(&preimage), image);
+        assert_eq!(inverse_foata_cycle_word_map(&image), preimage);
+    }
+
+    #[test]
+    fn test_arrow_pattern_parser() {
+        assert_eq!(
+            parse_arrow_pattern("(12; 1 -> 3)"),
+            ArrowPattern::new(3, vec![1, 2], vec![(1, 3)])
+        );
+        assert_eq!(
+            parse_arrow_pattern("10,2,1,3,4,5,6,7,8,9;1->10"),
+            ArrowPattern::new(10, vec![10, 2, 1, 3, 4, 5, 6, 7, 8, 9], vec![(1, 10)])
+        );
+    }
+
+    #[test]
+    fn test_arrow_pattern_contains_paper_example() {
+        let pi = parse_sequence("3627154");
+        let alpha = parse_arrow_pattern("12;1->3");
+        let beta = parse_arrow_pattern("231;1->4");
+        assert!(contains_arrow_pattern(&pi, &alpha));
+        assert!(!contains_arrow_pattern(&pi, &beta));
+    }
+
+    #[test]
+    fn test_arrow_pattern_count_agrees_with_contains() {
+        let alpha = parse_arrow_pattern("12;1->3");
+        for n in 1..=5 {
+            for perm in all_permutations(n) {
+                assert_eq!(
+                    contains_arrow_pattern(&perm, &alpha),
+                    count_arrow_pattern_occurrences(&perm, &alpha) > 0,
+                    "perm={:?}",
+                    perm
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_arrow_avoiding_schroder_counts() {
+        // Archer--Laudone: avoiding (12;1->3) is counted by large Schroder
+        // numbers S_{n-1}: 1, 2, 6, 22, 90.
+        let alpha = parse_arrow_pattern("12;1->3");
+        for (n, expected) in [(1, 1), (2, 2), (3, 6), (4, 22), (5, 90)] {
+            let direct = arrow_avoiding_permutations(n, std::slice::from_ref(&alpha));
+            assert_eq!(direct.len(), expected, "n={}", n);
+        }
+    }
+
+    #[test]
+    fn test_arrow_and_classical_avoidance_counts() {
+        // Fu--Yang: a_n(123, (12;1->3)) = 2^n - n.
+        let alpha = parse_arrow_pattern("12;1->3");
+        for n in 2..=6 {
+            let constraints = PermConstraints {
+                avoiding: vec![parse_sequence("123")],
+                avoiding_arrow: vec![alpha.clone()],
+                ..Default::default()
+            };
+            assert_eq!(
+                filtered_permutations(n, &constraints).len(),
+                (1usize << n) - n as usize,
+                "n={}",
+                n
+            );
+        }
+
+        // Fu--Yang: a_n(321, (12;1->2)) = M_n, the Motzkin numbers.
+        let beta = parse_arrow_pattern("12;1->2");
+        for (n, expected) in [(1, 1), (2, 2), (3, 4), (4, 9), (5, 21), (6, 51)] {
+            let constraints = PermConstraints {
+                avoiding: vec![parse_sequence("321")],
+                avoiding_arrow: vec![beta.clone()],
+                ..Default::default()
+            };
+            assert_eq!(
+                filtered_permutations(n, &constraints).len(),
+                expected,
+                "n={}",
+                n
+            );
+        }
     }
 
     #[test]

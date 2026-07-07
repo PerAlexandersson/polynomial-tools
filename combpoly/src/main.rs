@@ -264,6 +264,10 @@ struct PermFilters {
     #[arg(long, value_name = "PATTERN")]
     avoiding: Vec<String>,
 
+    /// Arrow pattern(s) to avoid (e.g., "12;1->3"). Repeatable.
+    #[arg(long, value_name = "ARROW_PATTERN")]
+    arrow_avoiding: Vec<String>,
+
     /// Only alternating permutations (up-down: p1 < p2 > p3 < ...)
     #[arg(long)]
     alternating: bool,
@@ -288,6 +292,11 @@ fn build_constraints(filters: &PermFilters) -> permutation::PermConstraints {
             .iter()
             .map(|s| permutation::parse_sequence(s))
             .collect(),
+        avoiding_arrow: filters
+            .arrow_avoiding
+            .iter()
+            .map(|s| permutation::parse_arrow_pattern(s))
+            .collect(),
         derangement: filters.derangement,
         alternating: filters.alternating,
         involution: false, // TODO: add --involution CLI flag
@@ -300,6 +309,7 @@ fn get_objects(source: &Source) -> Vec<Vec<u8>> {
     if let Some(n) = source.perms {
         let constraints = build_constraints(&source.filters);
         let has_constraints = !constraints.avoiding.is_empty()
+            || !constraints.avoiding_arrow.is_empty()
             || constraints.derangement
             || constraints.alternating
             || constraints.starts_with.is_some()
