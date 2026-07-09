@@ -28,7 +28,7 @@
 
 use std::collections::HashMap;
 
-use polynomial_tools::{check_weak_interlacing, is_real_rooted};
+use polytool::{check_weak_interlacing, is_real_rooted};
 
 /// Compute the standard rook polynomial for a Ferrers board.
 ///

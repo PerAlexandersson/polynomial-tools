@@ -406,7 +406,7 @@ compute with exactly.
 
 The repo already has the exact arithmetic and TNN certification pieces we need:
 
-- `polynomial-tools/src/linalg.rs` has exact rational linear algebra and
+- `polytool/src/linalg.rs` has exact rational linear algebra and
   `check_tnn_neville_bigint`.
 - `num-rational` is already in the workspace, so returning `BigRational`
   weights is natural.
@@ -521,7 +521,7 @@ test for the Rust implementation.
 
 ## 11. Recommended implementation order
 
-1. Add a new module in `polynomial-tools` for canonical network reconstruction.
+1. Add a new module in `polytool` for canonical network reconstruction.
 2. Start with matrix input over `BigInt`, convert to `BigRational` internally.
 3. Reuse `check_tnn_neville_bigint` as the validator.
 4. Implement the recursive Whitney reduction exactly as above.

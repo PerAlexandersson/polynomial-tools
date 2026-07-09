@@ -14,7 +14,7 @@ experiments, checked examples, and `symmetricfunctions.com` support.
   quasisymmetric, and multivariate polynomial code, including Schur,
   quasisymmetric Schur, key, atom, slide/glide, lock, Kohnert/Lascoux,
   Schubert, and nonsymmetric Macdonald filling-formula routines.
-- `polynomial-tools`: exact univariate polynomial tools for real-rootedness,
+- `polytool`: exact univariate polytool for real-rootedness,
   interlacing, gamma-positivity, recurrence searches, and Ehrhart/h*-vectors.
 - `combpoly`: command-line exploration of combinatorial polynomials from
   permutations, words, and parking functions.

@@ -6,8 +6,8 @@ use combpoly::{
     catalan, lattice_path_matroid, order, parking, permutation, polynomial_builder, statistics,
     word,
 };
-use polynomial_tools::real_rootedness::{format_poly, is_log_concave, is_real_rooted};
-use polynomial_tools::recurrence;
+use polytool::real_rootedness::{format_poly, is_log_concave, is_real_rooted};
+use polytool::recurrence;
 use statistics::Stat;
 
 #[derive(Debug, Clone, Copy, ValueEnum)]

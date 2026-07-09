@@ -254,7 +254,7 @@ dependencies = [
  "num-bigint",
  "num-rational",
  "num-traits",
- "polynomial-tools",
+ "polytool",
  "rayon",
 ]
 
@@ -465,7 +465,7 @@ dependencies = [
  "num-bigint",
  "num-rational",
  "num-traits",
- "polynomial-tools",
+ "polytool",
  "rayon",
  "sym-poly-core",
  "sym-poly-multipoly",
@@ -1093,7 +1093,7 @@ dependencies = [
  "clap",
  "num-bigint",
  "num-traits",
- "polynomial-tools",
+ "polytool",
  "schemars",
  "serde",
  "serde_json",
@@ -1114,7 +1114,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "polynomial-tools"
+name = "polytool"
 version = "0.2.1-rc.5"
 dependencies = [
  "num-bigint",
@@ -1126,12 +1126,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "polynomial-tools-mcp"
+name = "polytool-mcp"
 version = "0.2.1-rc.5"
 dependencies = [
  "anyhow",
  "num-bigint",
- "polynomial-tools",
+ "polytool",
  "rmcp",
  "schemars",
  "serde",
@@ -1140,10 +1140,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "polynomial-tools-web"
+name = "polytool-web"
 version = "0.2.1-rc.5"
 dependencies = [
- "polynomial-tools",
+ "polytool",
  "serde",
  "serde_json",
  "wasm-bindgen",

@@ -9,7 +9,7 @@ rust/
   sym-poly/sym/               ← Symmetric functions (6 classical bases)
   sym-poly/qsym/              ← Quasisymmetric functions (M, F, Ψ, Φ bases)
   sym-poly/multipoly/         ← Multivariate polynomials, divided differences, key polys
-  polynomial-tools/           ← Polynomial toolkit (will be public)
+  polytool/           ← Polynomial toolkit (will be public)
   combinatoric-core/          ← Graphs, posets, chromatic; re-exports sym-poly
   combpoly/                   ← Permutation statistics + combpoly CLI
   kostka/                     ← Public crate: Kostka/LR coefficients, GT polytopes
@@ -59,7 +59,7 @@ over `Ring` coefficients (i64, BigInt, Ratio<BigInt>, Ratio<i64>).
   permuted-basement nonsymmetric Macdonald polynomials by the SSAF filling
   formula
 
-### polynomial-tools/
+### polytool/
 Univariate polynomial toolkit for combinatorial research. Uses primitive
 integer PRS/root counting as the default exact real-rootedness backend, with
 Bézout matrices as the main backend for interlacing and explicit matrix
@@ -130,7 +130,7 @@ Ehrhart polynomials and h*-vectors of Gelfand-Tsetlin polytopes. Has CLI.
 
 ### experiments/
 Temporary working directory for research exploration binaries.
-Depends on combpoly and polynomial-tools. Flat layout with prefix-based grouping.
+Depends on combpoly and polytool. Flat layout with prefix-based grouping.
 
 Notes:
 - This folder is disposable and may be gitignored.

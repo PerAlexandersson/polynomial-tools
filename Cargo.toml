@@ -1,8 +1,8 @@
 [workspace]
 members = [
-    "polynomial-tools",
-    "polynomial-tools/web",
-    "polynomial-tools/mcp",
+    "polytool",
+    "polytool/web",
+    "polytool/mcp",
     "combinatoric-core",
     "combpoly",
     "kostka",

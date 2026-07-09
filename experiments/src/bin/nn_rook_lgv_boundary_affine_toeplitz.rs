@@ -18,7 +18,7 @@ use std::env;
 use experiments::nn_rook_utils::{
     add, degree, fixed_row_count_lgv, monomial, partitions, subset_size, trim,
 };
-use polynomial_tools::format_poly;
+use polytool::format_poly;
 
 type BiPoly = BTreeMap<(usize, usize), i128>;
 

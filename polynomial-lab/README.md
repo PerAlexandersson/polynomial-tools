@@ -103,8 +103,8 @@ available.
 ## Family Registry
 
 The family registry is only convenience plumbing for generated evidence.
-It deliberately lives in `polynomial-lab`, not `polynomial-tools`.  Stable
-standard families are backed by `polynomial-tools`; project-specific families
+It deliberately lives in `polynomial-lab`, not `polytool`.  Stable
+standard families are backed by `polytool`; project-specific families
 remain in the lab namespace until they become broadly useful.
 
 ```bash

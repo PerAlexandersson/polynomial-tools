@@ -1363,7 +1363,7 @@ fn trim_bigint_trailing_zeros(mut coeffs: Vec<BigInt>) -> Vec<BigInt> {
 }
 
 /// Convert a small `h*` vector to `i64` coefficients for use with
-/// `polynomial-tools` checks.
+/// `polytool` checks.
 pub fn hstar_to_i64(coeffs: &[BigInt]) -> Option<Vec<i64>> {
     coeffs.iter().map(ToPrimitive::to_i64).collect()
 }

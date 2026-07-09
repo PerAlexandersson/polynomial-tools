@@ -203,7 +203,7 @@ impl PolynomialFamilyRegistry {
         for n in n_min..=n_max {
             let computed = self.compute(family_id, n)?;
             let bigint_coeffs = bigint_coefficients(&computed)?;
-            let real_rooted = polynomial_tools::is_real_rooted_bigint_coeffs(&bigint_coeffs);
+            let real_rooted = polytool::is_real_rooted_bigint_coeffs(&bigint_coeffs);
             if !real_rooted && first_failure_n.is_none() {
                 first_failure_n = Some(n);
             }
@@ -265,11 +265,11 @@ impl PolynomialFamilyRegistry {
             let left_coefficients = bigint_coefficients(&left)?;
             let right_coefficients = bigint_coefficients(&right)?;
             let interlaces = match mode {
-                InterlacingMode::Weak => polynomial_tools::check_weak_interlacing_bigint_coeffs(
+                InterlacingMode::Weak => polytool::check_weak_interlacing_bigint_coeffs(
                     &left_coefficients,
                     &right_coefficients,
                 ),
-                InterlacingMode::Strict => polynomial_tools::check_interlacing_bigint_coeffs(
+                InterlacingMode::Strict => polytool::check_interlacing_bigint_coeffs(
                     &left_coefficients,
                     &right_coefficients,
                 ),
@@ -327,7 +327,7 @@ pub fn default_family_registry() -> PolynomialFamilyRegistry {
         "eulerian_polynomial",
         "Eulerian polynomial",
         "A_n(t)",
-        "polynomial-tools::sequences",
+        "polytool::sequences",
         1,
         eulerian_polynomial,
     );
@@ -335,7 +335,7 @@ pub fn default_family_registry() -> PolynomialFamilyRegistry {
         "narayana_polynomial",
         "Narayana polynomial",
         "N_n(t)",
-        "polynomial-tools::sequences",
+        "polytool::sequences",
         1,
         narayana_polynomial,
     );
@@ -343,7 +343,7 @@ pub fn default_family_registry() -> PolynomialFamilyRegistry {
         "type_b_eulerian_polynomial",
         "Type B Eulerian polynomial",
         "B_n(t)",
-        "polynomial-tools::sequences",
+        "polytool::sequences",
         0,
         type_b_eulerian_polynomial,
     );
@@ -351,7 +351,7 @@ pub fn default_family_registry() -> PolynomialFamilyRegistry {
         "chebyshev_t_polynomial",
         "Chebyshev polynomial of the first kind",
         "T_n(t)",
-        "polynomial-tools::sequences",
+        "polytool::sequences",
         0,
         chebyshev_t_polynomial,
     );
@@ -359,7 +359,7 @@ pub fn default_family_registry() -> PolynomialFamilyRegistry {
         "chebyshev_u_polynomial",
         "Chebyshev polynomial of the second kind",
         "U_n(t)",
-        "polynomial-tools::sequences",
+        "polytool::sequences",
         0,
         chebyshev_u_polynomial,
     );
@@ -367,7 +367,7 @@ pub fn default_family_registry() -> PolynomialFamilyRegistry {
         "hermite_polynomial",
         "Probabilist Hermite polynomial",
         "He_n(t)",
-        "polynomial-tools::sequences",
+        "polytool::sequences",
         0,
         hermite_polynomial,
     );
@@ -446,9 +446,7 @@ pub fn real_rooted_evaluation_draft(
         id,
         relation_id,
         status,
-        method: Some(
-            "polynomial-lab family registry + polynomial-tools real-rootedness".to_string(),
-        ),
+        method: Some("polynomial-lab family registry + polytool real-rootedness".to_string()),
         notes: Some(format!(
             "Checked real-rootedness of {family_id} for n={}..{}.",
             report.n_min, report.n_max
@@ -565,7 +563,7 @@ pub fn interlacing_evaluation_draft(
         id,
         relation_id,
         status,
-        method: Some("polynomial-lab family registry + polynomial-tools interlacing".to_string()),
+        method: Some("polynomial-lab family registry + polytool interlacing".to_string()),
         notes: Some(format!(
             "Checked {} interlacing {} << {} for n={}..{}.",
             report.mode,
@@ -643,27 +641,27 @@ fn interlacing_item_status(interlaces: Option<bool>) -> &'static str {
 }
 
 fn eulerian_polynomial(n: usize) -> Result<Vec<BigInt>> {
-    indexed_from_one(n, polynomial_tools::sequences::eulerian_polynomials)
+    indexed_from_one(n, polytool::sequences::eulerian_polynomials)
 }
 
 fn narayana_polynomial(n: usize) -> Result<Vec<BigInt>> {
-    indexed_from_one(n, polynomial_tools::sequences::narayana_polynomials)
+    indexed_from_one(n, polytool::sequences::narayana_polynomials)
 }
 
 fn type_b_eulerian_polynomial(n: usize) -> Result<Vec<BigInt>> {
-    indexed_from_zero(n, polynomial_tools::sequences::type_b_eulerian_polynomials)
+    indexed_from_zero(n, polytool::sequences::type_b_eulerian_polynomials)
 }
 
 fn chebyshev_t_polynomial(n: usize) -> Result<Vec<BigInt>> {
-    indexed_from_zero(n, polynomial_tools::sequences::chebyshev_polynomials_t)
+    indexed_from_zero(n, polytool::sequences::chebyshev_polynomials_t)
 }
 
 fn chebyshev_u_polynomial(n: usize) -> Result<Vec<BigInt>> {
-    indexed_from_zero(n, polynomial_tools::sequences::chebyshev_polynomials_u)
+    indexed_from_zero(n, polytool::sequences::chebyshev_polynomials_u)
 }
 
 fn hermite_polynomial(n: usize) -> Result<Vec<BigInt>> {
-    indexed_from_zero(n, polynomial_tools::sequences::hermite_polynomials)
+    indexed_from_zero(n, polytool::sequences::hermite_polynomials)
 }
 
 fn indexed_from_one<F>(n: usize, sequence: F) -> Result<Vec<BigInt>>

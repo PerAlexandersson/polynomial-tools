@@ -33,8 +33,8 @@ cargo run --release -- recurrence --perms 3:12 --avoiding 312 --stat des --auto
 
 ## Dependencies
 
-- `polynomial-tools` for real-rootedness, interlacing, format_poly, recurrence search
-- Polynomial analysis is NOT in this crate — use `polynomial_tools` directly
+- `polytool` for real-rootedness, interlacing, format_poly, recurrence search
+- Polynomial analysis is NOT in this crate — use `polytool` directly
 
 ## Exploration binaries
 
