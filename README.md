@@ -21,7 +21,7 @@ cargo build --release -p polytool
 
 The CLI binary is at `target/release/polytool`.
 
-In a future standalone `polytool` repository, the equivalent command is:
+On the generated standalone `main` branch, the equivalent command is:
 
 ```sh
 cargo build --release
@@ -37,20 +37,19 @@ this directory:
 polytool = { path = "/home/paxinum/Dropbox/AI-projects/rust/polytool" }
 ```
 
-From a public Git repository containing this Rust workspace, Cargo can also
-depend on the package by name:
+From the monorepo `master` branch, Cargo can also depend on the package by
+name:
 
 ```toml
 [dependencies]
-polytool = { git = "https://github.com/USER/REPO.git", package = "polytool" }
+polytool = { git = "https://github.com/PerAlexandersson/polytool.git", branch = "master", package = "polytool" }
 ```
 
-If this directory is pushed as its own standalone GitHub repository, the
-dependency can instead be:
+The repository's generated standalone `main` branch supports the shorter form:
 
 ```toml
 [dependencies]
-polytool = { git = "https://github.com/USER/polytool.git" }
+polytool = { git = "https://github.com/PerAlexandersson/polytool.git" }
 ```
 
 After publishing to crates.io, the dependency would be:
@@ -106,7 +105,7 @@ configuration snippet:
 ./polytool/mcp/install.sh
 ```
 
-In a future standalone `polytool` repository, run:
+On the generated standalone `main` branch, run:
 
 ```sh
 ./mcp/install.sh
@@ -752,9 +751,9 @@ Run the web wrapper tests:
 cargo test -p polytool-web
 ```
 
-If this directory is split out into its own Git repository, keep the core crate,
-`mcp/`, and `web/` under one workspace manifest, and keep `Cargo.lock` if
-reproducible binary builds are important.
+The repository's `main` branch is generated from this directory with
+`git subtree split`; the monorepo `master` branch remains canonical. The core
+crate, `mcp/`, `web/`, and `Cargo.lock` are therefore published together.
 
 ## Support
 
