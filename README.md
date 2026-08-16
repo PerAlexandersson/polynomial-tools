@@ -24,3 +24,21 @@ experiments, checked examples, and `symmetricfunctions.com` support.
 For website examples that need tableau, SSAF, or key-polynomial verification,
 start in `sym-poly/README.md` and add a small checked example under the
 relevant crate's `examples/` directory.
+
+## Polytool repository layout
+
+The `master` branch is the canonical history for this entire workspace.
+Polytool development belongs under `polytool/` on `master`; do not commit
+directly to `main`.
+
+The `main` branch is a generated standalone view of `polytool/`, maintained
+with `git subtree split`. After committing and pushing polytool work on
+`master`, publish the standalone branch with:
+
+```sh
+./scripts/sync-polytool-main.sh
+```
+
+The script requires a clean `polytool/` tree and refuses to overwrite a
+diverged `main`. This keeps the standalone crate available without maintaining
+a second implementation or history by hand.
