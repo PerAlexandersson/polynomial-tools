@@ -1699,10 +1699,16 @@ fn exact_div_polynomial_bigint(
 /// For underdetermined systems, free variables are set to zero.
 pub fn solve_linear_system(a: &[Vec<Q>], b: &[Q]) -> Option<Vec<Q>> {
     let num_rows = a.len();
+    if b.len() != num_rows {
+        return None;
+    }
     if num_rows == 0 {
         return Some(vec![]);
     }
     let num_cols = a[0].len();
+    if a.iter().any(|row| row.len() != num_cols) {
+        return None;
+    }
 
     // Build augmented matrix [A | b].
     let mut aug: Vec<Vec<Q>> = a
@@ -2002,12 +2008,65 @@ pub fn is_totally_nonnegative(mat: &[Vec<i64>], max_minor_size: usize) -> bool {
 /// ];
 /// assert!(check_tnn_neville(&pascal).is_ok());
 /// ```
+fn check_tnn_neville_rational_rows(a: &mut [Vec<Q>]) -> Result<(), String> {
+    let nrows = a.len();
+    let ncols = a.first().map_or(0, Vec::len);
+    let min_dim = nrows.min(ncols);
+    for k in 0..min_dim {
+        for i in (k + 1..nrows).rev() {
+            if a[i][k].is_zero() {
+                continue;
+            }
+            if a[i - 1][k].is_zero() {
+                // A positive entry below a zero pivot gives a negative 2x2
+                // minor if the pivot row has any later positive entry. A
+                // zero suffix row can be moved down without changing a minor.
+                if ((k + 1)..ncols).any(|j| !a[i - 1][j].is_zero()) {
+                    return Err(format!(
+                        "Neville elimination: positive entry [{},{}] below zero pivot \
+                         with nonzero pivot-row suffix",
+                        i, k
+                    ));
+                }
+                a.swap(i - 1, i);
+                continue;
+            }
+            let multiplier = a[i][k].clone() / a[i - 1][k].clone();
+            debug_assert!(multiplier >= Q::zero());
+
+            for j in k..ncols {
+                let sub = multiplier.clone() * a[i - 1][j].clone();
+                a[i][j] -= sub;
+            }
+            a[i][k] = Q::zero();
+
+            for j in (k + 1)..ncols {
+                if a[i][j] < Q::zero() {
+                    return Err(format!(
+                        "Neville elimination: entry [{},{}] became negative \
+                         (multiplier at column {}, rows [{},{}])",
+                        i,
+                        j,
+                        k,
+                        i - 1,
+                        i
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn check_tnn_neville(mat: &[Vec<i64>]) -> Result<(), String> {
     let nrows = mat.len();
     if nrows == 0 {
         return Ok(());
     }
     let ncols = mat[0].len();
+    if mat.iter().any(|row| row.len() != ncols) {
+        return Err("matrix rows have inconsistent lengths".to_string());
+    }
     if ncols == 0 {
         return Ok(());
     }
@@ -2031,49 +2090,19 @@ pub fn check_tnn_neville(mat: &[Vec<i64>]) -> Result<(), String> {
         }
     }
 
-    // Neville elimination: for each column k, eliminate bottom-up using adjacent rows
-    let min_dim = nrows.min(ncols);
-    for k in 0..min_dim {
-        for i in (k + 1..nrows).rev() {
-            if a[i][k].is_zero() {
-                continue;
-            }
-            if a[i - 1][k].is_zero() {
-                // Zero pivot with positive entry below: swap rows
-                // Valid for TNN since both rows have zeros in columns < k
-                a.swap(i - 1, i);
-                continue;
-            }
-            // Both a[i-1][k] > 0 and a[i][k] > 0: compute multiplier
-            let p = a[i][k].clone() / a[i - 1][k].clone();
-            // Multiplier must be non-negative (guaranteed since both entries ≥ 0)
-            debug_assert!(p >= Q::zero());
+    check_tnn_neville_rational_rows(&mut a)?;
 
-            // Subtract: row[i] -= p * row[i-1]
-            for j in k..ncols {
-                let sub = p.clone() * a[i - 1][j].clone();
-                a[i][j] -= sub;
-            }
-            a[i][k] = Q::zero(); // exact zero in the eliminated position
-
-            // Check all remaining entries in this row are non-negative
-            for j in (k + 1)..ncols {
-                if a[i][j] < Q::zero() {
-                    return Err(format!(
-                        "Neville elimination: entry [{},{}] became negative \
-                         (multiplier at column {}, rows [{},{}])",
-                        i,
-                        j,
-                        k,
-                        i - 1,
-                        i
-                    ));
-                }
-            }
-        }
-    }
-
-    Ok(())
+    // Row elimination detects the initial minors involving the first column;
+    // applying the same test to the transpose checks the complementary family
+    // of initial minors. Both families are required in the Neville criterion.
+    let mut transpose = (0..ncols)
+        .map(|j| {
+            (0..nrows)
+                .map(|i| Q::from_integer(BigInt::from(mat[i][j])))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    check_tnn_neville_rational_rows(&mut transpose)
 }
 
 /// Fast TNN check via Neville elimination. Returns bool.
@@ -2090,6 +2119,9 @@ pub fn check_tnn_neville_bigint(mat: &[Vec<BigInt>]) -> Result<(), String> {
         return Ok(());
     }
     let ncols = mat[0].len();
+    if mat.iter().any(|row| row.len() != ncols) {
+        return Err("matrix rows have inconsistent lengths".to_string());
+    }
     if ncols == 0 {
         return Ok(());
     }
@@ -2107,37 +2139,15 @@ pub fn check_tnn_neville_bigint(mat: &[Vec<BigInt>]) -> Result<(), String> {
         }
     }
 
-    let min_dim = nrows.min(ncols);
-    for k in 0..min_dim {
-        for i in (k + 1..nrows).rev() {
-            if a[i][k].is_zero() {
-                continue;
-            }
-            if a[i - 1][k].is_zero() {
-                a.swap(i - 1, i);
-                continue;
-            }
-            let p = a[i][k].clone() / a[i - 1][k].clone();
-            for j in k..ncols {
-                let sub = p.clone() * a[i - 1][j].clone();
-                a[i][j] -= sub;
-            }
-            a[i][k] = Q::zero();
-            for j in (k + 1)..ncols {
-                if a[i][j] < Q::zero() {
-                    return Err(format!(
-                        "Neville: entry [{},{}] negative (col {}, rows [{},{}])",
-                        i,
-                        j,
-                        k,
-                        i - 1,
-                        i
-                    ));
-                }
-            }
-        }
-    }
-    Ok(())
+    check_tnn_neville_rational_rows(&mut a)?;
+    let mut transpose = (0..ncols)
+        .map(|j| {
+            (0..nrows)
+                .map(|i| Q::from_integer(mat[i][j].clone()))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    check_tnn_neville_rational_rows(&mut transpose)
 }
 
 fn extract_submatrix_i64(mat: &[Vec<i64>], rows: &[usize], cols: &[usize]) -> Vec<Vec<BigInt>> {
@@ -2594,6 +2604,17 @@ mod tests {
         let a = vec![vec![Q::one(), Q::one()], vec![Q::one(), Q::one()]];
         let b = vec![Q::one(), Q::from_integer(bi(2))];
         assert!(solve_linear_system(&a, &b).is_none());
+    }
+
+    #[test]
+    fn test_solve_rejects_mismatched_shapes() {
+        assert!(solve_linear_system(&[vec![Q::one()]], &[]).is_none());
+        assert!(solve_linear_system(&[], &[Q::one()]).is_none());
+        assert!(solve_linear_system(
+            &[vec![Q::one(), Q::zero()], vec![Q::one()]],
+            &[Q::one(), Q::one()]
+        )
+        .is_none());
     }
 
     // -----------------------------------------------------------------------
@@ -3065,6 +3086,25 @@ mod tests {
     }
 
     #[test]
+    fn test_tnn_rejects_row_swap_false_positive() {
+        let permutation = vec![vec![0, 1], vec![1, 0]];
+        assert!(check_tnn_neville(&permutation).is_err());
+
+        let permutation_bigint = vec![vec![bi(0), bi(1)], vec![bi(1), bi(0)]];
+        assert!(check_tnn_neville_bigint(&permutation_bigint).is_err());
+
+        // Moving an all-zero suffix row remains safe and avoids rejecting a
+        // genuinely TNN rank-deficient matrix.
+        assert!(check_tnn_neville(&[vec![0, 0], vec![1, 1]]).is_ok());
+    }
+
+    #[test]
+    fn test_tnn_rejects_ragged_matrices() {
+        assert!(check_tnn_neville(&[vec![1, 0], vec![1]]).is_err());
+        assert!(check_tnn_neville_bigint(&[vec![bi(1), bi(0)], vec![bi(1)]]).is_err());
+    }
+
+    #[test]
     fn test_tnn_not_tnn_positive_entries() {
         // All entries ≥ 0 but 2x2 minor det = 1*1 - 2*2 = -3 < 0
         let m = vec![vec![1, 2], vec![2, 1]];
@@ -3086,6 +3126,21 @@ mod tests {
         let neville = check_tnn_neville(&m).is_ok();
         let brute = check_total_positivity(&m, 3, false).is_ok();
         assert_eq!(neville, brute);
+    }
+
+    #[test]
+    fn test_tnn_neville_matches_brute_force_on_binary_3x3_matrices() {
+        for bits in 0_u16..(1 << 9) {
+            let mut matrix = vec![vec![0; 3]; 3];
+            for entry in 0..9 {
+                matrix[entry / 3][entry % 3] = i64::from((bits >> entry) & 1);
+            }
+            assert_eq!(
+                check_tnn_neville(&matrix).is_ok(),
+                check_total_positivity(&matrix, 3, false).is_ok(),
+                "Neville and brute-force checks disagree for {matrix:?}"
+            );
+        }
     }
 
     #[test]

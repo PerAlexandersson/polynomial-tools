@@ -84,7 +84,7 @@ use crate::Polynomial;
 use num_bigint::BigInt;
 use num_integer::Integer;
 use num_rational::Ratio;
-use num_traits::{Signed, ToPrimitive, Zero};
+use num_traits::{One, Signed, ToPrimitive, Zero};
 
 type Q = Ratio<BigInt>;
 
@@ -388,48 +388,19 @@ pub fn is_palindromic_bigint_coeffs(coeffs: &[BigInt]) -> bool {
 /// p(t) = sum_{i=0}^{floor(d/2)} gamma_i * t^i * (1+t)^{d-2i}
 /// ```
 ///
-/// Returns `None` if the polynomial is not palindromic.
+/// Returns `None` if the polynomial is not palindromic or if an exact gamma
+/// coefficient does not fit in `i64`; use
+/// [`gamma_coefficients_bigint_coeffs`] for the no-overflow result.
 /// Returns `Some(gamma_coefficients)` where `gamma[i]` is the coefficient
 /// of t^i (1+t)^{d-2i} in the expansion.
 ///
 /// The polynomial is gamma-positive iff all returned coefficients are non-negative.
 pub fn gamma_coefficients(coeffs: &[i64]) -> Option<Vec<i64>> {
-    let d = match coeffs.iter().rposition(|&c| c != 0) {
-        Some(d) => d,
-        None => return Some(vec![]),
-    };
-    if !is_palindromic(coeffs) {
-        return None;
-    }
-    let half = d / 2;
-
-    // Precompute binomial coefficients C(n, k) for n up to d.
-    // binomials[n][k] = C(n, k).
-    let mut binomials = vec![vec![0i128; d + 1]; d + 1];
-    for n in 0..=d {
-        binomials[n][0] = 1;
-        for k in 1..=n {
-            binomials[n][k] = binomials[n - 1][k - 1] + binomials[n - 1][k];
-        }
-    }
-
-    // Extract gamma coefficients from i=0 upward.
-    // gamma_i = coeffs[i] - sum_{j<i} gamma_j * C(d-2j, i-j)
-    let mut gamma = vec![0i128; half + 1];
-    for i in 0..=half {
-        let mut val = coeffs[i] as i128;
-        for j in 0..i {
-            val -= gamma[j] * binomials[d - 2 * j][i - j];
-        }
-        gamma[i] = val;
-    }
-
-    Some(
-        gamma
-            .into_iter()
-            .map(|g| i64::try_from(g).expect("gamma coefficient too large for i64"))
-            .collect(),
-    )
+    let coeffs = coeffs.iter().map(|&c| BigInt::from(c)).collect::<Vec<_>>();
+    gamma_coefficients_bigint_coeffs(&coeffs)?
+        .into_iter()
+        .map(|gamma| gamma.to_i64())
+        .collect()
 }
 
 /// Compute gamma coefficients for a palindromic `BigInt` coefficient polynomial.
@@ -606,19 +577,28 @@ pub fn has_simple_roots_bigint_coeffs(coeffs: &[BigInt]) -> bool {
 /// Returns `None` if the polynomial is not real-rooted.
 /// Returns `Some(vec![])` for constant/zero polynomials.
 pub fn real_roots(coeffs: &[i64]) -> Option<Vec<Q>> {
-    let start = coeffs.iter().position(|&c| c != 0).unwrap_or(0);
-    let end = coeffs.iter().rposition(|&c| c != 0).unwrap_or(0);
-    if start > end {
+    let Some(start) = coeffs.iter().position(|&c| c != 0) else {
         return Some(vec![]);
-    }
+    };
+    let end = coeffs
+        .iter()
+        .rposition(|&c| c != 0)
+        .expect("nonzero polynomial has a final nonzero coefficient");
     let trimmed = &coeffs[start..=end];
+    let mut roots = if start > 0 {
+        vec![Q::zero()]
+    } else {
+        Vec::new()
+    };
     if trimmed.len() <= 1 {
-        return Some(vec![]);
+        return Some(roots);
     }
     if trimmed.len() == 2 {
         let a = Q::from_integer(BigInt::from(trimmed[0]));
         let b = Q::from_integer(BigInt::from(trimmed[1]));
-        return Some(vec![-a / b]);
+        roots.push(-a / b);
+        roots.sort();
+        return Some(roots);
     }
 
     let sc = SturmChain::from_i64_coeffs(trimmed);
@@ -627,12 +607,13 @@ pub fn real_roots(coeffs: &[i64]) -> Option<Vec<Q>> {
     let intervals = sc.isolate_roots(&eps);
 
     if intervals.len() == sf_degree {
-        Some(
+        roots.extend(
             intervals
                 .into_iter()
-                .map(|(lo, hi)| (&lo + &hi) / Q::from_integer(BigInt::from(2)))
-                .collect(),
-        )
+                .map(|(lo, hi)| (&lo + &hi) / Q::from_integer(BigInt::from(2))),
+        );
+        roots.sort();
+        Some(roots)
     } else {
         None
     }
@@ -648,26 +629,46 @@ pub fn real_roots(coeffs: &[i64]) -> Option<Vec<Q>> {
 /// Returns `None` if either polynomial is not real-rooted.
 /// Returns `Some(false)` if deg(g) ≠ deg(f) + 1.
 pub fn check_interlacing_sturm(f: &[i64], g: &[i64]) -> Option<bool> {
-    let rf = real_roots(f)?;
-    let rg = real_roots(g)?;
+    if !is_real_rooted_sturm(f) || !is_real_rooted_sturm(g) {
+        return None;
+    }
 
-    if rg.len() != rf.len() + 1 {
+    let (Some(df), Some(dg)) = (poly_degree_trimmed(f), poly_degree_trimmed(g)) else {
+        return Some(false);
+    };
+    if dg != df + 1 {
+        return Some(false);
+    }
+    if !has_simple_roots(f) || !has_simple_roots(g) || resultant(f, g).is_zero() {
         return Some(false);
     }
 
-    let mut rf: Vec<_> = rf;
-    rf.sort();
-    let mut rg: Vec<_> = rg;
-    rg.sort();
+    let f_chain = SturmChain::from_i64_coeffs(f);
+    let g_chain = SturmChain::from_i64_coeffs(g);
+    let mut epsilon = Q::one();
+    loop {
+        let f_intervals = f_chain.isolate_roots(&epsilon);
+        let g_intervals = g_chain.isolate_roots(&epsilon);
+        debug_assert_eq!(f_intervals.len(), df);
+        debug_assert_eq!(g_intervals.len(), dg);
 
-    // Check rg[0] < rf[0] < rg[1] < rf[1] < ... < rg[d]
-    for i in 0..rf.len() {
-        if rf[i] <= rg[i] || rf[i] >= rg[i + 1] {
+        let certified = f_intervals
+            .iter()
+            .enumerate()
+            .all(|(i, (f_lo, f_hi))| g_intervals[i].1 < *f_lo && *f_hi < g_intervals[i + 1].0);
+        if certified {
+            return Some(true);
+        }
+
+        let definitely_wrong = f_intervals
+            .iter()
+            .enumerate()
+            .any(|(i, (f_lo, f_hi))| *f_hi < g_intervals[i].0 || g_intervals[i + 1].1 < *f_lo);
+        if definitely_wrong {
             return Some(false);
         }
+        epsilon /= Q::from_integer(BigInt::from(2));
     }
-
-    Some(true)
 }
 
 // ---------------------------------------------------------------------------
@@ -689,7 +690,7 @@ pub fn check_interlacing_sturm(f: &[i64], g: &[i64]) -> Option<bool> {
 /// ```
 ///
 /// Returns a d x d matrix (as `i64`) where d = deg(f), or `None` if the degree
-/// constraint is not satisfied.
+/// constraint is not satisfied or an exact entry does not fit in `i64`.
 ///
 /// The division is exact because h(x,y) = f(x)g(y) - f(y)g(x) vanishes on x = y.
 /// Expanding: for each pair (k, l) with k > l, the contribution is
@@ -701,53 +702,10 @@ pub fn check_interlacing_sturm(f: &[i64], g: &[i64]) -> Option<bool> {
 /// which follows from factoring x^k y^l - x^l y^k = x^l y^l (x^{k-l} - y^{k-l})
 /// and using the geometric sum (x^n - y^n)/(x - y) = sum x^i y^{n-1-i}.
 pub fn bezout_matrix(f: &[i64], g: &[i64]) -> Option<Vec<Vec<i64>>> {
-    let df = poly_degree_trimmed(f)?;
-    let dg = poly_degree_trimmed(g)?;
-
-    if df != dg + 1 {
-        return None;
-    }
-
-    let d = df; // matrix is d × d
-    let mut b = vec![vec![0i128; d]; d];
-
-    for k in 0..=df {
-        for l in 0..k {
-            if l > dg && k > dg {
-                continue;
-            }
-            // Contribution: (f_k * g_l - f_l * g_k) * Σ_m x^{l+m} y^{k-1-m}
-            let fk = coeff_i64(f, k) as i128;
-            let fl = coeff_i64(f, l) as i128;
-            let gk = coeff_i64(g, k) as i128;
-            let gl = coeff_i64(g, l) as i128;
-            let c = fk * gl - fl * gk;
-            if c == 0 {
-                continue;
-            }
-            for m in 0..=(k - l - 1) {
-                let xi = l + m; // power of x
-                let yj = k - 1 - m; // power of y
-                if xi < d && yj < d {
-                    b[xi][yj] += c;
-                }
-            }
-        }
-    }
-
-    // Convert to i64 — return None if any entry overflows.
-    let mut result: Vec<Vec<i64>> = Vec::with_capacity(d);
-    for row in b {
-        let mut r = Vec::with_capacity(d);
-        for v in row {
-            if v > i64::MAX as i128 || v < i64::MIN as i128 {
-                return None; // overflow: caller should use bezout_matrix_bigint
-            }
-            r.push(v as i64);
-        }
-        result.push(r);
-    }
-    Some(result)
+    bezout_matrix_bigint(f, g)?
+        .into_iter()
+        .map(|row| row.into_iter().map(|entry| entry.to_i64()).collect())
+        .collect()
 }
 
 /// Compute the Bézout matrix with BigInt entries (no overflow).
@@ -1988,6 +1946,11 @@ mod tests {
 
         // t^2 + 1: not real-rooted
         assert!(real_roots(&[1, 0, 1]).is_none());
+
+        // Initial zero coefficients represent a root at zero, not coefficients
+        // that may simply be discarded from the returned root set.
+        assert_eq!(real_roots(&[0, 1]), Some(vec![Q::zero()]));
+        assert_eq!(real_roots(&[0, 0, 1]), Some(vec![Q::zero()]));
     }
 
     #[test]
@@ -2006,6 +1969,14 @@ mod tests {
 
         // Not real-rooted: t^2+1 → None
         assert_eq!(check_interlacing_sturm(&[1, 1], &[1, 0, 1]), None);
+
+        // The linear root 333333334/1000000000 lies just to the right of
+        // 1/3, the smaller root of 2 - 7t + 3t^2. Fixed-width midpoint
+        // approximations used to reverse this ordering.
+        assert_eq!(
+            check_interlacing_sturm(&[-333_333_334, 1_000_000_000], &[2, -7, 3]),
+            Some(true)
+        );
     }
 
     #[test]
@@ -2059,6 +2030,13 @@ mod tests {
         // Should be positive definite since g interlaces f (roots: 1 < 2 < 3).
         let b_big = bezout_matrix_bigint(&[3, -4, 1], &[-2, 1]).unwrap();
         assert!(is_positive_definite_bigint(&b_big));
+    }
+
+    #[test]
+    fn test_bezout_matrix_checked_narrowing() {
+        let max = i64::MAX;
+        let min = i64::MIN;
+        assert!(bezout_matrix(&[max, min, max], &[min, max]).is_none());
     }
 
     #[test]
@@ -2368,6 +2346,14 @@ mod tests {
 
         // [1,2,2,1] degree 3: gamma_0=1, gamma_1=2-3=-1
         assert_eq!(gamma_coefficients(&[1, 2, 2, 1]), Some(vec![1, -1]));
+
+        // The exact gamma expansion exists, but later coefficients do not fit
+        // in i64. The convenience wrapper must fail cleanly without overflowing
+        // its former i128 Pascal triangle.
+        let mut high_degree = vec![0; 201];
+        high_degree[0] = 1;
+        high_degree[200] = 1;
+        assert_eq!(gamma_coefficients(&high_degree), None);
     }
 
     #[test]

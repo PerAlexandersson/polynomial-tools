@@ -31,6 +31,35 @@ fn real_rooted_accepts_bigint_coefficients() {
 }
 
 #[test]
+fn malformed_polynomial_input_is_fatal() {
+    let output = run_polytool(&["real-rooted"], "1,1\nnot-a-polynomial\n1,2,1\n");
+
+    assert!(!output.status.success());
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+    let stderr = String::from_utf8(output.stderr).expect("stderr is utf8");
+    assert!(stderr.contains("Invalid polynomial input"));
+}
+
+#[test]
+fn explicit_hstar_dimension_reports_degree_violation() {
+    let output = run_polytool(
+        &["hstar-inequalities", "--dimension", "1", "--json"],
+        "1,0,1\n",
+    );
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).expect("stdout is utf8");
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("valid hstar JSON");
+    assert_eq!(
+        json["items"][0]["hstar"],
+        serde_json::json!(["1", "0", "1"])
+    );
+    assert_eq!(json["items"][0]["degree"], 2);
+    assert_eq!(json["items"][0]["all_applicable_hold"], false);
+}
+
+#[test]
 fn gamma_expansion_json_accepts_bigint_coefficients() {
     let output = run_polytool(
         &["gamma-expansion", "--json"],

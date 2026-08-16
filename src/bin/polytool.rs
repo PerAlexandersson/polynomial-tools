@@ -1082,11 +1082,11 @@ fn read_polys_bigint() -> Vec<Vec<BigInt>> {
     io::stdin().read_to_string(&mut input).unwrap();
     parse_polynomials_bigint(&input)
         .into_iter()
-        .filter_map(|r| match r {
-            Ok(p) => Some(p),
-            Err(e) => {
-                eprintln!("Warning: {}", e);
-                None
+        .map(|result| match result {
+            Ok(polynomial) => polynomial,
+            Err(error) => {
+                eprintln!("Invalid polynomial input: {error}");
+                std::process::exit(2);
             }
         })
         .collect()
@@ -1107,11 +1107,11 @@ fn read_polys_rational() -> Vec<Vec<RecurrenceBigRational>> {
             let t = l.trim();
             !t.is_empty() && !t.starts_with('#')
         })
-        .filter_map(|line| match parse_coeff_list_rational(line) {
-            Ok(p) => Some(p),
-            Err(e) => {
-                eprintln!("Warning: {}", e);
-                None
+        .map(|line| match parse_coeff_list_rational(line) {
+            Ok(polynomial) => polynomial,
+            Err(error) => {
+                eprintln!("Invalid polynomial input: {error}");
+                std::process::exit(2);
             }
         })
         .collect()
