@@ -1060,6 +1060,10 @@ impl Poset {
     /// on positions {1,...,n} where covers encode the required comparisons.
     /// Linear extensions of this poset correspond to k-alternating permutations.
     pub fn k_alternating(n: usize, k: usize) -> Self {
+        assert!(k > 0, "k_alternating requires k > 0");
+        if n == 0 {
+            return Poset::new(0, &[]);
+        }
         // The poset is on positions {0, ..., n-1} (0-indexed).
         // For each adjacent pair (j, j+1):
         //   If position (j+1) is NOT a descent (ascent): j < j+1 in poset
@@ -1505,6 +1509,17 @@ mod tests {
         assert_eq!(f.num_elements(), 4);
         assert_eq!(f.covers().len(), 3);
         assert_eq!(f.num_linear_extensions(), 5);
+    }
+
+    #[test]
+    fn test_k_alternating_empty_poset() {
+        assert_eq!(Poset::k_alternating(0, 1), Poset::new(0, &[]));
+    }
+
+    #[test]
+    #[should_panic(expected = "requires k > 0")]
+    fn test_k_alternating_rejects_zero_k() {
+        let _ = Poset::k_alternating(3, 0);
     }
 
     #[test]

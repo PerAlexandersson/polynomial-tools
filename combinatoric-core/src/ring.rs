@@ -1,4 +1,5 @@
 use num_bigint::BigInt;
+use num_traits::ToPrimitive;
 use std::fmt;
 use std::ops::{Add, Mul, Neg, Sub};
 
@@ -32,6 +33,17 @@ pub trait Ring:
     /// Embed a 64-bit integer into this ring.
     fn from_i64(n: i64) -> Self;
 
+    /// Embed an arbitrary-precision integer into this ring.
+    ///
+    /// Bounded coefficient rings use the checked default conversion. Exact
+    /// arbitrary-precision rings override this method.
+    fn from_bigint(n: &BigInt) -> Self {
+        Self::from_i64(
+            n.to_i64()
+                .expect("integer coefficient does not fit in this coefficient ring"),
+        )
+    }
+
     /// Additive inverse exists by `Neg`, but this is convenient.
     fn minus_one() -> Self {
         Self::zero() - Self::one()
@@ -43,6 +55,15 @@ pub trait Ring:
     /// For integer types (i64, BigInt): panics if division is not exact.
     /// For rational types: always works.
     fn exact_div_i64(&self, divisor: i64) -> Self;
+
+    /// Exact division by an arbitrary-precision integer.
+    fn exact_div_bigint(&self, divisor: &BigInt) -> Self {
+        self.exact_div_i64(
+            divisor
+                .to_i64()
+                .expect("integer divisor does not fit in this coefficient ring"),
+        )
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -91,6 +112,9 @@ impl Ring for BigInt {
     fn from_i64(n: i64) -> Self {
         BigInt::from(n)
     }
+    fn from_bigint(n: &BigInt) -> Self {
+        n.clone()
+    }
     fn exact_div_i64(&self, divisor: i64) -> Self {
         let d = BigInt::from(divisor);
         let (q, r) = num_integer::Integer::div_rem(self, &d);
@@ -100,6 +124,11 @@ impl Ring for BigInt {
             self,
             divisor
         );
+        q
+    }
+    fn exact_div_bigint(&self, divisor: &BigInt) -> Self {
+        let (q, r) = num_integer::Integer::div_rem(self, divisor);
+        assert!(r == BigInt::from(0), "inexact arbitrary-precision division");
         q
     }
 }
@@ -123,8 +152,14 @@ impl Ring for Ratio<BigInt> {
     fn from_i64(n: i64) -> Self {
         Ratio::from_integer(BigInt::from(n))
     }
+    fn from_bigint(n: &BigInt) -> Self {
+        Ratio::from_integer(n.clone())
+    }
     fn exact_div_i64(&self, divisor: i64) -> Self {
         self.clone() / Ratio::from_integer(BigInt::from(divisor))
+    }
+    fn exact_div_bigint(&self, divisor: &BigInt) -> Self {
+        self.clone() / Ratio::from_integer(divisor.clone())
     }
 }
 

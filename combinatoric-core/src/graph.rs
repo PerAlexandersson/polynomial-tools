@@ -913,9 +913,19 @@ impl Graph {
 
     /// Induced subgraph on vertex set `verts` (relabeled to 0..verts.len()).
     pub fn induced_subgraph(&self, verts: &[usize]) -> Self {
-        let vset: BTreeSet<usize> = verts.iter().copied().collect();
+        assert!(
+            verts.iter().all(|&vertex| vertex < self.n),
+            "induced_subgraph vertex is outside the graph"
+        );
+        let mut seen = BTreeSet::new();
+        let unique_verts = verts
+            .iter()
+            .copied()
+            .filter(|vertex| seen.insert(*vertex))
+            .collect::<Vec<_>>();
+        let vset: BTreeSet<usize> = unique_verts.iter().copied().collect();
         let mut idx = vec![0usize; self.n];
-        for (new, &old) in verts.iter().enumerate() {
+        for (new, &old) in unique_verts.iter().enumerate() {
             idx[old] = new;
         }
         let edges: Vec<_> = self
@@ -924,7 +934,7 @@ impl Graph {
             .filter(|&&(u, v)| vset.contains(&u) && vset.contains(&v))
             .map(|&(u, v)| (idx[u], idx[v]))
             .collect();
-        Graph::new(verts.len(), &edges)
+        Graph::new(unique_verts.len(), &edges)
     }
 
     /// Delete a vertex (reindex remaining vertices).
@@ -2297,6 +2307,20 @@ mod tests {
         let g = k4.delete_vertex(0);
         assert_eq!(g.num_vertices(), 3);
         assert_eq!(g.num_edges(), 3); // K3
+    }
+
+    #[test]
+    fn test_induced_subgraph_treats_vertices_as_a_set() {
+        let graph = Graph::path(4);
+        let induced = graph.induced_subgraph(&[2, 1, 2]);
+        assert_eq!(induced.num_vertices(), 2);
+        assert_eq!(induced.num_edges(), 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "outside the graph")]
+    fn test_induced_subgraph_rejects_invalid_vertex() {
+        let _ = Graph::path(3).induced_subgraph(&[0, 3]);
     }
 
     #[test]

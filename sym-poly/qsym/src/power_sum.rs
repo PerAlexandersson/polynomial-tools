@@ -36,6 +36,8 @@
 
 use std::collections::BTreeMap;
 
+use num_bigint::BigInt;
+use num_rational::BigRational;
 use sym_poly_core::{Composition, Ring};
 
 use crate::basis::QSymBasis;
@@ -179,6 +181,7 @@ impl BlockWeight {
         }
     }
 
+    #[cfg(test)]
     fn value_i64(self, block: &[u32]) -> i64 {
         self.factors(block).into_iter().fold(1i64, |value, factor| {
             value.checked_mul(factor).unwrap_or_else(|| match self {
@@ -192,6 +195,7 @@ impl BlockWeight {
 /// π(B) = product of partial sums of block B.
 ///
 /// For B = (b_1, ..., b_m): π(B) = b_1 · (b_1+b_2) · ... · (b_1+...+b_m).
+#[cfg(test)]
 fn pi_value(block: &[u32]) -> i64 {
     BlockWeight::Pi.value_i64(block)
 }
@@ -199,6 +203,7 @@ fn pi_value(block: &[u32]) -> i64 {
 /// sp(B) = |B|! · Π b_i — factorial of block length times product of parts.
 ///
 /// For B = (b_1, ..., b_m): sp(B) = m! · b_1 · b_2 · ... · b_m.
+#[cfg(test)]
 fn sp_value(block: &[u32]) -> i64 {
     BlockWeight::Sp.value_i64(block)
 }
@@ -334,10 +339,10 @@ fn monomial_to_power_sum<C: Ring>(
             let mut sum = C::zero();
             for j in 0..k {
                 if !input[j].is_zero() {
-                    let (num, den) = m_to_ps[j][i];
-                    if num != 0 {
-                        let term = input[j].clone() * C::from_i64(num);
-                        sum = sum + term.exact_div_i64(den);
+                    let coefficient = &m_to_ps[j][i];
+                    if *coefficient.numer() != BigInt::from(0) {
+                        let term = input[j].clone() * C::from_bigint(coefficient.numer());
+                        sum = sum + term.exact_div_bigint(coefficient.denom());
                     }
                 }
             }
@@ -429,10 +434,10 @@ fn monomial_to_combinatorial_power_sum_basis<C: Ring>(
             let mut sum = C::zero();
             for j in 0..k {
                 if !input[j].is_zero() {
-                    let (num, den) = m_to_ps[j][i];
-                    if num != 0 {
-                        let term = input[j].clone() * C::from_i64(num);
-                        sum = sum + term.exact_div_i64(den);
+                    let coefficient = &m_to_ps[j][i];
+                    if *coefficient.numer() != BigInt::from(0) {
+                        let term = input[j].clone() * C::from_bigint(coefficient.numer());
+                        sum = sum + term.exact_div_bigint(coefficient.denom());
                     }
                 }
             }
@@ -450,6 +455,7 @@ fn monomial_to_combinatorial_power_sum_basis<C: Ring>(
 // =========================================================================
 
 /// z_α = Π i^{m_i} · m_i! where m_i = #{j : α_j = i}.
+#[cfg(test)]
 fn z_coefficient(parts: &[u32]) -> i64 {
     let mut counts: BTreeMap<u32, u32> = BTreeMap::new();
     for &p in parts {
@@ -652,50 +658,30 @@ fn build_transition_matrix(
     compositions: &[Composition],
     comp_index: &BTreeMap<&Composition, usize>,
     block_weight: BlockWeight,
-) -> Vec<Vec<(i64, i64)>> {
+) -> Vec<Vec<BigRational>> {
     let k = compositions.len();
-    let mut matrix = vec![vec![(0i64, 1i64); k]; k];
+    let mut matrix = vec![vec![BigRational::from_integer(BigInt::from(0)); k]; k];
 
     for (j, alpha) in compositions.iter().enumerate() {
         let parts = alpha.parts();
-        let z = z_coefficient(parts);
+        let z = z_factors(parts)
+            .into_iter()
+            .fold(BigInt::from(1), |value, factor| value * factor);
 
         for coarsening in composition_coarsenings(parts) {
             let mut result_parts = Vec::new();
-            let mut denom: i64 = 1;
+            let mut denominator = BigInt::from(1);
 
             for block in &coarsening {
                 result_parts.push(checked_block_sum(block));
-                denom = denom
-                    .checked_mul(block_weight.value_i64(block))
-                    .expect("power-sum denominator overflow");
+                for factor in block_weight.factors(block) {
+                    denominator *= factor;
+                }
             }
 
             let comp = Composition::new(result_parts);
             if let Some(&i) = comp_index.get(&comp) {
-                let (ref mut num, ref mut den) = matrix[j][i];
-                let left = (*num)
-                    .checked_mul(denom)
-                    .expect("power-sum transition coefficient overflow");
-                let right = z
-                    .checked_mul(*den)
-                    .expect("power-sum transition coefficient overflow");
-                *num = left
-                    .checked_add(right)
-                    .expect("power-sum transition coefficient overflow");
-                *den = (*den)
-                    .checked_mul(denom)
-                    .expect("power-sum transition coefficient overflow");
-                let g = i64::try_from(gcd(num.unsigned_abs(), den.unsigned_abs()))
-                    .expect("rational gcd overflow");
-                if g > 1 {
-                    *num /= g;
-                    *den /= g;
-                }
-                if *den < 0 {
-                    *num = -(*num);
-                    *den = -(*den);
-                }
+                matrix[j][i] += BigRational::new(z.clone(), denominator);
             }
         }
     }
@@ -707,9 +693,9 @@ fn build_combinatorial_power_sum_transition_matrix(
     compositions: &[Composition],
     comp_index: &BTreeMap<&Composition, usize>,
     reverse: bool,
-) -> Vec<Vec<(i64, i64)>> {
+) -> Vec<Vec<BigRational>> {
     let k = compositions.len();
-    let mut matrix = vec![vec![(0i64, 1i64); k]; k];
+    let mut matrix = vec![vec![BigRational::from_integer(BigInt::from(0)); k]; k];
 
     for (j, alpha) in compositions.iter().enumerate() {
         for beta in Composition::integer_compositions(alpha.size()) {
@@ -718,7 +704,7 @@ fn build_combinatorial_power_sum_transition_matrix(
                 continue;
             }
             if let Some(&i) = comp_index.get(&beta) {
-                matrix[j][i] = (coeff, 1);
+                matrix[j][i] = BigRational::from_integer(BigInt::from(coeff));
             }
         }
     }
@@ -735,28 +721,24 @@ fn gcd(mut a: u64, mut b: u64) -> u64 {
     a
 }
 
-/// Invert a rational matrix (entries as (num, den) pairs) via Gaussian elimination.
-fn invert_rational_matrix(m: &[Vec<(i64, i64)>]) -> Vec<Vec<(i64, i64)>> {
-    use num_rational::Ratio;
-    type Q = Ratio<i64>;
-
+/// Invert a rational matrix via exact Gaussian elimination.
+fn invert_rational_matrix(m: &[Vec<BigRational>]) -> Vec<Vec<BigRational>> {
     let n = m.len();
     if n == 0 {
         return vec![];
     }
 
-    let mut aug: Vec<Vec<Q>> = Vec::with_capacity(n);
+    let mut aug: Vec<Vec<BigRational>> = Vec::with_capacity(n);
     for i in 0..n {
         let mut row = Vec::with_capacity(2 * n);
         for j in 0..n {
-            let (num, den) = m[i][j];
-            row.push(Q::new(num, den));
+            row.push(m[i][j].clone());
         }
         for j in 0..n {
             row.push(if i == j {
-                Q::from_integer(1)
+                BigRational::from_integer(BigInt::from(1))
             } else {
-                Q::from_integer(0)
+                BigRational::from_integer(BigInt::from(0))
             });
         }
         aug.push(row);
@@ -765,7 +747,7 @@ fn invert_rational_matrix(m: &[Vec<(i64, i64)>]) -> Vec<Vec<(i64, i64)>> {
     for col in 0..n {
         let mut pivot = None;
         for row in col..n {
-            if aug[row][col] != Q::from_integer(0) {
+            if aug[row][col] != BigRational::from_integer(BigInt::from(0)) {
                 pivot = Some(row);
                 break;
             }
@@ -790,11 +772,10 @@ fn invert_rational_matrix(m: &[Vec<(i64, i64)>]) -> Vec<Vec<(i64, i64)>> {
         }
     }
 
-    let mut inv = vec![vec![(0i64, 1i64); n]; n];
+    let mut inv = vec![vec![BigRational::from_integer(BigInt::from(0)); n]; n];
     for i in 0..n {
         for j in 0..n {
-            let val = &aug[i][n + j];
-            inv[i][j] = (*val.numer(), *val.denom());
+            inv[i][j] = aug[i][n + j].clone();
         }
     }
     inv
@@ -863,6 +844,16 @@ mod tests {
         let phi = coefficient_from_factors::<BigQ>(z, BlockWeight::Sp.factors(&parts));
         assert_eq!(psi, BigQ::from_integer(BigInt::from(1)));
         assert_eq!(phi, BigQ::from_integer(BigInt::from(1)));
+    }
+
+    #[test]
+    fn test_rational_matrix_inverse_keeps_bigint_coefficients() {
+        type BigQ = Ratio<BigInt>;
+
+        let large = BigInt::from(i64::MAX) + BigInt::from(1);
+        let matrix = vec![vec![BigQ::new(BigInt::from(1), large.clone())]];
+        let inverse = invert_rational_matrix(&matrix);
+        assert_eq!(inverse[0][0], BigQ::from_integer(large));
     }
 
     #[test]
