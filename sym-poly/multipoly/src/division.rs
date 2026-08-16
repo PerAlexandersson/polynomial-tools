@@ -34,7 +34,10 @@ pub fn multiply_by_monomial<C: Ring>(
             let new_exp = term_exp
                 .iter()
                 .zip(exponents.iter())
-                .map(|(&a, &b)| a + b)
+                .map(|(&a, &b)| {
+                    a.checked_add(b)
+                        .expect("monomial exponent overflow during multiplication")
+                })
                 .collect();
             (new_exp, term_coeff.clone() * coefficient.clone())
         })
@@ -346,6 +349,13 @@ mod tests {
         let shifted = multiply_by_monomial(&f, &[2, 1], q(-1));
 
         assert_eq!(shifted, mono(&[3, 1], -2) + mono(&[2, 2], -3));
+    }
+
+    #[test]
+    #[should_panic(expected = "monomial exponent overflow during multiplication")]
+    fn test_multiply_by_monomial_rejects_exponent_overflow() {
+        let f = MultiPoly::monomial(1, vec![u32::MAX], q(1));
+        let _ = multiply_by_monomial(&f, &[1], q(1));
     }
 
     #[test]

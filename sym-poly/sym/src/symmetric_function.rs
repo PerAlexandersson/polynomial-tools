@@ -450,8 +450,8 @@ impl<C: Ring> SymmetricFunction<C> {
         let in_schur = self.to_schur_basis();
         let mut result = C::zero();
         for (partition, coeff) in in_schur.terms() {
-            let val = schur_trivial_spec(partition, n);
-            result = result + coeff.clone() * C::from_i64(val);
+            let val = schur_trivial_spec::<C>(partition, n);
+            result = result + coeff.clone() * val;
         }
         result
     }
@@ -548,26 +548,45 @@ fn partition_b(p: &Partition) -> u32 {
         .sum()
 }
 
-fn schur_trivial_spec(partition: &Partition, n: u32) -> i64 {
+fn schur_trivial_spec<C: Ring>(partition: &Partition, n: u32) -> C {
     if partition.is_empty() {
-        return 1;
+        return C::one();
     }
     if partition.num_parts() > n as usize {
-        return 0;
+        return C::zero();
     }
-    let mut numer: i64 = 1;
-    let mut denom: i64 = 1;
+
+    // Cancel the hook-content factors before embedding them in C.  This keeps
+    // intermediate integer arithmetic bounded by individual u32-sized factors
+    // and lets arbitrary-precision coefficient rings retain their precision.
+    let mut numerators = Vec::new();
+    let mut denominators = Vec::new();
     for (r, c) in partition.diagram_boxes() {
         let content = c as i64 - r as i64;
-        let hook = partition.hook_length(r, c).unwrap() as i64;
-        numer *= n as i64 + content;
-        denom *= hook;
-        let g = gcd_i64(numer.abs(), denom.abs());
-        numer /= g;
-        denom /= g;
+        let factor = i64::from(n) + content;
+        debug_assert!(factor > 0);
+        numerators.push(factor);
+        denominators.push(i64::from(partition.hook_length(r, c).unwrap()));
     }
-    assert_eq!(denom, 1);
-    numer
+
+    for denominator in &mut denominators {
+        for numerator in &mut numerators {
+            let divisor = gcd_i64(*numerator, *denominator);
+            *numerator /= divisor;
+            *denominator /= divisor;
+            if *denominator == 1 {
+                break;
+            }
+        }
+    }
+
+    assert!(
+        denominators.iter().all(|&factor| factor == 1),
+        "hook-content formula did not simplify to an integer"
+    );
+    numerators
+        .into_iter()
+        .fold(C::one(), |value, factor| value * C::from_i64(factor))
 }
 
 fn gcd_i64(mut a: i64, mut b: i64) -> i64 {
@@ -869,6 +888,18 @@ mod tests {
         let s: SymmetricFunction<i64> =
             SymmetricFunction::schur_symmetric(Partition::new(vec![2, 1]));
         assert_eq!(s.trivial_specialization(3), 8);
+    }
+
+    #[test]
+    fn test_trivial_specialization_bigint_does_not_narrow_through_i64() {
+        use num_bigint::BigInt;
+
+        let s: SymmetricFunction<BigInt> =
+            SymmetricFunction::schur_symmetric(Partition::new(vec![50]));
+        let expected = (1u32..=50).fold(BigInt::from(1), |value, k| {
+            value * BigInt::from(49 + k) / BigInt::from(k)
+        });
+        assert_eq!(s.trivial_specialization(50), expected);
     }
 
     #[test]

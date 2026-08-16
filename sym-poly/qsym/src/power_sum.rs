@@ -49,7 +49,7 @@ use crate::qsym_function::QSymFunction;
 ///
 /// Requires rational coefficients since the expansion involves 1/π(B) factors.
 pub fn psi_in_monomial_basis<C: Ring>(alpha: &Composition) -> QSymFunction<C> {
-    power_sum_in_monomial_basis::<C>(alpha, pi_value)
+    power_sum_in_monomial_basis::<C>(alpha, BlockWeight::Pi)
 }
 
 /// Compute Ψ̃_α = Ψ_α / z_α (normalized type 1 power sum) in the monomial basis.
@@ -59,29 +59,29 @@ pub fn psi_in_monomial_basis<C: Ring>(alpha: &Composition) -> QSymFunction<C> {
 /// The normalized basis has the property that for naturally labeled posets P,
 /// ω(Γ(P)) is Ψ̃-positive with non-negative integer coefficients.
 pub fn psi_normalized_in_monomial_basis<C: Ring>(alpha: &Composition) -> QSymFunction<C> {
-    normalized_power_sum_in_monomial_basis::<C>(alpha, pi_value)
+    normalized_power_sum_in_monomial_basis::<C>(alpha, BlockWeight::Pi)
 }
 
 /// Compute Φ̃_α = Φ_α / z_α (normalized type 2 power sum) in the monomial basis.
 pub fn phi_normalized_in_monomial_basis<C: Ring>(alpha: &Composition) -> QSymFunction<C> {
-    normalized_power_sum_in_monomial_basis::<C>(alpha, sp_value)
+    normalized_power_sum_in_monomial_basis::<C>(alpha, BlockWeight::Sp)
 }
 
 /// Compute Φ_α (type 2 power sum) expanded in the monomial basis.
 ///
 /// Requires rational coefficients since the expansion involves 1/sp(B) factors.
 pub fn phi_in_monomial_basis<C: Ring>(alpha: &Composition) -> QSymFunction<C> {
-    power_sum_in_monomial_basis::<C>(alpha, sp_value)
+    power_sum_in_monomial_basis::<C>(alpha, BlockWeight::Sp)
 }
 
 /// Convert a QSymFunction from Ψ basis to M basis.
 pub fn psi_to_monomial<C: Ring>(f: &QSymFunction<C>) -> QSymFunction<C> {
-    expand_to_monomial(f, pi_value)
+    expand_to_monomial(f, BlockWeight::Pi)
 }
 
 /// Convert a QSymFunction from Φ basis to M basis.
 pub fn phi_to_monomial<C: Ring>(f: &QSymFunction<C>) -> QSymFunction<C> {
-    expand_to_monomial(f, sp_value)
+    expand_to_monomial(f, BlockWeight::Sp)
 }
 
 /// Convert a QSymFunction from M basis to Ψ basis.
@@ -89,7 +89,7 @@ pub fn phi_to_monomial<C: Ring>(f: &QSymFunction<C>) -> QSymFunction<C> {
 /// Uses per-degree rational matrix inversion.
 /// Requires rational coefficients (Ratio<BigInt>, Ratio<i64>).
 pub fn monomial_to_psi<C: Ring>(f: &QSymFunction<C>) -> QSymFunction<C> {
-    monomial_to_power_sum(f, QSymBasis::PowerSumPsi, pi_value)
+    monomial_to_power_sum(f, QSymBasis::PowerSumPsi, BlockWeight::Pi)
 }
 
 /// Convert a QSymFunction from M basis to Φ basis.
@@ -97,7 +97,7 @@ pub fn monomial_to_psi<C: Ring>(f: &QSymFunction<C>) -> QSymFunction<C> {
 /// Uses per-degree rational matrix inversion.
 /// Requires rational coefficients (Ratio<BigInt>, Ratio<i64>).
 pub fn monomial_to_phi<C: Ring>(f: &QSymFunction<C>) -> QSymFunction<C> {
-    monomial_to_power_sum(f, QSymBasis::PowerSumPhi, sp_value)
+    monomial_to_power_sum(f, QSymBasis::PowerSumPhi, BlockWeight::Sp)
 }
 
 /// Compute the combinatorial power sum `p_alpha` expanded in the monomial basis.
@@ -147,36 +147,60 @@ pub fn monomial_to_reverse_combinatorial_power_sum<C: Ring>(
 // Block-weight functions
 // =========================================================================
 
+#[derive(Clone, Copy)]
+enum BlockWeight {
+    Pi,
+    Sp,
+}
+
+impl BlockWeight {
+    /// Return a factorization of the block weight into individually bounded
+    /// factors.  Keeping the factorization avoids narrowing their product to
+    /// `i64` in generic arbitrary-precision computations.
+    fn factors(self, block: &[u32]) -> Vec<i64> {
+        match self {
+            BlockWeight::Pi => {
+                let mut sum = 0u32;
+                block
+                    .iter()
+                    .map(|&part| {
+                        sum = sum.checked_add(part).expect("pi block weight overflow");
+                        i64::from(sum)
+                    })
+                    .collect()
+            }
+            BlockWeight::Sp => {
+                let mut factors: Vec<i64> = (1..=block.len())
+                    .map(|factor| i64::try_from(factor).expect("block length overflow"))
+                    .collect();
+                factors.extend(block.iter().map(|&part| i64::from(part)));
+                factors
+            }
+        }
+    }
+
+    fn value_i64(self, block: &[u32]) -> i64 {
+        self.factors(block).into_iter().fold(1i64, |value, factor| {
+            value.checked_mul(factor).unwrap_or_else(|| match self {
+                BlockWeight::Pi => panic!("pi block weight overflow"),
+                BlockWeight::Sp => panic!("sp block weight overflow"),
+            })
+        })
+    }
+}
+
 /// π(B) = product of partial sums of block B.
 ///
 /// For B = (b_1, ..., b_m): π(B) = b_1 · (b_1+b_2) · ... · (b_1+...+b_m).
 fn pi_value(block: &[u32]) -> i64 {
-    let mut sum = 0i64;
-    let mut product = 1i64;
-    for &b in block {
-        sum = sum
-            .checked_add(i64::from(b))
-            .expect("pi block weight overflow");
-        product = product.checked_mul(sum).expect("pi block weight overflow");
-    }
-    product
+    BlockWeight::Pi.value_i64(block)
 }
 
 /// sp(B) = |B|! · Π b_i — factorial of block length times product of parts.
 ///
 /// For B = (b_1, ..., b_m): sp(B) = m! · b_1 · b_2 · ... · b_m.
 fn sp_value(block: &[u32]) -> i64 {
-    let m = i64::try_from(block.len()).expect("block length overflow");
-    let mut result = 1i64;
-    for k in 1..=m {
-        result = result.checked_mul(k).expect("sp block weight overflow");
-    }
-    for &b in block {
-        result = result
-            .checked_mul(i64::from(b))
-            .expect("sp block weight overflow");
-    }
-    result
+    BlockWeight::Sp.value_i64(block)
 }
 
 // =========================================================================
@@ -186,7 +210,7 @@ fn sp_value(block: &[u32]) -> i64 {
 /// Normalized power sum: Σ_{β coarsens α} 1/Π_B w(B) · M_{sum(β)} (no z_α factor).
 fn normalized_power_sum_in_monomial_basis<C: Ring>(
     alpha: &Composition,
-    block_weight: fn(&[u32]) -> i64,
+    block_weight: BlockWeight,
 ) -> QSymFunction<C> {
     if alpha.is_empty() {
         return QSymFunction::basis_element(QSymBasis::Monomial, Composition::empty());
@@ -197,17 +221,15 @@ fn normalized_power_sum_in_monomial_basis<C: Ring>(
 
     for coarsening in composition_coarsenings(parts) {
         let mut result_parts = Vec::new();
-        let mut denom: i64 = 1;
+        let mut denominator_factors = Vec::new();
 
         for block in &coarsening {
             result_parts.push(checked_block_sum(block));
-            denom = denom
-                .checked_mul(block_weight(block))
-                .expect("power-sum denominator overflow");
+            denominator_factors.extend(block_weight.factors(block));
         }
 
         let comp = Composition::new(result_parts);
-        let coeff = C::one().exact_div_i64(denom);
+        let coeff = coefficient_from_factors::<C>(Vec::new(), denominator_factors);
 
         let entry = terms.entry(comp).or_insert_with(C::zero);
         *entry = entry.clone() + coeff;
@@ -219,30 +241,28 @@ fn normalized_power_sum_in_monomial_basis<C: Ring>(
 /// Generic power sum expansion: z_α · Σ_{β coarsens α} 1/Π_B w(B) · M_{sum(β)}.
 fn power_sum_in_monomial_basis<C: Ring>(
     alpha: &Composition,
-    block_weight: fn(&[u32]) -> i64,
+    block_weight: BlockWeight,
 ) -> QSymFunction<C> {
     if alpha.is_empty() {
         return QSymFunction::basis_element(QSymBasis::Monomial, Composition::empty());
     }
 
     let parts = alpha.parts();
-    let z = z_coefficient(parts);
+    let numerator_factors = z_factors(parts);
 
     let mut terms: BTreeMap<Composition, C> = BTreeMap::new();
 
     for coarsening in composition_coarsenings(parts) {
         let mut result_parts = Vec::new();
-        let mut denom: i64 = 1;
+        let mut denominator_factors = Vec::new();
 
         for block in &coarsening {
             result_parts.push(checked_block_sum(block));
-            denom = denom
-                .checked_mul(block_weight(block))
-                .expect("power-sum denominator overflow");
+            denominator_factors.extend(block_weight.factors(block));
         }
 
         let comp = Composition::new(result_parts);
-        let coeff = C::from_i64(z).exact_div_i64(denom);
+        let coeff = coefficient_from_factors::<C>(numerator_factors.clone(), denominator_factors);
 
         let entry = terms.entry(comp).or_insert_with(C::zero);
         *entry = entry.clone() + coeff;
@@ -252,10 +272,7 @@ fn power_sum_in_monomial_basis<C: Ring>(
 }
 
 /// Expand from a power sum basis to monomial basis.
-fn expand_to_monomial<C: Ring>(
-    f: &QSymFunction<C>,
-    block_weight: fn(&[u32]) -> i64,
-) -> QSymFunction<C> {
+fn expand_to_monomial<C: Ring>(f: &QSymFunction<C>, block_weight: BlockWeight) -> QSymFunction<C> {
     let mut result_terms: BTreeMap<Composition, C> = BTreeMap::new();
 
     for (alpha, coeff) in f.terms() {
@@ -273,7 +290,7 @@ fn expand_to_monomial<C: Ring>(
 fn monomial_to_power_sum<C: Ring>(
     f: &QSymFunction<C>,
     target_basis: QSymBasis,
-    block_weight: fn(&[u32]) -> i64,
+    block_weight: BlockWeight,
 ) -> QSymFunction<C> {
     if f.is_zero() {
         return QSymFunction::zero(target_basis);
@@ -453,6 +470,48 @@ fn z_coefficient(parts: &[u32]) -> i64 {
     z
 }
 
+fn z_factors(parts: &[u32]) -> Vec<i64> {
+    let mut counts: BTreeMap<u32, usize> = BTreeMap::new();
+    for &part in parts {
+        *counts.entry(part).or_insert(0) += 1;
+    }
+    let mut factors = Vec::new();
+    for (part, multiplicity) in counts {
+        factors.extend(std::iter::repeat(i64::from(part)).take(multiplicity));
+        factors.extend(
+            (1..=multiplicity)
+                .map(|factor| i64::try_from(factor).expect("z coefficient multiplicity overflow")),
+        );
+    }
+    factors
+}
+
+fn coefficient_from_factors<C: Ring>(
+    mut numerator_factors: Vec<i64>,
+    mut denominator_factors: Vec<i64>,
+) -> C {
+    for denominator in &mut denominator_factors {
+        for numerator in &mut numerator_factors {
+            let divisor = gcd(numerator.unsigned_abs(), denominator.unsigned_abs()) as i64;
+            *numerator /= divisor;
+            *denominator /= divisor;
+            if *denominator == 1 {
+                break;
+            }
+        }
+    }
+
+    let mut coefficient = numerator_factors
+        .into_iter()
+        .fold(C::one(), |value, factor| value * C::from_i64(factor));
+    for denominator in denominator_factors {
+        if denominator != 1 {
+            coefficient = coefficient.exact_div_i64(denominator);
+        }
+    }
+    coefficient
+}
+
 fn checked_block_sum(block: &[u32]) -> u32 {
     block
         .iter()
@@ -592,7 +651,7 @@ fn reverse_composition(alpha: &Composition) -> Composition {
 fn build_transition_matrix(
     compositions: &[Composition],
     comp_index: &BTreeMap<&Composition, usize>,
-    block_weight: fn(&[u32]) -> i64,
+    block_weight: BlockWeight,
 ) -> Vec<Vec<(i64, i64)>> {
     let k = compositions.len();
     let mut matrix = vec![vec![(0i64, 1i64); k]; k];
@@ -608,7 +667,7 @@ fn build_transition_matrix(
             for block in &coarsening {
                 result_parts.push(checked_block_sum(block));
                 denom = denom
-                    .checked_mul(block_weight(block))
+                    .checked_mul(block_weight.value_i64(block))
                     .expect("power-sum denominator overflow");
             }
 
@@ -748,6 +807,7 @@ fn invert_rational_matrix(m: &[Vec<(i64, i64)>]) -> Vec<Vec<(i64, i64)>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use num_bigint::BigInt;
     use num_rational::Ratio;
     type Q = Ratio<i64>;
 
@@ -791,6 +851,18 @@ mod tests {
     #[should_panic(expected = "z coefficient overflow")]
     fn test_z_coefficient_rejects_overflow() {
         let _ = z_coefficient(&vec![1; 21]);
+    }
+
+    #[test]
+    fn test_factorized_power_sum_coefficient_avoids_i64_overflow() {
+        type BigQ = Ratio<BigInt>;
+
+        let parts = vec![1; 21];
+        let z = z_factors(&parts);
+        let psi = coefficient_from_factors::<BigQ>(z.clone(), BlockWeight::Pi.factors(&parts));
+        let phi = coefficient_from_factors::<BigQ>(z, BlockWeight::Sp.factors(&parts));
+        assert_eq!(psi, BigQ::from_integer(BigInt::from(1)));
+        assert_eq!(phi, BigQ::from_integer(BigInt::from(1)));
     }
 
     #[test]

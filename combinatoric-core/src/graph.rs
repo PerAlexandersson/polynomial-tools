@@ -260,6 +260,9 @@ impl Graph {
         if bytes.is_empty() {
             return Err("empty graph6 string".into());
         }
+        if bytes.iter().any(|&b| !(63..=126).contains(&b)) {
+            return Err("graph6 bytes must be printable ASCII in the range 63..=126".into());
+        }
 
         // Decode n (number of vertices)
         let (n, offset) = if bytes[0] == 126 {
@@ -278,6 +281,18 @@ impl Graph {
         } else {
             ((bytes[0] as usize - 63), 1)
         };
+
+        let required_bits = n
+            .checked_mul(n.saturating_sub(1))
+            .and_then(|value| value.checked_div(2))
+            .ok_or_else(|| "graph6 vertex count is too large".to_string())?;
+        let required_bytes = required_bits.div_ceil(6);
+        if bytes.len() - offset < required_bytes {
+            return Err(format!(
+                "truncated graph6 payload: expected {required_bytes} data bytes, found {}",
+                bytes.len() - offset
+            ));
+        }
 
         // Decode adjacency bits from remaining bytes
         let mut bits = Vec::new();
@@ -1555,7 +1570,7 @@ impl Graph {
         &self,
     ) -> (Vec<usize>, Vec<usize>, Vec<Vec<BigInt>>, Vec<Vec<BigInt>>) {
         assert!(
-            self.edges.len() + 1 == self.n && self.n > 0,
+            self.edges.len() + 1 == self.n && self.n > 0 && self.is_connected(),
             "tree_ab_polynomials requires a tree"
         );
 
@@ -1650,8 +1665,8 @@ impl Graph {
     /// See \cref{prop:treeRecursion} in the paper for details.
     pub fn sink_polynomial_tree_bigint(&self) -> Vec<BigInt> {
         assert!(
-            self.edges.len() + 1 == self.n && self.n > 0,
-            "sink_polynomial_tree requires a tree (|E| = |V| - 1)"
+            self.edges.len() + 1 == self.n && self.n > 0 && self.is_connected(),
+            "sink_polynomial_tree requires a connected tree"
         );
 
         if self.n == 1 {
@@ -2363,6 +2378,20 @@ mod tests {
         let g = Graph::from_graph6("Bw").unwrap();
         assert_eq!(g.num_vertices(), 3);
         assert_eq!(g.num_edges(), 3);
+    }
+
+    #[test]
+    fn test_graph6_rejects_invalid_or_truncated_input() {
+        assert!(Graph::from_graph6("!").is_err());
+        assert!(Graph::from_graph6("A").is_err());
+        assert!(Graph::from_graph6("~??").is_err());
+    }
+
+    #[test]
+    #[should_panic(expected = "requires a connected tree")]
+    fn test_tree_sink_polynomial_rejects_disconnected_graph() {
+        let graph = Graph::new(4, &[(0, 1), (1, 2), (0, 2)]);
+        let _ = graph.sink_polynomial_tree_bigint();
     }
 
     #[test]

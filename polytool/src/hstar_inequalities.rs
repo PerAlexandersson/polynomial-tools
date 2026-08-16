@@ -63,8 +63,10 @@ fn coeff(hstar: &[BigInt], index: usize) -> BigInt {
     hstar.get(index).cloned().unwrap_or_else(BigInt::zero)
 }
 
-fn trim_to_dimension(mut hstar: Vec<BigInt>, dimension: usize) -> Vec<BigInt> {
-    hstar.resize(dimension + 1, BigInt::zero());
+fn pad_to_dimension(mut hstar: Vec<BigInt>, dimension: usize) -> Vec<BigInt> {
+    if hstar.len() <= dimension {
+        hstar.resize(dimension + 1, BigInt::zero());
+    }
     hstar
 }
 
@@ -437,7 +439,7 @@ pub fn hstar_inequality_report_bigint(
 ) -> HStarInequalityReport {
     let inferred_dimension = hstar.len().saturating_sub(1);
     let dimension = dimension.unwrap_or(inferred_dimension);
-    let mut h = trim_to_dimension(hstar.to_vec(), dimension);
+    let mut h = pad_to_dimension(hstar.to_vec(), dimension);
     let degree = degree(&h);
     let mut checks = Vec::new();
 
@@ -515,5 +517,18 @@ mod tests {
         assert!(report.checks.iter().any(|check| {
             check.family == "Balletti-Higashitani" && check.applicable && !check.holds
         }));
+    }
+
+    #[test]
+    fn explicit_dimension_does_not_discard_higher_coefficients() {
+        let report = hstar_inequality_report_bigint(&b(&[1, 0, 1]), Some(1));
+        assert_eq!(report.hstar, b(&[1, 0, 1]));
+        assert_eq!(report.degree, 2);
+        assert_eq!(report.codegree, None);
+        assert!(!report.all_applicable_hold);
+        assert!(report
+            .checks
+            .iter()
+            .any(|check| check.name == "dimension bound" && !check.holds));
     }
 }

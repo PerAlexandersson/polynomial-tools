@@ -6,7 +6,7 @@
 
 use std::collections::BTreeMap;
 use std::fmt;
-use std::ops::{Add, Neg, Sub};
+use std::ops::{Add, Deref, DerefMut, Neg, Sub};
 
 use crate::index::BasisIndex;
 use crate::ring::Ring;
@@ -16,6 +16,34 @@ use crate::ring::Ring;
 #[derive(Debug, Clone)]
 pub struct FormalSum<I: BasisIndex, C: Ring> {
     terms: BTreeMap<I, C>,
+}
+
+/// Mutable access to a [`FormalSum`]'s terms.
+///
+/// Zero coefficients are removed when the guard is dropped, preserving the
+/// canonical representation even after direct map edits.
+pub struct TermsMut<'a, I: BasisIndex, C: Ring> {
+    terms: &'a mut BTreeMap<I, C>,
+}
+
+impl<I: BasisIndex, C: Ring> Deref for TermsMut<'_, I, C> {
+    type Target = BTreeMap<I, C>;
+
+    fn deref(&self) -> &Self::Target {
+        self.terms
+    }
+}
+
+impl<I: BasisIndex, C: Ring> DerefMut for TermsMut<'_, I, C> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.terms
+    }
+}
+
+impl<I: BasisIndex, C: Ring> Drop for TermsMut<'_, I, C> {
+    fn drop(&mut self) {
+        self.terms.retain(|_, coefficient| !coefficient.is_zero());
+    }
 }
 
 impl<I: BasisIndex, C: Ring> FormalSum<I, C> {
@@ -56,8 +84,12 @@ impl<I: BasisIndex, C: Ring> FormalSum<I, C> {
     }
 
     /// Mutable access to the terms map.
-    pub fn terms_mut(&mut self) -> &mut BTreeMap<I, C> {
-        &mut self.terms
+    ///
+    /// The returned guard strips zero coefficients when it is dropped.
+    pub fn terms_mut(&mut self) -> TermsMut<'_, I, C> {
+        TermsMut {
+            terms: &mut self.terms,
+        }
     }
 
     /// Consume self and return the terms map.
@@ -129,7 +161,9 @@ impl<I: BasisIndex, C: Ring> FormalSum<I, C> {
         }
         let entry = self.terms.entry(index).or_insert_with(C::zero);
         *entry = entry.clone() + coeff;
-        // Don't strip here for performance; caller can strip_zeros() when done
+        if entry.is_zero() {
+            self.terms.retain(|_, coefficient| !coefficient.is_zero());
+        }
     }
 }
 
@@ -265,6 +299,24 @@ mod tests {
         let f2: FormalSum<Partition, i64> = FormalSum::scaled_basis_element(p.clone(), -5);
         let sum = f1 + f2;
         assert!(sum.is_zero());
+    }
+
+    #[test]
+    fn test_add_term_cancellation_stays_canonical() {
+        let p = Partition::new(vec![2, 1]);
+        let mut f: FormalSum<Partition, i64> = FormalSum::scaled_basis_element(p.clone(), 5);
+        f.add_term(p, -5);
+        assert!(f.is_zero());
+        assert_eq!(f.num_terms(), 0);
+    }
+
+    #[test]
+    fn test_terms_mut_strips_inserted_zeros() {
+        let p = Partition::new(vec![2, 1]);
+        let mut f: FormalSum<Partition, i64> = FormalSum::zero();
+        f.terms_mut().insert(p, 0);
+        assert!(f.is_zero());
+        assert_eq!(f, FormalSum::zero());
     }
 
     #[test]

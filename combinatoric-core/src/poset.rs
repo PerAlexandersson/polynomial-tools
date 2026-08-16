@@ -21,8 +21,8 @@
 //! O(P) using the frontier DP and Stanley reciprocity (strict maps give negative
 //! evaluation points for free). Uses `BigRational` for exact arithmetic — no overflow.
 //!
-//! `order_polytope_hstar()` returns the h*-vector. By Stanley's theorem, for
-//! naturally labeled posets this equals the P-Eulerian polynomial.
+//! `order_polytope_hstar_bigint()` returns the exact h*-vector. By Stanley's
+//! theorem, for naturally labeled posets this equals the P-Eulerian polynomial.
 //!
 //! # Examples
 //!
@@ -993,11 +993,11 @@ impl Poset {
     /// standard conversion. By Stanley's theorem, for naturally labeled
     /// posets, h*_i equals the number of linear extensions with exactly
     /// i descents (i.e., the P-Eulerian polynomial).
-    pub fn order_polytope_hstar(&self) -> Vec<i64> {
+    pub fn order_polytope_hstar_bigint(&self) -> Vec<BigInt> {
         let ehrhart = self.order_polytope_ehrhart();
         let d = self.n;
         if d == 0 {
-            return vec![1];
+            return vec![BigInt::one()];
         }
 
         // h*_i = sum_{k=0}^{i} (-1)^k * C(d+1, k) * Ehr(i-k)
@@ -1015,17 +1015,35 @@ impl Poset {
                 val += sign * binom * ehr;
             }
             assert!(val.is_integer(), "h*-vector entry not integer at i={}", i);
-            hstar.push(
-                val.to_integer()
-                    .to_i64()
-                    .expect("h* entry too large for i64"),
-            );
+            hstar.push(val.to_integer());
         }
         // Trim trailing zeros
-        while hstar.len() > 1 && *hstar.last().unwrap() == 0 {
+        while hstar.len() > 1 && hstar.last().is_some_and(BigInt::is_zero) {
             hstar.pop();
         }
         hstar
+    }
+
+    /// Compute the h*-vector, returning an error if an entry does not fit in `i64`.
+    pub fn try_order_polytope_hstar(&self) -> Result<Vec<i64>, String> {
+        self.order_polytope_hstar_bigint()
+            .into_iter()
+            .enumerate()
+            .map(|(i, value)| {
+                value
+                    .to_i64()
+                    .ok_or_else(|| format!("h*-vector entry at index {i} is too large for i64"))
+            })
+            .collect()
+    }
+
+    /// Compute the h*-vector using `i64` coefficients.
+    ///
+    /// Panics when a coefficient does not fit in `i64`; use
+    /// [`Self::order_polytope_hstar_bigint`] for arbitrary-size exact output.
+    pub fn order_polytope_hstar(&self) -> Vec<i64> {
+        self.try_order_polytope_hstar()
+            .expect("h*-vector coefficient does not fit in i64")
     }
 
     // -- k-alternating poset --------------------------------------------------
@@ -1827,6 +1845,14 @@ mod tests {
         // Antichain(3): h* = Eulerian numbers A(3,k) = [1, 4, 1]
         let p = Poset::antichain(3);
         assert_eq!(p.order_polytope_hstar(), vec![1, 4, 1]);
+    }
+
+    #[test]
+    fn test_hstar_bigint_handles_coefficients_above_i64() {
+        let p = Poset::antichain(22);
+        let hstar = p.order_polytope_hstar_bigint();
+        assert!(hstar.iter().any(|entry| entry.to_i64().is_none()));
+        assert!(p.try_order_polytope_hstar().is_err());
     }
 
     #[test]

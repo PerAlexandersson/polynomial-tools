@@ -8,11 +8,12 @@
 //! # Algorithm
 //!
 //! 1. Verify *f* is homogeneous with nonnegative coefficients.
-//! 2. If deg ≤ 1, accept.
-//! 3. If deg = 2, extract the Hessian, use the 2×2 principal minors as a
+//! 2. Verify that the support is M-convex.
+//! 3. If deg ≤ 1, accept.
+//! 4. If deg = 2, extract the Hessian, use the 2×2 principal minors as a
 //!    fast necessary check, then count the positive eigenvalues of the full
 //!    Hessian.
-//! 4. If deg > 2, check that every first partial derivative ∂f/∂xᵢ is
+//! 5. If deg > 2, check that every first partial derivative ∂f/∂xᵢ is
 //!    Lorentzian (recursion reduces degree by 1 each step).
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -32,8 +33,22 @@ pub enum LorentzianResult {
     NegativeCoefficient { exponent: Vec<u32> },
     /// Not Lorentzian: not homogeneous.
     NotHomogeneous,
-    /// Not strictly Lorentzian: support is not M-convex.
+    /// Not Lorentzian: support is not M-convex.
     SupportNotMConvex,
+    /// Not strictly Lorentzian: some degree-d monomial has zero coefficient.
+    NotStrictlyPositiveSupport,
+    /// Not strictly Lorentzian: a quadratic derivative has degenerate or
+    /// otherwise non-Lorentzian Hessian inertia.
+    StrictHessianInertiaFailure {
+        /// The derivative sequence that produced the failing quadratic.
+        derivative_seq: Vec<usize>,
+        /// Number of positive eigenvalues found.
+        positive_eigenvalues: usize,
+        /// Number of negative eigenvalues found.
+        negative_eigenvalues: usize,
+        /// Number of zero eigenvalues found.
+        zero_eigenvalues: usize,
+    },
     /// Not Lorentzian: a degree-2 derivative has a Hessian with a positive 2×2 minor.
     HessianFailure {
         /// The derivative sequence that produced the failing quadratic.
@@ -84,6 +99,11 @@ pub fn is_lorentzian(f: &MultiPoly<i64>) -> LorentzianResult {
     let d = degrees[0];
     if degrees.iter().any(|&deg| deg != d) {
         return LorentzianResult::NotHomogeneous;
+    }
+
+    let support: Vec<Vec<u32>> = f.terms().keys().cloned().collect();
+    if !is_m_convex(&support) {
+        return LorentzianResult::SupportNotMConvex;
     }
 
     check_lorentzian_recursive(f, d, &mut Vec::new())
@@ -203,10 +223,10 @@ fn partial_derivative(f: &MultiPoly<i64>, var: usize) -> MultiPoly<i64> {
 ///
 /// The count is computed exactly by rational congruence diagonalization, so
 /// Sylvester inertia is preserved without floating-point tolerances.
-fn positive_eigenvalue_count(matrix: &[Vec<i128>]) -> usize {
+fn eigenvalue_inertia(matrix: &[Vec<i128>]) -> (usize, usize, usize) {
     let n = matrix.len();
     if n == 0 {
-        return 0;
+        return (0, 0, 0);
     }
 
     type BigRat = Ratio<BigInt>;
@@ -221,6 +241,7 @@ fn positive_eigenvalue_count(matrix: &[Vec<i128>]) -> usize {
         .collect();
 
     let mut positives = 0;
+    let mut negatives = 0;
     let mut k = 0;
 
     while k < n {
@@ -253,6 +274,8 @@ fn positive_eigenvalue_count(matrix: &[Vec<i128>]) -> usize {
         debug_assert!(!pivot_value.is_zero());
         if pivot_value > BigRat::zero() {
             positives += 1;
+        } else {
+            negatives += 1;
         }
 
         for i in (k + 1)..n {
@@ -274,7 +297,11 @@ fn positive_eigenvalue_count(matrix: &[Vec<i128>]) -> usize {
         k += 1;
     }
 
-    positives
+    (positives, negatives, n - positives - negatives)
+}
+
+fn positive_eigenvalue_count(matrix: &[Vec<i128>]) -> usize {
+    eigenvalue_inertia(matrix).0
 }
 
 fn swap_symmetric<T>(matrix: &mut [Vec<T>], i: usize, j: usize) {
@@ -305,23 +332,91 @@ pub fn is_lorentzian_bool(f: &MultiPoly<i64>) -> bool {
     is_lorentzian(f).is_lorentzian()
 }
 
-/// Check whether a polynomial is **strictly Lorentzian**: Lorentzian AND
-/// its support is M-convex.
+/// Check whether a polynomial is **strictly Lorentzian**.
 ///
-/// By Brändén–Huh Thm 2.25 the derivative conditions characterize the
-/// *closure* of strictly Lorentzian polynomials.  This function adds the
-/// explicit M-convexity check to detect boundary cases like x³ + y³.
+/// In addition to being Lorentzian, a strictly Lorentzian polynomial has
+/// positive coefficients on the full homogeneous support and every quadratic
+/// derivative has nonsingular Hessian of signature `(+, -, ..., -)`.
 pub fn is_strictly_lorentzian(f: &MultiPoly<i64>) -> LorentzianResult {
     let r = is_lorentzian(f);
     if !r.is_lorentzian() {
         return r;
     }
-    // Check M-convexity of support
-    let support: Vec<Vec<u32>> = f.terms().keys().cloned().collect();
-    if !support.is_empty() && !is_m_convex(&support) {
-        return LorentzianResult::SupportNotMConvex;
+    if f.is_zero() {
+        return LorentzianResult::NotStrictlyPositiveSupport;
+    }
+    let degree = checked_total_degree(f.terms().keys().next().expect("nonzero polynomial"));
+    check_strict_lorentzian_recursive(f, degree, &mut Vec::new())
+}
+
+fn check_strict_lorentzian_recursive(
+    f: &MultiPoly<i64>,
+    degree: u32,
+    derivative_seq: &mut Vec<usize>,
+) -> LorentzianResult {
+    if !has_full_homogeneous_support(f, degree) {
+        return LorentzianResult::NotStrictlyPositiveSupport;
+    }
+    if degree <= 1 {
+        return LorentzianResult::Yes;
+    }
+    if degree == 2 {
+        let n = f.num_vars();
+        let mut h = vec![vec![0i128; n]; n];
+        for (exp, &coefficient) in f.terms() {
+            let vars: Vec<_> = exp
+                .iter()
+                .enumerate()
+                .flat_map(|(variable, &power)| std::iter::repeat(variable).take(power as usize))
+                .collect();
+            let (i, j) = (vars[0], vars[1]);
+            if i == j {
+                h[i][i] = 2 * i128::from(coefficient);
+            } else {
+                h[i][j] = i128::from(coefficient);
+                h[j][i] = i128::from(coefficient);
+            }
+        }
+        let (positive, negative, zero) = eigenvalue_inertia(&h);
+        if positive != 1 || negative != n.saturating_sub(1) || zero != 0 {
+            return LorentzianResult::StrictHessianInertiaFailure {
+                derivative_seq: derivative_seq.clone(),
+                positive_eigenvalues: positive,
+                negative_eigenvalues: negative,
+                zero_eigenvalues: zero,
+            };
+        }
+        return LorentzianResult::Yes;
+    }
+
+    for variable in 0..f.num_vars() {
+        let derivative = partial_derivative(f, variable);
+        derivative_seq.push(variable);
+        let result = check_strict_lorentzian_recursive(&derivative, degree - 1, derivative_seq);
+        derivative_seq.pop();
+        if !result.is_lorentzian() {
+            return result;
+        }
     }
     LorentzianResult::Yes
+}
+
+fn has_full_homogeneous_support(f: &MultiPoly<i64>, degree: u32) -> bool {
+    if f.terms().values().any(|&coefficient| coefficient <= 0) {
+        return false;
+    }
+    let n = f.num_vars();
+    if n == 0 {
+        return degree == 0 && f.terms().len() == 1;
+    }
+    let mut expected = 1usize;
+    for k in 1..=degree as usize {
+        let Some(product) = expected.checked_mul(n + k - 1) else {
+            return false;
+        };
+        expected = product / k;
+    }
+    f.terms().len() == expected
 }
 
 // ── Normalized Lorentzian ────────────────────────────────────────────
@@ -364,6 +459,11 @@ pub fn is_normalized_lorentzian(f: &MultiPoly<i64>) -> LorentzianResult {
     let d = degrees[0];
     if degrees.iter().any(|&deg| deg != d) {
         return LorentzianResult::NotHomogeneous;
+    }
+
+    let support: Vec<Vec<u32>> = f.terms().keys().cloned().collect();
+    if !is_m_convex(&support) {
+        return LorentzianResult::SupportNotMConvex;
     }
 
     if d <= 1 {
@@ -462,15 +562,34 @@ pub fn is_normalized_lorentzian_bool(f: &MultiPoly<i64>) -> bool {
     is_normalized_lorentzian(f).is_lorentzian()
 }
 
-/// Strictly normalized Lorentzian: the normalized check plus M-convex support.
+/// Strictly normalized Lorentzian: positive full support and every normalized
+/// Hessian has nonsingular signature `(+, -, ..., -)`.
 pub fn is_strictly_normalized_lorentzian(f: &MultiPoly<i64>) -> LorentzianResult {
     let r = is_normalized_lorentzian(f);
     if !r.is_lorentzian() {
         return r;
     }
-    let support: Vec<Vec<u32>> = f.terms().keys().cloned().collect();
-    if !support.is_empty() && !is_m_convex(&support) {
-        return LorentzianResult::SupportNotMConvex;
+    if f.is_zero() {
+        return LorentzianResult::NotStrictlyPositiveSupport;
+    }
+    let degree = checked_total_degree(f.terms().keys().next().expect("nonzero polynomial"));
+    if !has_full_homogeneous_support(f, degree) {
+        return LorentzianResult::NotStrictlyPositiveSupport;
+    }
+    if degree <= 1 {
+        return LorentzianResult::Yes;
+    }
+    for beta in normalized_hessian_bases(f, degree) {
+        let h = normalized_hessian_matrix(f, &beta);
+        let (positive, negative, zero) = eigenvalue_inertia(&h);
+        if positive != 1 || negative != f.num_vars().saturating_sub(1) || zero != 0 {
+            return LorentzianResult::StrictHessianInertiaFailure {
+                derivative_seq: beta_to_derivative_seq(&beta),
+                positive_eigenvalues: positive,
+                negative_eigenvalues: negative,
+                zero_eigenvalues: zero,
+            };
+        }
     }
     LorentzianResult::Yes
 }
@@ -649,7 +768,7 @@ mod tests {
                 (vec![0, 0, 0, 2], 1),
             ],
         );
-        let r = is_lorentzian(&f);
+        let r = check_quadratic_lorentzian(&f, &[]);
         assert!(matches!(
             r,
             LorentzianResult::HessianInertiaFailure {
@@ -812,7 +931,28 @@ mod tests {
 
     #[test]
     fn test_strictly_lorentzian_passes() {
-        // (x+y)³ is strictly Lorentzian
+        // The coefficients are strictly log-concave after normalization.
+        let f = poly_from_map(
+            2,
+            vec![
+                (vec![3, 0], 1),
+                (vec![2, 1], 6),
+                (vec![1, 2], 6),
+                (vec![0, 3], 1),
+            ],
+        );
+        assert!(is_strictly_lorentzian(&f).is_lorentzian());
+    }
+
+    #[test]
+    fn test_lorentzian_detects_non_m_convex_support() {
+        let f = poly_from_map(2, vec![(vec![3, 0], 1), (vec![0, 3], 1)]);
+        let r = is_lorentzian(&f);
+        assert!(matches!(r, LorentzianResult::SupportNotMConvex));
+    }
+
+    #[test]
+    fn test_strictly_lorentzian_rejects_degenerate_boundary_point() {
         let f = poly_from_map(
             2,
             vec![
@@ -822,19 +962,11 @@ mod tests {
                 (vec![0, 3], 1),
             ],
         );
-        assert!(is_strictly_lorentzian(&f).is_lorentzian());
-    }
-
-    #[test]
-    fn test_strictly_lorentzian_detects_non_m_convex() {
-        // x³ + y³ passes derivative conditions (closure) but support
-        // {(3,0),(0,3)} is not M-convex → not strictly Lorentzian.
-        let f = poly_from_map(2, vec![(vec![3, 0], 1), (vec![0, 3], 1)]);
-        // Passes the weak (closure) Lorentzian check
         assert!(is_lorentzian_bool(&f));
-        // Fails the strict check
-        let r = is_strictly_lorentzian(&f);
-        assert!(matches!(r, LorentzianResult::SupportNotMConvex));
+        assert!(matches!(
+            is_strictly_lorentzian(&f),
+            LorentzianResult::StrictHessianInertiaFailure { .. }
+        ));
     }
 
     // ── Normalized Lorentzian tests ───────────────────────────────
@@ -903,13 +1035,11 @@ mod tests {
                 (vec![0, 0, 0, 2], 1),
             ],
         );
-        let r = is_normalized_lorentzian(&f);
+        let h = normalized_hessian_matrix(&f, &[0, 0, 0, 0]);
+        assert_eq!(positive_eigenvalue_count(&h), 2);
         assert!(matches!(
-            r,
-            LorentzianResult::HessianInertiaFailure {
-                positive_eigenvalues: 2,
-                ..
-            }
+            is_normalized_lorentzian(&f),
+            LorentzianResult::SupportNotMConvex
         ));
     }
 
