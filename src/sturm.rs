@@ -307,7 +307,15 @@ impl SturmChain {
 
     /// Find all real roots as isolating intervals, refined to width ≤ epsilon.
     /// Returns a vector of (lo, hi) pairs.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `epsilon` is not positive.
     pub fn isolate_roots(&self, epsilon: &Q) -> Vec<(Q, Q)> {
+        assert!(
+            epsilon.is_positive(),
+            "root isolation epsilon must be positive"
+        );
         let bound = self.root_bound();
         let neg_bound = -bound.clone();
         self.isolate_in(&neg_bound, &bound, epsilon)
@@ -390,6 +398,20 @@ mod tests {
         assert!(lo0 < &Q::from_integer(BigInt::from(-1)));
         let (_lo1, hi1) = &roots[1];
         assert!(hi1 > &Q::from_integer(BigInt::from(0)));
+    }
+
+    #[test]
+    #[should_panic(expected = "root isolation epsilon must be positive")]
+    fn test_isolate_roots_rejects_zero_epsilon() {
+        let sc = SturmChain::from_i64_coeffs(&[-2, 1, 1]);
+        sc.isolate_roots(&Q::zero());
+    }
+
+    #[test]
+    #[should_panic(expected = "root isolation epsilon must be positive")]
+    fn test_isolate_roots_rejects_negative_epsilon() {
+        let sc = SturmChain::from_i64_coeffs(&[-2, 1, 1]);
+        sc.isolate_roots(&Q::from_integer(BigInt::from(-1)));
     }
 
     #[test]
