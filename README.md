@@ -764,13 +764,26 @@ Report issues in the Git repository, or contact Per Alexandersson
 
 ### Real-rootedness algorithms
 
-The default real-rootedness check uses the primitive integer PRS path from
-`root_count`.  It replaces the polynomial by its square-free part and counts
+The default real-rootedness check uses an adaptive exact path from
+`root_count`. It replaces the polynomial by its square-free part and counts
 distinct real roots exactly over `BigInt`; the polynomial is real-rooted
-precisely when this count equals the square-free degree.  For one-signed
+precisely when this count equals the square-free degree. For one-signed
 coefficient polynomials, the backend first tries cheap coefficient filters and
 then counts positive roots of `f(-t)`, since such polynomials can only have
-non-positive real roots.
+non-positive real roots. Primitive PRS remains the general backend. Uspensky is
+selected conservatively at degree 35 or above when the endpoint coefficients
+are equal and an interior coefficient is at least `4^degree` times as large as
+an endpoint. This benchmark-derived, scale-invariant rule captures the large
+Eulerian, type-B Eulerian, and Touchard cases tested without penalizing
+Narayana polynomials or evenly spaced linear-factor products.
+
+For algorithm comparisons, `is_real_rooted_uspensky_bigint_coeffs` uses an
+independent exact Uspensky/Descartes path.  It applies a strict Fujiwara root
+bound, separates roots into dyadic magnitude bands (using the reciprocal
+polynomial below `1`), and applies homographic subdivision with Descartes sign
+variations.  It does not use finite fields, floating point, or approximate
+roots. The explicit PRS and Uspensky entry points remain available for direct
+comparison.
 
 Explicit matrix comparison paths remain available as
 `is_real_rooted_bezout`, `is_real_rooted_bezout_squarefree`, and

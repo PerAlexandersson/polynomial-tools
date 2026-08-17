@@ -1,10 +1,12 @@
 //! Exact real-root counting over the integers.
 //!
-//! This module is the default exact backend for boolean real-rootedness.  It
-//! uses a primitive pseudo-remainder Sturm sequence: every Euclidean remainder
-//! is computed by pseudo-division and then made primitive.  That keeps
+//! This module provides the default exact backend for boolean
+//! real-rootedness. It uses a primitive pseudo-remainder Sturm sequence for
+//! general inputs and adaptively selects an exact Uspensky/Descartes path for
+//! a conservative class of large one-signed inputs. Primitive PRS keeps
 //! intermediate coefficient growth much smaller than a naive rational PRS,
-//! while avoiding the large exact PSD matrices used by the Bézout criterion.
+//! while both paths avoid the large exact PSD matrices used by the Bézout
+//! criterion.
 //!
 //! The positive-coefficient path is intended for combinatorial polynomials.  If
 //! all coefficients have one sign, roots can only be non-positive; after
@@ -15,6 +17,10 @@
 //! part.  Real-rootedness tests compare that count with the square-free degree,
 //! so repeated real roots are handled without needing multiplicities from the
 //! Sturm sequence.
+//!
+//! An independent Uspensky/Descartes implementation is also available for
+//! exact comparison.  It bounds the roots, applies homographic subdivision,
+//! and uses Descartes' rule of signs to discard or certify open intervals.
 
 use num_bigint::BigInt;
 use num_integer::Integer;
@@ -268,8 +274,7 @@ fn squarefree_part_bigint(coeffs: &[BigInt]) -> Vec<BigInt> {
     }
 }
 
-fn sturm_chain_squarefree(coeffs: &[BigInt]) -> Vec<Vec<BigInt>> {
-    let p0 = squarefree_part_bigint(coeffs);
+fn sturm_chain_from_squarefree(p0: Vec<BigInt>) -> Vec<Vec<BigInt>> {
     if p0.is_empty() || degree(&p0).unwrap_or(0) == 0 {
         return vec![p0];
     }
@@ -289,6 +294,10 @@ fn sturm_chain_squarefree(coeffs: &[BigInt]) -> Vec<Vec<BigInt>> {
         chain.push(next);
     }
     chain
+}
+
+fn sturm_chain_squarefree(coeffs: &[BigInt]) -> Vec<Vec<BigInt>> {
+    sturm_chain_from_squarefree(squarefree_part_bigint(coeffs))
 }
 
 fn signed_remainder_sequence(a: &[BigInt], b: &[BigInt]) -> Vec<Vec<BigInt>> {
@@ -406,6 +415,226 @@ fn make_nonnegative(mut coeffs: Vec<BigInt>) -> Vec<BigInt> {
     coeffs
 }
 
+fn ceil_div_positive(numerator: &BigInt, denominator: &BigInt) -> BigInt {
+    debug_assert!(!numerator.is_negative());
+    debug_assert!(denominator.is_positive());
+    if numerator.is_zero() {
+        BigInt::zero()
+    } else {
+        (numerator + denominator - BigInt::one()) / denominator
+    }
+}
+
+/// A strict integer version of Fujiwara's root bound.
+///
+/// Every complex root of `p` has modulus strictly smaller than the returned
+/// integer.  Using the exponent `1 / (degree - i)` is important here: the
+/// simpler Cauchy bound can be exponentially too large for products of linear
+/// factors, which in turn creates needless Uspensky subdivision levels.
+fn strict_fujiwara_root_bound(coeffs: &[BigInt]) -> BigInt {
+    let d = degree(coeffs).expect("root bound requires a nonzero polynomial");
+    if d == 0 {
+        return BigInt::one();
+    }
+    let lc = coeffs[d].abs();
+    let mut maximum_root = BigInt::zero();
+
+    for (i, coefficient) in coeffs.iter().enumerate().take(d) {
+        if coefficient.is_zero() {
+            continue;
+        }
+        let quotient_ceiling = ceil_div_positive(&coefficient.abs(), &lc);
+        let exponent = u32::try_from(d - i).expect("polynomial degree should fit in u32");
+        let mut root_ceiling = quotient_ceiling.nth_root(exponent);
+        if root_ceiling.pow(exponent) < quotient_ceiling {
+            root_ceiling += BigInt::one();
+        }
+        maximum_root = maximum_root.max(root_ceiling);
+    }
+
+    BigInt::from(2) * maximum_root.max(BigInt::one()) + BigInt::one()
+}
+
+fn scale_argument(coeffs: &[BigInt], scale: &BigInt) -> Vec<BigInt> {
+    let mut power = BigInt::one();
+    let mut result = Vec::with_capacity(coeffs.len());
+    for coefficient in coeffs {
+        result.push(coefficient * &power);
+        power *= scale;
+    }
+    trim(result)
+}
+
+fn shift_argument(coeffs: &[BigInt], shift: &BigInt) -> Vec<BigInt> {
+    let Some(d) = degree(coeffs) else {
+        return Vec::new();
+    };
+    let mut result: Vec<BigInt> = Vec::new();
+
+    for coefficient in coeffs.iter().take(d + 1).rev() {
+        let mut next = vec![BigInt::zero(); result.len() + 1];
+        for (i, value) in result.iter().enumerate() {
+            next[i] += value * shift;
+            next[i + 1] += value;
+        }
+        next[0] += coefficient;
+        result = next;
+    }
+    trim(result)
+}
+
+/// Return `(1+x)^d p(x/(1+x))`, where `d = degree(p)`.
+///
+/// Positive roots of the result correspond to roots of `p` in `(0, 1)`.
+fn transform_unit_interval(coeffs: &[BigInt]) -> Vec<BigInt> {
+    let Some(d) = degree(coeffs) else {
+        return Vec::new();
+    };
+    let mut result = vec![BigInt::zero(); d + 1];
+
+    for (k, coefficient) in coeffs.iter().enumerate().take(d + 1) {
+        if coefficient.is_zero() {
+            continue;
+        }
+        let remaining = d - k;
+        let mut binomial = BigInt::one();
+        for offset in 0..=remaining {
+            result[k + offset] += coefficient * &binomial;
+            if offset < remaining {
+                binomial = binomial * BigInt::from(remaining - offset) / BigInt::from(offset + 1);
+            }
+        }
+    }
+    trim(result)
+}
+
+/// Return `p(x+1)`.
+///
+/// Positive roots of the result correspond to roots of `p` in `(1, +infinity)`.
+fn shift_argument_by_one(coeffs: &[BigInt]) -> Vec<BigInt> {
+    shift_argument(coeffs, &BigInt::one())
+}
+
+fn value_at_one(coeffs: &[BigInt]) -> BigInt {
+    coeffs.iter().sum()
+}
+
+fn value_at_integer(coeffs: &[BigInt], value: &BigInt) -> BigInt {
+    coeffs
+        .iter()
+        .rev()
+        .fold(BigInt::zero(), |acc, coefficient| acc * value + coefficient)
+}
+
+fn descartes_sign_variations(coeffs: &[BigInt]) -> usize {
+    sign_variations(coeffs.iter().map(sign_i8))
+}
+
+/// Count roots represented by one open Uspensky interval transform.
+fn count_roots_in_uspensky_node(initial: Vec<BigInt>) -> usize {
+    let linear_midpoint_factor = vec![-BigInt::one(), BigInt::one()];
+    let mut stack = vec![initial];
+    let mut roots = 0usize;
+
+    while let Some(mut node) = stack.pop() {
+        let variations = descartes_sign_variations(&node);
+        if variations <= 1 {
+            roots += variations;
+            continue;
+        }
+
+        if value_at_one(&node).is_zero() {
+            roots += 1;
+            node = primitive_keep_sign(exact_div(&node, &linear_midpoint_factor));
+            let remaining_variations = descartes_sign_variations(&node);
+            if remaining_variations <= 1 {
+                roots += remaining_variations;
+                continue;
+            }
+        }
+
+        let left = primitive_keep_sign(transform_unit_interval(&node));
+        let right = primitive_keep_sign(shift_argument_by_one(&node));
+        stack.push(right);
+        stack.push(left);
+    }
+    roots
+}
+
+/// Transform the open interval `(left, right)` to `(0, +infinity)`.
+fn transform_open_integer_interval(
+    coeffs: &[BigInt],
+    left: &BigInt,
+    right: &BigInt,
+) -> Vec<BigInt> {
+    debug_assert!(left < right);
+    let shifted = shift_argument(coeffs, left);
+    let width = right - left;
+    let scaled = scale_argument(&shifted, &width);
+    primitive_keep_sign(transform_unit_interval(&scaled))
+}
+
+/// Count roots in `(1, +infinity)` using dyadic magnitude bands.
+fn count_roots_above_one_uspensky_squarefree(coeffs: &[BigInt]) -> usize {
+    let mut p = trim_slice(coeffs);
+    if degree(&p).unwrap_or(0) == 0 {
+        return 0;
+    }
+    debug_assert!(!value_at_one(&p).is_zero());
+
+    let bound = strict_fujiwara_root_bound(&p);
+    let mut left = BigInt::one();
+    let mut roots = 0usize;
+
+    while left < bound {
+        let doubled = BigInt::from(2) * &left;
+        let right = doubled.min(bound.clone());
+
+        if right < bound && value_at_integer(&p, &right).is_zero() {
+            roots += 1;
+            p = primitive_keep_sign(exact_div(&p, &[-right.clone(), BigInt::one()]));
+        }
+
+        let transformed = transform_open_integer_interval(&p, &left, &right);
+        roots += count_roots_in_uspensky_node(transformed);
+        left = right;
+    }
+    roots
+}
+
+/// Count positive roots of a square-free polynomial with nonzero constant term.
+///
+/// Roots greater than one are grouped into dyadic magnitude bands.  Roots in
+/// `(0, 1)` are treated as reciprocals of roots greater than one of the reversed
+/// polynomial.  This avoids placing roots of very different magnitudes into a
+/// single bounded interval, which is particularly important for reciprocal
+/// families such as Eulerian polynomials.
+fn count_positive_roots_uspensky_squarefree(coeffs: &[BigInt]) -> usize {
+    let mut p = trim_slice(coeffs);
+    let Some(d) = degree(&p) else {
+        return 0;
+    };
+    if d == 0 {
+        return 0;
+    }
+    debug_assert!(!p[0].is_zero());
+
+    let initial_variations = descartes_sign_variations(&p);
+    if initial_variations <= 1 {
+        return initial_variations;
+    }
+
+    let mut roots = 0usize;
+    if value_at_one(&p).is_zero() {
+        roots += 1;
+        p = primitive_keep_sign(exact_div(&p, &[-BigInt::one(), BigInt::one()]));
+    }
+
+    roots += count_roots_above_one_uspensky_squarefree(&p);
+    let reciprocal: Vec<BigInt> = p.into_iter().rev().collect();
+    roots + count_roots_above_one_uspensky_squarefree(&reciprocal)
+}
+
 /// Degree of the square-free part of a `BigInt` polynomial.
 ///
 /// The zero polynomial and nonzero constants both return `0`.
@@ -430,10 +659,40 @@ pub fn count_real_roots_prs_bigint_coeffs(coeffs: &[BigInt]) -> usize {
 /// The count is over the open interval `(0, +infinity)`.
 pub fn count_positive_roots_prs_bigint_coeffs(coeffs: &[BigInt]) -> usize {
     let chain = sturm_chain_squarefree(coeffs);
+    count_positive_roots_from_sturm_chain(&chain)
+}
+
+fn count_positive_roots_from_sturm_chain(chain: &[Vec<BigInt>]) -> usize {
     if chain.is_empty() {
         return 0;
     }
-    variations_at_zero_plus(&chain).saturating_sub(variations_at_pos_infinity(&chain))
+    variations_at_zero_plus(chain).saturating_sub(variations_at_pos_infinity(chain))
+}
+
+/// Count distinct positive roots by exact Uspensky/Descartes subdivision.
+///
+/// The polynomial is replaced by its square-free part first.  The method uses
+/// only integer arithmetic: no finite fields, floating point, or approximate
+/// roots are involved.
+pub fn count_positive_roots_uspensky_bigint_coeffs(coeffs: &[BigInt]) -> usize {
+    let squarefree = squarefree_part_bigint(coeffs);
+    let without_zero = strip_initial_zeros_bigint(&squarefree);
+    count_positive_roots_uspensky_squarefree(without_zero)
+}
+
+/// Count distinct real roots by exact Uspensky/Descartes subdivision.
+pub fn count_real_roots_uspensky_bigint_coeffs(coeffs: &[BigInt]) -> usize {
+    let squarefree = squarefree_part_bigint(coeffs);
+    let zero_root = usize::from(squarefree.first().is_some_and(BigInt::is_zero));
+    let without_zero = strip_initial_zeros_bigint(&squarefree);
+    if degree(without_zero).unwrap_or(0) == 0 {
+        return zero_root;
+    }
+
+    let positive = count_positive_roots_uspensky_squarefree(without_zero);
+    let reflected = alternating_neg_argument(without_zero);
+    let negative = count_positive_roots_uspensky_squarefree(&reflected);
+    zero_root + positive + negative
 }
 
 /// Compute the Sturm--Tarski query of `query` at the real roots of `root_poly`.
@@ -564,15 +823,62 @@ pub fn satisfies_kurtz_condition_bigint(coeffs: &[BigInt]) -> bool {
 /// one-signed combinatorial polynomials.  It is often useful as a fallback when
 /// Bézout matrices become large.
 pub fn is_real_rooted_prs_bigint_coeffs(coeffs: &[BigInt]) -> bool {
-    let p = trim_slice(coeffs);
-    let d = match degree(&p) {
+    let squarefree = squarefree_part_bigint(coeffs);
+    let d = match degree(&squarefree) {
         Some(d) => d,
         None => return true,
     };
     if d <= 1 {
         return true;
     }
-    count_real_roots_prs_bigint_coeffs(&p) == squarefree_degree_bigint_coeffs(&p)
+    let chain = sturm_chain_from_squarefree(squarefree);
+    variations_at_neg_infinity(&chain).saturating_sub(variations_at_pos_infinity(&chain)) == d
+}
+
+/// Exact real-rootedness via Uspensky's method and Descartes' rule of signs.
+pub fn is_real_rooted_uspensky_bigint_coeffs(coeffs: &[BigInt]) -> bool {
+    let squarefree = squarefree_part_bigint(coeffs);
+    let squarefree_degree = degree(&squarefree).unwrap_or(0);
+    let zero_root = usize::from(squarefree.first().is_some_and(BigInt::is_zero));
+    let without_zero = strip_initial_zeros_bigint(&squarefree);
+    let positive = count_positive_roots_uspensky_squarefree(without_zero);
+    let reflected = alternating_neg_argument(without_zero);
+    let negative = count_positive_roots_uspensky_squarefree(&reflected);
+    zero_root + positive + negative == squarefree_degree
+}
+
+/// Convenience Uspensky wrapper for `i64` coefficient vectors.
+pub fn is_real_rooted_uspensky_i64(coeffs: &[i64]) -> bool {
+    let coeffs: Vec<BigInt> = coeffs.iter().map(|&c| BigInt::from(c)).collect();
+    is_real_rooted_uspensky_bigint_coeffs(&coeffs)
+}
+
+/// Whether the benchmarked Uspensky path is likely to beat primitive PRS.
+///
+/// Degree alone is not a reliable discriminator: PRS is substantially faster
+/// on Narayana, Chebyshev, Hermite, and evenly spaced linear-factor products.
+/// The families where Uspensky wins consistently in our benchmark (ordinary
+/// and type-B Eulerian, and Touchard after removing its zero root) have equal
+/// endpoint coefficients and interior coefficients at least `4^degree` times
+/// as large. This exact comparison is invariant under scalar multiplication.
+fn prefers_uspensky_for_one_signed(coeffs: &[BigInt]) -> bool {
+    const MIN_USPENSKY_DEGREE: usize = 35;
+
+    let d = match degree(coeffs) {
+        Some(d) if d >= MIN_USPENSKY_DEGREE => d,
+        _ => return false,
+    };
+    if coeffs[0] != coeffs[d] || !coeffs[0].is_positive() {
+        return false;
+    }
+
+    let Some(growth_shift) = d.checked_mul(2) else {
+        return false;
+    };
+    let large_interior_threshold = &coeffs[0] << growth_shift;
+    coeffs[1..d]
+        .iter()
+        .any(|coefficient| coefficient >= &large_interior_threshold)
 }
 
 /// Exact real-rootedness optimized for one-signed coefficient polynomials.
@@ -600,16 +906,26 @@ pub fn is_real_rooted_one_signed_bigint_coeffs(coeffs: &[BigInt]) -> Option<bool
         return Some(false);
     }
 
-    let transformed = alternating_neg_argument(&p);
-    let positive_roots = count_positive_roots_prs_bigint_coeffs(&transformed);
-    let sf_degree = squarefree_degree_bigint_coeffs(&p);
+    let use_uspensky = prefers_uspensky_for_one_signed(&p);
+    let squarefree = squarefree_part_bigint(&p);
+    let sf_degree = degree(&squarefree).unwrap_or(0);
+    let transformed = alternating_neg_argument(&squarefree);
+    let positive_roots = if use_uspensky {
+        count_positive_roots_uspensky_squarefree(&transformed)
+    } else {
+        let chain = sturm_chain_from_squarefree(transformed);
+        count_positive_roots_from_sturm_chain(&chain)
+    };
     Some(positive_roots == sf_degree)
 }
 
-/// Exact real-rootedness with a fast one-signed path and PRS fallback.
+/// Exact real-rootedness with an adaptive one-signed path and PRS fallback.
 ///
-/// This avoids constructing Bézout/PSD matrices entirely.  It is the backend
-/// used by the public `real_rootedness::is_real_rooted_bigint_coeffs` default.
+/// The one-signed path first applies coefficient filters, then selects between
+/// primitive PRS and Uspensky using a conservative benchmark-derived
+/// heuristic. Mixed-sign inputs use PRS. This avoids constructing Bézout/PSD
+/// matrices entirely and is the backend used by the public
+/// `real_rootedness::is_real_rooted_bigint_coeffs` default.
 pub fn is_real_rooted_fast_bigint_coeffs(coeffs: &[BigInt]) -> bool {
     if let Some(rr) = is_real_rooted_one_signed_bigint_coeffs(coeffs) {
         rr
@@ -807,6 +1123,86 @@ mod tests {
     }
 
     #[test]
+    fn test_uspensky_root_counts() {
+        assert_eq!(
+            count_positive_roots_uspensky_bigint_coeffs(&b(&[6, -7, 0, 1])),
+            2
+        ); // (x-1)(x-2)(x+3)
+        assert_eq!(
+            count_real_roots_uspensky_bigint_coeffs(&b(&[-6, 11, -6, 1])),
+            3
+        );
+        assert_eq!(count_real_roots_uspensky_bigint_coeffs(&b(&[1, 0, 1])), 0);
+        assert_eq!(
+            count_positive_roots_uspensky_bigint_coeffs(&b(&[-2, 7, -7, 2])),
+            3
+        ); // (x-1)(x-2)(2x-1), including dyadic boundary roots
+        assert_eq!(
+            count_real_roots_uspensky_bigint_coeffs(&b(&[0, 0, 1, -2, 1])),
+            2
+        ); // x^2(x-1)^2 has distinct roots 0 and 1
+    }
+
+    #[test]
+    fn test_uspensky_handles_large_close_roots() {
+        let center = BigInt::from(10u32).pow(20);
+        let p = vec![
+            &center * (&center + BigInt::one()),
+            -(BigInt::from(2) * &center + BigInt::one()),
+            BigInt::one(),
+        ];
+        assert_eq!(count_positive_roots_uspensky_bigint_coeffs(&p), 2);
+        assert!(is_real_rooted_uspensky_bigint_coeffs(&p));
+    }
+
+    #[test]
+    fn test_uspensky_agrees_with_prs_on_small_grid() {
+        for degree in 0usize..=4 {
+            let total = 5usize.pow((degree + 1) as u32);
+            for mut mask in 0..total {
+                let mut coeffs = Vec::with_capacity(degree + 1);
+                for _ in 0..=degree {
+                    coeffs.push((mask % 5) as i64 - 2);
+                    mask /= 5;
+                }
+
+                let bigint = b(&coeffs);
+                assert_eq!(
+                    count_real_roots_uspensky_bigint_coeffs(&bigint),
+                    count_real_roots_prs_bigint_coeffs(&bigint),
+                    "coeffs={coeffs:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_uspensky_agrees_with_prs_on_deterministic_higher_degree_cases() {
+        let mut state = 0x9e37_79b9_7f4a_7c15u64;
+        for degree in 5usize..=8 {
+            for _ in 0..64 {
+                let mut coeffs = Vec::with_capacity(degree + 1);
+                for _ in 0..=degree {
+                    state = state
+                        .wrapping_mul(6_364_136_223_846_793_005)
+                        .wrapping_add(1_442_695_040_888_963_407);
+                    coeffs.push(((state >> 32) % 21) as i64 - 10);
+                }
+                if coeffs[degree] == 0 {
+                    coeffs[degree] = 1;
+                }
+
+                let bigint = b(&coeffs);
+                assert_eq!(
+                    count_real_roots_uspensky_bigint_coeffs(&bigint),
+                    count_real_roots_prs_bigint_coeffs(&bigint),
+                    "coeffs={coeffs:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn test_agrees_with_existing_examples() {
         let cases = [
             (vec![1, 2, 1], true),
@@ -833,6 +1229,54 @@ mod tests {
         }
         let complex_factor = mul_i64(&p, &[1, 0, 1]);
         assert!(!is_real_rooted_fast_bigint_coeffs(&b(&complex_factor)));
+    }
+
+    #[test]
+    fn test_adaptive_uspensky_selector_on_benchmarked_families() {
+        let eulerian = crate::sequences::eulerian_polynomials_bigint(36)
+            .pop()
+            .unwrap();
+        let eulerian_below_cutoff = crate::sequences::eulerian_polynomials_bigint(35)
+            .pop()
+            .unwrap();
+        let narayana = crate::sequences::narayana_polynomials_bigint(36)
+            .pop()
+            .unwrap();
+        let type_b_eulerian = crate::sequences::type_b_eulerian_polynomials_bigint(35)
+            .pop()
+            .unwrap();
+
+        let mut touchard = vec![BigInt::one()];
+        for _ in 0..36 {
+            let mut next = vec![BigInt::zero(); touchard.len() + 1];
+            for (k, coefficient) in touchard.iter().enumerate() {
+                next[k + 1] += coefficient;
+                if k > 0 {
+                    next[k] += coefficient * BigInt::from(k);
+                }
+            }
+            touchard = trim(next);
+        }
+        let touchard = trim_slice(strip_initial_zeros_bigint(&touchard));
+
+        let mut product = vec![BigInt::one()];
+        for root in 1..=35 {
+            product = poly_mul(&product, &[BigInt::from(root), BigInt::one()]);
+        }
+
+        assert!(prefers_uspensky_for_one_signed(&eulerian));
+        assert!(!prefers_uspensky_for_one_signed(&eulerian_below_cutoff));
+        assert!(prefers_uspensky_for_one_signed(&type_b_eulerian));
+        assert!(prefers_uspensky_for_one_signed(&touchard));
+        assert!(!prefers_uspensky_for_one_signed(&narayana));
+        assert!(!prefers_uspensky_for_one_signed(&product));
+
+        let scaled_eulerian = poly_scale(&eulerian, &BigInt::from(7));
+        assert!(prefers_uspensky_for_one_signed(&scaled_eulerian));
+
+        assert!(is_real_rooted_fast_bigint_coeffs(&eulerian));
+        assert!(is_real_rooted_fast_bigint_coeffs(&type_b_eulerian));
+        assert!(is_real_rooted_fast_bigint_coeffs(&touchard));
     }
 
     #[test]

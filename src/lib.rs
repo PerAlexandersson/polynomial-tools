@@ -74,8 +74,8 @@
 //!   Cauchy bound reduction), log-concavity, ultra-log-concavity, palindromic
 //!   check, gamma-positivity, Stapledon decomposition, resultant,
 //!   discriminant, Ehrhart ↔ h*-vector, display utilities
-//! - [`root_count`] — primitive integer PRS root counting and the default exact
-//!   real-rootedness backend
+//! - [`root_count`] — adaptive exact real-rootedness using primitive integer
+//!   PRS and Uspensky/Descartes root counting
 //! - [`sturm`] — Sturm chains for exact root isolation (used internally)
 //! - [`sturm_cf`] — signed Euclidean/Sturm continued-fraction certificates
 //! - [`recurrence`] — Adaptive recurrence search for polynomial sequences
@@ -248,9 +248,11 @@ pub use real_rootedness::{
 };
 pub use root_count::{
     bigint_coeffs_to_i64, count_positive_roots_prs_bigint_coeffs,
-    count_real_roots_prs_bigint_coeffs, count_root_signs_prs_bigint_coeffs,
+    count_positive_roots_uspensky_bigint_coeffs, count_real_roots_prs_bigint_coeffs,
+    count_real_roots_uspensky_bigint_coeffs, count_root_signs_prs_bigint_coeffs,
     is_real_rooted_fast_bigint_coeffs, is_real_rooted_fast_i64,
     is_real_rooted_one_signed_bigint_coeffs, is_real_rooted_prs_bigint_coeffs,
+    is_real_rooted_uspensky_bigint_coeffs, is_real_rooted_uspensky_i64,
     primitive_sturm_max_coefficient_bits, satisfies_kurtz_condition_bigint,
     satisfies_newton_inequalities_bigint, squarefree_degree_bigint_coeffs,
     tarski_query_prs_bigint_coeffs, RootSignCounts,
