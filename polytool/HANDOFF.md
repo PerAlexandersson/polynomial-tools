@@ -1,5 +1,71 @@
 # Polytool handoff
 
+## Uspensky/Descartes comparison
+
+The main Rust worker owns these files:
+
+- `src/root_count.rs`
+- `src/lib.rs`
+- `examples/bench_positive_real_rooted.rs`
+- `README.md`
+- `HANDOFF.md`
+
+The exact Uspensky/Descartes comparison path is implemented and public. It
+uses a strict Fujiwara bound, dyadic magnitude bands, reciprocal reduction
+below `1`, homographic subdivision, and exact `BigInt` sign variations.  It
+uses no finite fields or floating point.
+
+The default one-signed real-rootedness path is now adaptive. It runs the cheap
+Kurtz/Newton filters first, uses PRS generally, and selects Uspensky only when:
+
+- the degree after stripping zero roots is at least 35;
+- the two endpoint coefficients are equal; and
+- an interior coefficient is at least `4^degree` times an endpoint.
+
+The last two exact tests are invariant under scalar multiplication. This
+conservative signature was chosen because degree or palindromicity alone
+regressed important families. Square-free preprocessing is now shared with the
+selected counter, avoiding a duplicate polynomial GCD in both the adaptive and
+explicit PRS real-rootedness paths.
+
+Release benchmark highlights from 2026-08-17 (single-process runs, so treat
+sub-millisecond differences as noise):
+
+```text
+family                              primitive PRS    Uspensky
+prod_{a=1}^{30} (x+a)                   0.88 ms       2.61 ms
+prod_{a=1}^{80} (x+a)                  15.14 ms      82.43 ms
+Eulerian (degree 35)                   45.82 ms      39.18 ms
+Eulerian (degree 79)                    9.83 s        5.15 s
+Narayana (degree 40)                    1.24 ms       9.41 ms
+type-B Eulerian (degree 40)           182.37 ms     151.77 ms
+Touchard (degree 40)                   55.54 ms      45.80 ms
+Chebyshev T (degree 40)                 0.43 ms      61.05 ms
+Chebyshev U (degree 40)                 0.43 ms      36.03 ms
+Hermite (degree 40)                     0.33 ms      10.46 ms
+```
+
+These fair timings include the shared square-free preprocessing only once.
+Eulerian, type-B Eulerian, and Touchard cross over around degree 35, while
+Narayana, Chebyshev, Hermite, and evenly spaced linear-factor products strongly
+favor PRS in the tested range. The benchmark example now covers all of these
+families; Touchard is generated locally by its standard recurrence.
+
+Verification:
+
+```text
+cargo test -q -p polytool --lib                 296 passed
+cargo test -q -p polytool --test cli_bigint      16 passed
+cargo test -q -p polytool --test interlacing_api  5 passed
+cargo test -q -p polytool --doc                   5 passed
+cargo clippy -q -p polytool --lib --examples -- \
+  -D warnings -A clippy::manual-is-multiple-of \
+  -A clippy::needless-range-loop                  passed
+```
+
+The two allowed Clippy lints are pre-existing in `cyclic_sieving.rs` and
+`hstar_inequalities.rs`; neither file is part of this work.
+
 ## Repository ownership
 
 - `/workspace/rust` branch `master` is the canonical monorepo history.
